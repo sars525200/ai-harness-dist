@@ -1,0 +1,35 @@
+{
+  "name": "DB-1 帶 bypass 註解 → 照跑檢查、印出略過項、但放行",
+  "rule": "db1_deploy",
+  "why": "D10：部署邊界的 BLOCK 誤判後果是「線上出事時推不上去」，必須有逃生口。且 bypass 要照跑檢查只是不擋——緊急部署時最需要知道自己正在推什麼進去。bypass 格式定死為尾註解（PowerShell 沒有 inline env-var 前綴，VAR=x cmd 是 parser error，逃生口不能依賴 shell 語法）。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master  # HARNESS_BYPASS:DB-1",
+      "description": "緊急部署，略過閘門"
+    },
+    "session_id": "fixture-db1-04",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW",
+    "bypassed": true,
+    "message_contains": "?v="
+  }
+}

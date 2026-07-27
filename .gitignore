@@ -1,0 +1,6 @@
+# session 執行期狀態：動作足跡、hook 錯誤 log、spike 捕捉的 payload
+# （含其他 session 的內容，絕不進版控）
+state/
+
+__pycache__/
+*.pyc

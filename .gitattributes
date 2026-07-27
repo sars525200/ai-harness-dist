@@ -1,0 +1,12 @@
+# 行尾策略 —— 建 repo 時即定（預防式，不等出事再補救）。
+#
+# 教訓來源：IT-department repo 未先定策略，被並行寫入把 CRLF 翻成 LF、
+# 造成巨量假 diff，2026-07-28 補救花了一次 87,128 行的 renormalize commit。
+#
+# 本 repo 選 LF：hook 程式碼未來可能搬到 VM（Linux）執行（見 D4），
+# 且不依賴 core.autocrlf——那是 per-machine 設定，換機器就失效。
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.txt   text eol=lf

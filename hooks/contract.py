@@ -1,0 +1,149 @@
+"""閘門契約 —— 規則介面與 git 存取抽象。
+
+這支檔案定義「規則長什麼樣」，實作與測試都依賴它。
+
+**為什麼 git 存取要抽象**：DB-1 的判定完全依賴 git 查詢
+（`diff vm/master..HEAD`、`status --porcelain`、`show HEAD:path`…）。
+若規則直接呼叫 git，就只能在真 repo 上測，而「工作區乾淨但有未推 commit」
+這種關鍵情境很難在真 repo 上穩定重現 —— 那正是 v3 發現的
+「DB-1 100% 靜默失效」的路徑。抽成介面後，fixture 可以精確描述任意 git 狀態。
+"""
+from __future__ import annotations
+
+ALLOW = "ALLOW"
+BLOCK = "BLOCK"
+WARN = "WARN"
+
+
+class Verdict:
+    """規則的判定結果。
+
+    decision: ALLOW / BLOCK / WARN
+    message : 給模型看的說明（BLOCK/WARN 必填，且必須說明替代路徑）
+    bypassed: 本次是否走了 bypass（照跑檢查但不擋，見 D10）
+    """
+
+    __slots__ = ("decision", "message", "bypassed")
+
+    def __init__(self, decision: str, message: str = "", bypassed: bool = False):
+        self.decision = decision
+        self.message = message
+        self.bypassed = bypassed
+
+    def __repr__(self) -> str:
+        tag = "+bypass" if self.bypassed else ""
+        return f"<Verdict {self.decision}{tag}: {self.message[:60]}>"
+
+    @property
+    def blocks(self) -> bool:
+        return self.decision == BLOCK
+
+
+def allow() -> Verdict:
+    return Verdict(ALLOW)
+
+
+def block(message: str) -> Verdict:
+    return Verdict(BLOCK, message)
+
+
+def warn(message: str) -> Verdict:
+    return Verdict(WARN, message)
+
+
+def bypassed(message: str) -> Verdict:
+    """走了 bypass：照跑檢查、印出略過了什麼，但放行（D10）。"""
+    return Verdict(ALLOW, message, bypassed=True)
+
+
+class GitContext:
+    """git 查詢介面。生產環境用 RealGitContext，測試用 FakeGitContext。
+
+    方法命名刻意貼近底層指令，讓 fixture 一眼看得出模擬的是什麼。
+    """
+
+    def resolve_remote_ref(self, remote: str, branch: str) -> str | None:
+        """回傳 remote-tracking ref（如 'vm/master'）；不存在回 None → 呼叫端須 fail-open。"""
+        raise NotImplementedError
+
+    def diff_names(self, rev_range: str) -> set[str]:
+        """`git diff --name-only -z <rev_range>` —— 已 commit 待推的檔案。"""
+        raise NotImplementedError
+
+    def status_paths(self) -> set[str]:
+        """`git status --porcelain -z` 的路徑集合（已改未 commit）。
+
+        實作必須用 -z：預設 core.quotepath=true 會把中文路徑轉義成
+        `"...\\350\\263\\207..."` 並外加引號（本 repo 實測），字串比對必對不上。
+        """
+        raise NotImplementedError
+
+    def show(self, ref_path: str) -> str:
+        """`git show <ref>:<path>` 的文字內容。ref_path 形如 'HEAD:a/b.js'。"""
+        raise NotImplementedError
+
+    def show_bytes(self, ref_path: str) -> bytes:
+        """同 show()，但回傳原始 bytes（驗行尾用，禁經文字管線）。"""
+        raise NotImplementedError
+
+    def check_attr_eol(self, path: str) -> str:
+        """`git check-attr eol -- <path>` 的值：'crlf' / 'lf' / 'unspecified'。"""
+        raise NotImplementedError
+
+    def syntax_error(self, path: str, ref: str = "HEAD") -> str | None:
+        """檢查 blob（非 worktree）的語法，無誤回 None。
+
+        D13：驗證一律讀 blob。worktree 語法正確不代表 commit 進去的那份正確。
+        依副檔名分派：.js → node --check／.py → ast.parse／.ps1 → PS Parser。
+        """
+        raise NotImplementedError
+
+
+class HookContext:
+    """一次 hook 呼叫的完整輸入。
+
+    欄位名對齊 Step 0 實測的真實 payload（見 HARNESS_PLAN.md §-0.5）。
+    """
+
+    def __init__(self, payload: dict, git: GitContext):
+        self.payload = payload
+        self.git = git
+
+    @property
+    def event(self) -> str:
+        return self.payload.get("hook_event_name", "")
+
+    @property
+    def tool_name(self) -> str:
+        return self.payload.get("tool_name", "")
+
+    @property
+    def tool_input(self) -> dict:
+        return self.payload.get("tool_input") or {}
+
+    @property
+    def command(self) -> str:
+        """Bash / PowerShell 的指令原文。非 shell 工具回空字串。"""
+        return self.tool_input.get("command", "") or ""
+
+    @property
+    def file_path(self) -> str:
+        """Edit / Write 的目標路徑。非檔案工具回空字串。"""
+        return self.tool_input.get("file_path", "") or ""
+
+    @property
+    def session_id(self) -> str:
+        return self.payload.get("session_id", "")
+
+    @property
+    def cwd(self) -> str:
+        return self.payload.get("cwd", "")
+
+    def has_bypass(self, rule_id: str) -> bool:
+        """D10：比對 command 字串，**不讀環境變數**。
+
+        PowerShell 沒有 inline env-var 前綴（`VAR=x cmd` 是 parser error），
+        所以逃生口不能依賴 shell 語法。格式定死為尾註解：
+            git push vm master  # HARNESS_BYPASS:DB-1
+        """
+        return f"HARNESS_BYPASS:{rule_id}" in self.command

@@ -1,0 +1,38 @@
+{
+  "name": "DB-1 ?v= 兩處值不一致 → BLOCK",
+  "rule": "db1_deploy",
+  "why": "實測 index.html 有兩處 ?v=（line 11 的 styles.css、line 5127 的 app.js），慣例同值。若只 bump 其中一個，另一個檔案的瀏覽器快取不會被清掉，症狀是「改了但使用者看到舊版」——比完全沒 bump 更難查，因為部分生效。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-08",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP_PROD/05_UI_Demo/styles.css",
+        "SOP_PROD/05_UI_Demo/index.html",
+        "SOP/05_UI_Demo/app.js",
+        "SOP/05_UI_Demo/styles.css",
+        "SOP/05_UI_Demo/index.html"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "不一致"
+  }
+}

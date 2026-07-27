@@ -1,0 +1,36 @@
+{
+  "name": "DB-1 ?v= 只在 worktree 改、未 commit → BLOCK",
+  "rule": "db1_deploy",
+  "why": "v4 審查發現：D8 說「改 worktree 不改變要推的內容」，那句話對『讀』同樣成立。若判定讀 worktree 版 index.html，會看到 ?v= 已改而放行，但推上去的仍是舊版。此 fixture 讓 HEAD blob 的 ?v= 維持舊值（模擬只改了 worktree 沒 commit），規則必須讀 blob 才會擋。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-03",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [
+      "SOP_PROD/05_UI_Demo/index.html"
+    ],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "?v="
+  }
+}

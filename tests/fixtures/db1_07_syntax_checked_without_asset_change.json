@@ -1,0 +1,32 @@
+{
+  "name": "DB-1 只改 server.py（無資產檔）語法錯仍要擋",
+  "rule": "db1_deploy",
+  "why": "v4 審查發現的控制流 bug：v3 把「沒動資產檔就 return」放在語法檢查之前，導致只有改 UI 資產的那種 push 才會驗語法，改 server.py 的部署一路綠燈。此 fixture 的變更集完全不含資產檔，語法檢查必須仍然執行。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署 server 修正"
+    },
+    "session_id": "fixture-db1-07",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/server.py"
+      ]
+    },
+    "status_paths": [],
+    "syntax_errors": {
+      "SOP_PROD/05_UI_Demo/server.py": "SyntaxError: invalid syntax (line 2629)"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "語法錯誤"
+  }
+}

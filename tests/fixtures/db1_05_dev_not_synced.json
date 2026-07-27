@@ -1,0 +1,36 @@
+{
+  "name": "DB-1 PROD 已改、DEV 未同步 → BLOCK",
+  "rule": "db1_deploy",
+  "why": "§6 雙改規則。判定用 verify_set（ref..HEAD）而非聯集：DEV 檔若只在 worktree 改了沒 commit，這次 push 不會帶走它，線上仍是單邊。用聯集驗證會把「只在 worktree 修好」誤算成已同步。此 fixture 讓 DEV 檔出現在 status_paths（未 commit）而不在 diff_names，規則必須擋。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-05",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP_PROD/05_UI_Demo/index.html"
+      ]
+    },
+    "status_paths": [
+      "SOP/05_UI_Demo/app.js"
+    ],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2225\" />\n<script src=\"/app.js?v=2225\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "雙改"
+  }
+}

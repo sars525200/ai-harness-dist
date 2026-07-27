@@ -1,0 +1,24 @@
+{
+  "name": "DB-1 remote ref 解不出 → fail-open 放行",
+  "rule": "db1_deploy",
+  "why": "§6 fail-open 原則：內部無法判定時應放行並記 log，不是擋。v3 曾寫成 fallback 到 git ls-files（全部 tracked 檔），那會讓雙改檢查要求每個 PROD 資產都有對應 DEV 變更、語法檢查掃全 repo，在部署當下幾乎必然誤擋——而那正是最不能擋的時刻。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-06",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": null,
+    "diff_names": {},
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

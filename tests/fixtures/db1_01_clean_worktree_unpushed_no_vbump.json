@@ -1,0 +1,34 @@
+{
+  "name": "DB-1 工作區乾淨但有未推 commit、?v= 未 bump → BLOCK",
+  "rule": "db1_deploy",
+  "why": "v3 審查發現的致命 bug：git push vm 的前一刻，該推的內容早已 commit，工作區乾淨 → git diff 與 git status --porcelain 雙雙回空 → 判定「本次沒動過任何檔」→ 一路放行。DB-1 會 100% 靜默失效，且失效方式是「永遠不擋」。若 fixture 只模擬「有未 commit 變更」會假綠燈通過。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署到正式站"
+    },
+    "session_id": "fixture-db1-01",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "?v="
+  }
+}
