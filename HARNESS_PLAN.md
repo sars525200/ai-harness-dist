@@ -367,12 +367,18 @@ state：append-only、session-scoped、24 小時過期清理。
 | v3 改版（D9–D10 + DB-1 附錄） | ✅ 第二輪審查 |
 | **v4 改版（D11–D14 + §-1 實測 + DB-1 重寫）** | ✅ 第三輪審查＋實測 |
 | **§-1 前提實測**（gitattributes／vm ref／quotepath／`?v=`） | ✅ 2026-07-28 全部指令實跑 |
-| **D12 決議：是否 renormalize app.js/styles.css** | ⬜ **待 user 定時機**（DEV_DRY_RUN；決定後 I6／A1／DB-1 step 6 三條刪除） |
-| 附-A AI-Projects git init | ⬜ 可先做 |
-| Step 0 schema spike（僅剩 Stop 時機 + stdin 欄位） | ⬜ |
+| **D12 renormalize** | ✅ 主 repo `8d5c2389`（87,128 行）＋ SOP `5c677945`；I6／A1／DB-1 step6 三條規則廢止 |
+| 附-A AI-Projects git init | ✅ `69b7141` — 238 檔 / 1.74MB，2,963MB payload 排除 |
+| Step 0 schema spike | ✅ 四發現見 §-0.5；settings SHA256 驗證完全復原 |
+| 共用層自身 git init | ✅ `bcfcb9b`（含預防式 `.gitattributes`，不重蹈覆轍） |
+| `contract.py`（規則介面 + git 抽象） | ✅ git 存取抽象化，DB-1 才可被 fixture 測 |
+| `run_hook_tests.py` | ✅ 含**零目標拒跑**與 fixture 完整性檢查（防自己假綠燈） |
+| **DB-1 實作 + 8 fixture** | ✅ **8/8 通過**；回歸網有效性已驗證（移除 `?v=` 守門 → 3 紅、正面測試維持綠） |
 | §2.5 RULE_COVERAGE.md（時間盒） | ⬜ |
-| `_lib.py` + dispatch.py | ⬜ |
-| I1–I6／DB-1–DB-5 + S1 去重／A1–A2 | ⬜ |
-| fixture（含「乾淨但有未推 commit」情境） | ⬜ |
-| 掛上 IT-department settings | ⬜ |
+| `_lib.py`（RealGitContext）+ dispatch.py | ⬜ |
+| I1–I5／DB-2–DB-5 + S1 去重／A2 | ⬜ |
+| 掛上 IT-department settings | ⬜ **需協調**：實測發現 hook 是專案層級，掛上即對所有並行 session 生效 |
+| exit code 語意實測 | ⬜ 未驗（測 exit 2 會擋到其他 session，改用 fixture 或個人層 settings） |
 | Phase 1.5–4 | ⬜ |
+
+> ⚠ `D:\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。
