@@ -1,0 +1,33 @@
+{
+  "name": "DB-1 只改 app.js、styles.css 的 token 停在舊值 → ALLOW",
+  "rule": "db1_deploy",
+  "why": "正面測試，防過度攔截。這是實際慣例中最常見的情況：只改 app.js 就只 bump app.js 的 token，styles.css 的 token 停在舊值是正確行為（歷史上曾停 2218 好幾版）。若規則寫成「兩處必須同值」或「所有 token 都要變」，這個最常見的正常部署會被誤擋。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-09",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP_PROD/05_UI_Demo/index.html"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2218\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2218\" />\n<script src=\"/app.js?v=2225\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

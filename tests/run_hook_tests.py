@@ -104,7 +104,9 @@ def run_one(fx: dict) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"無法載入規則 rules.{fx['rule']}：{type(exc).__name__}: {exc}"
 
-    ctx = HookContext(fx["payload"], FakeGitContext(fx.get("git", {})))
+    # dev_git 為獨立 repo（SOP/），fixture 未定義時傳 None → 雙改檢查跳過
+    dev = FakeGitContext(fx["dev_git"]) if "dev_git" in fx else None
+    ctx = HookContext(fx["payload"], FakeGitContext(fx.get("git", {})), dev)
 
     try:
         verdict = module.check(ctx)

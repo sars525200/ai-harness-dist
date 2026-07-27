@@ -40,8 +40,12 @@ def applies(ctx) -> bool:
 
 
 def parse_v_tokens(html: str) -> dict:
-    """抽出 {資源路徑: 版本值}。實測 index.html 有兩處（styles.css 與 app.js）。"""
-    return {res: ver for res, ver in _V_TOKEN.findall(html)}
+    """抽出 {資源檔名: 版本值}。實測 index.html 有兩處（styles.css 與 app.js）。
+
+    key 用 basename：原文是 `/styles.css?v=2224`，但呼叫端持有的是
+    `SOP_PROD/05_UI_Demo/styles.css`，用檔名才對得起來。
+    """
+    return {res.rsplit("/", 1)[-1]: ver for res, ver in _V_TOKEN.findall(html)}
 
 
 def check(ctx):
@@ -83,35 +87,47 @@ def check(ctx):
     if not prod_touched:
         return allow()
 
-    # 5. ?v= 比對「值」而非「檔名在不在變更清單裡」。
-    #    後者會讓「改了 index.html 的任何一行」都算成 bump 完成 ——
-    #    而那恰恰是最容易忘記升版的情境。
+    # 5. ?v= 比對 —— **per-token**，不是整體比對。
+    #
+    #    慣例查證（git log 實測，非臆測）：兩個 token **各自獨立 bump，只有改到該檔才升**。
+    #        177bb27e [2218, 2221]   cceec95d [2218, 2220]   e7eb78f1 [2218, 2219]
+    #    styles.css 曾停在 2218 好幾個版本，因為那期間只改 app.js。
+    #    所以「兩處必須同值」是錯的規則，「整體有變即通過」則會漏掉
+    #    「改了 styles.css 卻只 bump app.js」這種只有部分快取被清的情況。
     old_tokens = parse_v_tokens(ctx.git.show(f"{ref}:{INDEX_HTML}"))
     new_tokens = parse_v_tokens(ctx.git.show(f"HEAD:{INDEX_HTML}"))
 
-    if new_tokens == old_tokens:
-        shown = sorted(set(new_tokens.values())) or ["(無)"]
-        return decide(
-            f"§6：改了資產檔就必須升 ?v= 清快取，但兩版 index.html 的 ?v= 相同（{', '.join(shown)}）。"
-            f"待推的資產檔：{', '.join(prod_touched)}"
-        )
-
-    versions = set(new_tokens.values())
-    if len(versions) > 1:
-        return decide(
-            f"index.html 的 ?v= 兩處不一致：{new_tokens}。"
-            "慣例是所有資源共用同一版本值，否則只有部分檔案的快取被清掉。"
-        )
-
-    # 6. DEV/PROD 雙改用 verify_set —— 只在 worktree 改了但沒 commit 不算同步（D11）
     for path in prod_touched:
-        if path not in verify_set:
-            continue
-        dev_path = DEV_PREFIX + path[len(PROD_PREFIX):]
-        if dev_path not in verify_set:
+        name = posixpath.basename(path)
+        if name == "index.html":
+            continue                       # index.html 自己沒有對應 token
+        old_v, new_v = old_tokens.get(name), new_tokens.get(name)
+        if old_v is not None and old_v == new_v:
             return decide(
-                f"§6 雙改：{path} 已 commit 待推，但 {dev_path} 未同步。"
-                "app.js／styles.css／index.html 的改動必須 DEV+PROD 兩端一起推。"
+                f"§6：{path} 已改但 index.html 裡 {name} 的 ?v= 未升（仍為 {old_v}）。"
+                "改哪個檔就升哪個 token，否則該檔的瀏覽器快取不會被清掉。"
             )
+
+    # 6. DEV/PROD 雙改 —— DEV 是**獨立 repo**，必須查它自己的 git。
+    #    端到端實測發現：SOP/ 被主 repo .gitignore 排除，
+    #    DEV 檔永遠不在主 repo 的 diff_names 裡 → 查主 repo 會 100% 誤判未同步。
+    if ctx.dev_git is not None:
+        dev_ref = ctx.dev_git.resolve_remote_ref("origin", "master")
+        dev_changed = set(ctx.dev_git.status_paths())
+        if dev_ref:
+            dev_changed |= set(ctx.dev_git.diff_names(f"{dev_ref}..HEAD"))
+        else:
+            # DEV repo 無遠端（本地 repo）→ 用最近一次 commit 的變更集近似
+            dev_changed |= set(ctx.dev_git.diff_names("HEAD~1..HEAD"))
+
+        for path in prod_touched:
+            if path not in verify_set:
+                continue
+            dev_path = path[len(PROD_PREFIX):]      # DEV repo 內是 05_UI_Demo/xxx
+            if DEV_PREFIX + dev_path not in dev_changed and f"05_UI_Demo/{dev_path}" not in dev_changed:
+                return decide(
+                    f"§6 雙改：{path} 已 commit 待推，但 DEV repo 的 05_UI_Demo/{dev_path} 未同步。"
+                    "app.js／styles.css／index.html 的改動必須 DEV+PROD 兩端一起做。"
+                )
 
     return bypassed(f"{RULE_ID} 檢查全數通過（bypass 未實際略過任何項目）") if skipped else allow()

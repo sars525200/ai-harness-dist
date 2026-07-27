@@ -1,7 +1,7 @@
 {
   "name": "DB-1 ?v= 已 bump、雙改同步、語法無誤 → ALLOW",
   "rule": "db1_deploy",
-  "why": "正面測試防過度攔截。前面所有 BLOCK 情境都必須有對應的 ALLOW 樣本，否則規則寫成「無條件擋」也會全綠。",
+  "why": "正面測試防過度攔截。前面所有 BLOCK 情境都必須有對應的 ALLOW 樣本，否則規則寫成「無條件擋」也會全綠。註：變更集刻意不含 SOP/ 路徑——DEV 是獨立 repo 且被主 repo .gitignore 排除，DEV 檔不可能出現在主 repo 的 diff_names 裡（端到端實測確認）；雙改檢查走 dev_git，此處未定義故跳過。",
   "payload": {
     "hook_event_name": "PreToolUse",
     "tool_name": "PowerShell",
@@ -18,9 +18,7 @@
     "diff_names": {
       "vm/master..HEAD": [
         "SOP_PROD/05_UI_Demo/app.js",
-        "SOP_PROD/05_UI_Demo/index.html",
-        "SOP/05_UI_Demo/app.js",
-        "SOP/05_UI_Demo/index.html"
+        "SOP_PROD/05_UI_Demo/index.html"
       ]
     },
     "status_paths": [],

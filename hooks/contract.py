@@ -105,9 +105,16 @@ class HookContext:
     欄位名對齊 Step 0 實測的真實 payload（見 HARNESS_PLAN.md §-0.5）。
     """
 
-    def __init__(self, payload: dict, git: GitContext):
+    def __init__(self, payload: dict, git: GitContext, dev_git: "GitContext | None" = None):
         self.payload = payload
         self.git = git
+        # DEV(`SOP/`) 是**獨立 git repo**，且被主 repo 的 .gitignore 排除
+        # → DEV 檔永遠不會出現在主 repo 的 diff_names 裡。
+        # 雙改檢查若只查主 repo，在生產環境會 100% 誤判「DEV 未同步」。
+        # 端到端實測（2026-07-28）才抓到：fixture 手動把 SOP/... 塞進 diff_names，
+        # 那是現實中不可能出現的狀態。
+        # 為 None 時雙改檢查跳過（fail-open），不猜。
+        self.dev_git = dev_git
 
     @property
     def event(self) -> str:

@@ -209,6 +209,19 @@ settings.json 的 hook command 寫絕對路徑，兩工作區共用同一份 cod
 | DB-5 | 雙 repo 封存 | `git -C …/SOP commit` | 主 repo 也 commit 了嗎 | WARN |
 | S1 | Stop（降級） | 每回合 | 未滿足項，**每項每 session 只報一次** | 一句低調摘要 |
 
+#### 3.2.0 端到端實測修正（2026-07-28・v4.2）
+
+`_lib.py`(RealGitContext) 接上真 git 後跑第一次端到端，**立刻抓到兩個 fixture 測不出的 bug**。兩者都是「Fake 全綠但生產失效」——正是為什麼 Fake 測完還必須端到端。
+
+| # | Bug | 修正 |
+|---|---|---|
+| **E1** | **雙改檢查查錯 repo**。`SOP/`（DEV）是**獨立 git repo** 且被主 repo `.gitignore` 排除 → DEV 檔**永遠不會**出現在主 repo 的 `diff_names` 裡（實測 `待推 SOP/ = []`）→ 生產環境 **100% 誤判「DEV 未同步」**。原 fixture 手動把 `SOP/05_UI_Demo/app.js` 塞進 `diff_names`，那是現實中不可能出現的狀態 | `HookContext` 增設 `dev_git`（第二個 GitContext），查 DEV repo 自己的 git；為 `None` 時跳過（fail-open） |
+| **E2** | **`?v=` 判定違反實際慣例**。原寫成「整體有變 + 兩處值必須一致」。**git log 查證**：兩 token **各自獨立 bump，只有改到該檔才升** —— `177bb27e [2218, 2221]`／`cceec95d [2218, 2220]`／`e7eb78f1 [2218, 2219]`，styles.css 曾停在 2218 好幾版 | 改為 **per-token 比對**：只檢查「被改動資產」對應的 token 有沒有變。原 fixture 08（兩處不一致→BLOCK）**規則本身是錯的**，已刪除並改寫為兩個新 fixture |
+
+> **方法論**：E2 是靠 `git log` 查歷史慣例查出來的，不是靠推理。呼應 [[feedback-existing-data-is-source-of-truth]] —— 改行為前先看現有資料怎麼做，別用程式語義理論凌駕實際慣例。
+
+**待改進（已知但未做）**：雙改的更準判定應是**比對兩 repo 的 blob 是否一致**，而非「有沒有出現在變更集」。D12 已順帶證明 DEV/PROD 的 `app.js` blob 逐位元組相同（皆 3,590,513 bytes），此法可行。目前實作用「變更集有無」近似，DEV repo 無 remote 時 fallback 到 `HEAD~1..HEAD`，改動若在更早的 commit 會誤判。
+
 #### 3.2.1 DB-1 完整判定流程（v4 實作附錄）
 
 **v4 修掉 v3 的四個 bug**：讀 worktree 而非 blob（D8 的鏡像錯誤）／detect 與 verify 混用同一集合／early return 讓語法檢查永不執行／ref 解析失敗 fail-closed。

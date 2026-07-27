@@ -1,7 +1,7 @@
 {
-  "name": "DB-1 ?v= 兩處值不一致 → BLOCK",
+  "name": "DB-1 改了 styles.css 卻只 bump app.js 的 token → BLOCK",
   "rule": "db1_deploy",
-  "why": "實測 index.html 有兩處 ?v=（line 11 的 styles.css、line 5127 的 app.js），慣例同值。若只 bump 其中一個，另一個檔案的瀏覽器快取不會被清掉，症狀是「改了但使用者看到舊版」——比完全沒 bump 更難查，因為部分生效。",
+  "why": "慣例查證（git log 實測）：index.html 兩個 ?v= token **各自獨立 bump，只有改到該檔才升**——歷史上 styles.css 曾停在 2218 好幾個版本（177bb27e/cceec95d/e7eb78f1 皆為 [2218, 22xx]）。所以「兩處必須同值」是錯的規則（原 fixture 08 據此寫，已廢），而「整體有變即通過」會漏掉此情境：styles.css 改了但它的 token 沒動，該檔的瀏覽器快取不會被清掉，症狀是「改了但使用者看到舊樣式」——比完全沒 bump 更難查，因為 app.js 的部分生效了。",
   "payload": {
     "hook_event_name": "PreToolUse",
     "tool_name": "PowerShell",
@@ -19,10 +19,7 @@
       "vm/master..HEAD": [
         "SOP_PROD/05_UI_Demo/app.js",
         "SOP_PROD/05_UI_Demo/styles.css",
-        "SOP_PROD/05_UI_Demo/index.html",
-        "SOP/05_UI_Demo/app.js",
-        "SOP/05_UI_Demo/styles.css",
-        "SOP/05_UI_Demo/index.html"
+        "SOP_PROD/05_UI_Demo/index.html"
       ]
     },
     "status_paths": [],
@@ -33,6 +30,6 @@
   },
   "expect": {
     "decision": "BLOCK",
-    "message_contains": "不一致"
+    "message_contains": "styles.css"
   }
 }
