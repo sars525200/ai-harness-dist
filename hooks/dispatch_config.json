@@ -1,0 +1,5 @@
+{
+  "rules": {
+    "DB-1": { "shadow": true }
+  }
+}

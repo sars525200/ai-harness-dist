@@ -37,8 +37,9 @@ class FakeGitContext(GitContext):
     回空值會讓規則安靜地走進錯誤分支，正是我們要防的假綠燈。
     """
 
-    def __init__(self, spec: dict):
+    def __init__(self, spec: dict, default_root: str = "FAKE:repo"):
         self.spec = spec or {}
+        self._default_root = default_root
 
     def _need(self, section: str, key: str):
         table = self.spec.get(section)
@@ -77,6 +78,12 @@ class FakeGitContext(GitContext):
     def syntax_error(self, path: str, ref: str = "HEAD"):
         return self.spec.get("syntax_errors", {}).get(path)
 
+    @property
+    def repo_root(self):
+        # 兩個構造點（main/dev，見 run_one）傳不同的 default_root，
+        # 讓既有 fixture 不必逐一補 repo_root 也能滿足 D15 的相異性斷言。
+        return self.spec.get("repo_root", self._default_root)
+
 
 def load_fixtures(filter_word: str | None):
     if not os.path.isdir(FIXTURE_DIR):
@@ -105,8 +112,9 @@ def run_one(fx: dict) -> tuple[bool, str]:
         return False, f"無法載入規則 rules.{fx['rule']}：{type(exc).__name__}: {exc}"
 
     # dev_git 為獨立 repo（SOP/），fixture 未定義時傳 None → 雙改檢查跳過
-    dev = FakeGitContext(fx["dev_git"]) if "dev_git" in fx else None
-    ctx = HookContext(fx["payload"], FakeGitContext(fx.get("git", {})), dev)
+    dev = FakeGitContext(fx["dev_git"], default_root="FAKE:dev") if "dev_git" in fx else None
+    main = FakeGitContext(fx.get("git", {}), default_root="FAKE:main")
+    ctx = HookContext(fx["payload"], main, dev)
 
     try:
         verdict = module.check(ctx)

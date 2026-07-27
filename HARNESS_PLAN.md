@@ -116,6 +116,10 @@ git 原生機制三個維度全勝 hook：
 | **D12** | **能被平台原生機制消滅的規則，不寫進 harness** | CRLF 改用 `.gitattributes text eol=crlf` 根治，非 hook | git 原生：零延遲、涵蓋**所有**寫入者（hook 只看得到 Claude 的工具呼叫）、不需維護清單。詳見 §-1 |
 | **D13** | **驗證一律讀 blob，不讀 worktree** | `git show HEAD:<path>` | D8 的鏡像：「改 worktree 不改變要推的內容」對**讀**同樣成立。worktree 已 bump／CRLF 正確，commit 進去的未必 |
 | **D14** | **「驗過沒」綁被測內容而非 session** | DB-2 用 reconciler 相關檔在 HEAD 的 tree sha 當 key | 跑測試與推上線常跨 session（今天測、明天推）；綁 tree sha 語意＝「這份 code 驗過沒」，code 一改紀錄自動失效，比時間窗準 |
+| **D15** | **repo 邊界必須顯式化，不能靠隱含假設** | `GitContext.repo_root` 抽象屬性；`HookContext.__init__` 斷言 `git.repo_root != dev_git.repo_root` | 兩個 GitContext 若意外指到同一個 repo（設定錯誤），雙改檢查會兩邊查到同樣東西、天然「一致」而**靜默通過**——這不是資料問題，是 wiring 問題，必須在建構當下就炸出來，不能被 fail-open 悄悄吃掉變成一條看似生效、實則從未真正檢查過的規則 |
+| **D16** | **shadow mode 設定必須 per-rule，不是全域開關** | `dispatch_config.json` → `{"rules": {"DB-1": {"shadow": true}}}`；設定缺該規則 ID 預設 `shadow=true` | 全域開關會讓「DB-1 驗完轉正式」牽連「I1 也要跟著重新 shadow 一輪」或「I1 被迫跳過 shadow 直接上線」，兩者都違反 D2 的根治精神。per-rule 讓每條規則各自畢業 |
+| **D17** | **heartbeat／decision 分離記錄，且只記非 ALLOW** | `state/events.<session_id>.ndjson`，`kind` 欄位區分 `dispatch`／`applies`／`decision`；只有 `decision` 才含 `command`/`message` | 持續運行的 shadow mode 若比照 spike.py 全量記錄，會像 spike 那次一樣意外收錄其他 session 的完整操作內容；且 I1 這類掛在高頻 matcher（每次 Bash 呼叫）的規則，全量記錄的 log 量會遠超 DB-1。純 ALLOW 不留內容，只計數 |
+| **D18** | **轉正式需雙門檻，不只看日曆天數** | 時間窗（3–5 天）**且** `applies()` 命中次數 ≥ 最低樣本數（例如 5） | DB-1 只在 `git push vm` 觸發，若窗期內剛好只推了 1 次，would-block 清單樣本不足以支撐「沒誤判」的結論；且 `applies()` 命中數為 0（而非「大家都在忙沒空推」）本身就是 D7 定義的紅燈，不能解讀成「沒有誤判、可以轉正式」 |
 
 **執行環境已驗證**
 - `py -3` → Python 3.14.5 @ `C:\Users\<USER>\AppData\Local\Python\pythoncore-3.14-64\python.exe`
@@ -209,6 +213,19 @@ settings.json 的 hook command 寫絕對路徑，兩工作區共用同一份 cod
 | DB-5 | 雙 repo 封存 | `git -C …/SOP commit` | 主 repo 也 commit 了嗎 | WARN |
 | S1 | Stop（降級） | 每回合 | 未滿足項，**每項每 session 只報一次** | 一句低調摘要 |
 
+#### 3.2.0a §6 原文查證（2026-07-28）—— per-token 是意圖推導，不是明文規則
+
+原文（`CLAUDE.md:65`）：
+
+> 任何 `app.js`/`index.html`/`styles.css` 改動必同步 DEV+PROD 兩目錄，**並升 `?v=` 清快取**
+
+字面完全沒提「兩個 token 各自獨立」——這件事文字上是空的。db1_deploy.py 的 per-token 判定是從**規則的目的**（清快取）反推出來的唯一自洽讀法，E2 的 git log 觀察只是側面印證，不是規則本身：
+
+- bump 沒被動到的 token → 沒清到任何東西，白做
+- 不 bump 有被動到的 token → 該檔快取沒清，正是規則要防的事
+
+**邊角案例**：規則字面把 `index.html` 也列進「改動」清單，但它自己沒有對應 token。`db1_deploy.py` 用 `if name == "index.html": continue` 跳過——這是刻意判斷（沒有東西可以 bump 就不要求 bump），不是漏寫。
+
 #### 3.2.0 端到端實測修正（2026-07-28・v4.2）
 
 `_lib.py`(RealGitContext) 接上真 git 後跑第一次端到端，**立刻抓到兩個 fixture 測不出的 bug**。兩者都是「Fake 全綠但生產失效」——正是為什麼 Fake 測完還必須端到端。
@@ -279,6 +296,29 @@ def decide(bypassed, msg):
         log_bypass('DB-1', msg); emit(f'⚠ 已略過：{msg}'); return ALLOW
     return BLOCK(msg)
 ```
+
+### 3.2.2 dispatch.py 架構（2026-07-28・已實作＋隔離測試驗證）
+
+單一 entry point，settings.json 只需指 `py -3 D:\.ai-harness\hooks\dispatch.py`（省維護，見 §3.6，**不省延遲**）。事件來源用 payload 的 `hook_event_name`，不用 argv——payload 自帶，少一個要在每個 matcher 條目手動填對的配置點。
+
+**流程**：precheck（`HookContext(payload, None, None)`，只讀 `ctx.command`，不建 GitContext）先過濾掉不相干的 Bash/PowerShell 呼叫 → 只有 `applies()` 為真才建 `RealGitContext(cwd)` + 探測手足 `SOP/` 目錄建 `dev_git` → 逐條規則跑 `check()` → 依 per-rule shadow 設定決定要不要真的影響 exit code。
+
+**shadow gating**（D16）：`dispatch_config.json` 的 `{"rules": {"DB-1": {"shadow": true}}}`，缺該規則 ID 預設 `shadow=true`（不確定就只觀察，不擋）。shadow=true 時無論判定是什麼，**exit code 恆為 0、stdout/stderr 恆空**——shadow 的存在意義就是「先看資料再決定要不要擋」，不能有任何行為外洩。
+
+**log schema**（D17）：單一檔案 `state/events.<session_id>.ndjson`，`kind` 欄位區分：
+- `dispatch`——事件/工具符合任一規則 matcher 就記（{event, tool_name}），心跳訊號
+- `applies`——規則的 `applies()` 真的為真才記（{rule_id}），是「情境真的發生幾次」的分母
+- `decision`——只在判定 != 乾淨 ALLOW 或有 bypass 時記（{rule_id, decision, bypassed, shadow, message, command}），would-block 清單原始資料
+
+`report.py` 讀回三種 kind 彙總，對應步驟 5/7 的「收 would-block 清單」。
+
+**驗證**（因真實 repo 在測試過程中被並行 session 改動，改用兩層測試）：
+1. subprocess 灌 5 種真實 stdin payload（不相干指令／git push vm／bypass／非 Bash 工具／壞 JSON）→ 全部行為符合預期，且 BOM-safe 讀取、fail-open 錯誤記錄、`kind=dispatch` vs `kind=applies` 的分野都在真實 repo 上驗證過
+2. **monkeypatch `db1_deploy.check`** 隔離測 `_dispatch()` 自己的 exit code 映射邏輯（5 種組合：BLOCK+shadow/BLOCK+enforce/WARN+enforce/bypass+enforce/ALLOW+enforce）→ 5/5 通過，包含最關鍵的 `BLOCK+shadow=False → exit 2`
+
+> 過程插曲：subprocess 測試中一度看到「預期 BLOCK 卻 exit=0」，一度懷疑是 bug——查 log 發現 `applies` 有記但 `decision` 沒記，代表判定本身就是 ALLOW，即**真實 repo 狀態在兩次測試呼叫之間被另一個 session 改掉了**（`?v=` 被補上）。這正是為什麼 dispatch.py 自己的邏輯驗證要用 monkeypatch 隔離，不能依賴會被並行改動的即時真相。
+
+**未驗項**：WARN 判定的 exit0+stderr 是否真的被模型看到（見 §-0.5「未驗項」），目前只是最保守的猜測寫法。DB-1 本身不產生 WARN（只有 BLOCK/ALLOW/bypass），故此路徑對 DB-1 尚無影響；I1–I5 若有 WARN-only 規則要轉出 shadow，屆時需專案驗證。
 
 ### 3.3 資料來源三層（D9）
 
@@ -387,11 +427,16 @@ state：append-only、session-scoped、24 小時過期清理。
 | `contract.py`（規則介面 + git 抽象） | ✅ git 存取抽象化，DB-1 才可被 fixture 測 |
 | `run_hook_tests.py` | ✅ 含**零目標拒跑**與 fixture 完整性檢查（防自己假綠燈） |
 | **DB-1 實作 + 8 fixture** | ✅ **8/8 通過**；回歸網有效性已驗證（移除 `?v=` 守門 → 3 紅、正面測試維持綠） |
+| `_lib.py`（RealGitContext 8 方法）+ smoke test | ✅ 31/31；含語法檢查負面測試 |
+| 端到端修正 E1（雙改查錯 repo）/E2（`?v=` per-token） | ✅ 9 fixture 全通過，含 db1_09 正面案例 |
+| §6 原文查證 | ✅ per-token 是意圖推導、非明文（§3.2.0a） |
+| **D15 repo_root 顯式化 + wiring 斷言** | ✅ 已驗證斷言真的會炸（同 repo 傳兩次 → ValueError） |
+| **dispatch.py + dispatch_config.json（per-rule shadow）+ report.py** | ✅ 5 種真實 payload + 5 種 monkeypatch 隔離測試全通過 |
 | §2.5 RULE_COVERAGE.md（時間盒） | ⬜ |
-| `_lib.py`（RealGitContext）+ dispatch.py | ⬜ |
 | I1–I5／DB-2–DB-5 + S1 去重／A2 | ⬜ |
-| 掛上 IT-department settings | ⬜ **需協調**：實測發現 hook 是專案層級，掛上即對所有並行 session 生效 |
-| exit code 語意實測 | ⬜ 未驗（測 exit 2 會擋到其他 session，改用 fixture 或個人層 settings） |
+| 掛上 IT-department settings（`shadow_mode: true`） | ⬜ **下一步**：per-rule 設定已就緒，DB-1 預設 shadow=true，理論上可安全掛上 |
+| 跑 3–5 天收 would-block 清單（D18 雙門檻） | ⬜ 待掛上後開始計時 |
+| exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
 | Phase 1.5–4 | ⬜ |
 
 > ⚠ `D:\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。

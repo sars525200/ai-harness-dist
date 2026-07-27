@@ -1,4 +1,4 @@
-"""RealGitContext —— 把 contract.GitContext 的 7 個方法接到真 git。
+"""RealGitContext —— 把 contract.GitContext 的 8 個方法接到真 git。
 
 設計原則
 --------
@@ -73,7 +73,23 @@ class RealGitContext(GitContext):
             self._cache[key] = producer()
         return self._cache[key]
 
-    # ---------- GitContext 介面（7 個） ----------
+    # ---------- GitContext 介面（8 個） ----------
+
+    @property
+    def repo_root(self) -> str:
+        """`git rev-parse --show-toplevel` 的規範化路徑（快取）。
+
+        用 toplevel 而非建構時傳入的 cwd：cwd 可能是子目錄，
+        兩個從同一 repo 不同子目錄建構的 RealGitContext 該被視為同一個 repo；
+        反之 D15 的 wiring 斷言才不會被「路徑字串碰巧不同但其實同一個 repo」
+        或「toplevel 相同但傳入 cwd 不同」這兩種假象誤導。
+        """
+
+        def _resolve():
+            raw = self._run(["rev-parse", "--show-toplevel"]).decode("utf-8", errors="replace").strip()
+            return os.path.normpath(raw)
+
+        return self._cached(("root",), _resolve)
 
     def resolve_remote_ref(self, remote: str, branch: str) -> str | None:
         """回傳 'vm/master'，不存在回 None。

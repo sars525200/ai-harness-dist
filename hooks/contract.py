@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+import os
+
 ALLOW = "ALLOW"
 BLOCK = "BLOCK"
 WARN = "WARN"
@@ -98,6 +100,19 @@ class GitContext:
         """
         raise NotImplementedError
 
+    @property
+    def repo_root(self) -> str:
+        """規範化的 repo 根目錄路徑，作為這個 GitContext 的身分識別。
+
+        D15：HookContext 用它斷言 `git` 與 `dev_git` 不是同一個 repo。
+        沒有這個識別，兩個 GitContext 若意外接到同一個 repo（設定錯誤，
+        例如 dev_git 忘了指到 SOP/、兩個都指回主 repo），雙改檢查會兩邊
+        查到同樣的東西、天然「一致」而靜默通過——這不是資料問題，是
+        wiring 問題，必須在建構時就炸出來，不能被 fail-open 悄悄吃掉、
+        變成一條看起來生效、實際上從未真正檢查過雙改的規則。
+        """
+        raise NotImplementedError
+
 
 class HookContext:
     """一次 hook 呼叫的完整輸入。
@@ -115,6 +130,19 @@ class HookContext:
         # 那是現實中不可能出現的狀態。
         # 為 None 時雙改檢查跳過（fail-open），不猜。
         self.dev_git = dev_git
+
+        # D15：git 與 dev_git 若指向同一個 repo_root，雙改檢查恆為真 ——
+        # 這是配置錯誤，必須在建構當下就炸出來（被 dispatch 層的 fail-open
+        # 接住、記進 hook_errors、exit 0），而不是靜默通過變成假 ALLOW。
+        # git 可能是 None（precheck 階段刻意不建 GitContext，見 dispatch.py），
+        # 此時無從比較，略過。
+        if git is not None and dev_git is not None and (
+            os.path.normcase(git.repo_root) == os.path.normcase(dev_git.repo_root)
+        ):
+            raise ValueError(
+                f"git 與 dev_git 指向同一個 repo_root（{git.repo_root!r}）——"
+                "雙改檢查在此設定下永遠比對相同內容，這是 wiring bug。"
+            )
 
     @property
     def event(self) -> str:

@@ -1,0 +1,207 @@
+"""單一 entry point —— 把 hook 事件路由到 rules/ 底下的規則。
+
+settings.json 只需要指這一支（`py -3 D:\\.ai-harness\\hooks\\dispatch.py`），
+省維護與 boilerplate（§3.6）；**不省啟動延遲**——每次仍是獨立 Python 進程。
+
+事件來源以 payload 的 `hook_event_name` 為準（Step 0 實測確認每個事件都帶這個
+欄位），不靠 argv——argv 需要在 settings.json 每個 matcher 條目手動填對，
+多一個容易配置錯誤的地方；payload 自帶反而是單一真相。
+
+三層 fail-safe（缺一都可能變成 D7 說的「規則靜默死亡」）：
+    1. stdin 讀 bytes 用 utf-8-sig 解——Step 0 實測 PowerShell 管線會加 BOM，
+       純 json.loads 直接失敗。
+    2. 整個 main() 包在 try/except——任何內部例外一律 exit 0 放行，
+       但**不是**吞掉不留痕：寫進 state/hook_errors.<session_id>.log。
+    3. shadow mode 下即使判定是 BLOCK，也絕不影響 exit code / stdout ——
+       shadow 的存在意義就是「先看資料，再決定要不要真的擋」。
+
+Shadow mode 設定：hooks/dispatch_config.json，**per-rule**（不是全域開關）。
+    這樣「shadow 驗證期 → 轉正式」是每條規則自己的畢業儀式，DB-1 轉正式後
+    未來新增 I1／DB-2 不需要跟著重新 shadow 一輪，也不會被逼著跳過驗證直接上線。
+    設定檔缺該規則 ID、或設定檔本身不存在 → 預設 shadow=true
+    （fail-open 方向：不確定就先只觀察，不擋）。
+
+Log 分工（state/events.<session_id>.ndjson，單一檔案＋kind 欄位區分）：
+    kind="dispatch" —— 每次 dispatch.py 被呼叫且事件/工具符合任一規則的
+                        matcher 就記一筆（{event, tool_name}，不含指令內容）。
+                        這是「wiring 有沒有被觸發」的心跳信號。
+    kind="applies"  —— 規則的 applies() 真的回 True 才記一筆（{rule_id}）。
+                        這是「該情境真的發生了幾次」的分母 —— 光看 dispatch
+                        次數看不出 DB-1 到底被 git push vm 命中過幾次，
+                        還是一次都沒中過（regex 寫錯 vs 沒人推的兩種零，
+                        必須分得出來）。
+    kind="decision" —— 只在判定 != ALLOW-乾淨 或有 bypass 時才記
+                        （{rule_id, decision, bypassed, shadow, message, command}）。
+                        這是 would-block 清單的原始資料。純 ALLOW 不留痕，
+                        避免持續運行數天後把其他 session 的操作內容
+                        （尤其 Bash/PowerShell 這種高頻 matcher）大量收進共用 log。
+    每個 session 各自的檔案（同一 session 內的 hook 呼叫是序列執行，
+    不會有並行 append 的競態；跨 session 才會並行，所以分檔）。
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+import time
+import traceback
+
+from contract import ALLOW, BLOCK, HookContext
+from rules import db1_deploy
+
+HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_DIR = r"D:\.ai-harness\state"
+CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
+
+sys.path.insert(0, HOOKS_DIR)
+from _lib import RealGitContext  # noqa: E402
+
+# 規則登記表。之後加 I1–I5／DB-2–DB-5 只需要在這裡加一行。
+REGISTRY = [
+    {
+        "id": "DB-1",
+        "module": db1_deploy,
+        "events": {"PreToolUse"},
+        "tools": {"Bash", "PowerShell"},
+    },
+]
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _log_event(session_id: str, **fields) -> None:
+    """append 一行到本 session 的事件檔。任何寫檔失敗都不該讓 hook 掛掉。"""
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        path = os.path.join(STATE_DIR, f"events.{session_id or 'unknown'}.ndjson")
+        line = json.dumps({"ts": _now(), **fields}, ensure_ascii=False)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        pass  # 連記錄都失敗就放棄記錄，但不可讓這個失敗外溢影響 hook 本體
+
+
+def _log_error(session_id: str, exc: BaseException) -> None:
+    """D7：fail-open 但不 fail-silent。例外一律放行，但留痕。"""
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        path = os.path.join(STATE_DIR, f"hook_errors.{session_id or 'unknown'}.log")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(f"[{_now()}] {type(exc).__name__}: {exc}\n")
+            fh.write(traceback.format_exc())
+            fh.write("\n")
+    except Exception:
+        pass
+
+
+def _load_shadow_config() -> dict:
+    try:
+        with open(CONFIG_PATH, "rb") as fh:
+            raw = fh.read().decode("utf-8-sig")
+        return json.loads(raw).get("rules", {})
+    except Exception:
+        return {}
+
+
+def _is_shadow(rule_id: str, config: dict) -> bool:
+    """設定缺該規則、或設定檔整個讀不到 → 預設 True（觀察優先，不擋）。"""
+    return bool(config.get(rule_id, {}).get("shadow", True))
+
+
+def _resolve_dev_git(main_git: RealGitContext) -> "RealGitContext | None":
+    """探測主 repo 根目錄旁是否有帶 .git 的 SOP/ 資料夾（DEV 對應目錄）。
+
+    刻意不寫死專案名稱 —— 只探測目錄結構。IT-department 有 SOP/，
+    探測會找到；AI-Projects 沒有這個結構，探測自然回 None。
+    共用層（D1）因此不需要為每個專案各寫一套判斷式。
+    """
+    try:
+        root = main_git.repo_root
+    except Exception:
+        return None
+    candidate = os.path.join(root, "SOP")
+    if os.path.isdir(os.path.join(candidate, ".git")):
+        return RealGitContext(candidate)
+    return None
+
+
+def _dispatch(payload: dict) -> int:
+    session_id = payload.get("session_id", "")
+    event = payload.get("hook_event_name", "")
+    tool_name = payload.get("tool_name", "")
+
+    candidates = [
+        e for e in REGISTRY if event in e["events"] and tool_name in e["tools"]
+    ]
+    if not candidates:
+        return 0
+
+    _log_event(session_id, kind="dispatch", event=event, tool_name=tool_name)
+
+    # precheck：只讀 payload（ctx.command 不碰 git），過濾掉絕大多數
+    # 不相干的 Bash/PowerShell 呼叫，避免每次都白付一次 git rev-parse 的成本。
+    precheck_ctx = HookContext(payload, None, None)
+    applicable = [e for e in candidates if e["module"].applies(precheck_ctx)]
+    if not applicable:
+        return 0
+
+    cwd = payload.get("cwd", "")
+    main_git = RealGitContext(cwd)
+    dev_git = _resolve_dev_git(main_git)
+    ctx = HookContext(payload, main_git, dev_git)
+
+    config = _load_shadow_config()
+    block_message = None
+    warn_messages: list[str] = []
+
+    for entry in applicable:
+        rule_id = entry["id"]
+        _log_event(session_id, kind="applies", rule_id=rule_id, tool_name=tool_name)
+
+        verdict = entry["module"].check(ctx)
+        shadow = _is_shadow(rule_id, config)
+
+        if verdict.decision != ALLOW or verdict.bypassed:
+            _log_event(
+                session_id, kind="decision", rule_id=rule_id,
+                decision=verdict.decision, bypassed=verdict.bypassed,
+                shadow=shadow, message=verdict.message, command=ctx.command,
+            )
+
+        if shadow:
+            continue  # shadow：只觀察記錄，絕不影響行為
+
+        if verdict.decision == BLOCK:
+            block_message = verdict.message  # 第一個 BLOCK 就夠了，不必湊齊全部
+        elif verdict.message:
+            warn_messages.append(verdict.message)
+
+    if block_message:
+        sys.stderr.write(block_message + "\n")
+        return 2
+
+    if warn_messages:
+        # WARN 的實際呈現方式（exit 0 + stderr 是否真的被模型看到）尚未實測
+        # ——見 HARNESS_PLAN.md §-0.5「未驗項」。目前先用最保守的猜測：
+        # 不阻擋，只嘗試印出，日後有規則轉出 shadow 時要專案驗證這條路徑。
+        sys.stderr.write("\n".join(warn_messages) + "\n")
+
+    return 0
+
+
+def main() -> int:
+    session_id = "unknown"
+    try:
+        raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
+        payload = json.loads(raw)
+        session_id = payload.get("session_id", "unknown")
+        return _dispatch(payload)
+    except Exception as exc:
+        _log_error(session_id, exc)
+        return 0  # fail-open：dispatch 本身的錯誤絕不能卡住使用者
+
+
+if __name__ == "__main__":
+    sys.exit(main())
