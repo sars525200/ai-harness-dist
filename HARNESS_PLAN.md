@@ -386,8 +386,8 @@ state：append-only、session-scoped、24 小時過期清理。
 | **§2.5 RULE_COVERAGE.md（時間盒）** | ✅ 6 條有計次標記的規則逐一查證＋I1/I2 佐證強度查證，**改寫了 I 系列優先序**：R1（DEFAULT_* 遷移，3 犯）／R3（併入 DB-3）／R4（取代原 I3）排到 I1/I2 之前。詳見 `RULE_COVERAGE.md` |
 | R4（PreToolUse Write，取代原 I3） | ✅ commit `e589356`，5 fixture + 真實 E2E |
 | **AWC-1（新增，非原規劃）：Stop 觀察「問句結尾未呼叫 AskUserQuestion」** | ✅ commit `d2c08be`。緣起：本 session 自己違反 CLAUDE.md §2 硬規則被 user 當場抓到——索引/記憶強化解決不了執行機制問題，做成 WARN 級 Stop 觀察規則。風險層級刻意低於 `STOP_HOOK_MARKER_PLAN.md`（只記錄不擋，不依賴未驗證的 exit-code-blocks-Stop 假設）。5 fixture（3 份真實 transcript）+ 回歸網有效性驗證（天真版「整檔搜尋」會誤判 fixture 04，證明「這一輪」邊界判斷有實質作用）+ 真實 subprocess E2E |
-| R1（DEFAULT_* 遷移 WARN） | ⬜ **下一步** |
-| R3（併入 DB-3） | ⬜ |
+| R1（DEFAULT_* 遷移 WARN） | ✅ commit `81beffd`。順帶把 DB-1 的私有 `_is_push_to_vm` 升格成 `contract.is_push_to_remote` 共用工具（DB-2~DB-5 未來可重用），6 fixture + 回歸網驗證 + 真實 repo 直接呼叫測試 |
+| R3（併入 DB-3） | ⬜ **下一步** |
 | I1/I2／DB-2/DB-4/DB-5 + S1 去重／A2 | ⬜ |
 | Phase 1.5–4 | ⬜ |
 
