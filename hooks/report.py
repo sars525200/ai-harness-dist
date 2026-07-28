@@ -91,6 +91,27 @@ def main() -> None:
 
     print()
     print("=" * 70)
+    print("Skill 使用次數（誰真的被用過）")
+    print("=" * 70)
+    skills: Counter = Counter(
+        e.get("skill") or "(未帶名稱)" for e in events if e.get("kind") == "skill"
+    )
+    skill_sessions: dict[str, set] = defaultdict(set)
+    for e in events:
+        if e.get("kind") == "skill":
+            skill_sessions[e.get("skill") or "(未帶名稱)"].add(e["_session_id"])
+    if not skills:
+        print("  尚無記錄。注意 matcher 必須含 Skill（settings 的 PreToolUse matcher），")
+        print("  否則 Skill 呼叫根本不會送進 dispatch —— 那時的「0」是沒接線，不是沒人用。")
+    else:
+        for name, n in skills.most_common():
+            print(f"  {name:<24} {n:>3} 次　（{len(skill_sessions[name])} 個 session）")
+        print()
+        print("  ※ 這裡只記「被觸發過」，不代表整套流程跑完。要判斷是否驗收，")
+        print("    仍需看該次有沒有留下產出（commit／檔案）。")
+
+    print()
+    print("=" * 70)
     print("Hook 內部錯誤（D7：fail-open 但不 fail-silent）")
     print("=" * 70)
     if not errors:

@@ -132,6 +132,25 @@ def _dispatch(payload: dict) -> int:
     event = payload.get("hook_event_name", "")
     tool_name = payload.get("tool_name", "")
 
+    # ── Skill 使用記錄（2026-07-28）──────────────────────────────────────────
+    # 純觀測：不是規則、不進 REGISTRY、不參與 allow/block，記完立刻 return 0。
+    #
+    # 動機：要回答「這支 skill 到底有沒有被真的用過」，原本只能靠 commit 訊息的
+    # 產出特徵反推（「收工封存」→ shougong、「SG-###」→ suggestion-inbox）。
+    # 沒有產出特徵的 skill（deploy-prod／diagnose-bug…）就查不到——而
+    # **查不到不等於沒被用過**，那是資料缺口，不是結論。這一行把它補上。
+    #
+    # 只記 skill 名稱，不記 args：args 帶的是任務內容，這是跨 session 共用的 log，
+    # 不該收（同 kind="decision" 只在非乾淨 ALLOW 才留痕的理由）。
+    if event == "PreToolUse" and tool_name == "Skill":
+        skill_name = ""
+        try:
+            skill_name = str((payload.get("tool_input") or {}).get("skill", ""))[:60]
+        except Exception:
+            pass  # payload 形狀非預期也不該讓觀測用的一行害 hook 掛掉
+        _log_event(session_id, kind="skill", skill=skill_name)
+        return 0
+
     candidates = [
         e for e in REGISTRY if event in e["events"] and tool_name in e["tools"]
     ]
