@@ -1,0 +1,5 @@
+{"utterance": "今天就先到這吧", "expect": "shougong", "why": "口語版收工觸發詞，CLAUDE.md §4 明列"}
+{"utterance": "幫我把今天的東西封存一下，記憶也補一補", "expect": "shougong", "why": "封存＋補規範，正是這支的職責"}
+{"utterance": "收工，順便寫工時日誌", "expect": "shougong", "why": "收工＋ERP 日誌是同一套流程"}
+{"utterance": "幫我 commit 這個檔案", "expect": null, "why": "只是單一 git 操作，不是整套收工流程；誤觸會多跑清暫存/量測/雙 repo"}
+{"utterance": "把這條規則寫進記憶檔", "expect": null, "why": "單點補記憶，不需要走完整收工 SOP"}

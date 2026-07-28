@@ -1,0 +1,5 @@
+{"utterance": "這個計畫書找另一個 AI 幫忙挑錯", "expect": "adversarial-review", "why": "description 明列的說法"}
+{"utterance": "這個資安重構方案，來個互審", "expect": "adversarial-review", "why": "大型 [DB|邏輯] 類計畫"}
+{"utterance": "幫我找人挑戰這個設計的漏洞", "expect": "adversarial-review", "why": "對抗式覆核"}
+{"utterance": "幫我 review 這段程式碼有沒有 bug", "expect": null, "why": "一般 code review，不需要開獨立審查者逐輪挑錯"}
+{"utterance": "這兩個方案你比較推薦哪個", "expect": null, "why": "要的是建議不是對抗式覆核"}

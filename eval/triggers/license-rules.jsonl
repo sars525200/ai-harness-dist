@@ -1,0 +1,5 @@
+{"utterance": "要匯入一批 Windows 序號，有什麼要注意", "expect": "license-rules", "why": "序號匯入"}
+{"utterance": "這個授權的續約邏輯怎麼判", "expect": "license-rules", "why": "_swRenewalArranged 相關"}
+{"utterance": "要刪掉這個軟體授權的整個 series", "expect": "license-rules", "why": "series 刪除是明列的雷"}
+{"utterance": "幫我查這個軟體現在有幾個授權", "expect": null, "why": "唯讀查詢，不需要載入規則卡"}
+{"utterance": "這個帳單金額算錯了，改一下", "expect": "license-rules", "why": "★首跑修正：原標 none 是**出題錯誤**——license-rules 內就有「授權價錯值可能只躲在權威表／改價查帳一律做四層一致性檢查」，改帳單金額正是該規則情境，載入是對的"}

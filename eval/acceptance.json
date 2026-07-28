@@ -1,0 +1,14 @@
+{
+  "license-rules": {
+    "file_mtime": 1785210169.0737507,
+    "note": "2026-07-28 本 session 實際載入，參考型 skill 載入即完成",
+    "result": "pass",
+    "verified_at": "2026-07-28T13:43:08"
+  },
+  "shougong": {
+    "file_mtime": 1785217407.3245876,
+    "note": "2026-07-28 本 session 完整跑過六步，產出 commit aa10fd98（期間為驗證過期偵測曾 touch mtime，內容未變，故重記）",
+    "result": "pass",
+    "verified_at": "2026-07-28T13:43:39"
+  }
+}

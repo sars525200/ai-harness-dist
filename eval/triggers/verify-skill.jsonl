@@ -1,0 +1,5 @@
+{"utterance": "這支 skill 寫好了，驗一下能不能用", "expect": "verify-skill", "why": "description 明列"}
+{"utterance": "測一下這個新 skill", "expect": "verify-skill", "why": "同上"}
+{"utterance": "這個會 spawn agent 的 skill 我不確定跑不跑得起來", "expect": "verify-skill", "why": "多輪流程 skill 上線前"}
+{"utterance": "這個 skill 的描述幫我改順一點", "expect": null, "why": "編輯文字，不是驗證可用性"}
+{"utterance": "列一下現在有哪些 skill", "expect": null, "why": "清單查詢"}

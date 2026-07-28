@@ -1,0 +1,5 @@
+{"utterance": "這個 bug 改了三次還是會出現", "expect": "diagnose-bug", "why": "改了沒好＝典型難 bug"}
+{"utterance": "頁面偶爾會卡住，找不到原因", "expect": "diagnose-bug", "why": "間歇性、跨層"}
+{"utterance": "幫我查這個效能退化的根因", "expect": "diagnose-bug", "why": "效能退化明列在 description"}
+{"utterance": "這裡少一個分號，補一下", "expect": null, "why": "一眼可見的小修，description 明講不用"}
+{"utterance": "上週那批資料不見了，查一下怎麼回事", "expect": "data-incident", "why": "★首跑修正：原標 none 是**出題錯誤**——資料不見本來就該走 data-incident，不是「不該觸發任何一支」。改為驗分流是否分對邊（正確答案是另一支，而非 none）"}

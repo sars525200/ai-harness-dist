@@ -1,0 +1,5 @@
+{"utterance": "這個修好了，推正式站", "expect": "deploy-prod", "why": "明確的部署意圖"}
+{"utterance": "push vm 上線吧", "expect": "deploy-prod", "why": "§9 主流程的觸發語"}
+{"utterance": "正式站那個錯誤修一修然後部署", "expect": "deploy-prod", "why": "修 PROD＋部署＝八步流程"}
+{"utterance": "幫我看一下正式站現在的版號", "expect": null, "why": "唯讀查詢，不該啟動八步部署流程"}
+{"utterance": "這段程式碼推到 GitHub", "expect": null, "why": "不是 vm 部署，走的不是同一套"}

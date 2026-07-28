@@ -1,0 +1,5 @@
+{"utterance": "用腳本把這批資料批次回補到正式庫", "expect": "dry-run-migrate", "why": "改正式資料＝閘門情境"}
+{"utterance": "這個 Excel 匯入系統", "expect": "dry-run-migrate", "why": "外部文件匯入明列在 description"}
+{"utterance": "把這些舊記錄清一清，DELETE 掉", "expect": "dry-run-migrate", "why": "含 DELETE"}
+{"utterance": "查一下正式庫這個欄位現在是什麼值", "expect": null, "why": "唯讀查詢不需要 dry-run 閘門"}
+{"utterance": "改一下這個 SQL 的 SELECT 條件", "expect": null, "why": "改查詢語句不是改資料"}

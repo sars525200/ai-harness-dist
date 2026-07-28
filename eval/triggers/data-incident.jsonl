@@ -1,0 +1,5 @@
+{"utterance": "我之前建的共用帳號都不見了", "expect": "data-incident", "why": "7/22 事故的原始說法"}
+{"utterance": "這個設定又跑回舊的值了", "expect": "data-incident", "why": "被覆寫，事件已發生"}
+{"utterance": "資料庫裡那些筆數對不上，少了一半", "expect": "data-incident", "why": "數字對不上＝資料事故"}
+{"utterance": "這個按鈕點了沒反應", "expect": null, "why": "可重現的 UI bug，該走 diagnose-bug"}
+{"utterance": "幫我把這個測試用的暫存檔案刪掉", "expect": null, "why": "★首跑修正：原句「刪掉三筆測試資料」語意模糊（沒指明是不是正式資料），若是正式資料本來就該走 dry-run-migrate 閘門。且此句當初重複寫進兩個檔案、只改了一邊 → 樣本集需查重複，見 run_triggers 的 dup 檢查"}

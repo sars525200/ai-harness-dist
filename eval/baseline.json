@@ -1,0 +1,42 @@
+{
+  "adversarial-review": {
+    "tokens": 2045,
+    "mtime": 1785210929.5771923
+  },
+  "codebase-health": {
+    "tokens": 1294,
+    "mtime": 1784911974.0733016
+  },
+  "data-incident": {
+    "tokens": 1469,
+    "mtime": 1785208149.6160252
+  },
+  "deploy-prod": {
+    "tokens": 702,
+    "mtime": 1784912194.7093048
+  },
+  "diagnose-bug": {
+    "tokens": 1062,
+    "mtime": 1785216548.2662547
+  },
+  "dry-run-migrate": {
+    "tokens": 716,
+    "mtime": 1784912484.37282
+  },
+  "license-rules": {
+    "tokens": 755,
+    "mtime": 1785210169.0737507
+  },
+  "shougong": {
+    "tokens": 624,
+    "mtime": 1784912176.5343206
+  },
+  "suggestion-inbox": {
+    "tokens": 895,
+    "mtime": 1785177740.3237967
+  },
+  "verify-skill": {
+    "tokens": 1356,
+    "mtime": 1785211074.4158618
+  }
+}

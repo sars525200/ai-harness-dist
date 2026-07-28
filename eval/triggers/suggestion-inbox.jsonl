@@ -1,0 +1,5 @@
+{"utterance": "讀一下建議信箱有什麼待辦", "expect": "suggestion-inbox", "why": "description 明列"}
+{"utterance": "來看 SG-072", "expect": "suggestion-inbox", "why": "SG-### 編號"}
+{"utterance": "處理一下內部建議清單", "expect": "suggestion-inbox", "why": "同一套流程"}
+{"utterance": "員工前台那個建議表單壞了", "expect": null, "why": "員工前台建議是另一個分頁，description 明確排除"}
+{"utterance": "我有個建議：把這個按鈕改大一點", "expect": null, "why": "使用者當下提建議，不是去讀待辦清單"}

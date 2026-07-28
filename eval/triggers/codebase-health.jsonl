@@ -1,0 +1,5 @@
+{"utterance": "幫我看看這個專案的架構債集中在哪", "expect": "codebase-health", "why": "架構健檢"}
+{"utterance": "跑一次架構健檢出報告", "expect": "codebase-health", "why": "直述"}
+{"utterance": "哪些模組太淺、摩擦最大", "expect": "codebase-health", "why": "淺模組熱點是 description 用詞"}
+{"utterance": "這個函式寫得很爛，幫我重構", "expect": null, "why": "單點重構，不是全域唯讀健檢"}
+{"utterance": "專案現在多少行程式碼", "expect": null, "why": "單一數字查詢，不需要出整份報告"}
