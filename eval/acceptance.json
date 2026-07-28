@@ -6,9 +6,9 @@
     "verified_at": "2026-07-28T13:43:08"
   },
   "shougong": {
-    "file_mtime": 1785217407.3245876,
-    "note": "2026-07-28 本 session 完整跑過六步，產出 commit aa10fd98（期間為驗證過期偵測曾 touch mtime，內容未變，故重記）",
+    "file_mtime": 1785230192.2982244,
+    "note": "2026-07-28 完整跑完五步（清暫存→補規範分流→防膨脹量測→3.5 看板→兩 repo commit）；本次順帶把步驟 3 改成 check_bloat.py",
     "result": "pass",
-    "verified_at": "2026-07-28T13:43:39"
+    "verified_at": "2026-07-28T17:17:35"
   }
 }
