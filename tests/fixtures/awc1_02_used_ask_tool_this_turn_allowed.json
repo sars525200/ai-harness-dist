@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 結尾問句、但這輪真的呼叫過 AskUserQuestion → ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "正面測試防過度攔截：這輪已經用選擇題問過（見 transcript 裡的 AskUserQuestion tool_use），結尾的『這樣可以嗎？』是收尾確認語氣，不是還沒問就想結束對話。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-02",
+    "last_assistant_message": "好，先改 A。這樣可以嗎？",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\with_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

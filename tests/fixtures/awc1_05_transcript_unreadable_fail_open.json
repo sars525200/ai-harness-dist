@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 transcript_path 缺失或讀不到 → fail-open ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "D7 fail-open 原則：判斷不了『這輪有沒有問過』時不該猜成違規去洗版 WARN，寧可漏放行。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-05",
+    "last_assistant_message": "要現在做嗎？",
+    "transcript_path": ""
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

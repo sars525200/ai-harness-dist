@@ -47,7 +47,7 @@ import time
 import traceback
 
 from contract import ALLOW, BLOCK, HookContext
-from rules import db1_deploy, r4_server_dbpath
+from rules import awc1_choices_check, db1_deploy, r4_server_dbpath
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
@@ -57,6 +57,7 @@ sys.path.insert(0, HOOKS_DIR)
 from _lib import RealGitContext  # noqa: E402
 
 # 規則登記表。之後加其餘規則只需要在這裡加一行。
+# tools=None 表示不篩 tool_name（Stop 這類事件本來就沒有 tool_name 概念）。
 REGISTRY = [
     {
         "id": "DB-1",
@@ -69,6 +70,12 @@ REGISTRY = [
         "module": r4_server_dbpath,
         "events": {"PreToolUse"},
         "tools": {"Write"},
+    },
+    {
+        "id": "AWC-1",
+        "module": awc1_choices_check,
+        "events": {"Stop"},
+        "tools": None,
     },
 ]
 
@@ -157,8 +164,12 @@ def _dispatch(payload: dict) -> int:
         _log_event(session_id, kind="skill", skill=skill_name)
         return 0
 
+    # tools=None（Stop 這類非工具事件沒有 tool_name 概念）→ 只用 event 比對，
+    # 不做 tool_name in {} 判斷（空集合會讓任何 tool_name 都比對失敗，包含
+    # Stop 事件本身沒有 tool_name 這件事——None 明確表達「不篩」，跟「篩出空集合」不同）。
     candidates = [
-        e for e in REGISTRY if event in e["events"] and tool_name in e["tools"]
+        e for e in REGISTRY
+        if event in e["events"] and (e["tools"] is None or tool_name in e["tools"])
     ]
     if not candidates:
         return 0

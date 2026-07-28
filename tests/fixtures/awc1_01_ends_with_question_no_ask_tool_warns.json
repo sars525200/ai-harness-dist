@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 結尾問句、這輪沒呼叫 AskUserQuestion → WARN",
+  "rule": "awc1_choices_check",
+  "why": "CLAUDE.md §2 硬規則：需 user 決定一律走 AskUserQuestion，不用開放式問句。這是最基本的違規情境——結尾像問句，但完全沒呼叫工具。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-01",
+    "last_assistant_message": "要先改 A 還是 B？",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "AskUserQuestion"
+  }
+}

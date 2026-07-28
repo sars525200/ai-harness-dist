@@ -181,6 +181,16 @@ class HookContext:
     def cwd(self) -> str:
         return self.payload.get("cwd", "")
 
+    @property
+    def last_assistant_message(self) -> str:
+        """Stop 事件專屬：這一輪最後一則 assistant 訊息全文。非 Stop 事件回空字串。"""
+        return self.payload.get("last_assistant_message", "") or ""
+
+    @property
+    def transcript_path(self) -> str:
+        """本次 session 的完整 transcript（jsonl，逐行一個事件）路徑。所有事件都帶。"""
+        return self.payload.get("transcript_path", "") or ""
+
     def has_bypass(self, rule_id: str) -> bool:
         """D10：比對 command 字串，**不讀環境變數**。
 

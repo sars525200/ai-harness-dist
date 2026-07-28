@@ -1,0 +1,6 @@
+{"type":"user","message":{"role":"user","content":"幫我看一下這個功能"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"foo.py"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents here"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"AskUserQuestion","input":{"questions":[{"question":"要先改 A 還是 B？","header":"順序","options":[{"label":"A","description":"先改 A"},{"label":"B","description":"先改 B"}]}]}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"user 選了 A"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"好，先改 A。這樣可以嗎？"}]}}

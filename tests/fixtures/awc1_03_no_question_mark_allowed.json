@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 結尾不是問句 → ALLOW（applies 不成立，連 transcript 都不用讀）",
+  "rule": "awc1_choices_check",
+  "why": "正面測試：陳述句結尾完全不該觸發，且 applies() 該在讀檔前就篩掉——這裡故意給一個不存在的 transcript_path，若 applies() 沒篩掉、跑到 check() 去讀檔，也不該因為讀檔失敗而誤判成別的結果（fail-open 之外，這裡更該是『根本沒進去讀』）。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-03",
+    "last_assistant_message": "已經改好了，commit 是 abc1234。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\does_not_exist.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

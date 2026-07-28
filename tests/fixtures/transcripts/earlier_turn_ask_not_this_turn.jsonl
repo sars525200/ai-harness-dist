@@ -1,0 +1,8 @@
+{"type":"user","message":{"role":"user","content":"第一個任務"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"AskUserQuestion","input":{"questions":[{"question":"要用方案 A 還是 B？","header":"方案","options":[{"label":"A","description":"方案A"},{"label":"B","description":"方案B"}]}]}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"user 選了 A"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"好，用方案 A。"}]}}
+{"type":"user","message":{"role":"user","content":"第二個任務，跟第一個無關"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_2","name":"Read","input":{"file_path":"bar.py"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_2","content":"file contents"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"這個要接著做嗎？"}]}}

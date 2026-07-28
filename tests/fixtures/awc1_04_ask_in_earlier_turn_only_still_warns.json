@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 AskUserQuestion 只出現在更早的一輪，這輪還是問開放式問句 → WARN",
+  "rule": "awc1_choices_check",
+  "why": "驗證『這一輪』的邊界判斷是真的有效，不是『整份 transcript 裡有沒有出現過』這種粗糙判準——若只查全檔有沒有 AskUserQuestion 字樣，這個案例會被誤判成 ALLOW（因為第一輪真的問過），但第二輪『這個要接著做嗎？』其實完全沒有走選擇題，該被抓到。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-04",
+    "last_assistant_message": "這個要接著做嗎？",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\earlier_turn_ask_not_this_turn.jsonl"
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "AskUserQuestion"
+  }
+}
