@@ -1,6 +1,6 @@
 {
-  "total_bytes": 26652,
-  "entry_count": 95,
+  "total_bytes": 27556,
+  "entry_count": 100,
   "over_limit_count": 19,
   "entries": {
     "連續N≥3次patch仍reproduce→停下": 30,
@@ -29,6 +29,8 @@
     "sync＝REPLACE-ALL；`/api/i": 79,
     "刪除走專屬`/api/inout/delete`": 68,
     "server自有旗標禁掛REPLACE-ALL重": 47,
+    "整批單一transaction→任一子表撞UNI": 107,
+    "server修clientpayload**只能": 84,
     "synchelper寫設備必{保管人,statu": 67,
     "保管人一律`setAssetCustodian`": 43,
     "元件身分一律component_asset_id": 36,
@@ -49,6 +51,9 @@
     "先建「會紅的tightloop」(打真codep": 139,
     "外部報表對帳前先驗欄位語義(`數量×單價==金額": 91,
     "改判定引擎前必切「真實引擎程式碼」跑全量dry-": 125,
+    "**往既有harness加case前先確認它走得": 56,
+    "測試失敗先分辨**斷言階段vs收尾階段**（全綠": 74,
+    "**id生成一律掃existingIds取最小未": 115,
     "改前先grep找齊全部copy；禁全域sed過度": 123,
     "**改名/改制遷移必「先audit字面值→修程式": 140,
     "**boot期遷移禁「本機localStorag": 106,
