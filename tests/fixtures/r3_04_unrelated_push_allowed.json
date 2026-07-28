@@ -1,0 +1,22 @@
+{
+  "name": "R3 push 完全沒碰 ops/ 相關檔案 → ALLOW",
+  "rule": "r3_ops_backup_scp",
+  "why": "正面測試防過度攔截：絕大多數部署完全不涉及這 4 支腳本。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r3-04",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/app.js"]
+    },
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "R3 push 命中 health_check.py（有 /srv/it-asset-backup/ 獨立副本）→ WARN",
+  "rule": "r3_ops_backup_scp",
+  "why": "CLAUDE.md §9 已咬 2 次：這幾支 ops timer 腳本實際執行路徑是 /srv/it-asset-backup/ 副本，git push vm 不會更新它。2026-07-28 讀 it-asset-health.service 的 ExecStart 驗證過確實指向該路徑。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r3-01",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/ops/health_check.py"]
+    },
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "health_check.py"
+  }
+}

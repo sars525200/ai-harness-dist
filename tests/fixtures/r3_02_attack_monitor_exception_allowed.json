@@ -1,0 +1,22 @@
+{
+  "name": "R3 push 命中 attack_monitor.py（例外，跑 repo 路徑）→ ALLOW",
+  "rule": "r3_ops_backup_scp",
+  "why": "這是 R3 存在的理由本身：不是所有 ops/ 腳本都需要 scp。2026-07-28 讀 it-asset-monitor.service 的 ExecStart 確認它執行的是 /srv/it-asset/...（repo 路徑），git push vm 就會更新，不該被誤報成需要 scp。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r3-02",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/ops/attack_monitor.py"]
+    },
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

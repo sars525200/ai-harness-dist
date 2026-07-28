@@ -1,0 +1,15 @@
+{
+  "name": "R3 不是 git push vm 的指令 → ALLOW（applies 不成立）",
+  "rule": "r3_ops_backup_scp",
+  "why": "正面測試：非部署指令不該觸發。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git log --oneline -5" },
+    "session_id": "fixture-r3-06",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

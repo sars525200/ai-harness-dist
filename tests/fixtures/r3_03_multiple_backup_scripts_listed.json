@@ -1,0 +1,27 @@
+{
+  "name": "R3 push 同時命中多支需要 scp 的腳本 → WARN 全部列出",
+  "rule": "r3_ops_backup_scp",
+  "why": "驗證多筆命中時訊息真的列出全部檔名，不是只報第一個然後漏掉其他需要 scp 的檔案。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r3-03",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/ops/backup_db.sh",
+        "SOP_PROD/05_UI_Demo/ops/daily_report.py",
+        "SOP_PROD/05_UI_Demo/server.py"
+      ]
+    },
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "backup_db.sh"
+  }
+}

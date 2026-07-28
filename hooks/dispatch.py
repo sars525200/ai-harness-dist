@@ -47,7 +47,13 @@ import time
 import traceback
 
 from contract import ALLOW, BLOCK, HookContext
-from rules import awc1_choices_check, db1_deploy, r1_default_migration, r4_server_dbpath
+from rules import (
+    awc1_choices_check,
+    db1_deploy,
+    r1_default_migration,
+    r3_ops_backup_scp,
+    r4_server_dbpath,
+)
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
@@ -74,6 +80,12 @@ REGISTRY = [
     {
         "id": "R1",
         "module": r1_default_migration,
+        "events": {"PreToolUse"},
+        "tools": {"Bash", "PowerShell"},
+    },
+    {
+        "id": "R3",
+        "module": r3_ops_backup_scp,
         "events": {"PreToolUse"},
         "tools": {"Bash", "PowerShell"},
     },
