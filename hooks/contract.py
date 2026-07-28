@@ -167,6 +167,13 @@ class HookContext:
         return self.tool_input.get("file_path", "") or ""
 
     @property
+    def content(self) -> str:
+        """Write 即將寫入的完整內容。這是 D3「不可逆才 BLOCK」能在 Write 上真擋的關鍵——
+        Edit 只給得出 diff，Pre 驗不了完整檔案；Write 在動筆前就拿得到全文。
+        非 Write 工具回空字串。"""
+        return self.tool_input.get("content", "") or ""
+
+    @property
     def session_id(self) -> str:
         return self.payload.get("session_id", "")
 

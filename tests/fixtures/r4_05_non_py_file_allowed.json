@@ -1,0 +1,18 @@
+{
+  "name": "R4 非 .py 檔即使內容含 import server 字樣也不適用 → ALLOW",
+  "rule": "r4_server_dbpath",
+  "why": "邊界測試：applies() 先擋副檔名，避免對 .md/.txt 這類寫文件說明時剛好提到 'import server' 字樣誤觸發。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\NOTES.md",
+      "content": "測試腳本要 `import server` 並 monkeypatch DB_PATH。"
+    },
+    "session_id": "fixture-r4-05",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

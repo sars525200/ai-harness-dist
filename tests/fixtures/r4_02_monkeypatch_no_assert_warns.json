@@ -1,0 +1,19 @@
+{
+  "name": "R4 有 monkeypatch 但沒 assert 驗證 → WARN",
+  "rule": "r4_server_dbpath",
+  "why": "只做一半的保護：改了 DB_PATH 但沒驗證真的指向副本而非誤寫成同一路徑，比完全沒保護安全，但沒達到 CLAUDE.md §9 要求的完整做法（monkeypatch＋assert）。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\_tmp_check_assets.py",
+      "content": "import server\nserver.DB_PATH = 'D:\\\\tmp\\\\copy.sqlite'\n\nassets = server.get_all_assets()\nprint(len(assets))\n"
+    },
+    "session_id": "fixture-r4-02",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "assert"
+  }
+}

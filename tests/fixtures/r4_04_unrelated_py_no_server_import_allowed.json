@@ -1,0 +1,18 @@
+{
+  "name": "R4 .py 檔沒 import server → ALLOW（applies 不成立）",
+  "rule": "r4_server_dbpath",
+  "why": "正面測試防過度攔截：絕大多數 Write 到 .py 檔的情境跟 server.py 完全無關，這條規則不該碰到它們。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\_tmp_scratch.py",
+      "content": "import json\n\nwith open('data.json') as f:\n    data = json.load(f)\nprint(data)\n"
+    },
+    "session_id": "fixture-r4-04",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

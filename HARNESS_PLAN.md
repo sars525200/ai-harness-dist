@@ -195,12 +195,13 @@ settings.json 的 hook command 寫絕對路徑，兩工作區共用同一份 cod
 
 | # | 時機 | 觸發 | 動作 | 說明 |
 |---|---|---|---|---|
-| I1 | Pre(Bash/PS) | `DELETE FROM assets`／`DROP TABLE` + PROD 路徑或 `ssh <VM-HOST>` | **BLOCK** | 走 `record_state='removed'` + 清保管人 + bump + sync + restart |
-| I2 | Pre(Bash/PS) | `sed -i` 無單一檔案限定 | **BLOCK** | 先 grep 確認 call site 再逐檔 Edit |
-| I3 | Pre(**Write**) | content 語法錯 | **BLOCK（真擋，未落地）** | Write 的 content 在 Pre 拿得到 |
+| I1 | Pre(Bash/PS) | `DELETE FROM assets`／`DROP TABLE` + PROD 路徑或 `ssh <VM-HOST>` | **BLOCK** | 走 `record_state='removed'` + 清保管人 + bump + sync + restart。**2026-07-28 §2.5 查證**：CLAUDE.md 全文找不到直接踩雷紀錄，風險已有 server 端 403 擋著（既有防線），優先度降到 R1/R3/R4 之後（見 `RULE_COVERAGE.md`） |
+| I2 | Pre(Bash/PS) | `sed -i` 無單一檔案限定 | **BLOCK** | 先 grep 確認 call site 再逐檔 Edit。**§2.5 查證**：1 次真實踩雷（「曾害頂級機存檔被洗白」）但無計次標記，佐證弱於 R1/R3/R4，優先度同上調整 |
+| **R4**（取代原 I3） | Pre(**Write**) | `.py` 內容含 `import server`／`from server import` 卻無 `DB_PATH` monkeypatch/assert | **BLOCK（真擋，未落地）** | **2026-07-28 §2.5 反向對帳新發現**：原 I3「語法錯就擋」太籠統，改成這條真正咬過人（已犯、後果最嚴重——誤寫 PROD DB）且具體可判的模式。Write 的 content 在 Pre 拿得到，符合 D3「不可逆才 BLOCK」 |
 | I4 | Post(**Edit/MultiEdit**) | 改完語法錯 | **強制回饋（已落地）** | ⚠ Edit 只有 diff，Pre 驗不了完整語法。**不是 BLOCK**，命名不可混淆 |
 | I5 | Post(Edit/Write) | 改 PROD 資產檔而 DEV 未動 | WARN | 判定＝**`本 session state` ∪ `git dirty`**。state 為主（問的是動作，用純 git 會把三週前未 commit 的 DEV 檔算成已同步）；git dirty 為**補集非替代**，補掉「user 手改 DEV」造成的誤報（D9 盲區） |
-| I6 | Pre(Bash/PS) | python 寫三大檔 | WARN | ⚠ **採用 D12 後整條刪除**。字串比對必漏（`python3`／變數展開／heredoc），且 A1 不兜底（matcher 不相交） |
+| **R1**（新增） | Post(Edit/Write) 或 push 邊界 | git diff 命中 `DEFAULT_\w+\s*=` 這類賦值行的 RHS 變更 | WARN | **§2.5 反向對帳新發現，犯最多次（3 次）**：`Object.assign({},預設,saved)` 模式下 saved 蓋過新預設值，改常數等於沒改。偵測手法比照 DB-1 `?v=` token 比對 |
+| ~~I6~~ | ~~Pre(Bash/PS)~~ | ~~python 寫三大檔~~ | — | ⚠ **採用 D12 後整條刪除**。字串比對必漏（`python3`／變數展開／heredoc），且 A1 不兜底（matcher 不相交） |
 
 ### 3.2 發布邊界對帳
 
@@ -382,8 +383,11 @@ state：append-only、session-scoped、24 小時過期清理。
 | 跑 3–5 天收 would-block 清單（D18 雙門檻） | 🔄 進行中，**修正過去回報的樣本數**：`report.py` 曾只顯示 1 筆命中，經 `/adversarial-review` dry-run 才發現是統計方法的疏漏（只看 tail、漏算較早的行）——實際跨 5 個 session 已累積 **9 次 applies() 命中**，其中至少 2 筆是真陽性（同一失效模式：並行 commit 蓋掉版號 bump） |
 | exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
 | **`/adversarial-review` 對 DB-1 首次真實 dry-run（2026-07-28）** | ✅ 找到 4 個真實問題並已修復：**F1**（`?v=` 迴圈漏 `verify_set` 守門，無關髒檔誤觸發 BLOCK）／**F2**（`_PUSH_VM` regex 過度匹配，分支名/引號字串誤判，改用 shlex token 比對）／**F3**（本節狀態表過時，已修正）／**F4**（DEV 側從未做語法檢查，CLAUDE.md §6 明寫「兩端」）。新增 fixture db1_10–13，13/13 通過，回歸網逐一驗證過（舊碼跑新 fixture 確認會紅）。**F5**（§3.2.1 pseudocode 過時，見下）、**F6**（SOP repo 零 remote 非條件而是永久狀態，提高「改比對 blob 內容」TODO 優先度）純屬文件/既有限制，不需程式修正。詳見 [[project-ai-harness-gating]] |
-| §2.5 RULE_COVERAGE.md（時間盒） | ⬜ |
-| I1–I5／DB-2–DB-5 + S1 去重／A2 | ⬜ |
+| **§2.5 RULE_COVERAGE.md（時間盒）** | ✅ 6 條有計次標記的規則逐一查證＋I1/I2 佐證強度查證，**改寫了 I 系列優先序**：R1（DEFAULT_* 遷移，3 犯）／R3（併入 DB-3）／R4（取代原 I3）排到 I1/I2 之前。詳見 `RULE_COVERAGE.md` |
+| R4（PreToolUse Write，取代原 I3） | ⬜ **下一步** |
+| R1（DEFAULT_* 遷移 WARN） | ⬜ |
+| R3（併入 DB-3） | ⬜ |
+| I1/I2／DB-2/DB-4/DB-5 + S1 去重／A2 | ⬜ |
 | Phase 1.5–4 | ⬜ |
 
 > ⚠ `D:\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。

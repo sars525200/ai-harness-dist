@@ -1,5 +1,6 @@
 {
   "rules": {
-    "DB-1": { "shadow": true }
+    "DB-1": { "shadow": true },
+    "R4": { "shadow": true }
   }
 }

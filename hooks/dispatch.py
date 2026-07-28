@@ -47,7 +47,7 @@ import time
 import traceback
 
 from contract import ALLOW, BLOCK, HookContext
-from rules import db1_deploy
+from rules import db1_deploy, r4_server_dbpath
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
@@ -56,13 +56,19 @@ CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
 sys.path.insert(0, HOOKS_DIR)
 from _lib import RealGitContext  # noqa: E402
 
-# 規則登記表。之後加 I1–I5／DB-2–DB-5 只需要在這裡加一行。
+# 規則登記表。之後加其餘規則只需要在這裡加一行。
 REGISTRY = [
     {
         "id": "DB-1",
         "module": db1_deploy,
         "events": {"PreToolUse"},
         "tools": {"Bash", "PowerShell"},
+    },
+    {
+        "id": "R4",
+        "module": r4_server_dbpath,
+        "events": {"PreToolUse"},
+        "tools": {"Write"},
     },
 ]
 

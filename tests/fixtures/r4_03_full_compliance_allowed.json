@@ -1,0 +1,18 @@
+{
+  "name": "R4 monkeypatch + assert 都有 → ALLOW",
+  "rule": "r4_server_dbpath",
+  "why": "正面測試防過度攔截：完整依 CLAUDE.md §9 的做法寫測試腳本，不該被擋。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\_tmp_check_assets.py",
+      "content": "import server\nimport shutil\n\nshutil.copy('db/it_asset_platform.sqlite', '/tmp/copy.sqlite')\nserver.DB_PATH = '/tmp/copy.sqlite'\nassert server.DB_PATH != 'db/it_asset_platform.sqlite', 'DB_PATH must not be the real database_list'\n\nassets = server.get_all_assets()\nprint(len(assets))\n"
+    },
+    "session_id": "fixture-r4-03",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "R4 完全沒 monkeypatch DB_PATH 就 import server → BLOCK",
+  "rule": "r4_server_dbpath",
+  "why": "CLAUDE.md §9：測 server.py 必 import 後 monkeypatch DB_PATH，否則誤寫正式庫，已犯過一次。此 fixture 模擬最危險的情境——完全零保護。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\_tmp_check_assets.py",
+      "content": "import server\n\nassets = server.get_all_assets()\nprint(len(assets))\n"
+    },
+    "session_id": "fixture-r4-01",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "DB_PATH"
+  }
+}
