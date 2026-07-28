@@ -1,0 +1,19 @@
+{
+  "name": "DB-1 F2b：引號內的字串恰好含「git push vm」不算真的在推 → ALLOW（applies 不成立）",
+  "rule": "db1_deploy",
+  "why": "2026-07-28 dry-run 實測：本 session 做純查證（零次真實 git push）期間，舊 regex 對整條指令字串做子字串比對，被一次 grep（搜尋字串裡剛好含『git push vm master』這幾個字）誤觸發，5 次 applies() 命中全部發生在沒有任何真實部署動作的期間。shlex 斷詞後，引號內的內容天生是單一 token，『git』『push』不會被拆成兩個相鄰的獨立 token，不會誤判。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "grep -n \"git push vm master\" \"D:\\IT-department\\CLAUDE.md\"",
+      "description": "在文件裡搜尋部署指令的說明文字，不是真的在部署"
+    },
+    "session_id": "fixture-db1-12",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "DB-1 F2a：分支名含 vm（如 add-vm-support）不算推 vm → ALLOW（applies 不成立）",
+  "rule": "db1_deploy",
+  "why": "2026-07-28 dry-run 抓到：舊 regex `\\bgit\\s+push\\b[^\\n]*\\bvm\\b` 對 'add-vm-support' 也會命中——連字號兩側都算 word boundary，'vm' 被當成獨立字命中，但這其實是分支名的一部分，不是 remote 名稱。改用 shlex 斷詞後，push 後第一個非旗標 token 必須『恰好等於』vm 字串本身才算數。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push origin add-vm-support",
+      "description": "推一個分支名剛好含 vm 的功能分支到 origin"
+    },
+    "session_id": "fixture-db1-11",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

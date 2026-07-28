@@ -237,65 +237,11 @@ settings.json 的 hook command 寫絕對路徑，兩工作區共用同一份 cod
 
 > **方法論**：E2 是靠 `git log` 查歷史慣例查出來的，不是靠推理。呼應 [[feedback-existing-data-is-source-of-truth]] —— 改行為前先看現有資料怎麼做，別用程式語義理論凌駕實際慣例。
 
-**待改進（已知但未做）**：雙改的更準判定應是**比對兩 repo 的 blob 是否一致**，而非「有沒有出現在變更集」。D12 已順帶證明 DEV/PROD 的 `app.js` blob 逐位元組相同（皆 3,590,513 bytes），此法可行。目前實作用「變更集有無」近似，DEV repo 無 remote 時 fallback 到 `HEAD~1..HEAD`，改動若在更早的 commit 會誤判。
+**待改進（已知但未做，2026-07-28 `/adversarial-review` F6 確認優先度應提高）**：雙改的更準判定應是**比對兩 repo 的 blob 是否一致**，而非「有沒有出現在變更集」。D12 已順帶證明 DEV/PROD 的 `app.js` blob 逐位元組相同（皆 3,590,513 bytes），此法可行。目前實作用「變更集有無」近似，DEV repo 無 remote 時 fallback 到 `HEAD~1..HEAD`——F6 實測確認 **DEV repo（SOP/）零 remote、非 master 分支，這不是條件分支，是此 repo 的永久唯一路徑**，且其提交歷史細碎交錯，`HEAD~1..HEAD` 未必是「這次雙改對應的那個 commit」，存在真同步卻被誤判成未同步的風險。
 
-#### 3.2.1 DB-1 完整判定流程（v4 實作附錄）
+#### 3.2.1 DB-1 完整判定流程
 
-**v4 修掉 v3 的四個 bug**：讀 worktree 而非 blob（D8 的鏡像錯誤）／detect 與 verify 混用同一集合／early return 讓語法檢查永不執行／ref 解析失敗 fail-closed。
-
-```python
-def check_DB1(cmd, cwd):
-    bypassed = 'HARNESS_BYPASS:DB-1' in cmd          # 格式定死，見 D10
-
-    # 1. ref 解不出 → fail-open（v3 的 ls-files fallback 會在部署當下幾乎必然誤擋）
-    ref = resolve_remote_ref('vm', 'master')
-    if not ref:
-        log_skip('DB-1', 'vm/master 不存在，無法判定變更集'); return ALLOW
-
-    # 2. 兩個集合，用途不同 ← D11
-    #    detect 用聯集（寧可多攔）；verify 只認 ref..HEAD（dirty 不會被這次 push 帶走）
-    to_push = git_z(f'diff --name-only -z {ref}..HEAD')
-    dirty   = porcelain_z()          # -z 分割；免疫 quotepath 轉義與 rename 的 "old -> new"
-    detect_set, verify_set = to_push | dirty, to_push
-
-    # 3. 語法檢查拉到 early return 之前（v3 只在動 UI 資產時才驗 → server.py 部署全綠燈）
-    for f in verify_set:
-        if err := syntax_check_blob(f, 'HEAD'):      # 讀 blob 非 worktree ← D8 鏡像
-            return decide(bypassed, f'語法錯：{err}')
-
-    ASSETS = ('app.js', 'styles.css', 'index.html')
-    prod = [f for f in detect_set
-            if f.startswith('SOP_PROD/05_UI_Demo/') and basename(f) in ASSETS]
-    if not prod:
-        return ALLOW
-
-    # 4. ?v= 讀 blob；兩 token 須都變且同值（實測慣例：line 11 與 5127 皆 ?v=2224）
-    old = parse_v_tokens(git_show(f'{ref}:SOP_PROD/05_UI_Demo/index.html'))
-    new = parse_v_tokens(git_show(f'HEAD:SOP_PROD/05_UI_Demo/index.html'))
-    if new == old:                  return decide(bypassed, f'§6：必升 ?v=，兩版皆 {old}')
-    if len(set(new.values())) != 1: return decide(bypassed, f'?v= 兩處不一致：{new}')
-
-    # 5. 雙改用 verify_set（只在 worktree 改了但沒 commit ≠ 已同步）← D11
-    for f in prod:
-        if f in verify_set and f.replace('SOP_PROD/','SOP/') not in verify_set:
-            return decide(bypassed, f'§6 雙改：{f} 待推，DEV 未同步')
-
-    # 6. 行尾 —— 逐檔問 check-attr，禁寫死清單（實測三檔狀態不同）
-    #    ★ 若採用 §-1 的 .gitattributes 根治方案，本段整條刪除
-    for f in prod:
-        if git_check_attr_eol(f) == 'crlf':  continue   # 受保護，檢查 blob 必假陽性
-        if b'\r\n' not in git_show_bytes(f'HEAD:{f}'):
-            return decide(bypassed, f'{f} blob 行尾成 LF（此檔未受 .gitattributes 保護）')
-
-    return ALLOW
-
-
-def decide(bypassed, msg):
-    """bypass 照跑檢查、只是不擋 —— 緊急部署時才知道自己推了什麼進去。"""
-    if bypassed:
-        log_bypass('DB-1', msg); emit(f'⚠ 已略過：{msg}'); return ALLOW
-    return BLOCK(msg)
-```
+**不再放手抄的 pseudocode**——2026-07-28 `/adversarial-review` 對本文件的第一次真實 dry-run（見 §7 狀態表）抓到 finding 5：這裡曾經有一份 v4 輪手寫的示意程式碼，後續 v4.2／E1／E2／F1／F2／F4 陸續修正真正的 `db1_deploy.py` 時，這份示意稿沒有同步更新，變成一份會重現三個已修好的 bug 的過時參考（`?v=` 仍寫「兩處必須同值」、雙改仍比對「同一個 repo 的 verify_set」、行尾檢查仍在）。**手抄第二份邏輯敘述、程式改了文件沒跟著改，是這類文件天生的失效模式**——修法不是再抄一份更新的，是不維護第二份：完整、即時正確的判定邏輯只有一個來源，[`hooks/rules/db1_deploy.py`](hooks/rules/db1_deploy.py)，決策編號（D6/D8/D10/D11/D13）以注釋形式寫在該檔對應程式碼旁。
 
 ### 3.2.2 dispatch.py 架構（2026-07-28・已實作＋隔離測試驗證）
 
@@ -432,11 +378,12 @@ state：append-only、session-scoped、24 小時過期清理。
 | §6 原文查證 | ✅ per-token 是意圖推導、非明文（§3.2.0a） |
 | **D15 repo_root 顯式化 + wiring 斷言** | ✅ 已驗證斷言真的會炸（同 repo 傳兩次 → ValueError） |
 | **dispatch.py + dispatch_config.json（per-rule shadow）+ report.py** | ✅ 5 種真實 payload + 5 種 monkeypatch 隔離測試全通過 |
+| **掛上 IT-department settings（`shadow_mode: true`）** | ✅ 已裝在 `settings.local.json`（僅本機）；裝上 22 秒內即真陽性命中一筆（app.js `?v=` 未升），查證屬實 |
+| 跑 3–5 天收 would-block 清單（D18 雙門檻） | 🔄 進行中，**修正過去回報的樣本數**：`report.py` 曾只顯示 1 筆命中，經 `/adversarial-review` dry-run 才發現是統計方法的疏漏（只看 tail、漏算較早的行）——實際跨 5 個 session 已累積 **9 次 applies() 命中**，其中至少 2 筆是真陽性（同一失效模式：並行 commit 蓋掉版號 bump） |
+| exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
+| **`/adversarial-review` 對 DB-1 首次真實 dry-run（2026-07-28）** | ✅ 找到 4 個真實問題並已修復：**F1**（`?v=` 迴圈漏 `verify_set` 守門，無關髒檔誤觸發 BLOCK）／**F2**（`_PUSH_VM` regex 過度匹配，分支名/引號字串誤判，改用 shlex token 比對）／**F3**（本節狀態表過時，已修正）／**F4**（DEV 側從未做語法檢查，CLAUDE.md §6 明寫「兩端」）。新增 fixture db1_10–13，13/13 通過，回歸網逐一驗證過（舊碼跑新 fixture 確認會紅）。**F5**（§3.2.1 pseudocode 過時，見下）、**F6**（SOP repo 零 remote 非條件而是永久狀態，提高「改比對 blob 內容」TODO 優先度）純屬文件/既有限制，不需程式修正。詳見 [[project-ai-harness-gating]] |
 | §2.5 RULE_COVERAGE.md（時間盒） | ⬜ |
 | I1–I5／DB-2–DB-5 + S1 去重／A2 | ⬜ |
-| 掛上 IT-department settings（`shadow_mode: true`） | ⬜ **下一步**：per-rule 設定已就緒，DB-1 預設 shadow=true，理論上可安全掛上 |
-| 跑 3–5 天收 would-block 清單（D18 雙門檻） | ⬜ 待掛上後開始計時 |
-| exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
 | Phase 1.5–4 | ⬜ |
 
 > ⚠ `D:\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。

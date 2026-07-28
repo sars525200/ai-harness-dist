@@ -13,11 +13,26 @@
         （dirty 的檔案不會被這次 push 帶走，用聯集驗證會把「只在 worktree 修好」算成已修好）。
     D13 驗證一律讀 blob。「改 worktree 不改變要推的內容」對『讀』同樣成立。
     D10 bypass 比對 command 字串，不讀 env（PowerShell 無 inline env-var 前綴）。
+
+    2026-07-28 /adversarial-review 首次真實 dry-run 抓到兩個現存 bug（獨立驗證屬實）：
+    F1  ?v= 迴圈當時漏了 dual-edit 迴圈已有的 `if path not in verify_set: continue`
+        守門 —— prod_touched 來自 detect_set（聯集），一個「只在 worktree 髒、
+        根本不在這次 push 裡」的無關資產檔，會被誤判成「已改但未升版」而 BLOCK。
+        跟 D11 是同一類錯誤，只是這次漏套用到另一個迴圈。
+    F2  原本用單一 regex `\bgit\s+push\b[^\n]*\bvm\b` 判斷是不是在推 vm，
+        會把「分支名含 vm」（`add-vm-support`，連字號兩側都算 word boundary）
+        和「引號內字串恰好含這幾個字」（例如 grep 搜尋字串、commit message）
+        都算命中——這兩種都不是真的在執行 push。實測：本 session 做純讀取查證
+        （零次真實 git push）時，這條規則被誤觸發 5 次。改用 shlex 依 shell
+        語彙斷詞，「git」「push」必須是兩個相鄰的獨立 token，且其後第一個非旗標
+        token 要真的等於 "vm"（remote 名稱本身）才算數——quoted 字串在 shlex
+        下天生就是單一 token，不會被拆開誤判。
 """
 from __future__ import annotations
 
 import posixpath
 import re
+import shlex
 
 from contract import allow, block, bypassed
 
@@ -28,15 +43,33 @@ PROD_PREFIX = "SOP_PROD/05_UI_Demo/"
 DEV_PREFIX = "SOP/05_UI_Demo/"
 INDEX_HTML = PROD_PREFIX + "index.html"
 
-# `git push vm ...` —— 需同時命中 push 與 vm remote，避免誤攔 push origin
-_PUSH_VM = re.compile(r"\bgit\s+push\b[^\n]*\bvm\b")
-
 # 實測格式（2026-07-28）：<link href="/styles.css?v=2224" /> 與 <script src="/app.js?v=2224">
 _V_TOKEN = re.compile(r"([\w./-]+)\?v=([\w.-]+)")
 
 
+def _is_push_to_vm(command: str) -> bool:
+    """判斷是不是真的在對 vm remote 執行 push（見上方 F2）。
+
+    用 shlex 拆真正的 shell token，而非對整條字串做子字串/word-boundary 比對——
+    後者會被「巧合含有這幾個字」的無關內容（分支名、引號內字串）誤觸發。
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False  # 引號不成對等解析失敗 → 判定不適用（fail-open，不硬猜）
+
+    for i, tok in enumerate(tokens):
+        if tok == "git" and i + 1 < len(tokens) and tokens[i + 1] == "push":
+            for arg in tokens[i + 2:]:
+                if arg.startswith("-"):
+                    continue
+                return arg == "vm"        # push 後第一個非旗標 token 才是 remote 名稱
+            return False                  # `git push`（無 remote，用預設）不算明確推 vm
+    return False
+
+
 def applies(ctx) -> bool:
-    return bool(_PUSH_VM.search(ctx.command))
+    return _is_push_to_vm(ctx.command)
 
 
 def parse_v_tokens(html: str) -> dict:
@@ -98,6 +131,8 @@ def check(ctx):
     new_tokens = parse_v_tokens(ctx.git.show(f"HEAD:{INDEX_HTML}"))
 
     for path in prod_touched:
+        if path not in verify_set:
+            continue                       # F1：只在 worktree 髒、根本不在這次 push 裡的檔不算數
         name = posixpath.basename(path)
         if name == "index.html":
             continue                       # index.html 自己沒有對應 token
@@ -123,11 +158,18 @@ def check(ctx):
         for path in prod_touched:
             if path not in verify_set:
                 continue
-            dev_path = path[len(PROD_PREFIX):]      # DEV repo 內是 05_UI_Demo/xxx
-            if DEV_PREFIX + dev_path not in dev_changed and f"05_UI_Demo/{dev_path}" not in dev_changed:
+            dev_path = path[len(PROD_PREFIX):]      # 去掉 SOP_PROD/05_UI_Demo/ 後只剩檔名
+            dev_rel_path = f"05_UI_Demo/{dev_path}"  # dev_git 自己 repo 內的相對路徑
+            if DEV_PREFIX + dev_path not in dev_changed and dev_rel_path not in dev_changed:
                 return decide(
-                    f"§6 雙改：{path} 已 commit 待推，但 DEV repo 的 05_UI_Demo/{dev_path} 未同步。"
+                    f"§6 雙改：{path} 已 commit 待推，但 DEV repo 的 {dev_rel_path} 未同步。"
                     "app.js／styles.css／index.html 的改動必須 DEV+PROD 兩端一起做。"
                 )
+            # F4：CLAUDE.md §6 原文「node --check **兩端**」——PROD 側已在 step 3 驗過 blob，
+            # DEV 側從沒驗過。D12 已證實兩端 blob 逐位元組一致，語法錯誤理論上不該只出現
+            # 單邊，但沒人守門過就是沒人守門過。
+            dev_err = ctx.dev_git.syntax_error(dev_rel_path, "HEAD")
+            if dev_err:
+                return decide(f"DEV 側 {dev_rel_path} 語法錯誤：{dev_err}")
 
     return bypassed(f"{RULE_ID} 檢查全數通過（bypass 未實際略過任何項目）") if skipped else allow()

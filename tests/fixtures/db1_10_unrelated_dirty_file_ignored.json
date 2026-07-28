@@ -1,0 +1,34 @@
+{
+  "name": "DB-1 F1：無關的髒檔（不在這次 push 裡）不該影響 ?v= 判定 → ALLOW",
+  "rule": "db1_deploy",
+  "why": "2026-07-28 /adversarial-review 第一次真實 dry-run 抓到：prod_touched 來自 detect_set（to_push ∪ dirty，D11 刻意設計成聯集，寧可多攔），但 ?v= 迴圈當時忘了比照 dual-edit 迴圈加 `if path not in verify_set: continue`。此 fixture 讓 app.js 正確 commit+bump，styles.css 只是 worktree 髒了（從未 commit，根本不在這次 push 裡）、其 token 停在舊值——修好前這會被誤判成「styles.css 已改但未升版」而 BLOCK，即使 styles.css 從頭到尾沒有真的被推。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-10",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [
+      "SOP_PROD/05_UI_Demo/styles.css"
+    ],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2218\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2218\" />\n<script src=\"/app.js?v=2225\"></script>"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

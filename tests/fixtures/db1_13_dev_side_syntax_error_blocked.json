@@ -1,0 +1,48 @@
+{
+  "name": "DB-1 F4：DEV 側語法錯誤也要擋（CLAUDE.md §6「node --check 兩端」）→ BLOCK",
+  "rule": "db1_deploy",
+  "why": "2026-07-28 dry-run 抓到：語法檢查只查 verify_set（主 repo/PROD 側），從沒查過 ctx.dev_git（DEV 側）。CLAUDE.md §6 原文明寫『node --check 兩端』，且 D12 已證實兩端 blob 理論上逐位元組一致——PROD 語法正確不代表 DEV 也正確，兩端各自獨立 commit，可能一端漏改。此 fixture 讓 PROD 側 app.js 語法無誤、?v= 正確 bump、雙改同步都通過，但 DEV 側 app.js 有語法錯誤，必須在這裡被攔下。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master",
+      "description": "部署"
+    },
+    "session_id": "fixture-db1-13",
+    "cwd": "D:\\IT-department",
+    "permission_mode": "auto"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js",
+        "SOP_PROD/05_UI_Demo/index.html"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
+    },
+    "syntax_errors": {}
+  },
+  "dev_git": {
+    "remote_ref": null,
+    "diff_names": {
+      "HEAD~1..HEAD": [
+        "05_UI_Demo/app.js",
+        "05_UI_Demo/index.html"
+      ]
+    },
+    "status_paths": [],
+    "syntax_errors": {
+      "05_UI_Demo/app.js": "SyntaxError: Unexpected token (line 42)"
+    }
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "DEV 側"
+  }
+}
