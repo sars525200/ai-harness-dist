@@ -50,6 +50,7 @@ from contract import ALLOW, BLOCK, HookContext
 from rules import (
     awc1_choices_check,
     db1_deploy,
+    pr1_plan_review_marker,
     r1_default_migration,
     r3_ops_backup_scp,
     r4_server_dbpath,
@@ -92,6 +93,12 @@ REGISTRY = [
     {
         "id": "AWC-1",
         "module": awc1_choices_check,
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
+        "id": "PR-1",
+        "module": pr1_plan_review_marker,
         "events": {"Stop"},
         "tools": None,
     },

@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 marker hash 與現有內容相符 → ALLOW",
+  "why": "審過且內容未再變動就該放行。這條若失守，機制會擋住每一次 Stop、變成完全走不掉的死結——比漏擋嚴重得多。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=<HASH> rounds=2 at=2026-07-28T15:00:00 -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW",
+    "bypassed": false
+  },
+  "rule": "pr1_plan_review_marker"
+}

@@ -1,0 +1,54 @@
+{
+  "name": "PR-1 完全沒有狀態標記 → ALLOW",
+  "why": "既有的幾十份 *_PLAN.md 都沒有狀態標記。若『沒標記』被當成要檢查，規則一上線就會擋住所有碰計畫書的 session。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n## §1 現況\n\n沒有任何狀態標記。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

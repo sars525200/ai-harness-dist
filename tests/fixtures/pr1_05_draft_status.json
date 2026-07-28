@@ -1,0 +1,54 @@
+{
+  "name": "PR-1 狀態是草稿 → ALLOW（機制保持被動）",
+  "why": "§3.2-B 選 B1 的全部意義：由人決定何時送審。草稿被擋＝隨手改一個字都要跑一輪審查，就是 D5 的 WARN 疲勞重演。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：草稿\n\n## §1 現況\n\n這裡是內容。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

@@ -10,12 +10,86 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shlex
 
 ALLOW = "ALLOW"
 BLOCK = "BLOCK"
 WARN = "WARN"
+
+# 一輪對話最多往回讀多少 transcript bytes。長 session 的 jsonl 可以到數十 MB，
+# 而 Stop 每輪都觸發——全檔讀會讓 hook 延遲隨對話長度線性惡化。
+_TRANSCRIPT_TAIL_BYTES = 2_000_000
+
+
+def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
+    """回傳「這一輪」所有 assistant 的 tool_use block（依序）。
+
+    **回 None 代表「判斷不出來」，不是「這輪沒用工具」** —— 呼叫端必須
+    據此 fail-open。兩者混為一談，就會在讀不到 transcript 時把「不知道」
+    當成「沒有」，變成誤報（AWC-1）或誤擋（PR-1，代價更高：擋住整個對話結束）。
+
+    「這一輪」的邊界（2026-07-28 對真實 transcript 實測確認）：
+        type="user" 的項目有兩種——真人打字的訊息（content 是純字串，或
+        content list 第一個 block type="text"），與工具結果偽裝成的 user
+        項目（第一個 block type="tool_result"）。從檔尾往回找，第一個
+        「真人訊息」就是這一輪的起點。
+
+    只讀檔尾 _TRANSCRIPT_TAIL_BYTES；若在這段裡找不到明確的輪次起點，
+    一律回 None——寧可放棄判斷，也不要拿「上一輪的工具呼叫」當本輪的證據。
+    """
+    if not transcript_path:
+        return None
+
+    try:
+        with open(transcript_path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            start = max(0, size - _TRANSCRIPT_TAIL_BYTES)
+            fh.seek(start)
+            data = fh.read()
+    except Exception:
+        return None
+
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # 檔尾切片的第一行大機率被截半，丟掉
+
+    turn_start = None
+    for i in range(len(lines) - 1, -1, -1):
+        try:
+            obj = json.loads(lines[i])
+        except Exception:
+            continue
+        if obj.get("type") != "user" or obj.get("isMeta"):
+            continue
+        content = obj.get("message", {}).get("content")
+        if isinstance(content, str):
+            turn_start = i
+            break
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, dict) and first.get("type") == "text":
+                turn_start = i
+                break
+        # 第一個 block 是 tool_result → 是工具結果，繼續往回找
+
+    if turn_start is None:
+        return None  # 找不到輪次起點 → 判斷不出來，不猜
+
+    out: list[dict] = []
+    for line in lines[turn_start:]:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        for block in obj.get("message", {}).get("content", []) or []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                out.append(block)
+    return out
 
 
 def is_push_to_remote(command: str, remote: str) -> bool:

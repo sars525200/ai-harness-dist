@@ -124,6 +124,7 @@
 | R3 | PreToolUse push vm | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） | 通過 |
 | R4 | PreToolUse **Write** | `.py` import server 卻無 `DB_PATH=` monkeypatch | 通過 |
 | AWC-1 | **Stop** | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion` | 5/5 |
+| PR-1 | **Stop** | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker | 8/8 |
 
 ### 已建置的骨架（`D:\.ai-harness\hooks\`）
 
@@ -145,9 +146,28 @@
 
 **這是同一種病第二次發作**（第一次是 Skill matcher 缺席，見「本 session 完成」／`project-ai-harness-gating.md` 記錄）：**dispatch.py 的 REGISTRY 條目 + fixture 全過 ≠ 規則已上線**——那只驗證邏輯本身寫對，沒驗證 Claude Code 真的會呼叫到它。每加一條新規則，若它需要的 event/tool 不在 `settings.local.json` 現有 matcher／key 清單裡，必須顯式去確認並補上。
 
+### ✅ exit code 語意實測完成（2026-07-28・地基解鎖）
+
+原以為「測 exit 2 會擋到並行 session、風險太高」——**解法是換 cwd 不是換 settings 層級**：hook 是專案層級，開一個獨立目錄放自己的 `.claude/settings.json` 即完全隔離（個人層級 `~/.claude/settings.json` 已確認無 hooks）。探針留在 `tests/stop_exit2_probe/`。
+
+**結論**：Stop 的 **exit 2 真的擋得住**、**stderr 全文（含中文）真的餵回模型並被遵守**、`stop_hook_active` 在被擋後那輪為 `True`（可靠的防迴圈欄位）。🔴 副作用警告：模型**放棄了使用者的原始指令**改去執行 hook stderr 的指示 → BLOCK 訊息只能寫「原因＋該做什麼」，**禁寫會覆蓋使用者當前意圖的祈使句**。一次擋阻多燒一輪（測時 1,122 output tokens）。詳見 `STOP_HOOK_MARKER_PLAN.md` §4.1。
+
+**仍未驗**：WARN 路徑（**exit 0 + stderr**）是否被模型看到——不能從 exit 2 外推，且 Stop 事件下結構上無從觀察，要驗須改用 **PreToolUse** 事件。R1 是 WARN-only 規則，轉 enforce 前需補測。
+
 ### 尚待（`HARNESS_PLAN.md` Phase 1 未完項）
 
-⬜ DB-1/R1/R3/R4/AWC-1 解除 shadow（3–5 天觀察窗＋D18 雙門檻，約 2026-07-31~08-02 可看）　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　⬜ **exit code 語意實測**（測 exit 2 會擋到並行 session，風險高，尚未驗）
+⬜ DB-1/R1/R3/R4/AWC-1 解除 shadow（3–5 天觀察窗＋D18 雙門檻，約 2026-07-31~08-02 可看）　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　⬜ **WARN 路徑（exit 0 + stderr）實測**（須用 PreToolUse 事件）
+
+### Stop hook + marker 自動觸發審查機制 → 已落地為 PR-1（shadow）
+
+計畫書 §3.2 兩項決定都已定案（**A1** 先隔離測試／**B1** 檔內顯式 `> 狀態：待審核` 標記），規則已實作、8 fixture 全過、端到端 dry-run 通過（真實 session 被 exit 2 擋回、模型讀懂訊息）。**已在跑，shadow 模式**。
+
+**兩件下次動它之前要知道的事**：
+
+1. **`Stop` key 早就掛著，新 Stop 規則一進 REGISTRY 就立刻生效**——別再套用「規則寫好但 matcher 沒掛所以沒被呼叫」那個舊心智模型（那是本檔記錄過兩次的反面案例）。
+2. **觸發範圍用 transcript，不是 git status**（刻意偏離計畫書 §3.1 修正 2）：`git status` 跨 session，A 的草稿會擋住 B 的對話。D6「用 git 當真相」是給 DB-1 的部署邊界用的；「這輪我改了什麼」要 per-session 精確 → transcript。
+
+**⬜ 下一步**：觀察期（D18 雙門檻）後決定是否解除 shadow。轉 enforce 前要先想清楚：現存幾十份 `*_PLAN.md` 全都沒有狀態標記，目前一律放行——這是 B1 的刻意設計（機制被動），但也意味著**不主動標記就等於整個機制不會發動**。
 
 > 已因 D12（`.gitattributes` renormalize）**廢止** 3 條規則：I6／A1／DB-1 step 6 —— 用 git 原生機制取代 hook，涵蓋範圍更廣（含 user 手改與 cron session）。
 

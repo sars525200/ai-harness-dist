@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 待審核但完全沒有 marker → BLOCK",
+  "why": "這是規則的主目的：標成待審核卻沒審過就想結束對話，必須擋下。沒有這條，整個 marker 機制等於不存在。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "ADVERSARIAL_REVIEW_PASSED"
+  },
+  "rule": "pr1_plan_review_marker"
+}

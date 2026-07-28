@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 有 marker 但 hash 對不上 → BLOCK",
+  "why": "計畫書 §3.1 修正 1 的核心：純存在性檢查擋不住「蓋完 marker 後又改內容」。這正是 D14『驗過要綁被測內容、不是綁時間窗』同一類錯誤。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rounds=2 at=2026-07-28T15:00:00 -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "hash 對不上"
+  },
+  "rule": "pr1_plan_review_marker"
+}

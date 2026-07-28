@@ -94,7 +94,9 @@ git 原生機制三個維度全勝 hook：
 
 ### 未驗項
 
-**exit code 語意（exit 2 是否回饋給模型／是否真能擋）尚未實測** —— 因 hook 為專案層級，測 exit 2 會連帶擋下其他兩個 session 的工具呼叫，風險過高。改於實作階段用 fixture 驗證，或改掛個人層級 settings 隔離測試。
+~~**exit code 語意（exit 2 是否回饋給模型／是否真能擋）尚未實測**~~ —— ✅ **2026-07-28 已實測**，用隔離專案目錄跑 headless session（非 subprocess 模擬），見 `STOP_HOOK_MARKER_PLAN.md` §4.1。結論：**Stop 事件的 exit 2 真的擋得住，且 stderr 全文（含中文）真的餵回模型並被遵守**。原本「會擋下其他 session」的顧慮，解法是**開一個獨立 cwd 放自己的 `.claude/settings.json`**——hook 是專案層級，換 cwd 即完全隔離，不必動個人層級 settings。
+
+**仍未驗**：**exit 0 + stderr（WARN 路徑）是否被模型看到**。此次測的是 exit 2，不能外推——且 Stop 事件下 exit 0 不擋、模型不會再產出，結構上無從觀察，要驗得改用 **PreToolUse** 事件（後續還有輪次）。R1 是 WARN-only 規則，轉 enforce 前需補這一項。
 
 ---
 
@@ -381,13 +383,14 @@ state：append-only、session-scoped、24 小時過期清理。
 | **dispatch.py + dispatch_config.json（per-rule shadow）+ report.py** | ✅ 5 種真實 payload + 5 種 monkeypatch 隔離測試全通過 |
 | **掛上 IT-department settings（`shadow_mode: true`）** | ✅ 已裝在 `settings.local.json`（僅本機）；裝上 22 秒內即真陽性命中一筆（app.js `?v=` 未升），查證屬實 |
 | 跑 3–5 天收 would-block 清單（D18 雙門檻） | 🔄 進行中，**修正過去回報的樣本數**：`report.py` 曾只顯示 1 筆命中，經 `/adversarial-review` dry-run 才發現是統計方法的疏漏（只看 tail、漏算較早的行）——實際跨 5 個 session 已累積 **9 次 applies() 命中**，其中至少 2 筆是真陽性（同一失效模式：並行 commit 蓋掉版號 bump） |
-| exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
+| exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ✅ **2026-07-28 完成**（隔離 cwd + headless session）：Stop 的 exit 2 真能擋、stderr 真的餵回模型且被遵守；`stop_hook_active` 在被擋後那輪為 `True`，可靠當防迴圈欄位。探針保留在 `tests/stop_exit2_probe/`。**WARN 路徑（exit 0 + stderr）仍未驗**，須改用 PreToolUse 事件測 |
 | **`/adversarial-review` 對 DB-1 首次真實 dry-run（2026-07-28）** | ✅ 找到 4 個真實問題並已修復：**F1**（`?v=` 迴圈漏 `verify_set` 守門，無關髒檔誤觸發 BLOCK）／**F2**（`_PUSH_VM` regex 過度匹配，分支名/引號字串誤判，改用 shlex token 比對）／**F3**（本節狀態表過時，已修正）／**F4**（DEV 側從未做語法檢查，CLAUDE.md §6 明寫「兩端」）。新增 fixture db1_10–13，13/13 通過，回歸網逐一驗證過（舊碼跑新 fixture 確認會紅）。**F5**（§3.2.1 pseudocode 過時，見下）、**F6**（SOP repo 零 remote 非條件而是永久狀態，提高「改比對 blob 內容」TODO 優先度）純屬文件/既有限制，不需程式修正。詳見 [[project-ai-harness-gating]] |
 | **§2.5 RULE_COVERAGE.md（時間盒）** | ✅ 6 條有計次標記的規則逐一查證＋I1/I2 佐證強度查證，**改寫了 I 系列優先序**：R1（DEFAULT_* 遷移，3 犯）／R3（併入 DB-3）／R4（取代原 I3）排到 I1/I2 之前。詳見 `RULE_COVERAGE.md` |
 | R4（PreToolUse Write，取代原 I3） | ✅ commit `e589356`，5 fixture + 真實 E2E |
 | **AWC-1（新增，非原規劃）：Stop 觀察「問句結尾未呼叫 AskUserQuestion」** | ✅ commit `d2c08be`。緣起：本 session 自己違反 CLAUDE.md §2 硬規則被 user 當場抓到——索引/記憶強化解決不了執行機制問題，做成 WARN 級 Stop 觀察規則。風險層級刻意低於 `STOP_HOOK_MARKER_PLAN.md`（只記錄不擋，不依賴未驗證的 exit-code-blocks-Stop 假設）。5 fixture（3 份真實 transcript）+ 回歸網有效性驗證（天真版「整檔搜尋」會誤判 fixture 04，證明「這一輪」邊界判斷有實質作用）+ 真實 subprocess E2E |
 | R1（DEFAULT_* 遷移 WARN） | ✅ commit `81beffd`。順帶把 DB-1 的私有 `_is_push_to_vm` 升格成 `contract.is_push_to_remote` 共用工具（DB-2~DB-5 未來可重用），6 fixture + 回歸網驗證 + 真實 repo 直接呼叫測試 |
 | R3（併入 DB-3，push 邊界+清單比對取代原「攔截 scp」設計） | ✅ commit `b55f500`。清單非照抄記憶檔——逐支讀 `SOP_PROD/05_UI_Demo/ops/*.service` 的 ExecStart 做地面真相驗證，確認 4 支需要 scp＋1 支例外（`attack_monitor.py`）；6 fixture + 回歸網驗證 + 真實 repo 直接呼叫 |
+| **PR-1（Stop：計畫書審查 marker）** | ✅ 2026-07-28 實作＋8 fixture＋回歸網有效性驗證＋端到端 dry-run（真實 session 被 exit 2 擋回）。shadow 中。設計與實作偏離見 `STOP_HOOK_MARKER_PLAN.md` §4.2 |
 | I1/I2／DB-2/DB-4/DB-5 + S1 去重／A2 | ⬜ |
 | Phase 1.5–4 | ⬜ |
 

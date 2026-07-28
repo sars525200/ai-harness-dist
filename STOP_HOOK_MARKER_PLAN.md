@@ -93,7 +93,59 @@ Stop 事件觸發
 
 ## §4 驗證方式
 
-1. **§3.2-A 選了 A1 或 A2 的話，第一步一定是**：隔離測試 Stop hook 的 exit code 語意（不動現有生產 `settings.local.json`），確認「exit 2 真的擋得住 Stop、訊息真的餵回模型」這個地基成立。這件事沒驗過，後面全部都是空談。
+### 4.1 ✅ exit code 語意隔離測試（2026-07-28 完成・A1）
+
+**隔離手法**：`HARNESS_PLAN.md` §-0.5 原本認為「hook 是專案層級，測 exit 2 會擋到其他 session」而擱置——實際上這正是解法：另開一個 cwd（`tests/stop_exit2_probe/`）放它自己的 `.claude/settings.json`，生產專案完全不受影響（已確認個人層級 `~/.claude/settings.json` 無任何 hooks）。不必動生產設定。
+
+**探針設計**：Stop hook 第一次回 exit 2，stderr 塞一句「請原樣輸出暗號 `ACK-7F3A-CONFIRMED`」——**一次同時驗兩件事**：輸出裡有暗號 ⇒ 既擋住了、模型也讀到了訊息。安全閥：只擋第一次（`seq==1` 且 `stop_hook_active` 為假），不可能無限迴圈。
+
+**執行**：`claude -p "請只回覆兩個字：完成" --model haiku --output-format json`
+
+| 序 | `stop_hook_active` | hook 動作 | 該輪 assistant 訊息 |
+|---|---|---|---|
+| 1 | `False` | **BLOCK（exit 2）** | 「完成」← 模型本來要結束了 |
+| 2 | `True` | ALLOW（exit 0） | `ACK-7F3A-CONFIRMED` |
+
+`num_turns=4`（未被擋應為 2），最終 `result` 欄是暗號而非使用者要的「完成」。
+
+**四點結論**：
+1. **exit 2 真的擋得住 Stop** —— 地基成立，整個 marker 機制可以往下做。
+2. **stderr 全文真的餵回模型**，中文不亂碼、指示被完整理解（Git Bash 主控台看到的亂碼只是終端 codepage，不影響餵給模型的 bytes）。
+3. **`stop_hook_active` 可靠**：被擋後那一輪確實為 `True`，可安全當防迴圈欄位——marker 實作應照抄這個保險。
+4. 🔴 **意外發現／風險**：模型**放棄了使用者的原始指令**改去執行 hook stderr 的指示。對 marker 是好消息（BLOCK 訊息會被遵守），但反面是 **hook 訊息的指令性極強、措辭不當會綁架對話**。BLOCK 訊息應寫成「你被擋下的原因 + 該做什麼」，**禁止寫成會覆蓋使用者當前意圖的祈使句**。
+
+**成本註記**：一次擋阻多花一輪（此測為 1,122 output tokens／haiku $0.026）。誤擋不只是煩，是真的燒 token。
+
+**仍未驗（不能外推）**：**exit 0 + stderr（WARN 路徑）是否被模型看到**。Stop 事件下 exit 0 不擋、模型不再產出，結構上無從觀察 → 要驗須改用 **PreToolUse** 事件。R1 是 WARN-only 規則，轉 enforce 前需補測。
+
+### 4.2 ✅ PR-1 實作 + fixture + 端到端 dry-run（2026-07-28 完成）
+
+規則 ID **PR-1**，`hooks/rules/pr1_plan_review_marker.py`，已進 `dispatch.py` REGISTRY，`dispatch_config.json` 設 **shadow: true**。
+
+**⚠ 注意：它現在就已經在所有 session 跑了（shadow 模式，只觀察不擋）** —— 因為 `settings.local.json` 的 `Stop` key 早在 AWC-1 時就掛上了，新規則一進 REGISTRY 就會被呼叫，不需要另外接線。這跟 `HARNESS_PROGRESS` 記錄過兩次的「規則寫好但 matcher 沒掛、從沒被呼叫」正好相反，別再假設「還沒接上」。
+
+**對 §3.1 修正 2 的實作偏離（刻意的）**：原文寫「範圍收成 `git diff`／`git status` 顯示這輪動過的 `*_PLAN.md`，跟 DB-1 判斷變更集同一招」。實作時改用 **transcript**，理由是照原設計會重演它自己要防的 D5：`git status` 是**跨 session 的共同事實**，A session 正在寫的草稿會出現在 B session 的 status 裡，於是 B 的對話被 A 的檔案擋住（並行 session 改同一批檔在本 repo 已真實發生過）。D6「用 git 當真相」是為了 DB-1 的**部署邊界**（那本來就該跨 session）；「這輪我改了什麼」要的是 per-session 精確，transcript 才是對的來源。
+
+**其他實作決定**：
+- hash 前**正規化行尾**（CRLF→LF）。這些 `.md` 在 Windows 上被不同工具寫，Edit 保留 CRLF、Python 寫檔常翻 LF（CLAUDE.md §8 有專條）。拿原始 bytes 算 hash 會讓「只是行尾被翻過」的檔 marker 失效 → 假 BLOCK。
+- 扣 marker 時扣**整行**（含換行），不是把 marker 字串替換成空字串——否則會殘留空行，蓋 marker 前後算出的 hash 不一致，marker 從寫下那刻就是失效的。
+- 輪次掃描抽成 `contract.iter_turn_tool_uses()`，AWC-1 改用同一支（不留第二份 copy）。它**回 `None` 代表「判斷不出來」、`[]` 代表「這輪沒用工具」**——兩者混為一談就會把「讀不到 transcript」當成「沒改過計畫書」，或反過來誤擋。
+- 只讀 transcript 尾端 2MB：實測 41MB 的 transcript 也只花 **20ms**，不需要再優化。
+
+**fixture 8 組全過**（總數 35 → 43），且**回歸網有效性已驗**：逐一拆掉四個守門，該紅的都紅了。其中 fail-open 那條原本「拆了也沒紅」——查出來是**變體自己寫壞**（回傳字面 `<DIR>/…` 這種不存在的路徑，一樣走到 ALLOW），改用 raise 當探針才證明 fixture 真的走到那個分支。這正是「ALLOW 既是正確結果、也是『規則根本沒跑到』的結果」的陷阱。
+
+**端到端 dry-run**（`tests/pr1_e2e/`，薄 wrapper 強制 enforce，**不碰共用的 `dispatch_config.json`**——那份改成 enforce 會讓所有 session 一起真擋）：
+
+| Stop | `stop_hook_active` | touched | applies | 判定 | 實際動作 |
+|---|---|---|---|---|---|
+| #1 | `False` | `SAMPLE_PLAN.md` | `True` | BLOCK | **exit 2，擋回模型** |
+| #2 | `True` | `SAMPLE_PLAN.md` | `True` | BLOCK | ALLOW（防迴圈） |
+
+`num_turns=9`（正常 2–3），模型收到擋阻訊息後理解內容、並開始跟使用者討論該補 marker 還是用 SKIP。真實 transcript 的形狀與 fixture 一致。
+
+### 4.3 後續步驟
+
+1. ~~**§3.2-A 選了 A1 或 A2 的話，第一步一定是**：隔離測試 Stop hook 的 exit code 語意（不動現有生產 `settings.local.json`），確認「exit 2 真的擋得住 Stop、訊息真的餵回模型」這個地基成立。這件事沒驗過，後面全部都是空談。~~ → ✅ 見 §4.1
 2. marker／hash 判定邏輯寫成獨立函式，比照 `db1_deploy.py` 的模式配 fixture（觸發／不觸發／hash 不符／bypass 各一組）。
 3. 用一份可控的測試計畫書（不是動 `HARNESS_PLAN.md` 這種正在使用中的文件）跑一次端到端，比照 `/adversarial-review` 自己上線前的 dry-run 紀律。
 4. 若採 A2（shadow），觀察期比照 D18：時間窗 + 最低觸發樣本數雙門檻，不是單看日曆天數。
@@ -104,11 +156,13 @@ Stop 事件觸發
 
 | 項目 | 狀態 |
 |---|---|
-| 本計畫書 | ✅ 待你研讀 |
-| §3.2-A／B 兩項決定 | ⬜ 待你選 |
-| exit code 語意隔離測試 | ⬜ |
-| marker/hash 判定邏輯 + fixture | ⬜ |
-| 端到端 dry-run（可控測試計畫書） | ⬜ |
-| 接上真實 Stop hook | ⬜ 前面全過才做 |
+| 本計畫書 | ✅ 已研讀 |
+| §3.2-**A** 推出保守度 | ✅ **2026-07-28 選 A1**（先做隔離測試），並已執行完畢 |
+| §3.2-**B** 草稿／送審的區分 | ✅ **2026-07-28 選 B1**（檔內顯式 `> 狀態：待審核` 標記，機制保持被動） |
+| exit code 語意隔離測試 | ✅ **2026-07-28 通過**，四點結論見 §4.1；探針留在 `tests/stop_exit2_probe/` |
+| marker/hash 判定邏輯 + fixture | ✅ **2026-07-28 完成**：PR-1，8 fixture 全過（總 43/43），回歸網有效性已驗（拆四個守門逐一確認會紅）。見 §4.2 |
+| 端到端 dry-run（可控測試計畫書） | ✅ **2026-07-28 通過**：真實 session 改動測試計畫書 → exit 2 真的擋回、模型讀懂訊息。見 §4.2 |
+| 接上真實 Stop hook | ✅ **已接、shadow 中**（`Stop` key 早已存在，進 REGISTRY 即生效）。⬜ **解除 shadow 待觀察期** |
+| 觀察期（D18 雙門檻：時間窗＋最低觸發樣本數） | ⬜ **下一步**。轉 enforce 前需確認誤觸發率，且要先想清楚「現存幾十份 `*_PLAN.md` 全都沒有狀態標記」這件事——目前它們一律放行，是刻意的 |
 
-**本次不做**：不改任何 settings.json／settings.local.json，不寫任何 hook 程式碼，不動 `/adversarial-review` 既有設計。
+**§4.1 之後仍成立的限制**：不改任何生產 settings.json／settings.local.json（隔離測試用的是獨立 cwd 的自帶 settings），不寫任何正式 hook 規則程式碼，不動 `/adversarial-review` 既有設計。

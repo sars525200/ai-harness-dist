@@ -19,7 +19,9 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import shutil
 import sys
+import tempfile
 
 HOOKS_DIR = r"D:\.ai-harness\hooks"
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -27,6 +29,12 @@ FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures
 sys.path.insert(0, HOOKS_DIR)
 
 from contract import GitContext, HookContext  # noqa: E402
+
+# 佔位符：fixture 的 workspace 被寫進臨時目錄後，路徑才確定，
+# 所以 payload/transcript 裡以佔位符表示，跑之前才代換成真實路徑。
+_PH_DIR = "<DIR>"
+_PH_TRANSCRIPT = "<TRANSCRIPT>"
+_PH_HASH = "<HASH>"
 
 
 class FakeGitContext(GitContext):
@@ -101,6 +109,52 @@ def load_fixtures(filter_word: str | None):
     return out
 
 
+def _subst(obj, mapping: dict):
+    """遞迴把佔位符換成真實路徑。fixture 是純 JSON，路徑得在跑之前才填。"""
+    if isinstance(obj, str):
+        for k, v in mapping.items():
+            obj = obj.replace(k, v)
+        return obj
+    if isinstance(obj, list):
+        return [_subst(x, mapping) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _subst(v, mapping) for k, v in obj.items()}
+    return obj
+
+
+def _materialize(workspace: dict, module, tmpdir: str) -> dict:
+    """把 fixture 的 workspace 寫成真實檔案，回傳佔位符 → 真實值的對照表。
+
+    給 PR-1 這種**判定依據是檔案內容本身**的規則用（marker/hash 綁的是檔案，
+    不是 git 狀態，FakeGitContext 幫不上忙）。
+
+    `<HASH>` 的處理是關鍵：marker 行寫在檔案裡，而 hash 又是「扣掉 marker 行」
+    之後算的。所以先用 64 個 0 當假 hash 填進去算一次——那一行照樣被 marker
+    regex 認出來並扣掉，算出的 hash 與最終檔案完全一致——再把真 hash 填回去。
+    少了這一步，正面測試（hash 對得上）根本寫不出來，只能寫死一個手算的值，
+    規則一改就得全部重算。
+    """
+    mapping = {_PH_DIR: tmpdir.replace("\\", "/")}
+
+    for name, content in (workspace.get("files") or {}).items():
+        path = os.path.join(tmpdir, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if _PH_HASH in content and hasattr(module, "content_hash"):
+            probe = content.replace(_PH_HASH, "0" * 64)
+            content = content.replace(_PH_HASH, module.content_hash(probe))
+        with open(path, "w", encoding="utf-8", newline="") as fh:
+            fh.write(content)
+
+    if "transcript" in workspace:
+        tpath = os.path.join(tmpdir, "transcript.jsonl")
+        with open(tpath, "w", encoding="utf-8") as fh:
+            for entry in workspace["transcript"]:
+                fh.write(json.dumps(_subst(entry, mapping), ensure_ascii=False) + "\n")
+        mapping[_PH_TRANSCRIPT] = tpath
+
+    return mapping
+
+
 def run_one(fx: dict) -> tuple[bool, str]:
     for required in ("name", "rule", "why", "payload", "expect"):
         if required not in fx:
@@ -111,10 +165,29 @@ def run_one(fx: dict) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"無法載入規則 rules.{fx['rule']}：{type(exc).__name__}: {exc}"
 
+    payload = fx["payload"]
+    tmpdir = None
+    if "workspace" in fx:
+        tmpdir = tempfile.mkdtemp(prefix="hookfx_")
+        try:
+            mapping = _materialize(fx["workspace"], module, tmpdir)
+            payload = _subst(payload, mapping)
+        except Exception as exc:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return False, f"workspace 建立失敗：{type(exc).__name__}: {exc}"
+
+    try:
+        return _run_with(fx, module, payload)
+    finally:
+        if tmpdir:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _run_with(fx: dict, module, payload: dict) -> tuple[bool, str]:
     # dev_git 為獨立 repo（SOP/），fixture 未定義時傳 None → 雙改檢查跳過
     dev = FakeGitContext(fx["dev_git"], default_root="FAKE:dev") if "dev_git" in fx else None
     main = FakeGitContext(fx.get("git", {}), default_root="FAKE:main")
-    ctx = HookContext(fx["payload"], main, dev)
+    ctx = HookContext(payload, main, dev)
 
     try:
         verdict = module.check(ctx)

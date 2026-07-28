@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 SKIP 逃生口 → ALLOW 且標記 bypassed",
+  "why": "D10：誤判的代價是擋住整個對話結束，必須有逃生口，且要留痕計次（累計次數是『這機制是不是太煩』的訊號）。bypassed 旗標沒設起來就統計不到。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n\n<!-- ADVERSARIAL_REVIEW_SKIP: 只是修錯字，不值得審一輪 -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我把這份計畫書寫一寫"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/FOO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW",
+    "bypassed": true
+  },
+  "rule": "pr1_plan_review_marker"
+}

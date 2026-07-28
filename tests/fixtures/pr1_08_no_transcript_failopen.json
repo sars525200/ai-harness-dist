@@ -1,0 +1,20 @@
+{
+  "name": "PR-1 transcript 讀不到 → ALLOW（fail-open）",
+  "why": "判斷不出來時必須放行。『不知道』被當成『有問題』，就是拿使用者的對話去賭一個讀檔失敗——這條規則誤擋的代價是對話結束不了。",
+  "workspace": {
+    "files": {
+      "FOO_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n"
+    }
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<DIR>/does_not_exist.jsonl",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}
