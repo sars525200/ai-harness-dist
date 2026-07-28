@@ -384,8 +384,9 @@ state：append-only、session-scoped、24 小時過期清理。
 | exit code 語意實測（真實 hook 環境，非 subprocess 模擬） | ⬜ shadow mode 下永遠 exit 0，故掛上本身不受此未驗項影響；真正驗證要等某條規則轉 enforce 前 |
 | **`/adversarial-review` 對 DB-1 首次真實 dry-run（2026-07-28）** | ✅ 找到 4 個真實問題並已修復：**F1**（`?v=` 迴圈漏 `verify_set` 守門，無關髒檔誤觸發 BLOCK）／**F2**（`_PUSH_VM` regex 過度匹配，分支名/引號字串誤判，改用 shlex token 比對）／**F3**（本節狀態表過時，已修正）／**F4**（DEV 側從未做語法檢查，CLAUDE.md §6 明寫「兩端」）。新增 fixture db1_10–13，13/13 通過，回歸網逐一驗證過（舊碼跑新 fixture 確認會紅）。**F5**（§3.2.1 pseudocode 過時，見下）、**F6**（SOP repo 零 remote 非條件而是永久狀態，提高「改比對 blob 內容」TODO 優先度）純屬文件/既有限制，不需程式修正。詳見 [[project-ai-harness-gating]] |
 | **§2.5 RULE_COVERAGE.md（時間盒）** | ✅ 6 條有計次標記的規則逐一查證＋I1/I2 佐證強度查證，**改寫了 I 系列優先序**：R1（DEFAULT_* 遷移，3 犯）／R3（併入 DB-3）／R4（取代原 I3）排到 I1/I2 之前。詳見 `RULE_COVERAGE.md` |
-| R4（PreToolUse Write，取代原 I3） | ⬜ **下一步** |
-| R1（DEFAULT_* 遷移 WARN） | ⬜ |
+| R4（PreToolUse Write，取代原 I3） | ✅ commit `e589356`，5 fixture + 真實 E2E |
+| **AWC-1（新增，非原規劃）：Stop 觀察「問句結尾未呼叫 AskUserQuestion」** | ✅ commit `d2c08be`。緣起：本 session 自己違反 CLAUDE.md §2 硬規則被 user 當場抓到——索引/記憶強化解決不了執行機制問題，做成 WARN 級 Stop 觀察規則。風險層級刻意低於 `STOP_HOOK_MARKER_PLAN.md`（只記錄不擋，不依賴未驗證的 exit-code-blocks-Stop 假設）。5 fixture（3 份真實 transcript）+ 回歸網有效性驗證（天真版「整檔搜尋」會誤判 fixture 04，證明「這一輪」邊界判斷有實質作用）+ 真實 subprocess E2E |
+| R1（DEFAULT_* 遷移 WARN） | ⬜ **下一步** |
 | R3（併入 DB-3） | ⬜ |
 | I1/I2／DB-2/DB-4/DB-5 + S1 去重／A2 | ⬜ |
 | Phase 1.5–4 | ⬜ |
