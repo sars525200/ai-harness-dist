@@ -24,17 +24,15 @@
         和「引號內字串恰好含這幾個字」（例如 grep 搜尋字串、commit message）
         都算命中——這兩種都不是真的在執行 push。實測：本 session 做純讀取查證
         （零次真實 git push）時，這條規則被誤觸發 5 次。改用 shlex 依 shell
-        語彙斷詞，「git」「push」必須是兩個相鄰的獨立 token，且其後第一個非旗標
-        token 要真的等於 "vm"（remote 名稱本身）才算數——quoted 字串在 shlex
-        下天生就是單一 token，不會被拆開誤判。
+        語彙斷詞判斷（見 `contract.is_push_to_remote`，2026-07-28 寫 R1 時
+        從這裡升格成共用工具，兩條規則同一套邏輯，不重複實作）。
 """
 from __future__ import annotations
 
 import posixpath
 import re
-import shlex
 
-from contract import allow, block, bypassed
+from contract import allow, block, bypassed, is_push_to_remote
 
 RULE_ID = "DB-1"
 
@@ -47,29 +45,8 @@ INDEX_HTML = PROD_PREFIX + "index.html"
 _V_TOKEN = re.compile(r"([\w./-]+)\?v=([\w.-]+)")
 
 
-def _is_push_to_vm(command: str) -> bool:
-    """判斷是不是真的在對 vm remote 執行 push（見上方 F2）。
-
-    用 shlex 拆真正的 shell token，而非對整條字串做子字串/word-boundary 比對——
-    後者會被「巧合含有這幾個字」的無關內容（分支名、引號內字串）誤觸發。
-    """
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False  # 引號不成對等解析失敗 → 判定不適用（fail-open，不硬猜）
-
-    for i, tok in enumerate(tokens):
-        if tok == "git" and i + 1 < len(tokens) and tokens[i + 1] == "push":
-            for arg in tokens[i + 2:]:
-                if arg.startswith("-"):
-                    continue
-                return arg == "vm"        # push 後第一個非旗標 token 才是 remote 名稱
-            return False                  # `git push`（無 remote，用預設）不算明確推 vm
-    return False
-
-
 def applies(ctx) -> bool:
-    return _is_push_to_vm(ctx.command)
+    return is_push_to_remote(ctx.command, "vm")
 
 
 def parse_v_tokens(html: str) -> dict:

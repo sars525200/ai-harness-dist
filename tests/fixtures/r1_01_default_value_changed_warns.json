@@ -1,0 +1,27 @@
+{
+  "name": "R1 push 邊界偵測到 DEFAULT_* 值變動 → WARN",
+  "rule": "r1_default_migration",
+  "why": "CLAUDE.md §8 已咬 3 次的模式：改常數值不遷移 saved，getter 用 Object.assign({},預設,saved) 讓 saved 蓋過，改了等於沒改。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-01",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/app.js"]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_PAGE_SIZE = 20;\nfunction getConfig(saved) { return Object.assign({}, { pageSize: DEFAULT_PAGE_SIZE }, saved); }\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_PAGE_SIZE = 50;\nfunction getConfig(saved) { return Object.assign({}, { pageSize: DEFAULT_PAGE_SIZE }, saved); }\n"
+    }
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "DEFAULT_PAGE_SIZE"
+  }
+}

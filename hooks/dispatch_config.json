@@ -2,6 +2,7 @@
   "rules": {
     "DB-1": { "shadow": true },
     "R4": { "shadow": true },
-    "AWC-1": { "shadow": true }
+    "AWC-1": { "shadow": true },
+    "R1": { "shadow": true }
   }
 }

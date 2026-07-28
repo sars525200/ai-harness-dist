@@ -1,0 +1,26 @@
+{
+  "name": "R1 檔案裡完全沒有 DEFAULT_* 樣式 → ALLOW",
+  "rule": "r1_default_migration",
+  "why": "正面測試：絕大多數的 push 完全不涉及 DEFAULT_* 常數。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-03",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/server.py"]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/server.py": "def foo():\n    return 1\n",
+      "HEAD:SOP_PROD/05_UI_Demo/server.py": "def foo():\n    return 2\n"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "R1 remote ref 解不出 → fail-open 放行",
+  "rule": "r1_default_migration",
+  "why": "跟 DB-1 同一個 fail-open 原則：地基（能不能算出變更集）算不出來時不該硬猜、亂擋。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-05",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": null,
+    "diff_names": {},
+    "status_paths": []
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

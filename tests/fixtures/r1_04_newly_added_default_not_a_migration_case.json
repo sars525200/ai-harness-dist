@@ -1,0 +1,26 @@
+{
+  "name": "R1 新增的 DEFAULT_* 常數（舊版本沒有）不算「改值」→ ALLOW",
+  "rule": "r1_default_migration",
+  "why": "邊角案例：一個全新的 DEFAULT_* 常數，舊版本根本不存在，沒有「舊值被蓋過」的問題（沒有 saved 殘留舊值需要遷移），不該被當成需要遷移 saved 的情境誤判。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-04",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/app.js"]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "function render() {}\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_NEW_FEATURE_FLAG = false;\nfunction render() {}\n"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

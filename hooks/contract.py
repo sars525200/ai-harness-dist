@@ -11,10 +11,39 @@
 from __future__ import annotations
 
 import os
+import shlex
 
 ALLOW = "ALLOW"
 BLOCK = "BLOCK"
 WARN = "WARN"
+
+
+def is_push_to_remote(command: str, remote: str) -> bool:
+    """判斷 command 是不是真的在對某個 remote 執行 git push。
+
+    共用工具（原是 DB-1 的私有函式，2026-07-28 寫 R1 時升格——R1 需要同一段
+    「是不是在推 vm」判斷，未來 DB-2~DB-5 也會需要，不該讓每條規則各自
+    重新實作一次，或互相 import 對方模組裡底線開頭的私有函式）。
+
+    用 shlex 拆真正的 shell token，而非對整條字串做子字串/word-boundary 比對——
+    後者會被「巧合含有這幾個字」的無關內容誤觸發（DB-1 的 F2：分支名
+    `add-vm-support` 連字號兩側算 word boundary、引號內字串恰好含
+    「git push vm」都會誤判）。quoted 字串在 shlex 下天生是單一 token，
+    「git」「push」不會被拆成兩個相鄰獨立 token，不會誤判。
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False  # 引號不成對等解析失敗 → 判定不適用（fail-open，不硬猜）
+
+    for i, tok in enumerate(tokens):
+        if tok == "git" and i + 1 < len(tokens) and tokens[i + 1] == "push":
+            for arg in tokens[i + 2:]:
+                if arg.startswith("-"):
+                    continue
+                return arg == remote      # push 後第一個非旗標 token 才是 remote 名稱
+            return False                  # `git push`（無 remote，用預設）不算明確推該 remote
+    return False
 
 
 class Verdict:

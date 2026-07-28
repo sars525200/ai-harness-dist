@@ -1,0 +1,15 @@
+{
+  "name": "R1 不是 git push vm 的指令 → ALLOW（applies 不成立）",
+  "rule": "r1_default_migration",
+  "why": "正面測試：非部署指令完全不該觸發這條規則，applies() 要在碰任何 git 查詢之前就篩掉。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git status" },
+    "session_id": "fixture-r1-06",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "R1 檔案有改但 DEFAULT_* 那行沒變 → ALLOW",
+  "rule": "r1_default_migration",
+  "why": "正面測試防過度攔截：常見情況是改了檔案裡別的地方，DEFAULT_* 常數原封不動，不該被誤觸發。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-02",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/app.js"]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_PAGE_SIZE = 20;\nfunction render() { console.log('old'); }\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_PAGE_SIZE = 20;\nfunction render() { console.log('new'); }\n"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}
