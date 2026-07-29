@@ -90,8 +90,16 @@ Phase 3 的立論是「有一批寫入者不經過 tool-call，閘門看不到�
    重新成為真洞，屆時再處理。**注意**：修它要讓純字串函式去讀 git config，而它被用在
    `dispatch.py` 的 precheck（每次 Bash/PowerShell 呼叫都跑），會給三條規則同時加上
    subprocess 成本。
-2. `D:\.ai-harness` **無 remote**，harness 無法散佈到新機器 —— 這獨立於 Phase 3，且比
-   Phase 3 更該優先處理。
+2. ~~`D:\.ai-harness` **無 remote**~~ —— ✅ **已解決 2026-07-30**。
+   鏡像位置 `C:\Users\<USER>\git-mirrors\ai-harness.git`（remote 名 `backup`）。
+   **刻意跨實體磁碟**：來源在 Disk 0（ST1000DM010 SATA HDD），鏡像在 Disk 1
+   （KINGSTON SNV2S500G NVMe）—— 同一顆磁碟上放兩份不算備份。
+   本機無 NAS、無網路磁碟機對應，故未選網路位置。
+   已驗證可還原：clone 出來 119 檔／38 commits／**tree 雜湊逐字一致**。
+   `.git/hooks/post-commit` 每次 commit 後自動同步（fail-open）。
+   **仍未解決的部分**：這是同一棟建築內的備份，火災／竊盜／勒索軟體無防護；
+   且 bare repo 本身不在任何異地備份鏈裡（VM 的 GPG 異地包只涵蓋
+   `it_asset_platform.sqlite`，見 `backup_db.sh` 第 8-9 行）。
 3. `auto_commit.ps1` 的檔案清單兩側都沒有 `styles.css`，而 `db1_deploy.ASSET_NAMES` 有 ——
    styles.css 的改動落在 detect_set 卻不在 verify_set。屬 DB-1 既有行為。
 4. `git push --no-verify` 不在 deny 清單（即使不做 3b，這也是 `core.hooksPath` 型防護的通用缺口）。
