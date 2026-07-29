@@ -75,8 +75,8 @@
 
 | # | 項目 | 狀態 |
 |---|---|---|
-| 3a | `SessionStart` 回傳 `watchPaths` + `FileChanged` 事件（偵測，不能擋） | ⬜ |
-| 3b | 評估 git `pre-commit`/`pre-push` hook（唯一涵蓋 hook 自己／cron／人手改） | ⬜ |
+| 3a | `SessionStart` 回傳 `watchPaths` + `FileChanged` 事件（偵測，不能擋） | ⏸ **緩做**（輸出只走 5 秒 toast，見 `PHASE3_PLAN.md` §2） |
+| 3b | 評估 git `pre-commit`/`pre-push` hook（唯一涵蓋 hook 自己／cron／人手改） | ❌ **評估後決定不做 2026-07-30**（2 輪覆核重算：cron／nightly bump／bare push 三個動機全被證偽，邊際覆蓋只剩人手終端 push；見 `PHASE3_PLAN.md`） |
 | 3c | `permissions.deny` 補 PowerShell 形狀（現有 5 條全是 `Bash(...)`） | ✅ **完成 2026-07-30**（見 §4.5） |
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
