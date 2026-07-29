@@ -155,7 +155,29 @@ def _decide_git(tokens: list) -> "str | None":
     return None
 
 
+def force_utf8_output() -> None:
+    """把 stdout／stderr 釘成 UTF-8。**每支 hook 進入點的第一件事。**
+
+    Windows 上 Python 預設用 cp950 寫 stderr，而 Claude Code 是用 UTF-8 解讀
+    hook 輸出 —— 中文訊息因此變 mojibake（實測：`[唯讀角色]` 到模型眼裡是
+    `[�Ϊ��⦡]`）。模型收到的就只剩「被擋了」這個訊號，而訊息本身花力氣
+    寫的「不要改寫指令繞過」完全傳達不到，反而更可能去繞。
+
+    ⚠ 這不是本地化問題，是**閘門訊息的傳輸層**：dispatch.py 的 DB-1 是真閘門，
+    §4.1 特地檢查過它的 BLOCK 措辭「禁寫覆蓋使用者意圖的祈使句」—— 措辭在
+    亂碼下毫無意義。兩支都要有。
+
+    失敗一律吞掉：編碼是呈現層，不該讓閘門判定連帶失效。
+    """
+    for stream in (sys.stderr, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
 def main() -> int:
+    force_utf8_output()
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
         payload = json.loads(raw)

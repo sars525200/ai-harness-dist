@@ -16,6 +16,13 @@ import os
 import sys
 import time
 
+# 中文結果行要在 cp950 終端下讀得懂（同 run_hook_tests.py 開頭那段）。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 HOOKS_DIR = r"D:\.ai-harness\hooks"
 sys.path.insert(0, HOOKS_DIR)
 

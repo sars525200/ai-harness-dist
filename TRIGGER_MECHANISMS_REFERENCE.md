@@ -83,6 +83,23 @@
 同一類快照還有 **`.claude/agents/`**：本 session 新建的角色檔一律 `not found`，要下一個 session 才載入。
 區分「名字不被接受」與「整個目錄非熱載入」的方法是**換一個英文名探針再試一次**，別用猜的。
 
+##### ⚠ 但「重啟就會生效」只對 project 層成立（7/29 晚實測推翻前一版結論）
+
+角色檔放 `~/.claude/agents/`（user 層）時，**重啟多少次都不會出現**——這不是快照問題：
+
+| 環境 | 載入 user 層設定？ | `~/.claude/agents/` 的角色 |
+|---|---|---|
+| **VSCode extension（日常工作的 session）** | **否** | 看不到 |
+| `claude.exe` CLI／headless（預設 setting-sources） | 是 | 看得到 |
+
+證據是兩次對照的 headless 實驗：同一份角色檔，預設 setting-sources 列得出來，
+加 `--setting-sources project,local` 就整組消失，而**排除 user 後的清單與 VSCode
+session 逐字相同**。→ 角色檔一律放 **project 層 `<repo>/.claude/agents/`**。
+
+**這條的通則**：症狀同樣是「東西沒生效」，但成因有三層——①非熱載入（等重啟）
+②**設定來源沒被載入**（等到天荒地老也不會生效）③檔案本身有問題。先分辨在哪一層，
+別把 ② 誤診成 ①，那會得到「再重啟一次看看」這種永遠不會收斂的結論。
+
 ### 2.5 Permission 硬控管（`.claude/settings.json`，7/28 新增 deny）
 
 ```json

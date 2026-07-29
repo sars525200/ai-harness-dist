@@ -312,7 +312,27 @@ def _dispatch(payload: dict) -> int:
     return 0
 
 
+def _force_utf8_output() -> None:
+    """把 stdout／stderr 釘成 UTF-8 —— 進入點的第一件事。
+
+    Windows 的 Python 預設用 cp950 寫 stderr，Claude Code 卻用 UTF-8 解讀
+    hook 輸出 → 中文 BLOCK 訊息到模型眼裡是 mojibake（2026-07-29 實測）。
+    DB-1 已是真閘門，§4.1 檢查過的措辭在亂碼下等於沒寫。
+
+    **刻意內嵌、不共用**：1c 把 dispatch 的 import 從 34.5ms 壓到 20.3ms，
+    而這支每次 Edit／Bash 都跑一次。為 6 行 DRY 去 import `_lib` 會把那筆
+    優化吐回去。與 `agent_readonly_gate.force_utf8_output` 是**刻意的雙胞胎**，
+    一致性由 `tests/test_hook_encoding.py` 守（兩支都測，漂移會紅）。
+    """
+    for stream in (sys.stderr, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass  # 編碼是呈現層，不該讓 fail-open 的 dispatch 連帶爆掉
+
+
 def main() -> int:
+    _force_utf8_output()
     session_id = "unknown"
     agent_id = ""
     try:

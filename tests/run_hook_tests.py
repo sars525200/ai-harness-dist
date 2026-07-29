@@ -23,6 +23,15 @@ import shutil
 import sys
 import tempfile
 
+# 這支自己的中文輸出也要是 UTF-8：否則 PASS/FAIL 行在 cp950 終端下是亂碼，
+# 「哪個 fixture 紅了」得靠猜。與被測的 hook 同一條硬規則（自寫腳本開頭必
+# reconfigure），只是這裡壞掉的是可讀性，不是閘門訊息。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 HOOKS_DIR = r"D:\.ai-harness\hooks"
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
@@ -266,6 +275,22 @@ def main() -> int:
             unit_failed.extend(gate_failed)
             print(f"  {'PASS' if not gate_failed else 'FAIL'}  唯讀角色閘門{label}"
                   f"（{gate_passed}/{gate_passed + len(gate_failed)}）")
+
+        # hook 輸出編碼（跑真實子進程，唯一測得到 stderr 實際編碼的一層）。
+        # 上面兩層都用 io.StringIO 換掉 sys.stderr，那條路徑上 reconfigure
+        # 會失敗並被吞掉 —— 對「有沒有釘 UTF-8」這個性質永遠是綠的。
+        import test_hook_encoding
+        for run_fn, label in (
+            (test_hook_encoding.run, "gate"),
+            (test_hook_encoding.run_dispatch_cases, "dispatch"),
+        ):
+            enc_passed, enc_failed = run_fn()
+            unit_passed += enc_passed
+            for detail in enc_failed:
+                failed.append((f"hook 輸出編碼（{label}）", detail))
+            unit_failed.extend(enc_failed)
+            print(f"  {'PASS' if not enc_failed else 'FAIL'}  hook 輸出編碼 {label}"
+                  f"（{enc_passed}/{enc_passed + len(enc_failed)}）")
 
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()

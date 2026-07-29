@@ -61,14 +61,15 @@
 
 | # | 項目 | 狀態 |
 |---|---|---|
-| 2a | 建 `~/.claude/agents/查詢員.md`（`tools: Read, Grep, Glob`） | ✅ **檔案完成 2026-07-29**／⚠ 待重啟生效 |
-| 2b | 建雙改檢核員（給 Bash，用 agent-scoped `hooks:` ＋專屬唯讀閘門收窄） | ✅ **檔案完成 2026-07-29**／⚠ 待重啟生效 |
-| 2c | 接 `SubagentStop`（PR-1 `applies()` 改讀 `agent_transcript_path`） | ✅ **程式完成 2026-07-29**／⚠ 事件待重啟才會送達 |
+| 2a | 建查詢員（`tools: Read, Grep, Glob`） | ✅ **完成並實測上線 2026-07-29** |
+| 2b | 建雙改檢核員（給 Bash，用 agent-scoped `hooks:` ＋專屬唯讀閘門收窄） | ✅ **完成並實測上線 2026-07-29** |
+| 2c | 接 `SubagentStop`（PR-1 `applies()` 改讀 `agent_transcript_path`） | ✅ **完成並實測收到事件 2026-07-29** |
+| 2e | 存放位置改 project 層＋修 hook 輸出編碼（開場驗證衍生） | ✅ **完成 2026-07-29 晚**（見 §4.3） |
 | 2d | 收斂 `settings.local.json` 的 allow 白名單（187 條），改由角色 `tools:` 承擔 | ⬜ 未開始（user 定案另開一輪） |
 
-> **⚠ Phase 2 全部三項都卡在同一個平台事實**：`.claude/agents/` 與 hook 的
-> **event key 都是 session 啟動時快照**，本 session 建的角色、掛的
-> `SubagentStop` 都要**下一個 session** 才生效。驗證清單見 §4.2 末。
+> **✅ Phase 2 的四項開場驗證已全數通過**（清單見 §4.2 末，結果見 §4.3）。
+> 但通過的前提是**角色檔搬到 project 層**——原本放 `~/.claude/agents/` 的版本
+> 在日常工作環境永遠看不到，而那不是「等重啟」能解決的。詳見 §4.3。
 
 ### Phase 3 — 涵蓋非 tool-call 寫入者
 
@@ -370,6 +371,81 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
 2. 該 subagent 結束後，`state/events.<session>.agent-*.ndjson` 出現 `{"event":"SubagentStop"}`（驗 2c 真實接線）
 3. 派雙改檢核員跑一條 `git push --dry-run`，確認被 gate 擋下且 stderr 是角色邊界訊息（驗 agent-scoped hooks 真的生效）
 4. 問查詢員「§8 標題那行的完整文字」，確認自建 agent **有**載入 CLAUDE.md（內建 `Explore`/`Plan` 帶 `omitClaudeMd:true`，這是自建角色唯一的差異化理由）
+
+### 4.3 開場驗證結果與 2e（2026-07-29 晚）
+
+**四項全過** —— 但第 1 項在新 session 一開始是**失敗**的，追下去才是這一輪的主要收穫。
+
+| # | 結果 |
+|---|---|
+| 1 | ✅ 中文 `name` 可用（`查詢員`／`雙改檢核員` 都 spawn 得起來） |
+| 2 | ✅ `events.<session>.agent-<id>.ndjson` 收到 `{"event":"SubagentStop"}`，`agent_type` 正確落地（0d 的分檔機制第一次在真實 subagent 上驗證） |
+| 3 | ✅ `git push`／`git commit` 被 gate 擋下、`git status` 放行 —— agent-scoped `hooks:` 真的生效 |
+| 4 | ✅ 查詢員逐字背出 §8 標題行 → 自建角色**有**載入 CLAUDE.md，且工具集確實只有 `Read/Grep/Glob` |
+
+#### 「重啟就生效」是錯的診斷 —— 真正的原因是**設定來源沒被載入**
+
+新 session（全新 session_id）裡 `subagent_type: 查詢員` 仍然 `not found`。
+照上一版的結論這不該發生，於是改用 headless 進程做兩次對照：
+
+| 條件 | 可見角色 |
+|---|---|
+| `claude.exe -p`（預設 setting-sources） | **查詢員／雙改檢核員 都在** |
+| `claude.exe -p --setting-sources project,local` | **兩個都消失**，剩下的清單與 VSCode session **逐字相同** |
+
+→ **VSCode extension 的 session 不載入 user 層設定來源**，`~/.claude/agents/` 因此整個
+在視野外。角色檔、junction、中文名、event key 快照——全部無辜。
+
+再用一個 project 層的臨時探針（真實檔案、英文名）反向確認：在**排除 user 層**的條件下
+它出現了 → 解法成立，且不必等重啟就能驗。
+
+**2e 的處置（user 定案）**：角色檔本體搬到 **`d:\IT-department\.claude\agents\`**，
+與既有 `.claude/skills/`、`.claude/rules/` 同模式（專案專用、跟主 repo 版控走、
+`git clone` 就有）。harness repo 的 `agents/` 與 `scripts/bootstrap-agents.ps1` 一併撤除
+——junction 這條路不再需要，多一支 bootstrap 就多一個會漂移的地方。
+gate 腳本仍留 harness repo（它與 `dispatch.py` 同屬共用層），角色檔以絕對路徑引用它。
+
+> **推翻 §4.2 的存放決策**：那裡寫「user 定案全域層……角色與 gate 是一個單位，
+> 只版控一半會靜默漂移」。顧慮成立，但前提錯了——全域層在實際工作環境根本不會被載入，
+> 「一個單位」若有一半永遠不生效就沒有意義。
+
+**通則（值得帶到別的地方）**：「東西沒生效」有三層成因——①非熱載入（等重啟就好）
+②**設定來源沒被載入**（等到天荒地老都不會生效）③檔案本身有問題。②被誤診成 ① 時，
+得到的結論是「再重啟一次看看」，那是不會收斂的。
+分辨方法就是這次用的：**把懷疑的變數單獨關掉，看清單有沒有變**。
+
+#### 順帶抓到的真 bug：hook 的中文訊息到模型眼裡是 mojibake
+
+驗證 3 的 subagent 回報「stderr 原始為亂碼」。實測 raw bytes 確認：Windows 的 Python
+預設用 **cp950** 寫 stderr，Claude Code 卻用 **UTF-8** 解讀 hook 輸出。
+
+**這不是可讀性問題，是閘門訊息的傳輸層失效**：
+
+- `dispatch.py:303` 正是 **DB-1 這條真閘門**吐 BLOCK 訊息的地方
+- §4.1（1a）特地檢查過它的措辭「禁寫覆蓋使用者當前意圖的祈使句」——**措辭在亂碼下等於沒寫**
+- gate 訊息裡「不要改寫指令繞過」那句傳達不到，模型只收到「被擋了」，**反而更可能去繞**
+
+修正：兩支 hook 的 `main()` 第一件事就是把 stdout/stderr 釘成 UTF-8（失敗吞掉——
+編碼是呈現層，不該讓閘門判定連帶失效）。刻意**內嵌不共用**：1c 把 dispatch 的 import
+從 34.5ms 壓到 20.3ms，為 6 行 DRY 去 import `_lib` 會把那筆優化吐回去。
+
+**新測試層 `tests/test_hook_encoding.py`（7 case，已掛總入口）**：
+
+| 項 | 內容 |
+|---|---|
+| 為何非 subprocess 不可 | 要測 stderr 的編碼就得有一個真的 stderr。既有 `test_agent_gate.run_payload_cases` 用 `io.StringIO` 換掉 `sys.stderr` → 那條路徑上 `reconfigure` 會拋例外並被吞掉，**這個性質在 in-process 測法下永遠是綠的** |
+| 正反都斷言 | 不只驗「含 UTF-8 中文」，還驗「**不含**同一段中文的 cp950 bytes」——否則哪天訊息被改成純 ASCII，測試會因為「反正沒有 mojibake」繼續全綠 |
+| 結果 | `run_hook_tests.py` **145/145**、`smoke_real_git.py` 31/31 |
+
+**變異測試（兩發全紅，且紅在對的斷言上）**：
+
+| 變異 | 結果 |
+|---|---|
+| 拿掉 `dispatch.main()` 裡的 `_force_utf8_output()` | 3 → 1 ✅ 紅（`stderr.encoding='cp950'` ＋ bytes 斷言同時紅） |
+| 拿掉 `gate.main()` 裡的 `force_utf8_output()` | 4 → 2 ✅ 紅（BLOCK 與 fail-closed 兩條路徑都抓到） |
+
+順手把 `run_hook_tests.py`／`smoke_real_git.py` 自己的輸出也釘成 UTF-8 —— 它們的
+PASS/FAIL 行本來也是亂碼，「哪個 fixture 紅了」得靠猜。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
