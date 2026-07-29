@@ -52,7 +52,7 @@
 
 | # | 項目 | 狀態 |
 |---|---|---|
-| 1a | 解除 DB-1 shadow（**須先完成 0a/0b/0d**） | ⬜ |
+| 1a | 解除 DB-1 shadow（**須先完成 0a/0b/0d**） | ✅ **完成 2026-07-29 — DB-1 現為真閘門** |
 | 1b | 重寫 R4 `applies()`（改綁 `sqlite3.connect` 到 prod 路徑形狀） | ⬜ |
 | 1c | matcher **逐一列名**：`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent` | ⬜ |
 | 1d | 量測加 `Edit` 後的 dispatch 延遲（`.py` 的 Edit 有 118 次／期間） | ⬜ |
@@ -194,6 +194,23 @@ fixture 異動：`pr1_04` 改新格式 SKIP；`pr1_07` 語義過時（原本測�
 **IGNORE 機制第一次實戰**：標「0d 完成」之後 marker **仍然自洽**（`7858abb1…` 不變），不必重簽。這正是 0c 第 4 項要解決的問題。
 
 ⚠ 一個測量陷阱：`py report.py | Select-Object -First 14` 會提早關閉 pipe → `$LASTEXITCODE` 變成 -1/255，看起來像規則爆炸。**PowerShell 截斷輸出會污染 exit code**，判斷成敗前要先拿完整輸出。
+
+**✅ 1a 完成記錄（2026-07-29）—— DB-1 是整套 harness 第一條真閘門**
+
+`dispatch_config.json` 的 `DB-1` 轉 `shadow: false`，其餘 5 條維持 shadow。
+
+| 驗證 | 結果 |
+|---|---|
+| shadow 狀態 | DB-1 `False`，R1／R3／R4／AWC-1／PR-1 仍 `True` |
+| 真實環境不誤擋 | `git -C d:/IT-department push vm master` → exit **0** |
+| 真的擋得住 | monkeypatch `check()` 回 BLOCK → dispatch 回 exit **2**、stderr 有訊息 |
+| 回歸 | `run_hook_tests` 76/76 |
+
+**驗證用的指令刻意寫成 `git -C …`**：那正是 0a 修的形狀——修復前這條指令會讓 DB-1 完全不觸發（連 `applies` 都不記錄），現在它會被檢查並正確判 ALLOW。等於同時驗了 0a 與 1a。
+
+**exit 2 訊息措辭已檢查**：`STOP_HOOK_MARKER_PLAN.md` §4.1 實測過「模型會放棄使用者原始指令、改去執行 stderr 的指示」，因此 BLOCK 訊息禁寫覆蓋使用者當前意圖的祈使句。DB-1 的兩則訊息都是「原因＋規則說明」。另外這是 `PreToolUse` 不是 `Stop`，語義是「擋住這次工具呼叫」，比 Stop 溫和。
+
+**逃生口**：DB-1 有 `ctx.has_bypass()`，誤擋時在指令加 bypass 註解即可通過，且會記錄 `bypassed=true`（D10）。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
