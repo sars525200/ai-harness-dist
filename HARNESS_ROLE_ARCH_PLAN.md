@@ -65,7 +65,7 @@
 | 2b | 建雙改檢核員（給 Bash，用 agent-scoped `hooks:` ＋專屬唯讀閘門收窄） | ✅ **完成並實測上線 2026-07-29** |
 | 2c | 接 `SubagentStop`（PR-1 `applies()` 改讀 `agent_transcript_path`） | ✅ **完成並實測收到事件 2026-07-29** |
 | 2e | 存放位置改 project 層＋修 hook 輸出編碼（開場驗證衍生） | ✅ **完成 2026-07-29 晚**（見 §4.3） |
-| 2d | 收斂 `settings.local.json` 的 allow 白名單（187 條），改由角色 `tools:` 承擔 | ⬜ 未開始（user 定案另開一輪） |
+| 2d | 收斂 `settings.local.json` 的 allow 白名單（187 條），改由角色 `tools:` 承擔 | ✅ **完成 2026-07-29 晚 — 187 → 115**（方案 A，見 §4.4） |
 
 > **✅ Phase 2 的四項開場驗證已全數通過**（清單見 §4.2 末，結果見 §4.3）。
 > 但通過的前提是**角色檔搬到 project 層**——原本放 `~/.claude/agents/` 的版本
@@ -446,6 +446,51 @@ gate 腳本仍留 harness repo（它與 `dispatch.py` 同屬共用層），角�
 
 順手把 `run_hook_tests.py`／`smoke_real_git.py` 自己的輸出也釘成 UTF-8 —— 它們的
 PASS/FAIL 行本來也是亂碼，「哪個 fixture 紅了」得靠猜。
+
+### 4.4 2d 白名單收斂（2026-07-29 晚）
+
+**盤點結果 —— 187 條的實際成分**
+
+| 分類 | 條數 | 內容 |
+|---|---|---|
+| DEAD 死條目 | 43 | 綁死特定 PID／特定 session 的 scratchpad 路徑／`_tmp_*` 一次性檔名／特定行號 —— 永遠不可能再命中 |
+| REDUNDANT 冗餘 | 29 | 已被同清單更寬的規則涵蓋（5 條 `node --check <某檔>` 全被 `node --check:*` 吃掉） |
+| RISK 風險面 | 36 | 任意程式碼執行 17／遠端與部署 6／起行程刪檔 13 |
+| KEEP 合理 | 77 | 唯讀查詢、`git status/log/diff`、`curl localhost` |
+
+**user 定案：方案 A —— 只清 DEAD＋冗餘（72 條），風險面 36 條原封保留。**
+
+**這個決定的理由要記下來，否則下次會想「不是該收緊嗎」**：allow 白名單管的是
+「要不要問 user」，hook 閘門管的是「擋不擋」，**兩者獨立**——PreToolUse hook 對
+allow 過的指令照樣會跑。所以收緊 allow **不會讓 harness 多防住任何東西**，只會多
+跳詢問視窗。防護該長在閘門上（R1／R3／R4 解除 shadow、Phase 3），不是長在白名單上。
+
+且風險面裡有 17 條是 `python -c`／`python -`／heredoc ＝**任意程式碼執行**。
+只要它們在，白名單在安全意義上就等於全開——任何操作都能包一層繞過。這也反過來
+說明「把 187 收成 115」的真實收益就只是衛生，不該記成安全改善。
+
+**循環涵蓋陷阱（差點造成真實損害）**
+
+第一版盤點腳本用「被誰涵蓋就標冗餘」一次算完，結果 `Bash(git add *)` 與
+`Bash(git add:*)` **互為對方的涵蓋者**、雙雙被標成冗餘 —— 照單全刪會讓 `git add`
+與 `git commit` 完全失去白名單。改為**貪婪保留**（body 長→短逐條試刪，且只在
+「留下來的條目」仍涵蓋它時才刪）後，具體條目先刪、萬用條目後檢查時已找不到
+涵蓋者而得以保留。冗餘數 31 → 29，差的 2 條正是 `git add:*`／`git commit:*`。
+
+**變異測試（守門確實會紅）**
+
+| 變異 | 結果 |
+|---|---|
+| 去冗餘改回 naive「被涵蓋就刪」一次算完 | ✅ 紅 —— 7 條「覆蓋面縮小」＋ 2 個高頻探針（`git add -A`／`git commit -m`）失去白名單 |
+
+三層驗證判準：①每條非死條目刪後仍須有保留條目涵蓋它 ②高頻指令探針
+（`git add -A`／`git commit`／`node --check`／`git status`／`grep`）必須仍命中
+③風險面 8 類計數前後不變。
+
+**套用結果**：187 → 115。`hooks` 段逐字不變（三個事件都還在）、其他頂層 key 不變、
+風險面 8 類計數 0 變動。實測 `node --check SOP_PROD/05_UI_Demo/app.js` 與
+`git -C d:/IT-department status --short`（兩條都是被刪的具體條目）仍直接放行，
+證實覆蓋面沒縮小。備份留在 `settings.local.json.bak-<timestamp>`。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
