@@ -1,0 +1,54 @@
+{
+  "name": "PR-1 規則自己的測試資料（tests/ 底下）標待審核也不觸發 → ALLOW",
+  "why": "2026-07-29（0c）取代原本的『檔名不是 *_PLAN.md 就不管』。舊版用檔名當第二道 AND 條件，導致真實觸發面是 0（真實工作流的檔名五花八門，HARNESS_PROGRESS.md、scratchpad 的覆核文件都不叫 *_PLAN.md）。改成看狀態標記之後，必須顯式排除 tests/ 與 fixtures/：規則自己的 e2e fixture `tests/pr1_e2e/SAMPLE_PLAN.md` 刻意標『待審核』且刻意無 marker，若不排除，每一輪動到它的 Stop 都會被自家測試資料擋住，而且 BLOCK 訊息會教模型去改測試資料。註：一般 .md（memory/*.md 之類）不會被誤擋是靠**狀態標記**那一層，見 pr1_06。",
+  "workspace": {
+    "files": {
+      "tests/pr1_e2e/SAMPLE_PLAN.md": "# 測試用計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這是 PR-1 自己的 e2e fixture，刻意沒有 marker。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "跑一下 PR-1 的 e2e 測試"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/tests/pr1_e2e/SAMPLE_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

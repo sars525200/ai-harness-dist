@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 REVIEW_SCOPE_IGNORE 區間內的進度更新不讓 marker 失效 → ALLOW",
+  "why": "2026-07-29（0c）新增。舊版 hash 綁全檔，所以在計畫書標一行『0a 完成』marker 就對不上——但架構結論一個字都沒變。實務後果是『重算 hash』變成反射動作，而重算 hash 正是偽造憑證的唯一動作，tamper-evidence 的價值就在那個習慣裡被消耗掉。此 fixture 的檔案把進度區塊包在 REVIEW_SCOPE_IGNORE_START/END 之間，marker 的 hash 只綁區間外的結論段落。反向保證見 pr1_03（區間外的內容被改仍要擋）。",
+  "workspace": {
+    "files": {
+      "SCOPED_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 架構結論\n\n這段是審查過的結論。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## 進度\n\n- 0a 完成\n- 0b 完成\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=59b4e92820aecf6017f259d5d39dc71884f0b58f228c353b59f08484d51f489e rounds=3 at=2026-07-29T18:00:00+08:00 -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "把 0b 標成完成"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/SCOPED_PLAN.md",
+                "old_string": "...",
+                "new_string": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File updated"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

@@ -1,0 +1,56 @@
+{
+  "name": "PR-1 檔名不是 *_PLAN.md 但標了待審核 → 照樣 BLOCK",
+  "why": "2026-07-29（0c）核心改動的迴歸測試。舊版用 `endswith('_PLAN.md')` 當第二道 AND 條件，導致**真實觸發面是 0**：三輪覆核期間逐一比對兩個 repo，唯一符合舊判準的檔案是規則自己的 e2e fixture，真實工作流的檔名根本不長那樣（`HARNESS_PROGRESS.md` 標過待審核、scratchpad 的覆核文件也不叫 *_PLAN.md）。狀態標記本來就是 B1 的顯式握手，檔名是多餘的條件。此 fixture 用真實出現過的檔名，必須被檢查到。註：變異測試發現這條改動原本零覆蓋——所有既有 PR-1 fixture 的檔名都以 _PLAN.md 結尾，把判準改回舊版仍然全綠。",
+  "workspace": {
+    "files": {
+      "HARNESS_PROGRESS.md": "# Harness 進度報表\n\n> 狀態：待審核\n\n## 總覽\n\n這份不叫 *_PLAN.md，但它標了待審核。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "更新進度表"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/HARNESS_PROGRESS.md",
+                "old_string": "...",
+                "new_string": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File updated"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "待審核"
+  },
+  "rule": "pr1_plan_review_marker"
+}

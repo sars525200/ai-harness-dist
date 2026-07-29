@@ -1,0 +1,56 @@
+{
+  "name": "PR-1 舊版 SKIP（沒綁 hash）不再放行 → BLOCK 並給升級指引",
+  "why": "2026-07-29（0c）。舊格式 `<!-- ADVERSARIAL_REVIEW_SKIP: 理由 -->` 不綁 hash，一次寫下就**永久**關閉該檔的 PR-1——之後把整份計畫書改掉也不會再被檢查。改版後必須認得出舊格式並明確拒絕，而不是靜默放行（靜默放行＝升級當天所有既有 SKIP 全部繼續失效，而且沒人會知道）。訊息要給出可直接照抄的新格式與重算方式。",
+  "workspace": {
+    "files": {
+      "LEGACY_PLAN.md": "# 測試計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這裡是內容。\n\n<!-- ADVERSARIAL_REVIEW_SKIP: 舊格式，沒有綁 hash -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "更新這份計畫書"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/LEGACY_PLAN.md",
+                "old_string": "...",
+                "new_string": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File updated"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "舊版"
+  },
+  "rule": "pr1_plan_review_marker"
+}

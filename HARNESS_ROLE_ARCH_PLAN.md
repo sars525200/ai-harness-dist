@@ -32,13 +32,18 @@
 
 ## 3. 分類與排程
 
+<!-- REVIEW_SCOPE_IGNORE_START -->
+<!-- ↑ 以下到 IGNORE_END 為止是「進度」，不納入審查 hash：
+     標一項完成不該讓 marker 失效，否則「重算 hash」會變成反射動作，
+     而重算 hash 正是偽造憑證的唯一動作。見 §4.1 的 4️⃣。 -->
+
 ### Phase 0 — 閘門修復（解除 shadow 的前置，全部完成才進 Phase 1）
 
 | # | 項目 | 分類 | 狀態 |
 |---|---|---|---|
 | 0a | 修 `is_push_to_remote` 的 git 全域 flag 解析；同批修 `shlex.split` 對 PowerShell here-string 的 fail-open | 邏輯 | ✅ **完成 2026-07-29** |
 | 0b | `db1_deploy.py` 雙改判準改為**比兩端內容**（`auto_commit.ps1` 不動） | 邏輯 | ✅ **完成 2026-07-29** |
-| 0c | PR-1：觸發判準改內容標記（限本輪動過的檔）、移除 hash 洩漏、`_SKIP` 綁 hash、排除 `tests/` | 邏輯 | ⬜ 待做 |
+| 0c | PR-1：觸發判準改內容標記（限本輪動過的檔）、移除 hash 洩漏、`_SKIP` 綁 hash、排除 `tests/`、hash 綁架構段落 | 邏輯 | ✅ **完成 2026-07-29** |
 | 0d | `dispatch.py` 記 `agent_id`/`agent_type`；events 檔名納入 `agent_id` | devops | ⬜ 待做 |
 | ~~0e~~ | ~~實測 cron 是否丟棄 Stop block~~ | — | 🔻 降級（疑 dead code） |
 | ~~0-新~~ | ~~Stop 事件為何不到 dispatch~~ | — | ✅ **已解決 2026-07-29**（見 §4.0） |
@@ -69,6 +74,8 @@
 | 3b | 評估 git `pre-commit`/`pre-push` hook（唯一涵蓋 hook 自己／cron／人手改） | ⬜ |
 | 3c | `permissions.deny` 補 PowerShell 形狀（現有 5 條全是 `Bash(...)`） | ⬜ |
 
+<!-- REVIEW_SCOPE_IGNORE_END -->
+
 ---
 
 ## 4. 逐項做法與驗證判準
@@ -94,6 +101,8 @@
 - 做法：解析並跳過 git 全域 flag（`-C <path>`／`-c <k=v>`／`--git-dir=`／`--work-tree=`／`--exec-path` 等），再判 `push`
 - **驗證判準**：fixture 涵蓋上述 4 種寫法皆回 `True`；`run_hook_tests.py` 全過
 
+<!-- REVIEW_SCOPE_IGNORE_START -->
+
 **✅ 0a 完成記錄（2026-07-29）**
 
 | 項 | 內容 |
@@ -113,12 +122,16 @@
 | `_tokenize` 退回只用 posix | 22 → 21 ✅ 紅 |
 | `_is_git_token` 放寬成子字串比對 | **首跑 19/19 全綠 ❌** → 依硬規則補測「含 git 字樣但不是 git 本體」（`gitk`／`git-lfs`／`mygit`）3 個 case → 22 → 19 ✅ 紅 |
 
+<!-- REVIEW_SCOPE_IGNORE_END -->
+
 **0b**｜DEV repo **無 remote**（實測），`db1_deploy.py:133` 永遠走 `HEAD~1..HEAD` fallback；而 `auto_commit.ps1` 掛在 `Stop`、**每回合** commit 兩個 repo（近 200 筆有 39–40 筆）。
 - 失效：正確雙改的 `app.js` 被沖出 `HEAD~1..HEAD` 視窗 → DB-1 判「DEV 未同步」→ **誤 BLOCK 一次正確部署**
 - 後果**不是拒絕服務而是資料損壞**：已實測的 exit 2 副作用是「模型放棄原始指令、改執行 stderr 指示」→ 跑去改 DEV `app.js` 補假同步
 - 另一個自動寫入者：`ITAssetPlatform_NightlySemverBump`（**State=Ready**，每日 23:00，`bump_semver.py --auto`），動的正是 DB-1 比對的版本資料
 - 做法（**user 定案：改成內容比對**）：不動 `auto_commit.ps1`，改讓 DB-1 直接比 PROD `HEAD:{path}` 與 DEV 側同一檔的內容。§6 要求的是「兩目錄同步」＝內容一致；用 commit 範圍近似它等於引進「什麼時候 commit」這個與規則無關的變數（`auto_commit`、nightly `bump_semver` 都會動它），改比內容後全部無關
 - **驗證判準**：DEV 那筆 commit 已被沖出 `HEAD~1..HEAD` 視窗、但內容一致時仍判 ALLOW
+
+<!-- REVIEW_SCOPE_IGNORE_START -->
 
 **✅ 0b 完成記錄（2026-07-29）**
 
@@ -142,6 +155,32 @@
 | `_dev_matches` 拿掉 worktree fallback | **15 個 fixture 全綠 ❌** → 該分支零覆蓋。fixture 框架的 `workspace` 只能替換 payload 佔位符、改不到 `repo_root`，故補在函式層（`_run_dev_matches_cases`，6 個 case）→ 28 → 26 ✅ 紅 |
 
 ⚠ 一個踩到的自己人陷阱：第一版補測先建好全部 case 物件、最後才一起執行，但 worktree 檔案在建 case 過程中被反覆覆寫 → 執行時全讀到最後一次的內容，基準就 2 紅。**共用同一個檔案路徑的 case 必須在各自執行前才寫檔。**
+
+**✅ 0c 完成記錄（2026-07-29）**
+
+四項改動一次做完：
+
+| 項 | 內容 |
+|---|---|
+| 觸發判準 | `endswith("_PLAN.md")` → **這輪動過的任何 `.md` ＋ 狀態標記**。顯式排除 `tests/`／`fixtures/`（否則會永久命中規則自己的 e2e fixture，且 BLOCK 訊息會教模型去改測試資料） |
+| hash 洩漏 | BLOCK 訊息不再印出通關 sha256，改印「重算指令」。⚠ 誠實界線：模型有 shell 權限、自己算得出來——**憑證是提高成本並留痕，不是不可偽造** |
+| SKIP 綁 hash | 舊格式（無 hash）一次寫下就永久關閉該檔檢查。新格式 `<!-- ADVERSARIAL_REVIEW_SKIP sha256=…: 理由 -->`；舊格式會被明確拒絕並給升級指引，不靜默放行 |
+| **綁定範圍** | 支援 `REVIEW_SCOPE_IGNORE_START/END` 區間（user 定案：綁架構段落）。本計畫書自己已套用——§3 排程表與各完成記錄都在區間內，標完成不必重簽 |
+
+**結果**：`run_hook_tests.py` **76/76**、`smoke_real_git.py` **31/31**。
+
+**變異測試（第三次抓到零覆蓋）**：
+
+| 變異 | 結果 |
+|---|---|
+| `IGNORE` 區間不排除 | 11 → 10 ✅ 紅 |
+| `SKIP` 不驗 hash（舊行為） | 11 → 9 ✅ 紅 |
+| `tests/` 不排除 | 11 → 10 ✅ 紅 |
+| **檔名條件改回 `_PLAN.md`** | **10/10 全綠 ❌** —— 所有既有 PR-1 fixture 的檔名都以 `_PLAN.md` 結尾，**0c 的核心改動零覆蓋**。補 `pr1_11`（用真實出現過的 `HARNESS_PROGRESS.md` 當檔名）後 → 11 → 10 ✅ 紅 |
+
+fixture 異動：`pr1_04` 改新格式 SKIP；`pr1_07` 語義過時（原本測「檔名不符就不管」）→ 換成測 `tests/` 排除；新增 `pr1_09`（IGNORE 區間）、`pr1_10`（舊格式 SKIP 被拒）、`pr1_11`（非 `_PLAN.md` 檔名照樣檢查）。
+
+<!-- REVIEW_SCOPE_IGNORE_END -->
 
 **0c**｜PR-1 三個問題：
 1. **BLOCK 訊息逐字印出通關 sha256**（`pr1:85`）→ 模型複製貼上即通關。生產記錄有實例
@@ -258,5 +297,11 @@
 
 ---
 
-<!-- 重簽紀錄：2026-07-29 標記 0a／0b 完成＋補完成記錄後重算（架構結論未變，見 §4.1 的 4️⃣） -->
-<!-- ADVERSARIAL_REVIEW_PASSED sha256=e5931c49b9cf7773d98f04495f6cc78e79fdf60735f6ed6149cbb1a8cb264ab3 rounds=3 at=2026-07-29T17:40:00+08:00 -->
+<!-- REVIEW_SCOPE_IGNORE_START -->
+<!-- 重簽紀錄：2026-07-29 導入 REVIEW_SCOPE_IGNORE 區間後重算。
+     這是最後一次因為「進度更新」而重簽——之後標完成只會動到 IGNORE 區間內的內容，
+     marker 不再失效。架構結論自 3 輪覆核以來未變。
+     （這段註解自己也在 IGNORE 區間內：它是進度性質的資訊，不該讓 marker 失效。
+       第一版把它寫在區間外，結果加註解的當下 marker 就對不上了。） -->
+<!-- REVIEW_SCOPE_IGNORE_END -->
+<!-- ADVERSARIAL_REVIEW_PASSED sha256=7858abb1d9a6f56f7e4a65a13b2f8c980bd84e97ba555dc790ef3b3c6e8e117f rounds=3 at=2026-07-29T18:20:00+08:00 -->
