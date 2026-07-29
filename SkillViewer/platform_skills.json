@@ -1,0 +1,27 @@
+{
+  "updatedAt": "2026-07-28",
+  "note": "平台通用 skills 手動維護清單（Claude Code 內建/外掛，非本專案自動掃描得出）。此清單是某次 session 看到的快照，實際可用項目請以當下 Claude Code 內打「/」看到的為準；若發現有落差，直接編輯這個檔案補上/刪除/改描述即可，不用碰 SkillViewer.ps1。",
+  "skills": [
+    { "name": "shougong", "category": "收工/部署", "description": "收工封存 SOP 執行器。user 說「收工」「先到這」「封存」，或要求補規範/寫日誌/封存今天的工作時使用。" },
+    { "name": "deploy-prod", "category": "收工/部署", "description": "正式站修復部署主流程執行器（CLAUDE.md §9 八步）。任務是修 PROD 問題並部署、user 說「推正式」「上線」「push vm」或修完要驗證部署時使用。" },
+    { "name": "diagnose-bug", "category": "診斷/除錯", "description": "難 bug 診斷迴圈執行器。bug 症狀怪/跨層/改了沒好/效能退化，或 user 說「診斷」「查根因」「又出現了」時使用；一般一眼可見的小修不用。" },
+    { "name": "dry-run-migrate", "category": "診斷/除錯", "description": "資料遷移閘門執行器。任務要用腳本改正式資料——批次回補/遷移/清理/DELETE/外部文件(Excel/報價單)匯入——時使用；對應 DEV_DRY_RUN 模式。" },
+    { "name": "codebase-health", "category": "診斷/除錯", "description": "架構健檢，唯讀掃描整個專案並輸出 Artifact 報告。" },
+    { "name": "suggestion-inbox", "category": "工作追蹤", "description": "讀取「建議信箱→管理」待完成清單並逐項處理。user 說「讀建議信箱」「處理建議」「來看 SG-XXX」，或要清理內部待辦建議時使用。" },
+    { "name": "deep-research", "category": "研究/內容", "description": "深度研究執行器——fan-out 網路搜尋、抓取來源、交叉驗證、產出附引用的報告。需要多來源、事實查核的研究報告時使用。" },
+    { "name": "dataviz", "category": "研究/內容", "description": "任何圖表/圖形/儀表板前必讀。提供配色公式、圖形選型 heuristic、互動規則，確保視覺化在明暗主題下一致且可及。" },
+    { "name": "artifact-design", "category": "研究/內容", "description": "Artifact 頁面的設計指引與基礎規範。" },
+    { "name": "artifact-capabilities", "category": "研究/內容", "description": "已發布 Artifact 頁面可申請的進階執行期能力（即時/連動資料、跨使用者共享狀態、自我更新）。需要這類功能時載入。" },
+    { "name": "run", "category": "開發輔助", "description": "啟動並操作目前專案的 app，實際驗證一項改動是否真的生效（非只跑測試）。" },
+    { "name": "init", "category": "開發輔助", "description": "為新專案初始化一份包含程式庫文件的 CLAUDE.md。" },
+    { "name": "review", "category": "開發輔助", "description": "審查一個 GitHub Pull Request；審查自己本機尚未送出的 diff 改用 /code-review。" },
+    { "name": "security-review", "category": "開發輔助", "description": "對目前分支尚未提交的變更做一次完整資安審查。" },
+    { "name": "simplify", "category": "開發輔助", "description": "審查已變更的程式碼、抓重複/可簡化/低效率之處並直接套用修正；只管品質、不找 bug（找 bug 用 /code-review）。" },
+    { "name": "fewer-permission-prompts", "category": "開發輔助", "description": "掃描近期常見的唯讀 Bash/MCP 呼叫，產出白名單加進專案設定，減少之後的權限詢問彈窗。" },
+    { "name": "claude-api", "category": "開發輔助", "description": "Claude API / Anthropic SDK 用法查詢：model id、定價、參數、串流、tool use、MCP、快取、token 計算、模型遷移。任何提到 Claude/Anthropic 或 LLM 整合的任務先讀這個。" },
+    { "name": "update-config", "category": "環境設定", "description": "設定 Claude Code harness（settings.json）：權限白名單、hooks、環境變數。「允許 X 指令」「加權限」「設定 hook」這類要求用這個。" },
+    { "name": "keybindings-help", "category": "環境設定", "description": "自訂鍵盤快捷鍵、改綁按鍵、加組合鍵。" },
+    { "name": "loop", "category": "環境設定", "description": "讓一個 prompt 或 slash command 依固定間隔重複執行；不給間隔則自行抓節奏。設定定期輪詢/重複任務時使用。" },
+    { "name": "schedule", "category": "環境設定", "description": "建立/更新/列出/執行排程雲端 agent（依 cron 排程執行的自動化任務）。也用於單次定時任務（例如「明天下午三點提醒我」）。" }
+  ]
+}
