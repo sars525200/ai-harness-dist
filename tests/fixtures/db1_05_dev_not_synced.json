@@ -1,7 +1,7 @@
 {
   "name": "DB-1 PROD 已改、DEV repo 未同步 → BLOCK",
   "rule": "db1_deploy",
-  "why": "§6 雙改規則。端到端實測發現的架構問題：SOP/ 是獨立 git repo 且被主 repo .gitignore 排除，DEV 檔永遠不會出現在主 repo 的 diff_names 裡——查主 repo 會 100% 誤判「未同步」。必須查 DEV repo 自己的 git（dev_git）。此 fixture 的 dev_git 變更集不含 app.js，規則必須擋。",
+  "why": "§6 雙改規則。端到端實測發現的架構問題：SOP/ 是獨立 git repo 且被主 repo .gitignore 排除，DEV 檔永遠不會出現在主 repo 的 diff_names 裡——查主 repo 會 100% 誤判「未同步」。必須查 DEV repo 自己的 git（dev_git）。2026-07-29（0b）判準改為**比兩端內容**而非比 commit 範圍：此 fixture 的 DEV app.js 內容停在舊版（v1）而 PROD 已是 v2，規則必須擋。",
   "payload": {
     "hook_event_name": "PreToolUse",
     "tool_name": "PowerShell",
@@ -25,6 +25,10 @@
     "show": {
       "vm/master:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>",
       "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
+    },
+    "show_bytes": {
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "function boot() { return 'v2'; }\n",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
     }
   },
   "dev_git": {
@@ -34,7 +38,11 @@
         "05_UI_Demo/docs/SOME_PLAN.md"
       ]
     },
-    "status_paths": []
+    "status_paths": [],
+    "show_bytes": {
+      "HEAD:05_UI_Demo/app.js": "function boot() { return 'v1'; }\n",
+      "HEAD:05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2224\"></script>"
+    }
   },
   "expect": {
     "decision": "BLOCK",

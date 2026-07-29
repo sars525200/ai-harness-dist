@@ -1,7 +1,7 @@
 {
-  "name": "DB-1 F4：DEV 側語法錯誤也要擋（CLAUDE.md §6「node --check 兩端」）→ BLOCK",
+  "name": "DB-1 兩端內容相同、只有行尾 CRLF/LF 不同 → ALLOW",
   "rule": "db1_deploy",
-  "why": "2026-07-28 dry-run 抓到：語法檢查只查 verify_set（主 repo/PROD 側），從沒查過 ctx.dev_git（DEV 側）。CLAUDE.md §6 原文明寫『node --check 兩端』，且 D12 已證實兩端 blob 理論上逐位元組一致——PROD 語法正確不代表 DEV 也正確，兩端各自獨立 commit，可能一端漏改。此 fixture 讓 PROD 側 app.js 語法無誤、?v= 正確 bump、雙改同步都通過，但 DEV 側 app.js 有語法錯誤，必須在這裡被攔下。",
+  "why": "2026-07-29（0b）改成比內容之後才會踩到的雷：D12 做過 `.gitattributes` renormalize，git blob 存 LF、Windows 工作區是 CRLF。若比對前不先統一行尾，同一份內容在 blob 與 worktree 之間**永遠不相等** → 每一次部署都被誤 BLOCK。此 fixture 讓 PROD 側 blob 帶 CRLF、DEV 側帶 LF，其餘逐字相同，規則必須視為已同步。反向保證見 db1_05（真的內容不同時仍要擋）。",
   "payload": {
     "hook_event_name": "PreToolUse",
     "tool_name": "PowerShell",
@@ -9,7 +9,7 @@
       "command": "git push vm master",
       "description": "部署"
     },
-    "session_id": "fixture-db1-13",
+    "session_id": "fixture-db1-15",
     "cwd": "D:\\IT-department",
     "permission_mode": "auto"
   },
@@ -28,8 +28,8 @@
     },
     "syntax_errors": {},
     "show_bytes": {
-      "HEAD:SOP_PROD/05_UI_Demo/app.js": "function boot() { return 'v2'; }\n",
-      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "function boot() {\r\n  return 'v2';\r\n}\r\n",
+      "HEAD:SOP_PROD/05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\r\n<script src=\"/app.js?v=2225\"></script>"
     }
   },
   "dev_git": {
@@ -41,16 +41,13 @@
       ]
     },
     "status_paths": [],
+    "syntax_errors": {},
     "show_bytes": {
-      "HEAD:05_UI_Demo/app.js": "function boot() { return 'v2'; }\n",
+      "HEAD:05_UI_Demo/app.js": "function boot() {\n  return 'v2';\n}\n",
       "HEAD:05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
-    },
-    "syntax_errors": {
-      "05_UI_Demo/app.js": "SyntaxError: Unexpected token (line 42)"
     }
   },
   "expect": {
-    "decision": "BLOCK",
-    "message_contains": "DEV 側"
+    "decision": "ALLOW"
   }
 }

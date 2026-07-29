@@ -37,7 +37,7 @@
 | # | 項目 | 分類 | 狀態 |
 |---|---|---|---|
 | 0a | 修 `is_push_to_remote` 的 git 全域 flag 解析；同批修 `shlex.split` 對 PowerShell here-string 的 fail-open | 邏輯 | ✅ **完成 2026-07-29** |
-| 0b | `auto_commit.ps1` 與 `db1_deploy.py` 的 DEV `HEAD~1..HEAD` fallback | 邏輯 | ⬜ 待做 |
+| 0b | `db1_deploy.py` 雙改判準改為**比兩端內容**（`auto_commit.ps1` 不動） | 邏輯 | ✅ **完成 2026-07-29** |
 | 0c | PR-1：觸發判準改內容標記（限本輪動過的檔）、移除 hash 洩漏、`_SKIP` 綁 hash、排除 `tests/` | 邏輯 | ⬜ 待做 |
 | 0d | `dispatch.py` 記 `agent_id`/`agent_type`；events 檔名納入 `agent_id` | devops | ⬜ 待做 |
 | ~~0e~~ | ~~實測 cron 是否丟棄 Stop block~~ | — | 🔻 降級（疑 dead code） |
@@ -117,8 +117,31 @@
 - 失效：正確雙改的 `app.js` 被沖出 `HEAD~1..HEAD` 視窗 → DB-1 判「DEV 未同步」→ **誤 BLOCK 一次正確部署**
 - 後果**不是拒絕服務而是資料損壞**：已實測的 exit 2 副作用是「模型放棄原始指令、改執行 stderr 指示」→ 跑去改 DEV `app.js` 補假同步
 - 另一個自動寫入者：`ITAssetPlatform_NightlySemverBump`（**State=Ready**，每日 23:00，`bump_semver.py --auto`），動的正是 DB-1 比對的版本資料
-- 做法：DEV 側改用穩定基準 ref（例如在 DEV 建 `deployed` 標記 ref）取代 `HEAD~1..HEAD`
-- **驗證判準**：連續跑 3 個只改 `styles.css` 的 auto commit 之後，一次正確的 PROD+DEV 雙改 push 仍判 ALLOW
+- 做法（**user 定案：改成內容比對**）：不動 `auto_commit.ps1`，改讓 DB-1 直接比 PROD `HEAD:{path}` 與 DEV 側同一檔的內容。§6 要求的是「兩目錄同步」＝內容一致；用 commit 範圍近似它等於引進「什麼時候 commit」這個與規則無關的變數（`auto_commit`、nightly `bump_semver` 都會動它），改比內容後全部無關
+- **驗證判準**：DEV 那筆 commit 已被沖出 `HEAD~1..HEAD` 視窗、但內容一致時仍判 ALLOW
+
+**✅ 0b 完成記錄（2026-07-29）**
+
+| 項 | 內容 |
+|---|---|
+| 前置實測 | DEV/PROD 的 `app.js`／`styles.css`／`index.html`／`server.py` **四個檔逐位元組完全一致**（D12 早證實過），內容比對這條判準現況成立 |
+| 改動 | `db1_deploy.py` step 6 改為內容比對，新增 `_norm_eol()`／`_dev_matches()`；移除死常數 `DEV_PREFIX` |
+| 行尾陷阱 | D12 做過 `.gitattributes` renormalize → git blob 存 LF、工作區是 CRLF。不先正規化行尾就比 bytes，**同一份內容永遠不相等 → 每次部署都誤 BLOCK** |
+| D13 的取捨 | 主判準仍是 blob（「要推的是 commit 內容」），但 blob 不符時額外看一眼 worktree，接受「DEV 已改好只是還沒 commit」——誤 BLOCK 的代價已實測是資料損壞，這一格寧可寬 |
+| 新 fixture | `db1_14`（DEV 內容已同步但 commit 被 auto_commit 沖出視窗 → ALLOW，**這個 bug 的迴歸測試**）、`db1_15`（只有 CRLF/LF 差異 → ALLOW） |
+| 結果 | `run_hook_tests.py` **73/73**（45 fixture + 28 單元）、`smoke_real_git.py` **31/31** |
+
+**順帶補掉一個既有覆蓋缺口**：`db1_02` 是唯一的 ALLOW 樣本，但它沒有 `dev_git` 區塊 → 雙改檢查整段被跳過。也就是說**「雙改通過」這條路徑從來沒有正面測試**，規則寫成「雙改一律 BLOCK」也會全綠。`db1_14`／`db1_15` 補上了。
+
+**變異測試**：
+
+| 變異 | 結果 |
+|---|---|
+| `_norm_eol` 不轉行尾 | 15 → 14 ✅ 紅（`db1_15`） |
+| `_dev_matches` 永遠 True | 15 → 14 ✅ 紅（`db1_05`） |
+| `_dev_matches` 拿掉 worktree fallback | **15 個 fixture 全綠 ❌** → 該分支零覆蓋。fixture 框架的 `workspace` 只能替換 payload 佔位符、改不到 `repo_root`，故補在函式層（`_run_dev_matches_cases`，6 個 case）→ 28 → 26 ✅ 紅 |
+
+⚠ 一個踩到的自己人陷阱：第一版補測先建好全部 case 物件、最後才一起執行，但 worktree 檔案在建 case 過程中被反覆覆寫 → 執行時全讀到最後一次的內容，基準就 2 紅。**共用同一個檔案路徑的 case 必須在各自執行前才寫檔。**
 
 **0c**｜PR-1 三個問題：
 1. **BLOCK 訊息逐字印出通關 sha256**（`pr1:85`）→ 模型複製貼上即通關。生產記錄有實例
@@ -235,5 +258,5 @@
 
 ---
 
-<!-- 重簽紀錄：2026-07-29 標記 0a 完成＋補完成記錄後重算（架構結論未變，見 §4.1 的 4️⃣） -->
-<!-- ADVERSARIAL_REVIEW_PASSED sha256=94f958d4f75998b5fa199ffaead872edd5a86e361bfa9c1ecfa8e47a516046f0 rounds=3 at=2026-07-29T17:05:00+08:00 -->
+<!-- 重簽紀錄：2026-07-29 標記 0a／0b 完成＋補完成記錄後重算（架構結論未變，見 §4.1 的 4️⃣） -->
+<!-- ADVERSARIAL_REVIEW_PASSED sha256=e5931c49b9cf7773d98f04495f6cc78e79fdf60735f6ed6149cbb1a8cb264ab3 rounds=3 at=2026-07-29T17:40:00+08:00 -->

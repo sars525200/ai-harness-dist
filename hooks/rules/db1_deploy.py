@@ -29,6 +29,7 @@
 """
 from __future__ import annotations
 
+import os
 import posixpath
 import re
 
@@ -38,7 +39,8 @@ RULE_ID = "DB-1"
 
 ASSET_NAMES = ("app.js", "styles.css", "index.html")
 PROD_PREFIX = "SOP_PROD/05_UI_Demo/"
-DEV_PREFIX = "SOP/05_UI_Demo/"
+# 註：DEV 側路徑不再需要主 repo 視角的前綴（`SOP/05_UI_Demo/`）——0b 改成比內容之後，
+# 一律用 dev_git 自己 repo 內的相對路徑 `05_UI_Demo/<檔名>`。
 INDEX_HTML = PROD_PREFIX + "index.html"
 
 # 實測格式（2026-07-28）：<link href="/styles.css?v=2224" /> 與 <script src="/app.js?v=2224">
@@ -56,6 +58,43 @@ def parse_v_tokens(html: str) -> dict:
     `SOP_PROD/05_UI_Demo/styles.css`，用檔名才對得起來。
     """
     return {res.rsplit("/", 1)[-1]: ver for res, ver in _V_TOKEN.findall(html)}
+
+
+def _norm_eol(data):
+    """統一行尾後才比對內容。
+
+    D12 做過 `.gitattributes` renormalize：git blob 存 LF、工作區是 CRLF。
+    不正規化就比 bytes 的話，同一份內容在 blob 與 worktree 之間永遠不相等。
+    """
+    if data is None:
+        return b""
+    if isinstance(data, str):
+        data = data.encode("utf-8", "replace")
+    return data.replace(b"\r\n", b"\n")
+
+
+def _dev_matches(dev_git, rel_path, prod_norm) -> bool:
+    """DEV 側是否存在一份與 PROD 相同的內容。
+
+    以 **blob 為主要判準**（D13：驗證讀 blob 不讀 worktree——要推上去的是
+    commit 的內容，不是工作區的）。但 blob 不符時額外看一眼 worktree，
+    接受「DEV 已經改好、只是還沒 commit」：誤 BLOCK 的代價已實測是資料損壞，
+    這一格寧可寬。
+
+    `show_bytes` 在 blob 不存在（DEV 根本沒這個檔）時回 b""，與 PROD 內容
+    不會相等 → 照樣 BLOCK，語義正確。
+    """
+    if _norm_eol(dev_git.show_bytes(f"HEAD:{rel_path}")) == prod_norm:
+        return True
+
+    root = getattr(dev_git, "repo_root", None)
+    if isinstance(root, str) and os.path.isdir(root):   # 測試的 FAKE:repo 不是目錄，自動跳過
+        try:
+            with open(os.path.join(root, rel_path.replace("/", os.sep)), "rb") as fh:
+                return _norm_eol(fh.read()) == prod_norm
+        except OSError:
+            return False
+    return False
 
 
 def check(ctx):
@@ -123,23 +162,29 @@ def check(ctx):
     # 6. DEV/PROD 雙改 —— DEV 是**獨立 repo**，必須查它自己的 git。
     #    端到端實測發現：SOP/ 被主 repo .gitignore 排除，
     #    DEV 檔永遠不在主 repo 的 diff_names 裡 → 查主 repo 會 100% 誤判未同步。
+    #
+    #    2026-07-29（0b）：判準從「commit 範圍裡有沒有出現這個檔名」改成
+    #    **直接比兩端內容**。舊版對 DEV 無遠端時退回 `HEAD~1..HEAD` 近似，而
+    #    `SOP\scripts\auto_commit.ps1` 掛在 Stop hook、**每回合**都 commit 一次
+    #    （近 200 個 commit 裡 39~40 筆），正確雙改過的 app.js 只要隔幾輪就被
+    #    沖出那個一格視窗 → 誤 BLOCK 一次完全正確的部署。
+    #    而誤 BLOCK 的後果已實測不是拒絕服務而是**資料損壞**：exit 2 的 stderr
+    #    會讓模型放棄原指令、改去改 DEV 補一筆假同步。
+    #
+    #    §6 規則本體要求的是「兩目錄同步」＝內容一致，用 commit 範圍近似它
+    #    等於引進「什麼時候 commit」這個與規則無關的變數（auto_commit、
+    #    nightly bump_semver 都會動它）。改比內容後這些全部無關。
     if ctx.dev_git is not None:
-        dev_ref = ctx.dev_git.resolve_remote_ref("origin", "master")
-        dev_changed = set(ctx.dev_git.status_paths())
-        if dev_ref:
-            dev_changed |= set(ctx.dev_git.diff_names(f"{dev_ref}..HEAD"))
-        else:
-            # DEV repo 無遠端（本地 repo）→ 用最近一次 commit 的變更集近似
-            dev_changed |= set(ctx.dev_git.diff_names("HEAD~1..HEAD"))
-
         for path in prod_touched:
             if path not in verify_set:
                 continue
             dev_path = path[len(PROD_PREFIX):]      # 去掉 SOP_PROD/05_UI_Demo/ 後只剩檔名
             dev_rel_path = f"05_UI_Demo/{dev_path}"  # dev_git 自己 repo 內的相對路徑
-            if DEV_PREFIX + dev_path not in dev_changed and dev_rel_path not in dev_changed:
+
+            prod_norm = _norm_eol(ctx.git.show_bytes(f"HEAD:{path}"))
+            if not _dev_matches(ctx.dev_git, dev_rel_path, prod_norm):
                 return decide(
-                    f"§6 雙改：{path} 已 commit 待推，但 DEV repo 的 {dev_rel_path} 未同步。"
+                    f"§6 雙改：{path} 已 commit 待推，但 DEV repo 的 {dev_rel_path} 內容不一致。"
                     "app.js／styles.css／index.html 的改動必須 DEV+PROD 兩端一起做。"
                 )
             # F4：CLAUDE.md §6 原文「node --check **兩端**」——PROD 側已在 step 3 驗過 blob，

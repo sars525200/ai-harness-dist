@@ -60,6 +60,76 @@ PUSH_CASES = [
 ]
 
 
+class _FakeDevGit:
+    """只提供 `_dev_matches` 會用到的兩個東西。"""
+
+    def __init__(self, blobs: dict, root: str):
+        self._blobs = blobs
+        self.repo_root = root      # 真實 GitContext 與 FakeGitContext 都是 property
+
+    def show_bytes(self, ref_path: str) -> bytes:
+        return self._blobs.get(ref_path, b"")
+
+
+def _run_dev_matches_cases() -> tuple[int, list[str]]:
+    """`db1_deploy._dev_matches` 的 worktree fallback 路徑。
+
+    為什麼補在這裡（2026-07-29 變異測試逼出來的）：把 `_dev_matches` 換成
+    「只看 blob、拿掉 worktree fallback」之後，**15 個 DB-1 fixture 全部照樣綠**
+    ——代表那條分支完全沒有覆蓋。而 fixture 框架的 `workspace` 機制只會替換
+    payload 裡的佔位符，改不到 `dev_git.repo_root`，所以測不到需要「真實目錄」
+    的分支。只好在函式層補。
+    """
+    import tempfile
+    import shutil
+    from rules.db1_deploy import _dev_matches, _norm_eol  # noqa: PLC0415
+
+    rel = "05_UI_Demo/app.js"
+    prod = b"function boot() { return 'v2'; }\n"
+    prod_norm = _norm_eol(prod)
+
+    tmp = tempfile.mkdtemp(prefix="db1units_")
+    try:
+        os.makedirs(os.path.join(tmp, "05_UI_Demo"), exist_ok=True)
+        target = os.path.join(tmp, "05_UI_Demo", "app.js")
+
+        # (期望, HEAD blob, worktree 內容（None＝不建檔）, repo_root, 這條在守什麼)
+        # 注意：worktree 內容必須在**每個 case 執行前**才寫，不能先建好物件再一起跑
+        # ——同一個路徑被後續 case 覆寫，會讓前面的 case 讀到最後一次的內容。
+        cases = [
+            (True,  prod,   None,   tmp,
+             "blob 已一致 → 不必碰 worktree"),
+            (True,  b"old", prod,   tmp,
+             "blob 舊、worktree 已同步 → fallback 必須生效"),
+            (True,  b"old", b"function boot() { return 'v2'; }\r\n", tmp,
+             "fallback 路徑也要做行尾正規化"),
+            (False, b"old", b"function boot() { return 'v1'; }\n", tmp,
+             "blob 與 worktree 都不符 → 真的未同步"),
+            (False, b"old", None,   tmp,
+             "worktree 沒有這個檔 → 不得誤放行"),
+            (False, b"old", prod,   "FAKE:dev",
+             "repo_root 不是真實目錄時只認 blob"),
+        ]
+
+        passed, failures = 0, []
+        for want, blob, worktree, root, why in cases:
+            if worktree is None:
+                if os.path.exists(target):
+                    os.remove(target)
+            else:
+                with open(target, "wb") as fh:
+                    fh.write(worktree)
+
+            got = _dev_matches(_FakeDevGit({f"HEAD:{rel}": blob}, root), rel, prod_norm)
+            if got == want:
+                passed += 1
+            else:
+                failures.append(f"_dev_matches → {got}，期望 {want} —— {why}")
+        return passed, failures
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def run() -> tuple[int, list[str]]:
     """回傳 (通過數, 失敗描述清單)。供 run_hook_tests.py 併入總計。"""
     passed, failures = 0, []
@@ -71,7 +141,9 @@ def run() -> tuple[int, list[str]]:
             failures.append(
                 f"is_push_to_remote({command!r}, 'vm') = {got}，期望 {want} —— {why}"
             )
-    return passed, failures
+
+    dev_passed, dev_failures = _run_dev_matches_cases()
+    return passed + dev_passed, failures + dev_failures
 
 
 def main() -> int:

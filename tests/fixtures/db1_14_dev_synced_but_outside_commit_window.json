@@ -1,7 +1,7 @@
 {
-  "name": "DB-1 F4：DEV 側語法錯誤也要擋（CLAUDE.md §6「node --check 兩端」）→ BLOCK",
+  "name": "DB-1 DEV 內容已同步、但那筆 commit 已被 auto_commit 沖出視窗 → ALLOW",
   "rule": "db1_deploy",
-  "why": "2026-07-28 dry-run 抓到：語法檢查只查 verify_set（主 repo/PROD 側），從沒查過 ctx.dev_git（DEV 側）。CLAUDE.md §6 原文明寫『node --check 兩端』，且 D12 已證實兩端 blob 理論上逐位元組一致——PROD 語法正確不代表 DEV 也正確，兩端各自獨立 commit，可能一端漏改。此 fixture 讓 PROD 側 app.js 語法無誤、?v= 正確 bump、雙改同步都通過，但 DEV 側 app.js 有語法錯誤，必須在這裡被攔下。",
+  "why": "2026-07-29（0b）修的核心 bug 的迴歸測試。舊判準用『DEV 的 commit 範圍裡有沒有出現這個檔名』近似『兩端有沒有同步』，而 DEV repo 無 remote（實測 `git -C SOP remote -v` 為空）→ 退回 `HEAD~1..HEAD` 只看最近一個 commit；偏偏 `SOP\\scripts\\auto_commit.ps1` 掛在 Stop hook、每回合都 commit 一次（近 200 個 commit 有 39~40 筆），正確雙改過的 app.js 只要隔幾輪就被沖出那一格視窗 → 誤 BLOCK 一次完全正確的部署。而誤 BLOCK 的後果已實測不是拒絕服務而是資料損壞：exit 2 的 stderr 會讓模型放棄原指令、改去改 DEV 補一筆假同步。此 fixture 的 dev_git 變更集刻意只有無關檔案（模擬被沖走），但兩端 app.js/index.html 內容逐位元組一致——新判準比內容，必須放行。",
   "payload": {
     "hook_event_name": "PreToolUse",
     "tool_name": "PowerShell",
@@ -9,7 +9,7 @@
       "command": "git push vm master",
       "description": "部署"
     },
-    "session_id": "fixture-db1-13",
+    "session_id": "fixture-db1-14",
     "cwd": "D:\\IT-department",
     "permission_mode": "auto"
   },
@@ -36,21 +36,18 @@
     "remote_ref": null,
     "diff_names": {
       "HEAD~1..HEAD": [
-        "05_UI_Demo/app.js",
-        "05_UI_Demo/index.html"
+        "05_UI_Demo/styles.css",
+        "05_UI_Demo/version.json"
       ]
     },
     "status_paths": [],
+    "syntax_errors": {},
     "show_bytes": {
       "HEAD:05_UI_Demo/app.js": "function boot() { return 'v2'; }\n",
       "HEAD:05_UI_Demo/index.html": "<link rel=\"stylesheet\" href=\"/styles.css?v=2224\" />\n<script src=\"/app.js?v=2225\"></script>"
-    },
-    "syntax_errors": {
-      "05_UI_Demo/app.js": "SyntaxError: Unexpected token (line 42)"
     }
   },
   "expect": {
-    "decision": "BLOCK",
-    "message_contains": "DEV 側"
+    "decision": "ALLOW"
   }
 }
