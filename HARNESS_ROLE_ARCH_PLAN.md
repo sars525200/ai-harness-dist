@@ -525,16 +525,27 @@ hook matcher 同）—— 但注意這跟 `.claude/agents/*.md` 與 hook **event
 存在於 `claude.exe` v2.1.143。真實 schema：
 
 ```
-SessionStart 回傳 { additionalContext?, initialUserMessage?, watchPaths?: string[] }
-FileChanged  收到 { session_id, transcript_path, cwd, agent_id?,
-                    hook_event_name:"FileChanged", file_path, event:"change"|"add"|"unlink" }
-FileChanged  回傳 { watchPaths? }  ← 可動態改監看清單；systemMessages 會灌進對話
+FileChanged 收到 { session_id, transcript_path, cwd, agent_id?,
+                   hook_event_name:"FileChanged", file_path, event:"change"|"add"|"unlink" }
+
+回傳（★層級關鍵，見下方訂正）：
+{ "hookSpecificOutput": { "hookEventName": "SessionStart", "watchPaths": ["<絕對路徑>"] } }
 ```
 
 `watchPaths` 註明 **Absolute paths**。另有計畫書原本沒列的 `CwdChanged` 事件（同樣帶
 `watchPaths`）。watcher 是 chokidar 形狀（`add`／`change`／`unlink`／`ready`）。
 撈到一條限制：**`Agent stop hooks are not yet supported outside REPL`**。
-→ 3a 真要做時直接照這份 schema 寫，不必再逆向一次。
+
+> **★ 2026-07-30 訂正（Phase 3 Round 1 覆核抓到）**：本節初版把回傳寫成
+> 平鋪的 `{ additionalContext?, watchPaths? }`，**漏掉 `hookSpecificOutput` 這層**。
+> 那些 `hookEventName` literal 的 object 是 `hookSpecificOutput` 的 union 成員，
+> 不是 top-level。照初版寫法輸出 `{"watchPaths":[…]}`：top-level schema 欄位全為
+> optional → zod 解析成功、未知鍵被剝掉 → **watcher 永不啟動且零錯誤訊息**。
+>
+> 同時訂正「`systemMessages` 會灌進對話」：**FileChanged 這條路不會**。它走的是
+> `setEnvHookNotifier` 的 `key:"env-hook"` toast（`timeoutMs:5000`、同 key 互相
+> 覆蓋、模型讀不到、通知器未掛載時 `f?.()` 直接無聲蒸發）。一般 hook 的
+> `hook_system_message` 才進對話。細節與後續決策見 `PHASE3_PLAN.md` §2。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
