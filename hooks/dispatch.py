@@ -44,65 +44,80 @@ import json
 import os
 import sys
 import time
-import traceback
 
+# `traceback` 刻意不在頂層 import：`-X importtime` 實測它連同相依的 `_colorize`
+# 要 20.2 ms，佔 dispatch 整包 import 成本（34.5 ms）的六成，而它只在
+# `_log_error` 的例外路徑用得到 —— 正常路徑每次都白付。
 from contract import ALLOW, BLOCK, HookContext
-from rules import (
-    awc1_choices_check,
-    db1_deploy,
-    pr1_plan_review_marker,
-    r1_default_migration,
-    r3_ops_backup_scp,
-    r4_server_dbpath,
-)
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
 CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
 
 sys.path.insert(0, HOOKS_DIR)
-from _lib import RealGitContext  # noqa: E402
 
 # 規則登記表。之後加其餘規則只需要在這裡加一行。
 # tools=None 表示不篩 tool_name（Stop 這類事件本來就沒有 tool_name 概念）。
+#
+# 2026-07-29（1c 前置）：`module` 從**模組物件**改成**模組名字串**，規則只在
+# 真的成為 candidate 時才 import。實測拆解單次 dispatch 的 105 ms：
+#     Python 冷啟動 50 ms ／ import 六個規則模組 60 ms ／ 判定本身 <5 ms
+# 也就是 **55% 的成本花在 import 一堆這次根本用不到的規則**。而 hook 每次
+# 呼叫都是一個全新進程，這筆錢每次都付。
+# 絕大多數事件（例如任何 Edit）一條規則都不命中，延遲 import 讓它們只付
+# Python 冷啟動那 50 ms。這是把 Edit/MultiEdit/NotebookEdit/Agent 加進
+# matcher 的前置——不然高頻的 Edit 每次都要多等 0.1 秒。
 REGISTRY = [
     {
         "id": "DB-1",
-        "module": db1_deploy,
+        "module": "db1_deploy",
         "events": {"PreToolUse"},
         "tools": {"Bash", "PowerShell"},
     },
     {
         "id": "R4",
-        "module": r4_server_dbpath,
+        "module": "r4_server_dbpath",
         "events": {"PreToolUse"},
-        "tools": {"Write"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
         "id": "R1",
-        "module": r1_default_migration,
+        "module": "r1_default_migration",
         "events": {"PreToolUse"},
         "tools": {"Bash", "PowerShell"},
     },
     {
         "id": "R3",
-        "module": r3_ops_backup_scp,
+        "module": "r3_ops_backup_scp",
         "events": {"PreToolUse"},
         "tools": {"Bash", "PowerShell"},
     },
     {
         "id": "AWC-1",
-        "module": awc1_choices_check,
+        "module": "awc1_choices_check",
         "events": {"Stop"},
         "tools": None,
     },
     {
         "id": "PR-1",
-        "module": pr1_plan_review_marker,
+        "module": "pr1_plan_review_marker",
         "events": {"Stop"},
         "tools": None,
     },
 ]
+
+_RULE_CACHE: dict = {}
+
+
+def _rule_module(name: str):
+    """按需 import 規則模組（同一次進程內只 import 一次）。"""
+    mod = _RULE_CACHE.get(name)
+    if mod is None:
+        import importlib
+
+        mod = importlib.import_module(f"rules.{name}")
+        _RULE_CACHE[name] = mod
+    return mod
 
 
 def _now() -> str:
@@ -153,6 +168,8 @@ def _log_event(session_id: str, agent_id: str = "", agent_type: str = "", **fiel
 
 def _log_error(session_id: str, exc: BaseException, agent_id: str = "") -> None:
     """D7：fail-open 但不 fail-silent。例外一律放行，但留痕。"""
+    import traceback  # 延遲 import：見頂層註解，正常路徑不該付這 20 ms
+
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
         path = os.path.join(STATE_DIR, f"hook_errors.{_log_stem(session_id, agent_id)}.log")
@@ -178,13 +195,14 @@ def _is_shadow(rule_id: str, config: dict) -> bool:
     return bool(config.get(rule_id, {}).get("shadow", True))
 
 
-def _resolve_dev_git(main_git: RealGitContext) -> "RealGitContext | None":
+def _resolve_dev_git(main_git: "RealGitContext") -> "RealGitContext | None":
     """探測主 repo 根目錄旁是否有帶 .git 的 SOP/ 資料夾（DEV 對應目錄）。
 
     刻意不寫死專案名稱 —— 只探測目錄結構。IT-department 有 SOP/，
     探測會找到；AI-Projects 沒有這個結構，探測自然回 None。
     共用層（D1）因此不需要為每個專案各寫一套判斷式。
     """
+    from _lib import RealGitContext  # 延遲 import：只有規則真的命中時才需要碰 git
     try:
         root = main_git.repo_root
     except Exception:
@@ -237,9 +255,11 @@ def _dispatch(payload: dict) -> int:
     # precheck：只讀 payload（ctx.command 不碰 git），過濾掉絕大多數
     # 不相干的 Bash/PowerShell 呼叫，避免每次都白付一次 git rev-parse 的成本。
     precheck_ctx = HookContext(payload, None, None)
-    applicable = [e for e in candidates if e["module"].applies(precheck_ctx)]
+    applicable = [e for e in candidates if _rule_module(e["module"]).applies(precheck_ctx)]
     if not applicable:
         return 0
+
+    from _lib import RealGitContext  # 同上：走到這裡才代表真的要碰 git
 
     cwd = payload.get("cwd", "")
     main_git = RealGitContext(cwd)
@@ -254,7 +274,7 @@ def _dispatch(payload: dict) -> int:
         rule_id = entry["id"]
         _log_event(session_id, agent_id, agent_type, kind="applies", rule_id=rule_id, tool_name=tool_name)
 
-        verdict = entry["module"].check(ctx)
+        verdict = _rule_module(entry["module"]).check(ctx)
         shadow = _is_shadow(rule_id, config)
 
         if verdict.decision != ALLOW or verdict.bypassed:

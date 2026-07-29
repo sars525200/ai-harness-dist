@@ -54,8 +54,8 @@
 |---|---|---|
 | 1a | 解除 DB-1 shadow（**須先完成 0a/0b/0d**） | ✅ **完成 2026-07-29 — DB-1 現為真閘門** |
 | 1b | 重寫 R4 `applies()`（改綁 `sqlite3.connect` 到 prod 路徑形狀） | ✅ **完成 2026-07-29** |
-| 1c | matcher **逐一列名**：`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent` | ⬜ |
-| 1d | 量測加 `Edit` 後的 dispatch 延遲（`.py` 的 Edit 有 118 次／期間） | ⬜ |
+| 1c | matcher **逐一列名**：`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent` | ✅ **完成 2026-07-29** |
+| 1d | 量測加 `Edit` 後的 dispatch 延遲（`.py` 的 Edit 有 118 次／期間） | ✅ **完成 2026-07-29** |
 
 ### Phase 2 — 角色化
 
@@ -240,7 +240,33 @@ fixture 異動：`pr1_04` 改新格式 SKIP；`pr1_07` 語義過時（原本測�
 | ＋ `import dispatch`（頂層拉進 6 個規則模組） | **110 ms** |
 | 完整 dispatch（Edit／Bash，皆不命中規則） | 104–109 ms |
 
-→ **判定本身 <5 ms，60 ms 全是 import 成本**（佔 55%）。`dispatch.py` 頂層無條件 import 六個規則模組，而絕大多數事件一條規則都不命中。這直接影響 1c 的取捨：加 `Edit` 進 matcher 等於每次編輯都付這 105 ms。
+→ 判定本身 <5 ms，其餘是 import 與進程啟動成本。這直接影響 1c 的取捨：加 `Edit` 進 matcher 等於每次編輯都付這 105 ms。
+
+⚠ **但上面這組 wall-clock 數字的「歸因」是錯的，修正見 1c**：後續拆解時出現 `import contract`（62 ms）反而低於 `import json,os,sys`（87 ms）的自相矛盾結果 —— 在 ±20 ms 這個量級，PowerShell 外部計時全是雜訊。**要歸因 import 成本必須用 `python -X importtime`，不能用 wall-clock 相減。**
+
+**✅ 1c 完成記錄（2026-07-29）**
+
+user 定案「先優化再加全部」。分兩步：
+
+**① 延遲 import**
+
+| 改動 | 內容 |
+|---|---|
+| REGISTRY | `module` 從模組物件改成**模組名字串**，新增 `_rule_module()` 按需 import（同進程內快取） |
+| `_lib` | `RealGitContext` 移到 `_resolve_dev_git()` 與 `_dispatch()` 內 —— 只有規則真的命中才需要碰 git |
+| **`traceback`** | 移到 `_log_error()` 內。`-X importtime` 實測它連同相依的 `_colorize` 要 **20.2 ms**，佔 dispatch 整包 import（34.5 ms）的**六成**，而它只在例外路徑用得到 |
+
+**效果（用 `-X importtime` 量，不是 wall-clock）**：`dispatch` 累計 import **34.5 ms → 20.3 ms（省 41%）**。
+錯誤路徑另外驗過：餵一段壞 JSON 進去，`hook_errors` 檔照樣寫出 14 行含完整 stack trace，exit 0（fail-open 正常）。
+
+**② matcher 補齊**
+
+`Bash|PowerShell|Skill|Write` → `Bash|PowerShell|Skill|Write|Edit|MultiEdit|NotebookEdit|Agent`
+
+R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式化驗證「REGISTRY 需要的工具是否都在 matcher 內」→ 無遺漏。
+
+**接線實測（防第五次「規則寫完 ≠ 規則上線」）**：改完 matcher 後用一次真實 Edit 當探針 —— events 檔從 239 行增為 241 行，出現本 session 第一筆 `{"tool_name": "Edit"}`（此前為 0）。
+✅ 同時確認：**`settings.local.json` 的 hook matcher 改動熱生效，不需要重啟 session。**
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
