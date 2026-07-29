@@ -19,10 +19,25 @@ from collections import Counter, defaultdict
 STATE_DIR = r"D:\.ai-harness\state"
 
 
+def _split_stem(stem: str) -> tuple[str, str]:
+    """檔名主幹 → (session_id, agent_id)。
+
+    2026-07-29（0d）：subagent 與主 session 共用 session_id，所以背景 subagent
+    的事件另外分檔 `events.<session>.agent-<agent_id>.ndjson`（避免並行 append
+    競態，也讓報表分得出誰做的）。主 session 檔名不變，舊檔照樣讀得到。
+    """
+    marker = ".agent-"
+    if marker in stem:
+        session_id, agent_id = stem.split(marker, 1)
+        return session_id, agent_id
+    return stem, ""
+
+
 def _load_all_events() -> list[dict]:
     events = []
     for path in glob.glob(os.path.join(STATE_DIR, "events.*.ndjson")):
-        session_id = os.path.basename(path)[len("events."):-len(".ndjson")]
+        stem = os.path.basename(path)[len("events."):-len(".ndjson")]
+        session_id, agent_id = _split_stem(stem)
         with open(path, encoding="utf-8-sig") as fh:
             for line in fh:
                 line = line.strip()
@@ -33,6 +48,8 @@ def _load_all_events() -> list[dict]:
                 except Exception:
                     continue
                 row["_session_id"] = session_id
+                # 檔名與行內兩個來源，行內優先（行內是 payload 直接給的）
+                row.setdefault("agent_id", agent_id)
                 events.append(row)
     return events
 
@@ -40,10 +57,14 @@ def _load_all_events() -> list[dict]:
 def _load_error_counts() -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in glob.glob(os.path.join(STATE_DIR, "hook_errors.*.log")):
-        session_id = os.path.basename(path)[len("hook_errors."):-len(".log")]
+        stem = os.path.basename(path)[len("hook_errors."):-len(".log")]
+        session_id, _ = _split_stem(stem)
         with open(path, encoding="utf-8", errors="replace") as fh:
             # 每個例外開頭都是 "[timestamp] ExceptionType: ..." 這一行
-            counts[session_id] = sum(1 for ln in fh if ln.startswith("["))
+            n = sum(1 for ln in fh if ln.startswith("["))
+        # 累加而非賦值：同一個 session 現在可能有多個檔（主 session ＋ 各 subagent），
+        # 直接賦值會讓後讀到的檔把前面的數字蓋掉。
+        counts[session_id] = counts.get(session_id, 0) + n
     return counts
 
 
@@ -85,7 +106,11 @@ def main() -> None:
             print(f"\n  [{rule_id}] {decision} × {len(rows)}")
             for r in rows:
                 tag = "BYPASS" if r.get("bypassed") else ("SHADOW" if r.get("shadow") else "ENFORCE")
-                print(f"    ({tag}) session={r['_session_id'][:8]} {r.get('ts')}")
+                # 標出是不是 subagent 打的：解除 shadow 後 subagent 內的 BLOCK 會讓它
+                # 放棄原任務、改去執行 stderr 的指示，而 parent 只收到一份「看起來完整」
+                # 的報告 —— 事後對帳時必須分得出這筆是誰的。
+                who = f" agent={r['agent_id'][:8]}({r.get('agent_type') or '?'})" if r.get("agent_id") else ""
+                print(f"    ({tag}) session={r['_session_id'][:8]}{who} {r.get('ts')}")
                 print(f"      command: {r.get('command', '')[:100]}")
                 print(f"      message: {r.get('message', '')}")
 

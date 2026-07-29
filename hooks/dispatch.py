@@ -109,23 +109,53 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _log_event(session_id: str, **fields) -> None:
-    """append 一行到本 session 的事件檔。任何寫檔失敗都不該讓 hook 掛掉。"""
+def _log_stem(session_id: str, agent_id: str = "") -> str:
+    """事件檔／錯誤檔的檔名主幹。
+
+    2026-07-29（0d）：**subagent 與主 session 共用同一個 `session_id`**（實測：
+    subagent 打的 PreToolUse 事件全部寫進 parent 的 events 檔）。而 `Agent` 工具
+    的 `run_in_background` 會讓 subagent 與主 session **同時**執行 —— 這直接
+    證偽本檔開頭那句「同一 session 內的 hook 呼叫是序列執行，不會有並行
+    append 的競態」。分檔是最小修法。
+
+    主 session（payload 無 `agent_id`）檔名維持原樣，既有檔案不受影響。
+    """
+    sid = session_id or "unknown"
+    return sid if not agent_id else f"{sid}.agent-{agent_id}"
+
+
+def _log_event(session_id: str, agent_id: str = "", agent_type: str = "", **fields) -> None:
+    """append 一行到本 session（或 subagent）的事件檔。
+
+    任何寫檔失敗都不該讓 hook 掛掉。
+
+    `agent_id` 是平台在**所有** hook 的 base payload 都會帶的欄位（optional），
+    官方 describe 明說「Present only when the hook fires from within a subagent…
+    Use this field (not agent_type) to distinguish subagent calls from
+    main-thread calls」。這個欄位從第一天就在，只是沒讀 —— 於是 shadow 期
+    累積的所有觀測資料都分不出「這筆是主 session 還是 subagent 做的」。
+    """
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        path = os.path.join(STATE_DIR, f"events.{session_id or 'unknown'}.ndjson")
-        line = json.dumps({"ts": _now(), **fields}, ensure_ascii=False)
+        path = os.path.join(STATE_DIR, f"events.{_log_stem(session_id, agent_id)}.ndjson")
+        row = {"ts": _now()}
+        if agent_id:
+            row["agent_id"] = agent_id
+            if agent_type:
+                row["agent_type"] = agent_type
+        row.update(fields)
+        line = json.dumps(row, ensure_ascii=False)
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(line + "\n")
     except Exception:
         pass  # 連記錄都失敗就放棄記錄，但不可讓這個失敗外溢影響 hook 本體
 
 
-def _log_error(session_id: str, exc: BaseException) -> None:
+def _log_error(session_id: str, exc: BaseException, agent_id: str = "") -> None:
     """D7：fail-open 但不 fail-silent。例外一律放行，但留痕。"""
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        path = os.path.join(STATE_DIR, f"hook_errors.{session_id or 'unknown'}.log")
+        path = os.path.join(STATE_DIR, f"hook_errors.{_log_stem(session_id, agent_id)}.log")
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"[{_now()}] {type(exc).__name__}: {exc}\n")
             fh.write(traceback.format_exc())
@@ -169,6 +199,9 @@ def _dispatch(payload: dict) -> int:
     session_id = payload.get("session_id", "")
     event = payload.get("hook_event_name", "")
     tool_name = payload.get("tool_name", "")
+    # subagent 共用 parent 的 session_id，只有這兩個欄位分得出來（見 _log_stem）
+    agent_id = payload.get("agent_id") or ""
+    agent_type = payload.get("agent_type") or ""
 
     # ── Skill 使用記錄（2026-07-28）──────────────────────────────────────────
     # 純觀測：不是規則、不進 REGISTRY、不參與 allow/block，記完立刻 return 0。
@@ -186,7 +219,7 @@ def _dispatch(payload: dict) -> int:
             skill_name = str((payload.get("tool_input") or {}).get("skill", ""))[:60]
         except Exception:
             pass  # payload 形狀非預期也不該讓觀測用的一行害 hook 掛掉
-        _log_event(session_id, kind="skill", skill=skill_name)
+        _log_event(session_id, agent_id, agent_type, kind="skill", skill=skill_name)
         return 0
 
     # tools=None（Stop 這類非工具事件沒有 tool_name 概念）→ 只用 event 比對，
@@ -199,7 +232,7 @@ def _dispatch(payload: dict) -> int:
     if not candidates:
         return 0
 
-    _log_event(session_id, kind="dispatch", event=event, tool_name=tool_name)
+    _log_event(session_id, agent_id, agent_type, kind="dispatch", event=event, tool_name=tool_name)
 
     # precheck：只讀 payload（ctx.command 不碰 git），過濾掉絕大多數
     # 不相干的 Bash/PowerShell 呼叫，避免每次都白付一次 git rev-parse 的成本。
@@ -219,14 +252,14 @@ def _dispatch(payload: dict) -> int:
 
     for entry in applicable:
         rule_id = entry["id"]
-        _log_event(session_id, kind="applies", rule_id=rule_id, tool_name=tool_name)
+        _log_event(session_id, agent_id, agent_type, kind="applies", rule_id=rule_id, tool_name=tool_name)
 
         verdict = entry["module"].check(ctx)
         shadow = _is_shadow(rule_id, config)
 
         if verdict.decision != ALLOW or verdict.bypassed:
             _log_event(
-                session_id, kind="decision", rule_id=rule_id,
+                session_id, agent_id, agent_type, kind="decision", rule_id=rule_id,
                 decision=verdict.decision, bypassed=verdict.bypassed,
                 shadow=shadow, message=verdict.message, command=ctx.command,
             )
@@ -254,13 +287,15 @@ def _dispatch(payload: dict) -> int:
 
 def main() -> int:
     session_id = "unknown"
+    agent_id = ""
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
         payload = json.loads(raw)
         session_id = payload.get("session_id", "unknown")
+        agent_id = payload.get("agent_id") or ""
         return _dispatch(payload)
     except Exception as exc:
-        _log_error(session_id, exc)
+        _log_error(session_id, exc, agent_id)
         return 0  # fail-open：dispatch 本身的錯誤絕不能卡住使用者
 
 

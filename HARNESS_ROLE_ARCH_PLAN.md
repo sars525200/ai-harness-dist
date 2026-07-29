@@ -44,7 +44,7 @@
 | 0a | 修 `is_push_to_remote` 的 git 全域 flag 解析；同批修 `shlex.split` 對 PowerShell here-string 的 fail-open | 邏輯 | ✅ **完成 2026-07-29** |
 | 0b | `db1_deploy.py` 雙改判準改為**比兩端內容**（`auto_commit.ps1` 不動） | 邏輯 | ✅ **完成 2026-07-29** |
 | 0c | PR-1：觸發判準改內容標記（限本輪動過的檔）、移除 hash 洩漏、`_SKIP` 綁 hash、排除 `tests/`、hash 綁架構段落 | 邏輯 | ✅ **完成 2026-07-29** |
-| 0d | `dispatch.py` 記 `agent_id`/`agent_type`；events 檔名納入 `agent_id` | devops | ⬜ 待做 |
+| 0d | `dispatch.py` 記 `agent_id`/`agent_type`；events 檔名納入 `agent_id` | devops | ✅ **完成 2026-07-29** |
 | ~~0e~~ | ~~實測 cron 是否丟棄 Stop block~~ | — | 🔻 降級（疑 dead code） |
 | ~~0-新~~ | ~~Stop 事件為何不到 dispatch~~ | — | ✅ **已解決 2026-07-29**（見 §4.0） |
 
@@ -179,6 +179,21 @@
 | **檔名條件改回 `_PLAN.md`** | **10/10 全綠 ❌** —— 所有既有 PR-1 fixture 的檔名都以 `_PLAN.md` 結尾，**0c 的核心改動零覆蓋**。補 `pr1_11`（用真實出現過的 `HARNESS_PROGRESS.md` 當檔名）後 → 11 → 10 ✅ 紅 |
 
 fixture 異動：`pr1_04` 改新格式 SKIP；`pr1_07` 語義過時（原本測「檔名不符就不管」）→ 換成測 `tests/` 排除；新增 `pr1_09`（IGNORE 區間）、`pr1_10`（舊格式 SKIP 被拒）、`pr1_11`（非 `_PLAN.md` 檔名照樣檢查）。
+
+**✅ 0d 完成記錄（2026-07-29）**
+
+| 項 | 內容 |
+|---|---|
+| 改動 | `dispatch.py`：`_dispatch` 讀 `agent_id`／`agent_type` 並傳給全部 4 個 `_log_event` 呼叫點；新增 `_log_stem()` 讓 subagent 事件分檔 |
+| 檔名 | 主 session 維持 `events.<session>.ndjson`（既有檔不受影響）；subagent 為 `events.<session>.agent-<agent_id>.ndjson` |
+| 為何要分檔 | subagent 與主 session **共用同一個 `session_id`**（實測），而 `Agent` 工具的 `run_in_background` 會讓兩者同時執行 → 直接證偽 `dispatch.py` 開頭那句「同一 session 內序列執行、不會有並行 append 競態」 |
+| `report.py` | 新增 `_split_stem()` 解析兩種檔名；would-block 清單顯示 `agent=<id>(<type>)`；錯誤計數改**累加**（同一 session 現在有多個檔，直接賦值會互相蓋掉） |
+| 驗證 | 主 session／subagent 兩種 payload 各餵一次 → 正確分檔、`agent_id`／`agent_type` 進到行內；report 顯示 `session=ZZ-0d-ma agent=abc123de(Plan)` |
+| 結果 | `run_hook_tests.py` **76/76**、`smoke_real_git.py` **31/31**、`report.py` exit 0 |
+
+**IGNORE 機制第一次實戰**：標「0d 完成」之後 marker **仍然自洽**（`7858abb1…` 不變），不必重簽。這正是 0c 第 4 項要解決的問題。
+
+⚠ 一個測量陷阱：`py report.py | Select-Object -First 14` 會提早關閉 pipe → `$LASTEXITCODE` 變成 -1/255，看起來像規則爆炸。**PowerShell 截斷輸出會污染 exit code**，判斷成敗前要先拿完整輸出。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
