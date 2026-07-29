@@ -231,9 +231,22 @@ def main() -> int:
             print(f"  FAIL  {fx.get('name', fx['_file'])}")
             print(f"        {detail}")
 
+    # 共用函式的單元測試（fixture 框架只測規則層，測不到 contract.py 的共用
+    # 函式——`git -C` 那個讓三條規則同時靜默失效的洞就是從這個縫隙溜過去的）。
+    # 只在未指定 filter 時跑：帶 filter 是要單看某條規則，不該被別的雜訊干擾。
+    unit_passed, unit_failed = 0, []
+    if not filter_word:
+        import test_contract_units
+        unit_passed, unit_failed = test_contract_units.run()
+        for detail in unit_failed:
+            failed.append(("contract 單元測試", detail))
+        print(f"  {'PASS' if not unit_failed else 'FAIL'}  contract 共用函式單元測試"
+              f"（{unit_passed}/{unit_passed + len(unit_failed)}）")
+
+    total = len(fixtures) + unit_passed + len(unit_failed)
     print()
     print(f"{'=' * 60}")
-    print(f"通過 {passed} / {len(fixtures)}")
+    print(f"通過 {passed + unit_passed} / {total}")
     if failed:
         print(f"失敗 {len(failed)}：")
         for name, detail in failed:

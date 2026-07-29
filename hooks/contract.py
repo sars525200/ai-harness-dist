@@ -92,6 +92,43 @@ def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
     return out
 
 
+# git 的「全域選項」——放在 subcommand 之前，其中這幾個會吃掉下一個 token 當值。
+# 其餘 `-x` / `--xxx` 形式一律當成不吃值；`--xxx=yyy` 形式自帶值。
+_GIT_GLOBAL_FLAGS_WITH_VALUE = {
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace",
+    "--super-prefix", "--config-env", "--exec-path",
+}
+
+
+def _tokenize(command: str):
+    """拆 shell token，拆不出來回 None。
+
+    posix 模式遇到 PowerShell 語法（here-string `@'…'@`、反引號續行）會拋
+    ValueError。舊版在這裡直接 return False＝整條規則 fail-open，而 PowerShell
+    佔實測 dispatch 的 ~15%（181/1158），不是邊緣案例——所以再用 non-posix
+    模式試一次。兩種都失敗才放棄。
+    """
+    for posix in (True, False):
+        try:
+            return shlex.split(command, posix=posix)
+        except ValueError:
+            continue
+    return None
+
+
+def _unquote(tok: str) -> str:
+    """non-posix 模式會把引號留在 token 裡，比對前剝掉。"""
+    if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in "\"'":
+        return tok[1:-1]
+    return tok
+
+
+def _is_git_token(tok: str) -> bool:
+    """`git`／`git.exe`／`C:\\Program Files\\Git\\bin\\git.exe` 都算 git 本體。"""
+    base = _unquote(tok).replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return base in ("git", "git.exe")
+
+
 def is_push_to_remote(command: str, remote: str) -> bool:
     """判斷 command 是不是真的在對某個 remote 執行 git push。
 
@@ -104,19 +141,46 @@ def is_push_to_remote(command: str, remote: str) -> bool:
     `add-vm-support` 連字號兩側算 word boundary、引號內字串恰好含
     「git push vm」都會誤判）。quoted 字串在 shlex 下天生是單一 token，
     「git」「push」不會被拆成兩個相鄰獨立 token，不會誤判。
+
+    2026-07-29 對抗式覆核（3 輪）抓到的洞：舊版要求 `git` 與 `push` **相鄰**
+    （`tokens[i+1] == "push"`），於是 `git -C <path> push vm master` 判 False。
+    而 `git -C` 正是本專案的慣用寫法（`.claude/settings.json` 的 allow 清單裡
+    就有），一條等價寫法讓 **DB-1／R1／R3 三條規則同時靜默失效**——連 applies
+    都不會留下記錄，比規則沒掛更難察覺。現在改成跳過 git 全域選項後才認
+    subcommand。
     """
-    try:
-        tokens = shlex.split(command)
-    except ValueError:
-        return False  # 引號不成對等解析失敗 → 判定不適用（fail-open，不硬猜）
+    tokens = _tokenize(command)
+    if tokens is None:
+        return False  # 兩種斷詞法都失敗 → 判定不適用（fail-open，不硬猜）
 
     for i, tok in enumerate(tokens):
-        if tok == "git" and i + 1 < len(tokens) and tokens[i + 1] == "push":
-            for arg in tokens[i + 2:]:
-                if arg.startswith("-"):
-                    continue
-                return arg == remote      # push 後第一個非旗標 token 才是 remote 名稱
-            return False                  # `git push`（無 remote，用預設）不算明確推該 remote
+        if not _is_git_token(tok):
+            continue
+
+        # 跳過 git 全域選項，找出真正的 subcommand 位置
+        j = i + 1
+        while j < len(tokens):
+            arg = _unquote(tokens[j])
+            if not arg.startswith("-"):
+                break                     # 非旗標 → 這就是 subcommand
+            if "=" in arg:
+                j += 1                    # `--git-dir=/x` 自帶值
+            elif arg in _GIT_GLOBAL_FLAGS_WITH_VALUE:
+                j += 2                    # 值在下一個 token（`-C /path`）
+            else:
+                j += 1                    # 不吃值的旗標（`--no-pager`…）
+        else:
+            continue                      # 只有旗標、沒有 subcommand
+
+        if _unquote(tokens[j]) != "push":
+            continue
+
+        for arg in tokens[j + 1:]:
+            arg = _unquote(arg)
+            if arg.startswith("-"):
+                continue
+            return arg == remote          # push 後第一個非旗標 token 才是 remote 名稱
+        return False                      # `git push`（無 remote，用預設）不算明確推該 remote
     return False
 
 
