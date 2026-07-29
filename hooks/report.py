@@ -33,11 +33,22 @@ def _split_stem(stem: str) -> tuple[str, str]:
     return stem, ""
 
 
-def _load_all_events() -> list[dict]:
+# 手動餵 payload 給 dispatch.py 的接線探針一律用 `ZZ-` 開頭的假 session id
+# （`ZZ-1c`／`ZZ-0d-ma`／`ZZ-2c-probe`…）。這些不是真實工作足跡，卻會混進
+# would-block 清單與 applies 計數——2026-07-29 就發生過：收工要取看板數字時，
+# PR-1 的 would-block 裡躺著一筆自己 30 秒前造的測試資料。
+# 排除規則寫在這裡而不是靠每次記得手動刪 state 檔：忘了刪不會有任何徵兆，
+# 統計看起來只是「多了一筆」。
+_PROBE_SESSION_PREFIX = "ZZ-"
+
+
+def _load_all_events(include_probes: bool = False) -> list[dict]:
     events = []
     for path in glob.glob(os.path.join(STATE_DIR, "events.*.ndjson")):
         stem = os.path.basename(path)[len("events."):-len(".ndjson")]
         session_id, agent_id = _split_stem(stem)
+        if not include_probes and session_id.startswith(_PROBE_SESSION_PREFIX):
+            continue
         with open(path, encoding="utf-8-sig") as fh:
             for line in fh:
                 line = line.strip()
