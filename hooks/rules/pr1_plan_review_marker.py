@@ -56,6 +56,18 @@ stderr 全文真的餵回模型並被遵守。這條規則是整個 harness 第�
    排除在雜湊之外。沒有標記的檔案照舊綁全檔（向後相容）。
    ⚠ 模型可以把整份文件包進 IGNORE 區間來繞過——但那是明顯的竄改、在 diff
    裡看得見。同樣是「提高成本並留痕」而非「不可能」。
+
+────────────────────────────────────────────────────────────────────────
+2026-07-29（2c）：這條規則同時掛在 `Stop` 與 `SubagentStop`。
+
+角色化（Phase 2）把寫計畫書這件事外包給 subagent 之後，主 session 的
+transcript 裡只會看到一次 `Agent` 工具呼叫 —— 那輪動過的 `.md` 是空的，
+PR-1 在 `Stop` 上一律放行。**閘門沒有失效，只是視野外**：整條「開個
+subagent 寫計畫書」的路徑天然免疫。掛上 `SubagentStop` 才補得起來。
+
+讀哪一份 transcript 由 `ctx.turn_transcript_path` 決定（見 contract.py）：
+subagent 與主 session 共用 `session_id`，只有 `agent_transcript_path`
+分得出來。
 """
 from __future__ import annotations
 
@@ -91,8 +103,13 @@ _SKIP = re.compile(
 _SKIP_LEGACY = re.compile(r"<!--\s*ADVERSARIAL_REVIEW_SKIP\s*:\s*([^>]*?)-->")
 
 # 雜湊範圍排除區間：狀態／進度／完成記錄放這裡面，改它不會讓 marker 失效。
+#
+# 前後的空白與**尾端換行**要一起吃掉：只 sub 掉標記之間的內容，區塊原本佔的
+# 那一行會殘留成空行 —— 與下方 marker 行「扣整行」的理由完全相同。
 _IGNORE_BLOCK = re.compile(
-    r"<!--\s*REVIEW_SCOPE_IGNORE_START\s*-->.*?<!--\s*REVIEW_SCOPE_IGNORE_END\s*-->",
+    r"[ \t]*<!--\s*REVIEW_SCOPE_IGNORE_START\s*-->"
+    r".*?"
+    r"<!--\s*REVIEW_SCOPE_IGNORE_END\s*-->[ \t]*\r?\n?",
     re.DOTALL,
 )
 
@@ -105,11 +122,11 @@ _RECOMPUTE_HINT = (
 
 
 def applies(ctx) -> bool:
-    return bool(_touched_plan_files(ctx.transcript_path))
+    return bool(_touched_plan_files(ctx.turn_transcript_path))
 
 
 def check(ctx):
-    paths = _touched_plan_files(ctx.transcript_path)
+    paths = _touched_plan_files(ctx.turn_transcript_path)
     if not paths:
         return allow()
 
@@ -186,13 +203,28 @@ def content_hash(text: str) -> str:
 
     2、3 扣的是**整行**（含該行換行），不是只把 marker 字串替換成空字串——
     否則檔案會殘留一個空行，蓋 marker 前後算出來的 hash 不一致。
+
+    最後把**連續空行壓成一個**（2026-07-29 修）。三層扣除各自都做到「連同
+    整行一起消失」之後，還有一種殘留：被扣掉的那段前後原本各有一個空行，
+    段落消失後兩個空行變成相鄰。實際後果是**新增一個完全落在 IGNORE 區間
+    內的區塊，marker 照樣失效** —— 這正是 0c 第 4 項想根除的「進度更新逼人
+    重簽」，只是換了個入口活下來。第一次寫 Phase 2 完成記錄時當場踩到：
+    審查範圍內一個字都沒變，diff 只有兩個空行，hash 卻對不上。
+
+    代價是「在審查範圍內增刪空行」不再讓 marker 失效 —— 那本來就沒有實質
+    意義，而每一次不必要的重簽都在把重算 hash 訓練成反射動作（§4.1 4️⃣）。
     """
     body = _IGNORE_BLOCK.sub("", text)
     lines = [
         ln for ln in body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         if not (_PASSED.search(ln) or _SKIP.search(ln) or _SKIP_LEGACY.search(ln))
     ]
-    normalized = "\n".join(lines).strip()
+    collapsed: list[str] = []
+    for ln in lines:
+        if not ln.strip() and collapsed and not collapsed[-1].strip():
+            continue
+        collapsed.append(ln)
+    normalized = "\n".join(collapsed).strip()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 

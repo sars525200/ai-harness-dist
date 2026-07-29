@@ -61,10 +61,14 @@
 
 | # | 項目 | 狀態 |
 |---|---|---|
-| 2a | 建 `.claude/agents/查詢員.md`（`tools: Read, Grep, Glob, NotebookRead`） | ⬜ |
-| 2b | 建檢核員（**不給 Bash/PowerShell**，或用 agent-scoped `hooks:` 收窄） | ⬜ |
-| 2c | 接 `SubagentStop`（PR-1 的 `applies()` 必須改讀 `agent_transcript_path`） | ⬜ |
-| 2d | 收斂 `settings.local.json` 的 allow 白名單（170+ 條），改由角色 `tools:` 承擔 | ⬜ |
+| 2a | 建 `~/.claude/agents/查詢員.md`（`tools: Read, Grep, Glob`） | ✅ **檔案完成 2026-07-29**／⚠ 待重啟生效 |
+| 2b | 建雙改檢核員（給 Bash，用 agent-scoped `hooks:` ＋專屬唯讀閘門收窄） | ✅ **檔案完成 2026-07-29**／⚠ 待重啟生效 |
+| 2c | 接 `SubagentStop`（PR-1 `applies()` 改讀 `agent_transcript_path`） | ✅ **程式完成 2026-07-29**／⚠ 事件待重啟才會送達 |
+| 2d | 收斂 `settings.local.json` 的 allow 白名單（187 條），改由角色 `tools:` 承擔 | ⬜ 未開始（user 定案另開一輪） |
+
+> **⚠ Phase 2 全部三項都卡在同一個平台事實**：`.claude/agents/` 與 hook 的
+> **event key 都是 session 啟動時快照**，本 session 建的角色、掛的
+> `SubagentStop` 都要**下一個 session** 才生效。驗證清單見 §4.2 末。
 
 ### Phase 3 — 涵蓋非 tool-call 寫入者
 
@@ -295,6 +299,78 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
 - 做法：`_log_event` 加 `agent_id`/`agent_type`；events 檔名納入 agent_id
 - **驗證判準**：spawn 一個 subagent，其 tool call 的事件帶得到 agent_id
 
+<!-- REVIEW_SCOPE_IGNORE_START -->
+
+### 4.2 Phase 2 各項（2026-07-29 實作）
+
+**✅ 2c 完成 —— PR-1 現在也掛在 `SubagentStop`**
+
+角色化打開了一條原本天然免疫的路徑：**「開個 subagent 去寫計畫書」**。主 session
+那一輪的 transcript 只有一次 `Agent` 工具呼叫，動過的 `.md` 是空集合 —— PR-1 照跑、
+照放行。閘門沒失效，是視野外。
+
+| 項 | 內容 |
+|---|---|
+| 平台契約 | 從 `claude.exe` 的 zod schema 逐字取得（**不是照抄計畫書的欄位名**）：`SubagentStop = base ∧ {stop_hook_active, agent_id, agent_transcript_path, agent_type, last_assistant_message?}` |
+| 關鍵陷阱 | payload **同時帶** `transcript_path`（主 session）與 `agent_transcript_path`（subagent）。沿用前者＝規則每次都跑、永遠問錯問題，而且看起來完全正常 |
+| 改動 | `contract.py` 新增 `ctx.event`／`ctx.turn_transcript_path`；`pr1` 兩處改讀後者；`dispatch.py` REGISTRY 的 PR-1 events 加 `SubagentStop` |
+| 分派而非 `or` | 寫成 `agent_transcript_path or transcript_path` 會在欄位存在但為空時**靜默退回主 session 的 transcript**（讀錯對象）。改用事件名分派 → 退回空字串 → `iter_turn_tool_uses` 回 None → fail-open |
+| **AWC-1 刻意不掛** | 它抓的是「該問使用者卻沒用選擇題」，而 subagent 內 `ask` fail-closed 成 deny（§5.1）＝根本沒有問的能力。掛上去等於對每個以問句收尾的 subagent 報一次必然的假陽性 |
+| 測試框架擴充 | fixture 新增 `agent_transcript` 區塊／`<AGENT_TRANSCRIPT>` 佔位符 —— **必須能同時擺出兩份不同內容的 transcript**，兩份長一樣時「讀錯哪一份」這個 bug 在 fixture 裡看不出來 |
+| 新 fixture | `pr1_12`（主 session 沒動 .md、subagent 動了 → BLOCK）、`pr1_13`（`agent_transcript_path` 為空 → ALLOW，不得退回主 session） |
+| 結果 | `run_hook_tests.py` **130/130**、`smoke_real_git.py` **31/31** |
+
+**變異測試（三發全紅，且紅在對的 fixture 上）**：
+
+| 變異 | 結果 |
+|---|---|
+| 無視 SubagentStop，一律讀 `transcript_path` | 13 → 11 ✅ 紅（兩個新 fixture 都抓到） |
+| `agent_transcript_path or transcript_path` | 13 → 12 ✅ 紅（**只**紅 `pr1_13`，精準對應空值靜默退回） |
+| 一律讀 `agent_transcript_path`（連 Stop 也讀） | 13 → 8 ✅ 紅（Stop 路徑全垮） |
+
+**✅ 2a 查詢員／2b 雙改檢核員 —— 檔案完成，放 `~/.claude/agents/`（user 定案全域層）**
+
+| 項 | 內容 |
+|---|---|
+| 查詢員 | `tools: Read, Grep, Glob`、`model: sonnet`。**不寫 `NotebookRead`** —— binary 裡它只出現在疑似舊常數表，而無效工具名是靜默失效 |
+| 雙改檢核員 | `tools: … , Bash`＋agent-scoped `hooks:` 掛 `hooks/agent_readonly_gate.py`；`model: inherit`（誤判 ALLOW 會放行未同步的部署，錯誤成本高） |
+| **為什麼 `tools:` 收窄不了 Bash** | §5.3 坑 1：`Bash(git diff:*)` 的括號限定**只對 `Agent` 工具生效**，其他工具靜默拿到整支。要嘛不給，要嘛給了用 hook 真的擋 |
+| gate 方向 | **fail-CLOSED**，與 `dispatch.py` 的 fail-open 刻意相反：那支誤擋會卡住使用者本人，這支誤擋只是一個 subagent 少跑一條指令 |
+| gate 測試 | `tests/test_agent_gate.py` **48 case**（ALLOW/BLOCK 兩側都有樣本），已掛進 `run_hook_tests.py` 總入口 —— 孤兒測試等於沒有測試 |
+
+**gate 的兩個設計缺陷是變異測試抓出來的，不是想出來的**：
+
+| 漏掉的形狀 | 為什麼旗標黑名單抓不到 |
+|---|---|
+| `git branch feature-x` | 沒有任何旗標，位置參數本身就是「建分支」。改判準為「branch/remote 不得帶位置參數」 |
+| `git diff --output=leak.txt` | 唯讀 subcommand 照樣寫得了檔 |
+| `git config user.name foo` | 讀寫同形，差別只在多一個位置參數 → 整個 subcommand 移出白名單 |
+
+**第四次零覆蓋**：變異「清空 `_GIT_WRITE_FLAGS`」全綠 —— 該表想防的形狀全被「不得帶位置參數」那條先擋掉了。依硬規則補 `git branch -d`（不帶名稱）才紅。已在程式碼標註它是第二道防線，不是 branch/remote 的主要防護。
+
+**⚠ 三項都待重啟：兩個「啟動時快照」**
+
+| 快照對象 | 證據 | 影響 |
+|---|---|---|
+| `.claude/agents/*.md` | 建好角色後 `subagent_type: 查詢員` 回 `not found`；換英文名探針 `probe-hotreload` **同樣 not found** → 排除「中文名不被接受」，是整個目錄非熱載入 |
+| hook 的 **event key** | `zR()` 查的 `Bg()` 回傳的變數就叫 **`initialHooksConfig`**（只在 null 時初始化一次）。實測：`SubagentStop` 掛上後真實 subagent 跑完 **0 筆**事件，但把同樣的 payload 直接餵給 `dispatch.py` → `dispatch`／`applies PR-1`／`decision BLOCK` 三筆全對 |
+
+→ **修正 1c 的記錄**：「settings.local.json 的 hook 改動熱生效」只對**既有 event key 的 matcher／command** 成立（那是執行時才讀檔）；**新增一個 event key 必須重啟 session**。
+
+**中文 `name` 已證明可用，不必等實測**：`agentType` 先做精確比對，失敗才 fallback 到
+`Cu7()` 正規化 —— 而 `Cu7 = NFKC → toLowerCase → 去除 [\p{White_Space}\p{Pd}_]`，
+中文字元完整保留。另：loader `vq7` 對 **`name` 缺失是靜默 `return null`**（只有
+`description` 缺才有警告），這是「規則寫完≠上線」的又一形態。
+
+**下一個 session 開場的驗證清單（4 項，缺一項就還不算上線）**：
+
+1. `subagent_type: "查詢員"` spawn 得起來（驗中文名＋非熱載入的結論）
+2. 該 subagent 結束後，`state/events.<session>.agent-*.ndjson` 出現 `{"event":"SubagentStop"}`（驗 2c 真實接線）
+3. 派雙改檢核員跑一條 `git push --dry-run`，確認被 gate 擋下且 stderr 是角色邊界訊息（驗 agent-scoped hooks 真的生效）
+4. 問查詢員「§8 標題那行的完整文字」，確認自建 agent **有**載入 CLAUDE.md（內建 `Explore`/`Plan` 帶 `omitClaudeMd:true`，這是自建角色唯一的差異化理由）
+
+<!-- REVIEW_SCOPE_IGNORE_END -->
+
 ---
 
 ## 5. 已定案的架構決策
@@ -390,6 +466,15 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
      這是最後一次因為「進度更新」而重簽——之後標完成只會動到 IGNORE 區間內的內容，
      marker 不再失效。架構結論自 3 輪覆核以來未變。
      （這段註解自己也在 IGNORE 區間內：它是進度性質的資訊，不該讓 marker 失效。
-       第一版把它寫在區間外，結果加註解的當下 marker 就對不上了。） -->
+       第一版把它寫在區間外，結果加註解的當下 marker 就對不上了。）
+
+     第二次重簽：2026-07-29（Phase 2 / 2c）7858abb1… → 98e13b67…
+     理由是**雜湊演算法被修正，不是內容變動**——寫 §4.2 完成記錄時發現「新增
+     一整段 IGNORE 區塊」照樣讓 marker 失效：區塊被扣掉後，它前後原本各有的
+     空行變成相鄰。上一句「這是最後一次因進度更新而重簽」在機制上還沒真的成立，
+     這次把它補完（`content_hash` 改為連帶吃掉 IGNORE 區塊整行＋壓縮連續空行）。
+     驗證方式不是肉眼看 diff：用**新演算法**分別算 HEAD 版與現在版，兩者相同
+     （98e13b67…），且扣除 IGNORE 後的審查範圍 diff 為 0 行 —— 證明這輪編輯
+     完全落在區間內。rounds 與 at 一律保留原值：審查沒有重跑，不該假裝跑過。 -->
 <!-- REVIEW_SCOPE_IGNORE_END -->
-<!-- ADVERSARIAL_REVIEW_PASSED sha256=7858abb1d9a6f56f7e4a65a13b2f8c980bd84e97ba555dc790ef3b3c6e8e117f rounds=3 at=2026-07-29T18:20:00+08:00 -->
+<!-- ADVERSARIAL_REVIEW_PASSED sha256=98e13b67fc254339019b71386d64fc82dccffcb2a331cc73f75a2e62773cefb1 rounds=3 at=2026-07-29T18:20:00+08:00 -->

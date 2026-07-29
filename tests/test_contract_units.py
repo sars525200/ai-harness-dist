@@ -130,6 +130,95 @@ def _run_dev_matches_cases() -> tuple[int, list[str]]:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _run_content_hash_cases() -> tuple[int, list[str]]:
+    """PR-1 `content_hash` 的**性質測試**：什麼該讓 marker 失效、什麼不該。
+
+    fixture 層測的是「給定一份檔案，判定是 ALLOW 還是 BLOCK」，測不到
+    「同一份文件做了某種編輯之後，hash 該不該變」這種前後對照的性質——
+    而 marker 機制的全部價值就在這個性質上。
+
+    2026-07-29 實際踩到的 bug：新增一個**完全落在 IGNORE 區間內**的區塊，
+    審查範圍內一個字都沒變，hash 卻對不上（區塊前後的空行變成相鄰）。
+    後果是「更新進度就得重簽」復活，而重算 hash 正是偽造憑證的唯一動作。
+    """
+    import importlib
+
+    pr1 = importlib.import_module("rules.pr1_plan_review_marker")
+
+    BASE = (
+        "# 計畫書\n"
+        "\n"
+        "> 狀態：待審核\n"
+        "\n"
+        "## §1 架構結論\n"
+        "\n"
+        "這段是審查範圍。\n"
+        "\n"
+        "<!-- REVIEW_SCOPE_IGNORE_START -->\n"
+        "\n"
+        "### 進度\n"
+        "\n"
+        "| 0a | ✅ |\n"
+        "\n"
+        "<!-- REVIEW_SCOPE_IGNORE_END -->\n"
+        "\n"
+        "## §2 結尾\n"
+    )
+
+    def with_extra_ignore_block(text: str) -> str:
+        """插一整段 IGNORE 區塊（＝寫一則新的完成記錄）。
+
+        **必須插在檔案中間，不能插在檔尾**：第一版寫成加在最後一行之後，
+        殘留的空行全被 `.strip()` 吃掉 → 舊實作也照樣通過，這個 case 對它
+        想防的 bug 零覆蓋（變異測試當場抓到）。真實情況本來就是插在中間。
+        """
+        return text.replace(
+            "## §2 結尾\n",
+            "<!-- REVIEW_SCOPE_IGNORE_START -->\n"
+            "\n"
+            "### Phase 2 完成記錄\n"
+            "\n"
+            "做完了。\n"
+            "\n"
+            "<!-- REVIEW_SCOPE_IGNORE_END -->\n"
+            "\n"
+            "## §2 結尾\n",
+        )
+
+    cases = [
+        (True, lambda t: t.replace("| 0a | ✅ |", "| 0a | ✅ |\n| 0b | ✅ |"),
+         "在既有 IGNORE 區間內加一行進度"),
+        (True, with_extra_ignore_block,
+         "新增一整段 IGNORE 區塊（**這次踩到的 bug**：空行相鄰讓 hash 變動）"),
+        (True, lambda t: t + "\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=" + "0" * 64 + " rounds=1 at=x -->\n",
+         "補上 marker 行本身"),
+        (True, lambda t: t.replace("\n\n## §2 結尾", "\n\n\n\n## §2 結尾"),
+         "審查範圍內多幾個空行（無實質意義，刻意不失效）"),
+        (True, lambda t: t.replace("\n", "\r\n"),
+         "行尾被翻成 CRLF（本 repo 的 .md 常被不同工具寫）"),
+        (False, lambda t: t.replace("這段是審查範圍。", "這段被偷偷改掉了。"),
+         "**審查範圍內的實質內容變動 —— 必須失效**"),
+        (False, lambda t: t.replace("## §2 結尾\n", ""),
+         "刪掉審查範圍內的一整節 —— 必須失效"),
+        (False, lambda t: t.replace("<!-- REVIEW_SCOPE_IGNORE_START -->", "")
+                           .replace("<!-- REVIEW_SCOPE_IGNORE_END -->", ""),
+         "把 IGNORE 標記拿掉＝進度欄進了審查範圍 —— 必須失效"),
+    ]
+
+    base_hash = pr1.content_hash(BASE)
+    passed, failures = 0, []
+    for want_same, mutate, why in cases:
+        got_same = pr1.content_hash(mutate(BASE)) == base_hash
+        if got_same == want_same:
+            passed += 1
+        else:
+            failures.append(
+                f"content_hash 在「{why}」後{'相同' if got_same else '改變'}，"
+                f"期望{'相同' if want_same else '改變'}"
+            )
+    return passed, failures
+
+
 def run() -> tuple[int, list[str]]:
     """回傳 (通過數, 失敗描述清單)。供 run_hook_tests.py 併入總計。"""
     passed, failures = 0, []
@@ -143,7 +232,11 @@ def run() -> tuple[int, list[str]]:
             )
 
     dev_passed, dev_failures = _run_dev_matches_cases()
-    return passed + dev_passed, failures + dev_failures
+    hash_passed, hash_failures = _run_content_hash_cases()
+    return (
+        passed + dev_passed + hash_passed,
+        failures + dev_failures + hash_failures,
+    )
 
 
 def main() -> int:

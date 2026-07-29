@@ -1,0 +1,46 @@
+{
+  "name": "PR-1 SubagentStop 的 agent_transcript_path 是空 → ALLOW，不得退回主 session 的 transcript",
+  "why": "`agent_transcript_path or transcript_path` 這種寫法在欄位存在但為空時會靜默改讀主 session 的 transcript——變成拿主 session 這輪動過的檔去判 subagent。這裡主 transcript 刻意動過一份待審核無 marker 的計畫書：讀錯對象就會 BLOCK，而正確行為是不知道就不猜（fail-open）。",
+  "workspace": {
+    "files": {
+      "MAIN_PLAN.md": "# 主 session 寫的計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n沒有審查 marker。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我寫計畫書"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/MAIN_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "SubagentStop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "agent_transcript_path": "",
+    "agent_id": "fx-agent-2",
+    "agent_type": "查詢員",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

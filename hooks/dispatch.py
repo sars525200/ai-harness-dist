@@ -95,13 +95,20 @@ REGISTRY = [
     {
         "id": "AWC-1",
         "module": "awc1_choices_check",
+        # 刻意**只掛 Stop、不掛 SubagentStop**：AWC-1 抓的是「該問使用者卻沒用
+        # 選擇題」，而 subagent 內 `ask` 是 fail-closed 成 deny（§5.1），
+        # 它根本沒有問使用者的能力。掛上去等於對每個以問句收尾的 subagent
+        # 報一次必然的假陽性。
         "events": {"Stop"},
         "tools": None,
     },
     {
         "id": "PR-1",
         "module": "pr1_plan_review_marker",
-        "events": {"Stop"},
+        # 2026-07-29（2c）：加 SubagentStop。角色化之後「開個 subagent 去寫
+        # 計畫書」是一條完全繞過 PR-1 的路徑——主 session 那輪只有一次 Agent
+        # 呼叫，動過的 .md 是空集合，規則照跑照放行。
+        "events": {"Stop", "SubagentStop"},
         "tools": None,
     },
 ]

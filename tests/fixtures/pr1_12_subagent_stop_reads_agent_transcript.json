@@ -1,0 +1,70 @@
+{
+  "name": "PR-1 SubagentStop 讀 agent_transcript_path（subagent 寫的待審核計畫書 → BLOCK）",
+  "why": "角色化之後「開個 subagent 去寫計畫書」是一條完全繞過 PR-1 的路徑：主 session 那輪只有一次 Agent 呼叫、動過的 .md 是空集合，規則照跑照放行。這個 fixture 刻意讓兩份 transcript 內容不同——主 session 的沒動過任何 .md，只有 subagent 的動過——規則若沿用 transcript_path 就會判 ALLOW。",
+  "workspace": {
+    "files": {
+      "SUBAGENT_PLAN.md": "# subagent 寫的計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這份是 subagent 產的，沒有審查 marker。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我開個角色去寫計畫書"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Agent",
+              "input": {
+                "subagent_type": "查詢員",
+                "prompt": "寫一份計畫書"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "agent_transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "寫一份計畫書"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/SUBAGENT_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "SubagentStop",
+    "session_id": "fx-pr1",
+    "transcript_path": "<TRANSCRIPT>",
+    "agent_transcript_path": "<AGENT_TRANSCRIPT>",
+    "agent_id": "fx-agent-1",
+    "agent_type": "查詢員",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "SUBAGENT_PLAN.md"
+  },
+  "rule": "pr1_plan_review_marker"
+}

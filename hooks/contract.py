@@ -403,9 +403,40 @@ class HookContext:
         return self.payload.get("last_assistant_message", "") or ""
 
     @property
+    def event(self) -> str:
+        """事件名（`hook_event_name`）。base payload 必帶。"""
+        return self.payload.get("hook_event_name", "") or ""
+
+    @property
     def transcript_path(self) -> str:
         """本次 session 的完整 transcript（jsonl，逐行一個事件）路徑。所有事件都帶。"""
         return self.payload.get("transcript_path", "") or ""
+
+    @property
+    def turn_transcript_path(self) -> str:
+        """「觸發這個事件的那一方」這一輪的 transcript —— 規則想讀的一律是這個。
+
+        2026-07-29（2c）：`SubagentStop` 的 payload **同時帶兩個路徑**
+        （claude.exe 內的 zod schema 逐字確認，非推測）：
+
+            transcript_path        base payload，所有事件都有 → **主 session 的**
+            agent_transcript_path  SubagentStop 專屬          → **subagent 自己的**
+
+        subagent 與主 session 還共用同一個 `session_id`（0d 實測），所以
+        「這一輪誰動了什麼」在 SubagentStop 上唯一正確的來源是後者。
+        直接沿用 `transcript_path` 的話，PR-1 會拿主 session 這輪動過的檔
+        去回答「subagent 剛剛寫了什麼」—— 規則接了線、每次都跑、永遠問錯
+        問題，而且**看起來完全正常**（這是「規則寫完≠規則上線」的第六種形態）。
+
+        以事件名分派而不是 `agent_transcript_path or transcript_path`：
+        後者在欄位存在但為空字串時會**靜默退回主 session 的 transcript**，
+        變成讀錯對象；分派則讓它退回空字串 → `iter_turn_tool_uses` 回 None
+        → 呼叫端 fail-open 不擋。不知道就不猜，這條路徑的誤擋代價是
+        subagent 結束不了。
+        """
+        if self.event == "SubagentStop":
+            return self.payload.get("agent_transcript_path", "") or ""
+        return self.transcript_path
 
     def has_bypass(self, rule_id: str) -> bool:
         """D10：比對 command 字串，**不讀環境變數**。

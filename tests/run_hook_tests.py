@@ -34,6 +34,10 @@ from contract import GitContext, HookContext  # noqa: E402
 # 所以 payload/transcript 裡以佔位符表示，跑之前才代換成真實路徑。
 _PH_DIR = "<DIR>"
 _PH_TRANSCRIPT = "<TRANSCRIPT>"
+# subagent 自己的 transcript（`SubagentStop` 的 `agent_transcript_path`）。
+# 必須能同時擺出**兩份不同內容**的 transcript，否則「規則讀錯了哪一份」
+# 這個 bug 在 fixture 裡看不出來——兩份長一樣時，讀錯也會全綠。
+_PH_AGENT_TRANSCRIPT = "<AGENT_TRANSCRIPT>"
 _PH_HASH = "<HASH>"
 
 
@@ -145,12 +149,17 @@ def _materialize(workspace: dict, module, tmpdir: str) -> dict:
         with open(path, "w", encoding="utf-8", newline="") as fh:
             fh.write(content)
 
-    if "transcript" in workspace:
-        tpath = os.path.join(tmpdir, "transcript.jsonl")
+    for key, placeholder, filename in (
+        ("transcript", _PH_TRANSCRIPT, "transcript.jsonl"),
+        ("agent_transcript", _PH_AGENT_TRANSCRIPT, "agent_transcript.jsonl"),
+    ):
+        if key not in workspace:
+            continue
+        tpath = os.path.join(tmpdir, filename)
         with open(tpath, "w", encoding="utf-8") as fh:
-            for entry in workspace["transcript"]:
+            for entry in workspace[key]:
                 fh.write(json.dumps(_subst(entry, mapping), ensure_ascii=False) + "\n")
-        mapping[_PH_TRANSCRIPT] = tpath
+        mapping[placeholder] = tpath
 
     return mapping
 
@@ -242,6 +251,21 @@ def main() -> int:
             failed.append(("contract 單元測試", detail))
         print(f"  {'PASS' if not unit_failed else 'FAIL'}  contract 共用函式單元測試"
               f"（{unit_passed}/{unit_passed + len(unit_failed)}）")
+
+        # 角色層閘門（agent-scoped hook，不進 REGISTRY）。掛在總入口是因為
+        # 孤兒測試等於沒有測試 —— 改 gate 的人不會知道要去跑另一支檔案。
+        import test_agent_gate
+        for run_fn, label in (
+            (test_agent_gate.run, "指令白名單"),
+            (test_agent_gate.run_payload_cases, "payload 層"),
+        ):
+            gate_passed, gate_failed = run_fn()
+            unit_passed += gate_passed
+            for detail in gate_failed:
+                failed.append((f"唯讀角色閘門（{label}）", detail))
+            unit_failed.extend(gate_failed)
+            print(f"  {'PASS' if not gate_failed else 'FAIL'}  唯讀角色閘門{label}"
+                  f"（{gate_passed}/{gate_passed + len(gate_failed)}）")
 
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
