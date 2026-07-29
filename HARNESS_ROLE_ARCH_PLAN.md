@@ -337,6 +337,8 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
 | **為什麼 `tools:` 收窄不了 Bash** | §5.3 坑 1：`Bash(git diff:*)` 的括號限定**只對 `Agent` 工具生效**，其他工具靜默拿到整支。要嘛不給，要嘛給了用 hook 真的擋 |
 | gate 方向 | **fail-CLOSED**，與 `dispatch.py` 的 fail-open 刻意相反：那支誤擋會卡住使用者本人，這支誤擋只是一個 subagent 少跑一條指令 |
 | gate 測試 | `tests/test_agent_gate.py` **48 case**（ALLOW/BLOCK 兩側都有樣本），已掛進 `run_hook_tests.py` 總入口 —— 孤兒測試等於沒有測試 |
+| **存放（user 定案）** | 本體 `D:\.ai-harness\agents\`，`~/.claude/agents` 以 **junction** 接過去（與記憶檔同模式，CLAUDE.md §3）。理由：角色檔的 agent-scoped hook 指向 `hooks/agent_readonly_gate.py`，**角色與 gate 是一個單位**，只版控一半會靜默漂移 |
+| 新機器 | `scripts/bootstrap-agents.ps1`（冪等、免管理員、ASCII-only）。三條分支都用 `-LiveDir` 指到暫存路徑實測過 —— 備份分支含 `Remove-Item -Recurse -Force`，寫錯會刪真實角色檔 |
 
 **gate 的兩個設計缺陷是變異測試抓出來的，不是想出來的**：
 
