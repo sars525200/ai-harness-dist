@@ -72,8 +72,19 @@ def gather_current() -> dict:
                 1 for p in d.glob("*.py") if p.name != "__init__.py"
             )
 
+    # 2026-07-29 補：**規則的執行模式**（shadow 觀察 vs enforce 真擋）。
+    # 漏掉這個訊號害看板漏報過一次：DB-1 當天從 shadow 轉 enforce ——「整套 harness
+    # 第一條真閘門」是這份看板最該講的故事，但規則數沒變、would-block 沒變、檔案數
+    # 沒變，四個既有訊號全部靜止，腳本回報「無需更新」，而看板上還寫著「皆 shadow」。
+    # 同一種病：檢查器沒在檢查那個性質（見 [[feedback-execution-test-before-deploy]]）。
+    from dispatch import _is_shadow, _load_shadow_config  # noqa: E402
+
+    shadow_config = _load_shadow_config()
+    enforced = sorted(r["id"] for r in REGISTRY if not _is_shadow(r["id"], shadow_config))
+
     return {
         "rule_ids": rule_ids,
+        "enforced_rule_ids": enforced,
         "would_block": would_block,
         "skill_count": skill_count,
         "tool_raw_count": tool_raw_count,
@@ -107,6 +118,18 @@ def diff(old: dict | None, new: dict) -> list[str]:
             reasons.append(f"新增規則：{', '.join(sorted(added))}")
         if removed:
             reasons.append(f"移除規則：{', '.join(sorted(removed))}")
+
+    # shadow → enforce（或反向）是看板最該講的故事，但其餘四個訊號都偵測不到它。
+    # 快照沒有這個鍵＝舊格式，視為「當時全 shadow」，這樣升級當下就會正確報出差異。
+    old_enf = set(old.get("enforced_rule_ids", []))
+    new_enf = set(new["enforced_rule_ids"])
+    if old_enf != new_enf:
+        turned_on = new_enf - old_enf
+        turned_off = old_enf - new_enf
+        if turned_on:
+            reasons.append(f"轉為 enforce（真的會擋）：{', '.join(sorted(turned_on))}")
+        if turned_off:
+            reasons.append(f"退回 shadow（只觀察）：{', '.join(sorted(turned_off))}")
 
     old_wb, new_wb = old.get("would_block", {}), new["would_block"]
     for rid in sorted(set(old_wb) | set(new_wb)):
