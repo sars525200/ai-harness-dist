@@ -77,7 +77,7 @@
 |---|---|---|
 | 3a | `SessionStart` 回傳 `watchPaths` + `FileChanged` 事件（偵測，不能擋） | ⬜ |
 | 3b | 評估 git `pre-commit`/`pre-push` hook（唯一涵蓋 hook 自己／cron／人手改） | ⬜ |
-| 3c | `permissions.deny` 補 PowerShell 形狀（現有 5 條全是 `Bash(...)`） | ⬜ |
+| 3c | `permissions.deny` 補 PowerShell 形狀（現有 5 條全是 `Bash(...)`） | ✅ **完成 2026-07-30**（見 §4.5） |
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
@@ -491,6 +491,50 @@ allow 過的指令照樣會跑。所以收緊 allow **不會讓 harness 多防�
 風險面 8 類計數 0 變動。實測 `node --check SOP_PROD/05_UI_Demo/app.js` 與
 `git -C d:/IT-department status --short`（兩條都是被刪的具體條目）仍直接放行，
 證實覆蓋面沒縮小。備份留在 `settings.local.json.bak-<timestamp>`。
+
+### 4.5 3c permissions.deny 補 PowerShell（2026-07-30）
+
+**先實測 deny 的比對語意，兩個原本的假設都被推翻。**
+
+| 假設 | 實測結果 |
+|---|---|
+| deny 是 prefix 比對，`cd x && git push --force` 繞得過 | ❌ **錯**。加 `Bash(echo bash-probe:*)` 後 `cd /d && echo bash-probe hello` 直接被擋 → **複合指令會拆解逐段比對**（`&&`／`;` 都算），現有 5 條的涵蓋面比原本以為的大 |
+| PowerShell 走 `Bash(...)` 規則 | ❌ **錯**。deny 規則綁工具名，`Bash(...)` 對 PowerShell 工具完全不比對 |
+
+**探針設計**：用 `echo deny-probe` 這種 auto mode classifier 不會攔的無害指令量語意。
+一開始拿 `git push --force --dry-run nosuchremote` 測，PowerShell 那次是被
+**classifier** 擋的（訊息 `Blocked by classifier`），根本沒測到 deny 層 —— 兩層的
+錯誤訊息不同是唯一的區分依據，別把 classifier 的攔截誤記成規則生效。
+
+**所以 3c 的價值不是補「繞過形狀」，是把不確定的兜底換成確定的規則**：PowerShell 的
+`git push --force` 原本只有 classifier（模型判斷、非確定性）擋得住。
+
+**補上 5 條對稱規則**（`--no-verify`／`-n`／`--force`／`-f`／`--force-with-lease`）。
+
+**驗證（前後對照是鐵證）**：同一條 `git push -f --dry-run nosuchremote-probe`，
+加規則**前**訊息是 `Blocked by classifier`、加規則**後**是
+`Permission to use PowerShell ... has been denied.` → 規則生效，且 **deny 先於
+classifier**。另測 `git commit -n --dry-run` 同樣落在 deny。
+no-op 測試：`git status --short; git log --oneline -1` 正常執行，未誤擋。
+
+**順帶量到的平台事實**：`permissions` 改動**熱生效、不需重啟 session**（與 §4.2 的
+hook matcher 同）—— 但注意這跟 `.claude/agents/*.md` 與 hook **event key** 不同，
+那兩者是啟動時快照（§4.3）。
+
+**3a 可行性已查證（binary 實測，非文件推測）**：`watchPaths`／`FileChanged` 都真實
+存在於 `claude.exe` v2.1.143。真實 schema：
+
+```
+SessionStart 回傳 { additionalContext?, initialUserMessage?, watchPaths?: string[] }
+FileChanged  收到 { session_id, transcript_path, cwd, agent_id?,
+                    hook_event_name:"FileChanged", file_path, event:"change"|"add"|"unlink" }
+FileChanged  回傳 { watchPaths? }  ← 可動態改監看清單；systemMessages 會灌進對話
+```
+
+`watchPaths` 註明 **Absolute paths**。另有計畫書原本沒列的 `CwdChanged` 事件（同樣帶
+`watchPaths`）。watcher 是 chokidar 形狀（`add`／`change`／`unlink`／`ready`）。
+撈到一條限制：**`Agent stop hooks are not yet supported outside REPL`**。
+→ 3a 真要做時直接照這份 schema 寫，不必再逆向一次。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
