@@ -53,7 +53,7 @@
 | # | 項目 | 狀態 |
 |---|---|---|
 | 1a | 解除 DB-1 shadow（**須先完成 0a/0b/0d**） | ✅ **完成 2026-07-29 — DB-1 現為真閘門** |
-| 1b | 重寫 R4 `applies()`（改綁 `sqlite3.connect` 到 prod 路徑形狀） | ⬜ |
+| 1b | 重寫 R4 `applies()`（改綁 `sqlite3.connect` 到 prod 路徑形狀） | ✅ **完成 2026-07-29** |
 | 1c | matcher **逐一列名**：`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent` | ⬜ |
 | 1d | 量測加 `Edit` 後的 dispatch 延遲（`.py` 的 Edit 有 118 次／期間） | ⬜ |
 
@@ -211,6 +211,36 @@ fixture 異動：`pr1_04` 改新格式 SKIP；`pr1_07` 語義過時（原本測�
 **exit 2 訊息措辭已檢查**：`STOP_HOOK_MARKER_PLAN.md` §4.1 實測過「模型會放棄使用者原始指令、改去執行 stderr 的指示」，因此 BLOCK 訊息禁寫覆蓋使用者當前意圖的祈使句。DB-1 的兩則訊息都是「原因＋規則說明」。另外這是 `PreToolUse` 不是 `Stop`，語義是「擋住這次工具呼叫」，比 Stop 溫和。
 
 **逃生口**：DB-1 有 `ctx.has_bypass()`，誤擋時在指令加 bypass 註解即可通過，且會記錄 `bypassed=true`（D10）。
+
+**✅ 1b 完成記錄（2026-07-29）—— R4 原本是 dead on arrival**
+
+| 項 | 內容 |
+|---|---|
+| 原病因 | `applies()` 綁「`.py` 且 `import server`」。實測 Write dispatch 49 次、transcript 有 207 次 `.py` 寫入，`import server` 命中 **0 次**——本 repo 的腳本根本不寫那個形狀（測試都是 `sqlite3.connect` 直連） |
+| 新增形狀 B | 腳本直接 `connect()` 到 `SOP_PROD`／`/srv/it-asset` **並執行寫入** → BLOCK。這正是 CLAUDE.md §9「寫本地 .py → scp <VM-HOST> → ssh <VM-HOST> python3」那條工作流會踩的形狀 |
+| 唯讀不擋 | §9 明確允許用同一條工作流「查 VM 資料」，只有出現寫入訊號（INSERT/UPDATE/DELETE/DROP/ALTER/REPLACE 或 `.commit()`／`.executescript()`）才算危險 |
+| **涵蓋 Edit** | `contract.py` 新增 `ctx.resulting_content`：Write 取 `content`、Edit 讀磁碟現況套用 `old_string→new_string`、MultiEdit 依序套用。舊版只讀 `ctx.content`，而 `.py` 的 **Edit 118 次 vs Write 53 次**——七成改檔路徑被靜默放掉 |
+| 已知漏判 | 路徑存在變數裡再傳給 `connect`（`p = "…SOP_PROD…"; connect(p)`）抓不到。要抓得靠資料流分析，誤判成本高於漏判成本，刻意 fail-open |
+| 結果 | `run_hook_tests.py` **80/80**（R4 從 5 → 9 個 fixture） |
+
+**變異測試（四發全紅）**：
+
+| 變異 | 結果 |
+|---|---|
+| `_CONNECT_PROD` 永不匹配 | 9 → 7 ✅ 紅（形狀 B 的兩條） |
+| 寫入訊號永遠成立（唯讀也擋） | 9 → 8 ✅ 紅（`r4_07` 唯讀樣本） |
+| 路徑判定放寬成全文比對 | 9 → 8 ✅ 紅（`r4_09` 先複製到暫存再寫） |
+| `resulting_content` 退回 `content` | 9 → 8 ✅ 紅（`r4_08` Edit 路徑） |
+
+**✅ 1d 量測完成（2026-07-29）**
+
+| 階段 | 中位數 |
+|---|---|
+| Python 冷啟動（`py -3 -c "pass"`） | **50 ms** |
+| ＋ `import dispatch`（頂層拉進 6 個規則模組） | **110 ms** |
+| 完整 dispatch（Edit／Bash，皆不命中規則） | 104–109 ms |
+
+→ **判定本身 <5 ms，60 ms 全是 import 成本**（佔 55%）。`dispatch.py` 頂層無條件 import 六個規則模組，而絕大多數事件一條規則都不命中。這直接影響 1c 的取捨：加 `Edit` 進 matcher 等於每次編輯都付這 105 ms。
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 

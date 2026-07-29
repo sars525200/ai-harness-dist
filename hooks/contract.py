@@ -341,6 +341,55 @@ class HookContext:
         return self.tool_input.get("content", "") or ""
 
     @property
+    def resulting_content(self) -> str:
+        """這次寫入**之後**檔案將會是什麼內容。
+
+        2026-07-29（1b）新增。動機：`ctx.content` 只有 Write 有值，而實測期間
+        `.py` 檔的 **Edit 有 118 次、Write 只有 53 次** —— 只看 content 的規則
+        等於放掉七成的改檔路徑，而且是靜默放掉（applies 回 False，連
+        `report.py` 都看不出有這回事）。
+
+        Write     → tool_input.content（全文，最準）
+        Edit      → 磁碟現況套用 old_string→new_string（PreToolUse 時檔案還沒改，
+                    讀到的是舊內容，替換後即為「將成為」的內容）
+        MultiEdit → 依序套用 edits 陣列
+
+        讀不到檔案／缺欄位時回可得的最大片段（Edit 回 new_string），
+        fail-open 方向：寧可少判，不誤判。
+        """
+        if getattr(self, "_resulting_cache", None) is not None:
+            return self._resulting_cache
+
+        ti = self.tool_input
+        text = ti.get("content") or ""
+        if not text:
+            edits = ti.get("edits")
+            pairs = (
+                [(e.get("old_string") or "", e.get("new_string") or "") for e in edits]
+                if isinstance(edits, list)
+                else [(ti.get("old_string") or "", ti.get("new_string") or "")]
+            )
+            base = ""
+            path = self.file_path
+            if path:
+                try:
+                    with open(path, "rb") as fh:
+                        base = fh.read().decode("utf-8-sig", errors="replace")
+                except OSError:
+                    base = ""
+            if base:
+                for old, new in pairs:
+                    if old:
+                        base = base.replace(old, new)
+                text = base
+            else:
+                # 讀不到原檔（新檔／權限）→ 至少拿得到新增進去的那段
+                text = "\n".join(new for _, new in pairs if new)
+
+        self._resulting_cache = text
+        return text
+
+    @property
     def session_id(self) -> str:
         return self.payload.get("session_id", "")
 

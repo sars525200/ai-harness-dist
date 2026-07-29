@@ -1,0 +1,19 @@
+{
+  "name": "R4 直接 connect() 正式路徑並寫入 → BLOCK",
+  "rule": "r4_server_dbpath",
+  "why": "2026-07-29（1b）新增的形狀 B。舊版 applies() 只綁『.py 且 import server』，而本 repo 的腳本從不寫那個形狀——實測期間 Write dispatch 49 次、transcript 有 207 次 .py 寫入，import server 命中 0 次，規則 dead on arrival。真正會誤寫正式庫的形狀是 CLAUDE.md §9 那條工作流『寫本地 .py → scp <VM-HOST> → ssh <VM-HOST> python3』裡的腳本直接 connect 到 SOP_PROD／/srv/it-asset 並執行寫入。這正是規則宣稱要攔、卻永遠攔不到的那次事故。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "d:\\IT-department\\_tmp_fix_assets.py",
+      "content": "import sqlite3\n\nconn = sqlite3.connect(r'd:/IT-department/SOP_PROD/05_UI_Demo/db/it_asset_platform.sqlite')\nconn.execute(\"UPDATE assets SET record_state='removed' WHERE id=?\", ('AS-1045',))\nconn.commit()\n"
+    },
+    "session_id": "fx-r4-06",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "正式路徑"
+  }
+}
