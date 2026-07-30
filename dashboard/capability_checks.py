@@ -322,10 +322,20 @@ def _p_adversarial():
 
 
 def _p_red_first():
-    md = _read(CLAUDE_MD)
-    has = "會紅" in md and ("tight loop" in md or "沒紅訊號" in md)
-    return has, ("§8 硬規則：先建會紅的 tight loop，沒紅訊號不准進 hypothesis"
-                 if has else "無「先證明測試會紅」的紀律")
+    """規則會搬家，機制不會 —— 所以掃「規則的三層」而不是只讀 CLAUDE.md。
+
+    這條 2026-07-30 第三次被同一個坑咬：前兩次是綁 `wc -c`、綁「防膨脹」三個字，
+    這次是綁 §8 —— 規則搬進 `/verify-rules` 參考型 skill 後 probe 判 False，
+    但那條紀律一個字都沒少。**能力在不在，跟它住在哪一層無關。**
+    """
+    haystacks = [_read(CLAUDE_MD)]
+    for root, pattern in ((SKILLS_DIR, "*/SKILL.md"), (RULES_DIR, "*.md")):
+        if root.exists():
+            haystacks += [_read(p) for p in sorted(root.glob(pattern))]
+    hit = next((h for h in haystacks
+                if "會紅" in h and ("tight loop" in h or "沒紅訊號" in h)), None)
+    return bool(hit), ("硬規則：先建會紅的 tight loop，沒紅訊號不准進 hypothesis"
+                       if hit else "無「先證明測試會紅」的紀律")
 
 
 def _p_selftest_discipline():

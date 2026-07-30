@@ -283,23 +283,38 @@ def build_html(agents: list, stats: dict) -> str:
     return "\n".join(lines)
 
 
-def sync_tab_badge(html: str, n: int) -> str:
-    """把 nav 的「角色 N」徽章同步成實際角色數。
-
-    為什麼要一併做：表格產生了、徽章還是手寫的 2 —— 那是同一個病的第三次發作
-    （六大類卡片 → 角色表 → nav 徽章）。**手寫的數字會漂，而且漂的地方比想像多。**
-    有可靠來源的數字就不該讓人手維護。
-    """
+def _sync_badge(html: str, tab_id: str, label: str, n: int) -> str:
     pat = re.compile(
-        r'(id="tab-roles"[^>]*>角色<span class="count">)\d+(</span>)'
+        rf'(id="{re.escape(tab_id)}"[^>]*>{re.escape(label)}<span class="count">)\d+(</span>)'
     )
     out, cnt = pat.subn(rf"\g<1>{n}\g<2>", html, count=1)
     if cnt != 1:
         raise SystemExit(
-            "找不到 tab-roles 的徽章 —— nav 結構變了。不靜默略過："
-            "徽察與表格不一致正是這支腳本要根治的問題。"
+            f"找不到 {tab_id} 的徽章 —— nav 結構變了。不靜默略過："
+            "徽章與表格不一致正是這支腳本要根治的問題。"
         )
     return out
+
+
+def sync_tab_badge(html: str, n: int) -> str:
+    """把 nav 的「角色 N」與「Skill 與 Eval N」徽章同步成實際數量。
+
+    為什麼要一併做：表格產生了、徽章還是手寫的 2 —— 那是同一個病的第三次發作
+    （六大類卡片 → 角色表 → nav 徽章）。**手寫的數字會漂，而且漂的地方比想像多。**
+    有可靠來源的數字就不該讓人手維護。
+
+    2026-07-30 第四次發作：新增三支參考型 skill 後 nav 的「Skill 11」沒跟上，
+    結構驗證擋下發布。Skill 數量同樣數得出來（`.claude/skills/*/SKILL.md`），
+    卻只有角色徽章被納管 —— 治法不是再手改一次，是把它也接進來。
+    """
+    html = _sync_badge(html, "tab-roles", "角色", n)
+    skills_dir = AGENTS_DIR.parent / "skills"
+    n_skills = len(list(skills_dir.glob("*/SKILL.md"))) if skills_dir.exists() else 0
+    if n_skills == 0:
+        raise SystemExit(
+            f"數不到任何 skill（{skills_dir}）—— 零目標拒跑，不把徽章寫成 0。"
+        )
+    return _sync_badge(html, "tab-skills", "Skill 與 Eval", n_skills)
 
 
 def inject(html: str, block: str) -> str:
