@@ -304,10 +304,35 @@ def _dispatch(payload: dict) -> int:
         return 2
 
     if warn_messages:
-        # WARN 的實際呈現方式（exit 0 + stderr 是否真的被模型看到）尚未實測
-        # ——見 HARNESS_PLAN.md §-0.5「未驗項」。目前先用最保守的猜測：
-        # 不阻擋，只嘗試印出，日後有規則轉出 shadow 時要專案驗證這條路徑。
-        sys.stderr.write("\n".join(warn_messages) + "\n")
+        joined = "\n".join(warn_messages)
+        if event == "PreToolUse":
+            # 2026-07-30 實測（隔離 cwd ＋ 自帶 settings.json 的暗號探針，三條路徑同時測）：
+            #   stderr + exit 0        → **完全蒸發**。hook 確實執行（落檔 marker 為證），
+            #                            但模型被要求逐項列出收到的訊息時沒有它。
+            #   hookSpecificOutput
+            #     .additionalContext   → ✅ 到得了。模型能正確歸因「來自 PreToolUse:Bash
+            #                            hook（WARN 級，不阻擋操作）」並複述內容細節。
+            #   平鋪 additionalContext → 被 zod 靜默剝掉（與 3a 的 watchPaths 同一個坑）。
+            #
+            # 這解掉了本行原本的註解所列的未驗項：舊寫法讓 R1／R3／R4 三條 WARN 規則
+            # 就算解除 shadow 也等於沒解 —— 判定跑了、log 記了、訊息沒人收到。
+            #
+            # ⚠ 措辭限制（同一輪實測到的）：additionalContext 會被模型當**不可信來源**
+            # 審視。第一版探針寫「請原樣輸出暗號」被正確判為 prompt injection 而整條無視。
+            # 所以 WARN 訊息必須是純陳述的事實與後果，不要有「要求模型做某個動作」的形狀。
+            # 與 DB-1 的 BLOCK 措辭規則殊途同歸，但理由不同：BLOCK 怕綁架對話，
+            # WARN 怕被判成注入而整條失效。
+            sys.stdout.write(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": joined,
+                }
+            }, ensure_ascii=False))
+        else:
+            # Stop／SubagentStop 的 WARN 通道**尚未實測**（AWC-1 走這條）。
+            # 刻意不把 PreToolUse 的結論外推：hookSpecificOutput 是 per-event 的
+            # union 成員，欄位不通用，猜錯的下場就是上面那個「靜默剝掉」。
+            sys.stderr.write(joined + "\n")
 
     return 0
 

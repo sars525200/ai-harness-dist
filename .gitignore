@@ -4,3 +4,6 @@ state/
 
 __pycache__/
 *.pyc
+
+# 探針的「hook 有沒有跑過」分母證據：每次跑都重建，不是紀錄
+tests/*/fired.log

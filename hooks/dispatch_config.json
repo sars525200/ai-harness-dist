@@ -3,8 +3,8 @@
     "DB-1": { "shadow": false },
     "R4": { "shadow": true },
     "AWC-1": { "shadow": true },
-    "R1": { "shadow": true },
-    "R3": { "shadow": true },
+    "R1": { "shadow": false },
+    "R3": { "shadow": false },
     "PR-1": { "shadow": true }
   }
 }

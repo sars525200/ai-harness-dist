@@ -1,6 +1,10 @@
 # Harness 進度報表（6 大歸類）
 
-> 快照時間：**2026-07-28 約 10:10**（§5 Hook 於同日 15:35 由另一 session 更新至最新，其餘章節仍為 10:10 快照）。涵蓋 `d:\IT-department`（IT 資產平台）＋ `D:\.ai-harness`（共用層）。
+> 快照時間：**2026-07-30 約 11:00**。涵蓋 `d:\IT-department`（IT 資產平台）＋ `D:\.ai-harness`（共用層）。
+> **各章的 7/28 敘事段落刻意保留為歷史紀錄**（首次真陽性、接線缺口那些過程有複用價值），
+> 只有「現況陳述」被更新——判斷方式：總覽表與各章的表格是現況，`### 本 session 完成`／
+> `### 🔴 …` 這類敘事小節是當時的紀錄。**架構現況以 `HARNESS_ROLE_ARCH_PLAN.md` 為權威**，
+> 本檔是跨 session 的六大歸類總表。
 > 本檔是**跨 session 的現況總表**；施工細節見 `HARNESS_PLAN.md`（hook 工程）、`IT-DEPARTMENT_CLAUDEMD_PLAN.md`（規則結構）、`TRIGGER_MECHANISMS_REFERENCE.md`（觸發機制對照）。
 > ⚠ 多 session 並行是常態（實測同時 3–4 個），本表可能在你讀的當下就已落後。
 
@@ -11,10 +15,10 @@
 | # | 歸類 | 成熟度 | 一句話現況 |
 |---|---|---|---|
 | 1 | **Rule file**（規則檔案） | 🟢 **最強項** | 60+ 條硬規則、三層載入（always／path-scoped／on-demand）已成形 |
-| 2 | **Tools**（工具） | 🟡 | CLI 齊全但 permission 白名單膨脹；2 個 MCP 未授權 |
+| 2 | **Tools**（工具） | 🟡 | CLI 齊全；allow 187→**115**（2d 清死條目＋冗餘）、deny **12** 條（Bash／PowerShell 對稱）；2 個 MCP 未授權 |
 | 3 | **Sandbox**（沙盒） | 🔴 **未起步** | 無隔離，直接讀寫本機與 VM |
-| 4 | **Orchestration**（編排） | 🟡 | 7 skills＋5 任務模式＋模型路由；subagent 用得少 |
-| 5 | **Hook**（掛鉤） | 🟡 **5 條規則、全 shadow** | DB-1/R1/R3/R4/AWC-1 皆已寫完＋fixture 全過；15:31 發現 R4/AWC-1 接線缺口（見 §5）已修 |
+| 4 | **Orchestration**（編排） | 🟡 | **10** skills＋5 任務模式＋模型路由；**2 個自建角色已上線實測**（Phase 2） |
+| 5 | **Hook**（掛鉤） | 🟢 **3 條 enforce ＋ 3 條 shadow** | DB-1 真閘門（BLOCK）；**R1／R3 已解 shadow**（WARN，走 `additionalContext`）；R4／AWC-1／PR-1 仍 shadow |
 | 6 | **Observability**（可觀測性） | 🟡 | 有 event log 與 decision log；無 traces／evals／成本儀表 |
 
 ---
@@ -25,12 +29,13 @@
 
 | 層級 | 內容 | 載入時機 | 量 |
 |---|---|---|---|
-| always-loaded | `CLAUDE.md`（9 節 / 60+ 硬規則） | session 啟動 | 25,431 bytes ≈ 12.3k tokens |
-| always-loaded | `MEMORY.md` 索引 | session 啟動 | ≈ 6.5k tokens |
+| always-loaded | `CLAUDE.md`（9 節 / 60+ 硬規則） | session 啟動 | **28,201 bytes**（7/28 量到 25,431） |
+| always-loaded | `MEMORY.md` 索引 | session 啟動 | **18,315 bytes** |
 | always-loaded | 全域 `~/.claude/CLAUDE.md` | session 啟動 | 220 tokens |
-| always-loaded | 7 個 skill 的 description | session 啟動 | ≈ 1.9k tokens |
+| always-loaded | **10** 個 skill 的 description | session 啟動 | ≈ 2.7k tokens |
+| always-loaded | **2 個角色檔的 description**（`.claude/agents/`） | session 啟動 | 少量 |
 | **conditional** | `.claude/rules/` × 3（css-specificity／sql-db-symmetry／powershell-deploy-scripts） | **讀到符合 glob 的檔案時** | 平時 0 |
-| **on-demand** | `license-rules` skill＋約 159 個 memory topic 檔 | 被呼叫／被 Read 時 | 平時 0 |
+| **on-demand** | `license-rules` skill＋**164** 個 memory topic 檔＋角色檔本體 | 被呼叫／被 Read 時 | 平時 0 |
 
 **固定成本實測**：19.0k / 967k tokens = **2%**。已接近榨乾，input 這條軸沒什麼油水了。
 
@@ -56,7 +61,8 @@
 ### 尚待
 
 - ⬜ 跑 `/doctor` 取官方精簡建議（人工掃過沒找到可砍的架構描述型內容，但未實跑）
-- ⬜ `permissions.allow` 白名單收斂（~150 條，多為帶死 PID／死檔名的一次性條目）
+- ✅ ~~`permissions.allow` 白名單收斂~~ → **2d 已做（187→115）**。但要記住結論：收益是衛生不是安全
+  （allow 管「要不要問」、hook 閘門管「擋不擋」，兩者獨立），所以**不要再想著繼續收緊**
 - ⬜ 無 `AGENTS.md`（若要建，應以 `@AGENTS.md` import 單一實體，不維護兩份）
 
 ---
@@ -67,10 +73,17 @@
 |---|---|
 | CLI 工具鏈（git／ssh／scp／node／py／curl） | 🟢 齊全，走 permission 白名單 |
 | MCP servers | 🔴 **2 個未授權**：`claude.ai`、`Google Drive`（非互動 session 無法跑 OAuth，需你在 claude.ai 連接器設定或互動式 `/mcp` 授權） |
-| `permissions.allow` | 🟡 ~150 條、含大量一次性死條目（帶 PID／暫存檔名／timestamp），是 policy 層缺席的代償 |
-| `permissions.deny` | 🟢 **本 session 新增 5 條**（見 §5） |
+| `permissions.allow` | 🟢 **115 條**（7/29 由 187 收斂：清死條目 43＋冗餘 29；風險面 36 條刻意保留——見 §1 尚待的理由） |
+| `permissions.deny` | 🟢 **12 條真擋**（Bash／PowerShell 各 6：`commit --no-verify`／`commit -n`／`push --no-verify`／`push --force`／`push -f`／`push --force-with-lease`） |
 
-**本 session 貢獻**：僅 deny 部分（歸在 Hook 格）。工具層本身未動。
+**7/30 實測到的兩件事**（動 deny 前必知，否則會量錯）：
+1. **deny 綁工具名**：`Bash(...)` 規則對 PowerShell 工具完全不比對 → 兩邊必須對稱寫。
+2. **deny 不是單純 prefix**：複合指令會拆解逐段比對（`&&`／`;` 都算），所以
+   `cd x && git push --force` 本來就擋得住。且 **deny 先於 auto-mode classifier**，
+   兩層錯誤訊息不同（`Blocked by classifier` ≠ deny 的訊息）——那是唯一的區分依據，
+   拿錯訊息判讀會以為 deny 生效其實是 classifier 在擋。
+3. **permissions 是熱生效**：7/30 加完 `push --no-verify` 立刻實測被擋，不必重啟 session
+   （與 hook 的 event key 需重啟不同，別把兩者的規律混用）。
 
 ---
 
@@ -78,7 +91,7 @@
 
 **完全未起步。** 目前 agent 直接對本機檔案系統、本機 DB、以及正式 VM（`ssh <VM-HOST>` 有 NOPASSWD sudo）操作，無任何隔離層。
 
-風險緩解目前全靠：① CLAUDE.md 的 §2 任務模式路由（DEPLOY 不可自動升級）② server 端 403（PROD 禁硬刪）③ 剛加的 5 條 deny。
+風險緩解目前全靠：① CLAUDE.md 的 §2 任務模式路由（DEPLOY 不可自動升級）② server 端 403（PROD 禁硬刪）③ 12 條 deny ④ **唯讀角色的 tools 邊界**（Phase 2：`查詢員` 只有 Read/Grep/Glob；`雙改檢核員` 的 Bash 被 agent-scoped 閘門收窄成唯讀）——④ 是目前最接近沙盒的東西，但只涵蓋 subagent，主 session 仍無隔離。
 
 **本 session 貢獻**：無。**未列入近期計畫**（`HARNESS_PLAN.md` 也把 Sandbox 排在 Phase 3 之後）。
 
@@ -90,10 +103,10 @@
 
 | 機制 | 現況 |
 |---|---|
-| **Skills（7 個）** | `codebase-health`(鎖手動)／`deploy-prod`／`diagnose-bug`／`dry-run-migrate`／`shougong`／`suggestion-inbox`／**`license-rules`**(7/28 新增，參考型) |
+| **Skills（10 個）** | `codebase-health`(鎖手動)／`deploy-prod`／`diagnose-bug`／`dry-run-migrate`／`shougong`／`suggestion-inbox`／`license-rules`(參考型)／`data-incident`／`adversarial-review`／`verify-skill`（後三支 7/28 新增） |
 | **任務模式路由** | CLAUDE.md §2 五模式：ASK／VERIFY／DEV_DRY_RUN／DEPLOY／DEV，含升級安全閥 |
 | **模型路由** | §7：開室 Sonnet → 碰 [DB｜邏輯]／§8·§9 硬規則區／根因診斷／架構規劃切 Opus，目標 Opus:Sonnet ≈ 4:6 |
-| **Sub-agent** | 可用但少用；本 session 用 `claude-code-guide` 查證官方文件一次 |
+| **Sub-agent／角色** | 🟢 **2 個自建角色已上線並實測**（Phase 2，檔案在 **project 層** `<repo>\.claude\agents\`）：`查詢員`（Read/Grep/Glob，無 hook——tools 白名單即邊界）／`雙改檢核員`（Bash 被 `agent_readonly_gate.py` 收窄成唯讀）。**放 `~\.claude\agents`（user 層）在 VSCode 環境永遠載不到**，那不是等重啟能解的。自建角色**會**載入 CLAUDE.md，內建 Explore／Plan 帶 `omitClaudeMd:true` **不會** |
 | **Workflow（多 agent 編排）** | 未使用 |
 
 ### 本 session 完成
@@ -104,27 +117,30 @@
 
 ---
 
-## 5. Hook 🟡 → 5 條規則全上線（皆 shadow）＋抓到一次接線缺口
+## 5. Hook 🟢 → 6 條規則上線·**3 條 enforce**（DB-1 BLOCK ＋ R1／R3 WARN）·3 條 shadow
 
 ### 已生效
 
 | Event | 設定位置 | 內容 | 模式 |
 |---|---|---|---|
-| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **已掛載生效**；DB-1/R1/R3/R4 = **shadow**（判定但放行） |
-| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | **15:31 新掛**；AWC-1 = shadow |
-| `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 生效（本機自動 commit，與上面那個 Stop hook 各自獨立、都會跑） |
-| `permissions.deny` × 5 | `.claude/settings.json` | 擋 `git commit --no-verify`／`-n`、`git push --force`／`-f`／`--force-with-lease` | **真擋** |
+| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·R4 = shadow |
+| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | AWC-1／PR-1 = shadow |
+| `SubagentStop`（無 matcher） | `.claude/settings.local.json` | 同一支 `dispatch.py` | 2c 新掛，PR-1 改讀 `agent_transcript_path`。**新增一個 event key 必須重啟 session**（啟動時快照）；既有 key 的 matcher／command 才是熱生效 |
+| `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 生效（本機自動 commit，與上面那個 Stop hook 各自獨立、都會跑）·**7/30 補進 `styles.css`**（見章末） |
+| `permissions.deny` × **12** | `.claude/settings.json` | commit `--no-verify`／`-n`、push `--no-verify`／`--force`／`-f`／`--force-with-lease`，**Bash／PowerShell 各一份** | **真擋·熱生效** |
 
-### 5 條規則現況（皆 `dispatch_config.json` shadow:true）
+### 6 條規則現況（模式在 `hooks/dispatch_config.json`，per-rule）
 
-| ID | 事件/工具 | 判準 | fixture |
-|---|---|---|---|
-| DB-1 | PreToolUse push vm | `?v=` 未升／語法錯／dual-edit 缺一邊 | 13/13（含 4 個 dry-run 抓出的迴歸網） |
-| R1 | PreToolUse push vm | `DEFAULT_\w+=` 值被改而非新增（已犯 3 次） | 通過 |
-| R3 | PreToolUse push vm | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） | 通過 |
-| R4 | PreToolUse **Write** | `.py` import server 卻無 `DB_PATH=` monkeypatch | 通過 |
-| AWC-1 | **Stop** | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion` | 5/5 |
-| PR-1 | **Stop** | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker | 8/8 |
+| ID | 事件/工具 | 判定型別 | 模式 | 判準 |
+|---|---|---|---|---|
+| DB-1 | PreToolUse push vm | BLOCK | 🟢 **enforce** | `?v=` 未升／語法錯／dual-edit 缺一邊 |
+| R1 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | `DEFAULT_\w+=` 值被改而非新增（已犯 3 次） |
+| R3 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） |
+| R4 | PreToolUse **Write/Edit/MultiEdit** | BLOCK＋WARN | ⚪ shadow | 腳本 `connect()` 直連 PROD DB 並寫入（7/29 改綁，原本綁 `import server` 而本 repo 從不寫那形狀＝ dead on arrival） |
+| AWC-1 | **Stop** | WARN | ⚪ shadow | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion`。**解 shadow 前缺 Stop 事件的 WARN 通道驗證**（見章末） |
+| PR-1 | **Stop · SubagentStop** | BLOCK | ⚪ shadow | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker |
+
+fixture／回歸網總計 **145 + 9**（`tests\run_hook_tests.py` 145、`tests\test_warn_channel.py` 9）。
 
 ### 已建置的骨架（`D:\.ai-harness\hooks\`）
 
@@ -156,7 +172,7 @@
 
 ### 尚待（`HARNESS_PLAN.md` Phase 1 未完項）
 
-⬜ DB-1/R1/R3/R4/AWC-1 解除 shadow（3–5 天觀察窗＋D18 雙門檻，約 2026-07-31~08-02 可看）　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　⬜ **WARN 路徑（exit 0 + stderr）實測**（須用 PreToolUse 事件）
+✅ ~~DB-1 解除 shadow~~（7/29）　✅ ~~R1／R3 解除 shadow~~（7/30，前置是先修 WARN 通道）　⬜ **R4／AWC-1／PR-1 仍 shadow**：AWC-1 卡在「Stop 事件的 WARN 通道未驗」；R4 至今 0 次 applies，但這次能斷定是**情境未發生**而非沒接線（心跳顯示 Write／Edit 已進 dispatch）；PR-1 見下節　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　✅ ~~**WARN 路徑（exit 0 + stderr）實測**~~ → **7/30 完成，結論：stderr 蒸發，必須改走 `hookSpecificOutput.additionalContext`**（見 §5 章末那張表）
 
 ### Stop hook + marker 自動觸發審查機制 → 已落地為 PR-1（shadow）
 
@@ -164,12 +180,68 @@
 
 **兩件下次動它之前要知道的事**：
 
-1. **`Stop` key 早就掛著，新 Stop 規則一進 REGISTRY 就立刻生效**——別再套用「規則寫好但 matcher 沒掛所以沒被呼叫」那個舊心智模型（那是本檔記錄過兩次的反面案例）。
+1. ~~**`Stop` key 早就掛著，新 Stop 規則一進 REGISTRY 就立刻生效**~~ → **只對一半，7/29 訂正**：
+   **既有 event key 的 matcher／command 是熱生效**（執行時才讀檔），**但新增一個 event key
+   必須重啟 session**（`initialHooksConfig` 只在 null 時初始化一次，變數名就是答案）。
+   PR-1 加 `SubagentStop` 時就踩到這條線——真實 subagent 跑完 0 筆事件，但同一份 payload
+   直接餵 `dispatch.py` 三筆全對。所以「進 REGISTRY 就好」只在該事件已經掛過的前提下成立。
+   （順帶：`permissions` 是熱生效的，7/30 實測——別把 hook 的規律套到它身上。）
 2. **觸發範圍用 transcript，不是 git status**（刻意偏離計畫書 §3.1 修正 2）：`git status` 跨 session，A 的草稿會擋住 B 的對話。D6「用 git 當真相」是給 DB-1 的部署邊界用的；「這輪我改了什麼」要 per-session 精確 → transcript。
 
 **⬜ 下一步**：觀察期（D18 雙門檻）後決定是否解除 shadow。轉 enforce 前要先想清楚：現存幾十份 `*_PLAN.md` 全都沒有狀態標記，目前一律放行——這是 B1 的刻意設計（機制被動），但也意味著**不主動標記就等於整個機制不會發動**。
 
 > 已因 D12（`.gitattributes` renormalize）**廢止** 3 條規則：I6／A1／DB-1 step 6 —— 用 git 原生機制取代 hook，涵蓋範圍更廣（含 user 手改與 cron session）。
+
+---
+
+### 🟢 7/29–7/30：Phase 0–3 全部收攤（詳見 `HARNESS_ROLE_ARCH_PLAN.md`／`PHASE3_PLAN.md`）
+
+- **Phase 0／1**：四個閘門失效 bug 修完 → **DB-1 轉 enforce**，整套 harness 第一條真閘門。
+- **Phase 2**：角色化上線（見 §4）＋白名單 187→115＋hook 輸出釘 UTF-8。
+- **Phase 3**：3c 完成（deny 補 PowerShell 對稱）；**3a 緩做、3b 不做**——2 輪對抗式覆核用實測重算，
+  發現立論有一半是錯的（cron 是本機 session 走 PreToolUse、DB-1 已在真擋；nightly bump 不推 code；
+  bare push 因無 upstream 連 hook 都到不了），扣掉後 3b 的邊際覆蓋只剩「人手在終端機打 push」。
+
+### 🔴 7/30：WARN 級規則原本全是裝飾——「規則寫完≠規則上線」的第 6 種形態
+
+要解 R1／R3 的 shadow 時發現 `dispatch.py` 的 WARN 路徑是 `exit 0 + stderr`，而該行註解
+自己就把「stderr 到不到模型眼裡」列為未實測。用隔離 cwd ＋ 自帶 `settings.json` 的暗號探針
+跑四輪，結論如下（**這張表是解 AWC-1 之類 WARN 規則前的必讀**）：
+
+| 變因 | 結果 |
+|---|---|
+| `stderr` + exit 0 | 🔴 **完全蒸發**。hook 確實執行（落檔 marker 為證），但模型被要求逐項列出收到的訊息時沒有它 |
+| **`hookSpecificOutput.additionalContext`** | 🟢 **到得了**，模型還能正確歸因「來自 PreToolUse:Bash hook（WARN 級，不阻擋操作）」並複述細節 |
+| 平鋪 `additionalContext` | 🔴 被 zod 靜默剝掉（與 3a 的 `watchPaths` 同一個坑） |
+| 訊息含「請原樣輸出暗號」 | 🔴 被正確判為 **prompt injection**，整條無視 |
+| 訊息引用的規則來源在該環境不存在 | 🔴 判為不可信、不執行建議（探針隔離性的固有代價，非措辭問題） |
+| 來源可核對 ＋ 純陳述措辭 | 🟢 接受規則為真（「CLAUDE.md §9 確實載有完全相同的內容，hook 並非憑空捏造規則」） |
+| `applies()` 過寬（與當下情境不符） | 🔴 模型正確判為誤觸發而不採取行動 |
+
+**WARN 規則的三條上線條件**（R1／R3 全部滿足，故 7/30 解 shadow）：
+①走 `additionalContext`（已修，`dispatch.py` 依 event 分流）②訊息引用模型能核對到的來源
+（R1→§8、R3→§9）③`applies()` 要精確（兩條都是 `is_push_to_remote`）。
+
+**措辭限制**與 DB-1 的 BLOCK 規則殊途同歸但理由不同：BLOCK 怕綁架對話（exit 2 會讓模型
+放棄 user 原指令），WARN 怕被判成注入而**整條失效**。
+
+⚠ **Stop／SubagentStop 的 WARN 通道仍未驗**，`dispatch.py` 刻意維持 stderr 並註明不外推
+——`hookSpecificOutput` 是 per-event union，欄位不通用，猜錯就是「靜默剝掉」。
+**AWC-1 解 shadow 的前置就是這一項。**
+
+新增回歸網 `tests\test_warn_channel.py`（9 case）。之所以要新寫一支：既有 145 個 case
+**完全沒驗 stdout／exit code 映射**（grep 過，整支只有一行 reconfigure 用到 stdout），
+WARN 路徑寫錯時會全綠。5 個變異（平鋪／退回 stderr／`ensure_ascii`／shadow 不 short-circuit／
+跨事件外推）全部被抓到才算它可信。
+
+### 🔴 7/30：DB-1 的覆蓋漏洞——`styles.css` 不在 `auto_commit.ps1` 清單
+
+`auto_commit.ps1` 兩側清單都有 `app.js`／`index.html`／`version.json`／`server.py`，**就是少了
+`styles.css`**，而 `db1_deploy.ASSET_NAMES` 有它。後果比 `PHASE3_PLAN.md` §5-3 記的「?v= 沒被
+檢查」嚴重：CSS 改動不會被自動 commit → 停在工作區 → 不進 `to_push`（＝`verify_set`）→
+`db1_deploy.py:150` 的 `continue` 刻意跳過它（那條 F1 守門是為了不拿工作區髒檔誤擋，設計正確）
+→ **改動靜默推不上正式站、閘門也不會提醒**。看板記的 `1b2d9e95`「styles.css 版號補跳
+2227→2230」就是這個模式已經發生過。**7/30 已補兩側清單各一行。**
 
 ---
 
@@ -203,9 +275,18 @@
 ## 待你決策 / 待你執行
 
 1. ✅ ~~`app.js?v=` 未升~~ ——已由後續 commit 解決（15:35 查證 HEAD 為 `?v=2237`）。
-2. ⬜ DB-1/R1/R3/R4/AWC-1 何時解除 shadow → 變成真閘門（3–5 天觀察窗，約 2026-07-31~08-02，屆時拿 would-block 清單一起判斷）
+2. ✅ ~~DB-1/R1/R3 何時解除 shadow~~ ——**DB-1 於 7/29、R1／R3 於 7/30 已轉 enforce**。
+   剩 **R4／AWC-1／PR-1**：AWC-1 的前置是「Stop 事件 WARN 通道實測」（PreToolUse 的結論
+   不可外推）；PR-1 轉 enforce 前要先想清楚「現存幾十份 `*_PLAN.md` 全無狀態標記＝機制不會發動」；
+   R4 的 0 次 applies 已確認是情境未發生。
 3. 🔄 `d:\IT-department` 未 commit 項隨時在變（多 session 併發常態）——本輪 shougong 收工前會清一次，之後仍會再累積，屬正常現象非待辦。
 4. ⬜ 跑 `/doctor` 與 `/usage`（我叫不動互動式 slash command）
 5. ⬜ 兩個 MCP 授權（`claude.ai`、Google Drive）
-6. ⬜ `D:\.ai-harness` 沒有 `.markdownlint.json`，編輯這裡的 .md 仍會噴 lint 噪音進 context（是另一 session 的 repo，未擅自加）
-7. ⬜ R4/AWC-1 接線缺口修好後尚未觀察到真實命中——3–5 天觀察窗內留意 `report.py` 這兩條是否開始出現非零數字，若持續 0 要懷疑修法本身還有沒接對的地方。
+6. ✅ ~~`D:\.ai-harness` 沒有 `.markdownlint.json`~~ ——**7/30 已加**（一次編輯就噴 16.7KB 噪音進 context，成本遠高於加一個 9 行設定檔）。
+7. ✅ ~~R4/AWC-1 接線缺口修好後尚未觀察到真實命中~~ ——**AWC-1 已有 3 次 applies／2 次真陽性**；
+   R4 仍 0 次，但已確認是情境未發生（分母有值：Write／Edit 進得了 dispatch）。
+8. ⬜ **Stop／SubagentStop 事件的 WARN 通道實測**——AWC-1 解 shadow 的唯一前置。
+   探針已存進 repo：**`tests\warn_probe\`**（自帶 `.claude\settings.json` ＋ 落檔 marker
+   證明 hook 真的跑過 ＋ 對照組暗號分辨三條路徑 ＋ 一份可核對的 `CLAUDE.md`——
+   少了最後這項會量到假陰性）。用法與四輪結論都寫在 `probe_hook.py` 的 docstring 裡，
+   動它之前先讀，別重推一次。
