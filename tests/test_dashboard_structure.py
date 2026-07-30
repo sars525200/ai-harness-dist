@@ -77,6 +77,17 @@ _badge = re.search(r'id="tab-roles"[^>]*>角色<span class="count">(\d+)</span>'
 check(_badge is not None and int(_badge.group(1)) == len(rows),
       "nav「角色」徽章與表格列數一致：徽章 %s vs 表格 %d"
       % (_badge.group(1) if _badge else "找不到", len(rows)))
+
+# Skill 徽章對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
+# （六大類卡片 → 角色表 → nav 角色徽章 → Skill 徽章）。這條讓它下次自己現形。
+# 只綁徽章不綁表格列數：清冊的分組是人工的，未來可能刻意不列某支。
+_skills_dir = Path(r"D:\IT-department\.claude\skills")
+_skill_files = len(list(_skills_dir.glob("*/SKILL.md"))) if _skills_dir.exists() else 0
+_sbadge = re.search(r'id="tab-skills"[^>]*>Skill 與 Eval<span class="count">(\d+)</span>', html)
+check(_skill_files > 0, "找得到 skills 目錄（找不到無從比對）")
+check(_sbadge is not None and int(_sbadge.group(1)) == _skill_files,
+      "nav「Skill」徽章與 skills 目錄一致：徽章 %s vs 實際 %d 支"
+      % (_sbadge.group(1) if _sbadge else "找不到", _skill_files))
 check("Explore" in roles and "omitClaudeMd" in roles, "內建角色差異有交代（omitClaudeMd）")
 check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 
