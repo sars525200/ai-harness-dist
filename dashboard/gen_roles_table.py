@@ -124,6 +124,36 @@ def _split_desc(desc: str) -> "tuple[str, str]":
     return desc, ""
 
 
+def _brief(text: str, limit: int = 26) -> str:
+    """取第一句當表格摘要，完整內容留給浮窗。
+
+    為什麼要摘要：frontmatter 的 `description` 是**寫給模型判讀觸發用的**，
+    必須夠廣夠具體（L3 觸發測試的教訓：寫太窄會該觸發沒觸發）。
+    那種長度直接塞進表格會把欄位撐爛 —— 兩種用途本來就不該共用同一份文字長度。
+    """
+    s = re.split(r"[。；]", text.strip(), maxsplit=1)[0].strip()
+    if len(s) > limit:
+        s = s[:limit].rstrip("，、（(／/") + "…"
+    return s
+
+
+def _tip(full: str) -> str:
+    """浮窗內容：分段明確 —— 句號後換行，讓長描述可讀而不是一堵字。"""
+    parts = [p.strip() for p in re.split(r"(?<=。)", full) if p.strip()]
+    merged, buf = [], ""
+    for p in parts:
+        # 太短的句子併到上一段，避免變成一行一句的碎片
+        if len(buf) + len(p) < 34:
+            buf += p
+        else:
+            if buf:
+                merged.append(buf)
+            buf = p
+    if buf:
+        merged.append(buf)
+    return "&#10;".join(_esc(m) for m in merged)
+
+
 def build_html(agents: list, stats: dict) -> str:
     lines = []
     lines.append('    <section>')
@@ -158,41 +188,60 @@ def build_html(agents: list, stats: dict) -> str:
     lines.append('      </div>')
 
     lines.append('      <div class="twrap">')
-    lines.append('        <table class="roster">')
+    lines.append('        <table class="roster roles-table">')
     lines.append('          <thead><tr><th>角色</th><th>做什麼</th><th>工具</th><th>閘門</th>'
                  '<th>什麼時候會用到</th><th>狀態</th></tr></thead>')
     lines.append('          <tbody>')
+    # 每一格長文都走「表格顯示摘要 → hover／focus 出完整浮窗」。
+    # 不這樣做的下場已經看過：description 是給模型判讀觸發用的長文，
+    # 直接塞進表格會讓同一張表的列高差三倍，整版讀不下去。
+    def cell(brief: str, full: str, limit: int) -> str:
+        short = _brief(brief, limit)
+        if len(full.strip()) <= len(short):        # 內容本來就短，不必掛浮窗
+            return _esc(short)
+        return (f'<span class="cell-brief" tabindex="0" data-tip="{_tip(full)}">'
+                f'{_esc(short)}<i class="cb-more" aria-hidden="true">⋯</i></span>')
+
     for a in agents:
         does, when = _split_desc(a["description"])
         st = stats.get(a["name"], {"real": 0, "test": 0, "last": ""})
         if st["real"]:
             chip = '<span class="chip pass">已實派</span>'
-            note = f'真實 session {st["real"]} 次'
+            note_short = f'真實 {st["real"]} 次'
+            note_full = f'真實 session {st["real"]} 次'
             if st["test"]:
-                note += f'（另有測試 {st["test"]} 次）'
+                note_full += f'，另有測試 session {st["test"]} 次。'
             if st["last"]:
-                note += f'　最近 {st["last"][:16].replace("T", " ")}'
+                note_full += f'最近一次 {st["last"][:16].replace("T", " ")}。'
         elif st["test"]:
-            chip = '<span class="chip warn">閘門已驗·尚未實用</span>'
-            note = f'僅測試 session {st["test"]} 次；真實工作 session 從未派過它'
+            chip = '<span class="chip warn">閘門已驗·未實用</span>'
+            note_short = f'僅測試 {st["test"]} 次'
+            note_full = (f'僅測試 session {st["test"]} 次。'
+                         '真實工作 session 從未派過它 —— 閘門驗過了，但這個角色還沒真的被用上。')
         else:
             chip = '<span class="chip block">尚無紀錄</span>'
-            note = ('event log 查無 SubagentStop —— 可能剛建立，'
-                    '也可能建好沒人用（兩者這張表分不出來，要看建立日期）')
-        gate = (f'<span class="chip warn">hook 收窄</span>'
-                f'<div class="st-note"><code>{_esc(a["gate"])}</code>'
-                f'（agent-scoped）把 Bash 收窄成唯讀</div>') if a["gate"] else \
-               ('<span class="chip pass">tools 白名單</span>'
-                '<div class="st-note">無 hook。沒給 Bash／Write，越權在工具層就不存在</div>')
+            note_short = '無 SubagentStop'
+            note_full = ('event log 查無 SubagentStop。'
+                         '可能剛建立，也可能建好沒人用 —— 這張表分不出這兩者，要看角色檔的建立日期。')
+        if a["gate"]:
+            gate_full = (f'{a["gate"]}（agent-scoped hook）把 Bash 收窄成唯讀。'
+                         '只放行 git 的唯讀 subcommand、node --check、cmp／fc／diff；'
+                         'push／commit／add／ssh／python 一律擋下並回一段 stderr。')
+            gate = ('<span class="chip warn">hook 收窄</span>'
+                    f'<div class="st-note">{cell(a["gate"], gate_full, 22)}</div>')
+        else:
+            gate = ('<span class="chip pass">tools 白名單</span>'
+                    '<div class="st-note">無 hook，工具層即邊界</div>')
         tools = " ".join(f'<span class="toolname">{_esc(t)}</span>' for t in a["tools"])
         lines.append('            <tr>')
         lines.append(f'              <td><span class="cmdname">{_esc(a["name"])}</span>'
                      f'<div class="st-note">model: {_esc(a["model"])}</div></td>')
-        lines.append(f'              <td>{_esc(does)}</td>')
-        lines.append(f'              <td>{tools}</td>')
+        lines.append(f'              <td>{cell(does, does, 20)}</td>')
+        lines.append(f'              <td class="tools-cell">{tools}</td>')
         lines.append(f'              <td>{gate}</td>')
-        lines.append(f'              <td class="when">{_esc(when)}</td>')
-        lines.append(f'              <td>{chip}<div class="st-note">{note}</div></td>')
+        lines.append(f'              <td class="when">{cell(when, when, 22)}</td>')
+        lines.append(f'              <td>{chip}<div class="st-note">'
+                     f'{cell(note_short, note_full, 18)}</div></td>')
         lines.append('            </tr>')
     lines.append('          </tbody>')
     lines.append('        </table>')
