@@ -296,11 +296,13 @@ def main() -> int:
         # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），
         # 後者驗「看板的進度圖有沒有忠實反映計畫書」。掛進這支統一入口的理由很實際 ——
         # 要記得單獨跑的測試，等於沒有測試。
+        import test_enc1_encoding
         import test_progress_chart
         import test_warn_channel
         for run_fn, label in (
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
+            (test_enc1_encoding.run, "ENC-1 編碼閘門"),
         ):
             ex_passed, ex_failed = run_fn()
             unit_passed += ex_passed

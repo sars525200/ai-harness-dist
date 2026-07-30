@@ -2,6 +2,7 @@
   "rule_ids": [
     "AWC-1",
     "DB-1",
+    "ENC-1",
     "PR-1",
     "R1",
     "R3",
@@ -13,13 +14,14 @@
     "R3"
   ],
   "would_block": {
-    "AWC-1": 2,
+    "AWC-1": 4,
     "DB-1": 4,
     "PR-1": 1,
+    "ENC-1": 0,
     "R1": 0,
     "R3": 0,
     "R4": 0
   },
-  "skill_count": 10,
-  "tool_raw_count": 25
+  "skill_count": 11,
+  "tool_raw_count": 26
 }

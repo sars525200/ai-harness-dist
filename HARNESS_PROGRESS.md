@@ -181,12 +181,15 @@ fixture／回歸網總計 **145 + 9**（`tests\run_hook_tests.py` 145、`tests\t
 
 **兩件下次動它之前要知道的事**：
 
-1. ~~**`Stop` key 早就掛著，新 Stop 規則一進 REGISTRY 就立刻生效**~~ → **只對一半，7/29 訂正**：
-   **既有 event key 的 matcher／command 是熱生效**（執行時才讀檔），**但新增一個 event key
-   必須重啟 session**（`initialHooksConfig` 只在 null 時初始化一次，變數名就是答案）。
-   PR-1 加 `SubagentStop` 時就踩到這條線——真實 subagent 跑完 0 筆事件，但同一份 payload
-   直接餵 `dispatch.py` 三筆全對。所以「進 REGISTRY 就好」只在該事件已經掛過的前提下成立。
-   （順帶：`permissions` 是熱生效的，7/30 實測——別把 hook 的規律套到它身上。）
+1. ~~**`Stop` key 早就掛著，新 Stop 規則一進 REGISTRY 就立刻生效**~~ → 7/29 改寫成「新增 event key
+   必須重啟」→ **7/30 再次訂正：那條也不成立**。當天在 `settings.local.json` 新增
+   `PostToolUse` key 掛 ENC-1，**同一個 session 內立刻生效**（`state\events.*.ndjson` 有
+   `event: "PostToolUse"` 的 dispatch 紀錄、ENC-1 五次 applies 為證，全部發生在掛上之後）。
+   PR-1 當初加 `SubagentStop` 觀察到 0 筆事件，原因另有其他，不是「要重啟」。
+   **這是同一天內第二次推翻「需要重啟」的說法**（另一次是角色檔）——
+   兩次都是**拿一次觀測下機制結論**。現在的判準：`not found`／0 筆事件只證明
+   「此刻沒看到」，要斷言機制得有第二個獨立證據。
+   （`permissions` 同樣是熱生效，7/30 實測。）
 2. **觸發範圍用 transcript，不是 git status**（刻意偏離計畫書 §3.1 修正 2）：`git status` 跨 session，A 的草稿會擋住 B 的對話。D6「用 git 當真相」是給 DB-1 的部署邊界用的；「這輪我改了什麼」要 per-session 精確 → transcript。
 
 **⬜ 下一步**：觀察期（D18 雙門檻）後決定是否解除 shadow。轉 enforce 前要先想清楚：現存幾十份 `*_PLAN.md` 全都沒有狀態標記，目前一律放行——這是 B1 的刻意設計（機制被動），但也意味著**不主動標記就等於整個機制不會發動**。

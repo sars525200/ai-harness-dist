@@ -5,6 +5,7 @@
     "AWC-1": { "shadow": true },
     "R1": { "shadow": false },
     "R3": { "shadow": false },
+    "ENC-1": { "shadow": true },
     "PR-1": { "shadow": true }
   }
 }

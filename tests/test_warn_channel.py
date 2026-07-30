@@ -130,6 +130,20 @@ def _c3():
     assert not err.strip(), f"shadow 竟然寫了 stderr：{err!r}"
 
 
+@case("PostToolUse + WARN → 同樣走 additionalContext，且 hookEventName 是實際事件名")
+def _c4b():
+    rc, out, _ = _run("PostToolUse", [warn("ENC-1 訊息")], shadow=False)
+    assert rc == 0, f"WARN 不該擋，rc={rc}"
+    doc = json.loads(out)
+    hso = doc.get("hookSpecificOutput")
+    assert isinstance(hso, dict), f"缺 hookSpecificOutput：{doc}"
+    assert hso.get("hookEventName") == "PostToolUse", (
+        f"hookEventName 寫死成別的事件：{hso.get('hookEventName')} —— "
+        "它是 union 的 discriminator，填錯整包會被 zod 剝掉"
+    )
+    assert "ENC-1 訊息" in hso.get("additionalContext", "")
+
+
 @case("Stop + WARN + enforce → 走 stderr，不假裝 PreToolUse 的結論可以外推")
 def _c4():
     rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False)

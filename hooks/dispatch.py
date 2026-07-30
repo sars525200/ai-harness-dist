@@ -81,6 +81,15 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # ENC-1 是目前唯一掛 PostToolUse 的規則。理由：它驗的是「寫進去之後
+        # 磁碟上實際長什麼樣」（NUL／BOM／行尾），那些東西 PreToolUse 拿到的
+        # 字串裡根本不存在。這也是整套 harness 第一次用「結果」而非「意圖」當判準。
+        "id": "ENC-1",
+        "module": "enc1_file_encoding",
+        "events": {"PostToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         "id": "R1",
         "module": "r1_default_migration",
         "events": {"PreToolUse"},
@@ -305,7 +314,7 @@ def _dispatch(payload: dict) -> int:
 
     if warn_messages:
         joined = "\n".join(warn_messages)
-        if event == "PreToolUse":
+        if event in ("PreToolUse", "PostToolUse"):
             # 2026-07-30 實測（隔離 cwd ＋ 自帶 settings.json 的暗號探針，三條路徑同時測）：
             #   stderr + exit 0        → **完全蒸發**。hook 確實執行（落檔 marker 為證），
             #                            但模型被要求逐項列出收到的訊息時沒有它。
@@ -322,9 +331,13 @@ def _dispatch(payload: dict) -> int:
             # 所以 WARN 訊息必須是純陳述的事實與後果，不要有「要求模型做某個動作」的形狀。
             # 與 DB-1 的 BLOCK 措辭規則殊途同歸，但理由不同：BLOCK 怕綁架對話，
             # WARN 怕被判成注入而整條失效。
+            # hookEventName 必須是**實際的事件名**，不能寫死 PreToolUse ——
+            # 它是 union 的 discriminator，填錯等於整包被 zod 剝掉（靜默失效）。
+            # PostToolUse 這條通道 2026-07-30 已獨立實測（tests/post_probe/）：
+            # 模型完整收到、正確歸因、判定可信；stderr 與平鋪欄位同樣蒸發。
             sys.stdout.write(json.dumps({
                 "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
+                    "hookEventName": event,
                     "additionalContext": joined,
                 }
             }, ensure_ascii=False))
