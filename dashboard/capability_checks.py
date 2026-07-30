@@ -93,15 +93,28 @@ def _p_on_demand():
 
 
 def _p_anti_bloat():
-    # 判準綁「有防膨脹規則 ＋ 指名了量測工具」，不綁單一指令字面值。
-    # 2026-07-30 教訓：原本寫死 "wc -c"，CLAUDE.md 改用 check_bloat.py 之後
-    # probe 當場判 False —— 能力沒消失，是判準跟著字面值一起漂了。
-    # 這正是 §8「改名/改制必先 audit 字面值」那條規則講的情形，發生在規則自己身上。
-    md = _read(CLAUDE_MD)
-    tools = [t for t in ("check_bloat", "wc -c") if t in md]
-    has = "防膨脹" in md and bool(tools)
-    return has, (f"§4 有防膨脹量測條（量測工具：{'／'.join(tools)}）" if has
-                 else "找不到防膨脹量測判準")
+    """判準綁「機制存在 ＋ 任一常駐層或 skill 指向它」，不綁單一檔案的字面值。
+
+    2026-07-30 同一天咬了兩次，都是判準跟著字面值漂：
+      ①原本寫死 `wc -c`，CLAUDE.md 改用 `check_bloat.py` → 判 False
+      ②改綁 CLAUDE.md 的「防膨脹」，收工規則搬進 /shougong 後 §4 沒這三個字 → 又判 False
+    兩次能力都沒消失，是 probe 綁錯層。**規則會搬家，機制不會** —— 所以看檔案與 snapshot
+    在不在，再確認有東西指向它。這正是 §8「改名/改制必先 audit 字面值」講的情形，
+    發生在規則自己的檢查器身上。
+    """
+    script = HARNESS / "rulefile" / "check_bloat.py"
+    snapshot = HARNESS / "rulefile" / "bloat_snapshot.json"
+    pointers = []
+    if "防膨脹" in _read(CLAUDE_MD):
+        pointers.append("CLAUDE.md")
+    if "check_bloat" in _read(SKILLS_DIR / "shougong" / "SKILL.md"):
+        pointers.append("/shougong")
+    ok = script.exists() and snapshot.exists() and bool(pointers)
+    if not script.exists():
+        return False, "找不到 check_bloat.py —— 防膨脹沒有可執行的量測"
+    if not pointers:
+        return False, "check_bloat.py 存在但沒有任何常駐層或 skill 指向它 —— 不會有人跑"
+    return ok, f"check_bloat.py ＋ snapshot 基準，由 {'／'.join(pointers)} 指向"
 
 
 def _p_rule_index():
