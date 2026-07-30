@@ -37,6 +37,9 @@ HARNESS_ROOT = DASHBOARD_DIR.parent
 PLAN_PATH = HARNESS_ROOT / "HARNESS_ROLE_ARCH_PLAN.md"
 HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 
+sys.path.insert(0, str(DASHBOARD_DIR))
+import capability_checks  # noqa: E402  八大類檢查項與進度圖共用同一支產生器
+
 MARK_START = "<!-- PROGRESS_CHART_START"
 MARK_END = "<!-- PROGRESS_CHART_END -->"
 
@@ -172,9 +175,10 @@ def build_html(phases: list) -> str:
     lines.append('          </div>')
     lines.append('        </div>')
 
-    # ── lanes ──
+    # ── lanes（每列可展開看該 Phase 的規劃明細）──
     lines.append('        <div class="hprog-lanes">')
-    for p in phases:
+    for idx, p in enumerate(phases):
+        did = f"hprog-d{idx}"
         lines.append('          <div class="hprog-lane">')
         lines.append(f'            <div class="hprog-lane-name">{_esc(p["phase"])}'
                      f'<span>{_esc(p["title"])}</span></div>')
@@ -193,6 +197,29 @@ def build_html(phases: list) -> str:
         per = {c: sum(1 for it in p["items"] if it["status"] == c) for c in STATUS_ORDER}
         stat = " · ".join(f'{n} {STATUS_LABEL[c]}' for c, n in per.items() if n)
         lines.append(f'            <div class="hprog-lane-stat">{stat}</div>')
+        lines.append(f'            <button type="button" class="hprog-toggle" '
+                     f'aria-expanded="false" aria-controls="{did}">'
+                     f'<span class="hprog-chev" aria-hidden="true">▾</span>'
+                     f'<span class="hprog-toggle-txt">明細</span></button>')
+        lines.append('          </div>')
+        # 展開區：內容全部來自 §3 那張表本身 —— 那就是規劃本體，
+        # 不去解析 §4（§4 小節與 Phase 的對應不規則：4.1 是 Phase 0、4.2 是 Phase 2、
+        # Phase 1 沒有專節，硬對映會出現「展開看到別的 Phase 的做法」）。
+        lines.append(f'          <div class="hprog-detail" id="{did}" hidden>')
+        lines.append(f'            <div class="hprog-detail-inner">')
+        lines.append(f'              <div class="hprog-detail-goal">{_esc(p["title"])}</div>')
+        lines.append('              <ul class="hprog-items">')
+        for it in p["items"]:
+            detail = f'<span class="hprog-item-note">{_esc(it["detail"])}</span>' \
+                if it["detail"] else ""
+            lines.append(
+                f'                <li class="{it["status"]}">'
+                f'<span class="hprog-item-mark" aria-hidden="true">{STATUS_GLYPH[it["status"]]}</span>'
+                f'<span class="hprog-item-id">{_esc(it["id"])}</span>'
+                f'<span class="hprog-item-desc">{_esc(it["desc"])}{detail}</span></li>'
+            )
+        lines.append('              </ul>')
+        lines.append('            </div>')
         lines.append('          </div>')
     lines.append('        </div>')
 
@@ -207,6 +234,75 @@ def build_html(phases: list) -> str:
     lines.append('      <div class="copy-note"><span>※</span><span>滑過（或用鍵盤聚焦）任一狀態點'
                  '可看該項的編號與內容。規則層級的 enforce／shadow 狀態不在這裡，'
                  '見「Hook 現況」分頁。</span></div>')
+    lines.append('    </section>')
+    return "\n".join(lines)
+
+
+def build_capability_html() -> str:
+    """八大類能力進度。每一項都是 probe 讀實際狀態判定的，不是評分。
+
+    2026-07-30 外部標的校準後從六類擴充成八類：faros 五層／ETCLOVG 七層／
+    awesome-harness-engineering 三份標的都把 Verification 與 Human-in-the-Loop
+    列為一級維度，而原本的六大類沒有——資產一直在，只是看不見。
+    """
+    cats = capability_checks.evaluate()
+    have = sum(c["have"] for c in cats)
+    total = sum(c["total"] for c in cats)
+
+    lines = []
+    lines.append('    <section>')
+    lines.append('      <div class="section-head">')
+    lines.append('        <h2>八大類能力</h2>')
+    lines.append(f'        <span class="sub">{have} / {total} 項已具備 · 由 '
+                 f'<code>capability_checks.py</code> 逐項探測實際狀態</span>')
+    lines.append('      </div>')
+    lines.append('      <p class="lead">這裡<b>不打分數</b>——「Sandbox 要做到什麼程度才算 100%」'
+                 '沒有答案，硬畫進度條會讀成假的。改成逐項可查證的具體能力：有就是有，'
+                 '比例是數出來的。<b>⑦⑧ 是 7/30 對照外部標的後新增的兩類</b>'
+                 '（三份標的都列為一級維度，而我們原本沒有——驗證能力一直被埋在 ⑥ 裡）。</p>')
+
+    lines.append('      <div class="hprog hcap">')
+    lines.append('        <div class="hprog-lanes">')
+    for idx, c in enumerate(cats):
+        did = f"hcap-d{idx}"
+        pct = (c["have"] / c["total"] * 100) if c["total"] else 0
+        lines.append('          <div class="hprog-lane hcap-lane">')
+        lines.append(f'            <div class="hprog-lane-name">{_esc(c["name"])}'
+                     f'<span>{_esc(c["note"])}</span></div>')
+        aria = f'{c["name"]}：{c["have"]} / {c["total"]} 項已具備'
+        lines.append(f'            <div class="hcap-bar" role="img" aria-label="{_esc(aria)}">'
+                     f'<span class="hcap-fill" style="width:{pct:.1f}%"></span></div>')
+        lines.append(f'            <div class="hprog-lane-stat">{c["have"]} / {c["total"]}</div>')
+        lines.append(f'            <button type="button" class="hprog-toggle" '
+                     f'aria-expanded="false" aria-controls="{did}">'
+                     f'<span class="hprog-chev" aria-hidden="true">▾</span>'
+                     f'<span class="hprog-toggle-txt">明細</span></button>')
+        lines.append('          </div>')
+        lines.append(f'          <div class="hprog-detail" id="{did}" hidden>')
+        lines.append('            <div class="hprog-detail-inner">')
+        lines.append('              <ul class="hcap-items">')
+        for it in c["items"]:
+            state = "done" if it["ok"] else "dropped"
+            glyph = "✔" if it["ok"] else "✘"
+            lines.append(
+                f'                <li class="{state}">'
+                f'<span class="hprog-item-mark" aria-hidden="true">{glyph}</span>'
+                f'<span class="hcap-item-body"><b>{_esc(it["label"])}</b>'
+                f'<span class="hprog-item-note">{_esc(it["evidence"])}</span></span></li>'
+            )
+        lines.append('              </ul>')
+        lines.append('            </div>')
+        lines.append('          </div>')
+    lines.append('        </div>')
+    lines.append('        <div class="hprog-legend">')
+    lines.append('          <span><i class="done">✔</i>已具備</span>')
+    lines.append('          <span><i class="dropped">✘</i>尚缺（明細裡有原因）</span>')
+    lines.append('        </div>')
+    lines.append('      </div>')
+    lines.append('      <div class="copy-note"><span>※</span><span>檢查項是從現有實作反推的，'
+                 '有「自己定義標準自己達標」的循環論證風險——所以 <code>/audit</code> 的必查項之一'
+                 '就是「比對外部標的，有沒有一級維度是清單裡完全沒有的」。'
+                 '成本上限閘門就是這樣被抓出來的。</span></div>')
     lines.append('    </section>')
     return "\n".join(lines)
 
@@ -242,11 +338,15 @@ def main() -> None:
         html = f.read()
     if "\r\n" in html:
         raise SystemExit("看板 HTML 出現 CRLF —— 本檔應為純 LF，先查是誰翻的。")
-    out = inject(html, build_html(phases))
+    block = build_html(phases) + "\n\n" + build_capability_html()
+    out = inject(html, block)
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     total = sum(len(p["items"]) for p in phases)
-    print(f"已注入進度圖：{len(phases)} 個 Phase、{total} 項 → {HTML_PATH.name}")
+    caps = capability_checks.evaluate()
+    print(f"已注入：計畫進度 {len(phases)} 個 Phase／{total} 項　＋　"
+          f"八大類能力 {sum(c['have'] for c in caps)}/{sum(c['total'] for c in caps)} 項"
+          f" → {HTML_PATH.name}")
 
 
 if __name__ == "__main__":

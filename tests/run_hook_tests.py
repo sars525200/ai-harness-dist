@@ -310,6 +310,27 @@ def main() -> int:
             print(f"  {'PASS' if not ex_failed else 'FAIL'}  {label}"
                   f"（{ex_passed}/{ex_passed + len(ex_failed)}）")
 
+        # 看板結構驗證走真實子進程：它本來就是獨立可執行腳本（變異測試也是這樣呼叫它），
+        # 不為了整合而改造一個已經在用的介面 —— 那種「為測試而改被測對象」的改動
+        # 本身就是風險。這裡只收 pass/fail 一個結果。
+        import subprocess  # noqa: PLC0415
+        dash_test = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "test_dashboard_structure.py")
+        if os.path.exists(dash_test):
+            r = subprocess.run([sys.executable, dash_test], capture_output=True,
+                               text=True, encoding="utf-8")
+            if r.returncode == 0:
+                unit_passed += 1
+                print("  PASS  看板結構（頁籤↔面板配對／標籤平衡）")
+            else:
+                detail = "; ".join(
+                    ln.strip()[2:] for ln in (r.stdout or "").splitlines()
+                    if ln.strip().startswith("- ")
+                ) or f"exit {r.returncode}"
+                failed.append(("看板結構", detail))
+                unit_failed.append("看板結構")
+                print("  FAIL  看板結構（頁籤↔面板配對／標籤平衡）")
+
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
     print(f"{'=' * 60}")
