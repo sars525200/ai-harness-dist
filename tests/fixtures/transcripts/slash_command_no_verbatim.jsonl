@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"<command-name>/shougong</command-name>\n<command-message>shougong</command-message>\n收工封存：逐步做完 CLAUDE.md §4 的每一步，每步驗完成判準再進下一步。"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"foo.py"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents here"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"版號要升 minor 還是 patch？"}]}}

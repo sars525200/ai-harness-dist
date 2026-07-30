@@ -23,6 +23,48 @@ WARN = "WARN"
 _TRANSCRIPT_TAIL_BYTES = 2_000_000
 
 
+def _tail_lines(transcript_path: str) -> "list[str] | None":
+    """只讀 transcript 檔尾 `_TRANSCRIPT_TAIL_BYTES`，回行陣列；讀不到回 None。"""
+    try:
+        with open(transcript_path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            start = max(0, size - _TRANSCRIPT_TAIL_BYTES)
+            fh.seek(start)
+            data = fh.read()
+    except Exception:
+        return None
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if start > 0 and lines:
+        lines = lines[1:]  # 檔尾切片的第一行大機率被截半，丟掉
+    return lines
+
+
+def _find_turn_start(lines: "list[str]") -> "int | None":
+    """從檔尾往回找「這一輪」那則真人訊息的索引；找不到回 None。
+
+    輪次邊界（2026-07-28 對真實 transcript 實測確認）：type="user" 的項目有兩種——
+    真人打字的訊息（content 是純字串，或 content list 第一個 block type="text"），
+    與工具結果偽裝成的 user 項目（第一個 block type="tool_result"）。
+    """
+    for i in range(len(lines) - 1, -1, -1):
+        try:
+            obj = json.loads(lines[i])
+        except Exception:
+            continue
+        if obj.get("type") != "user" or obj.get("isMeta"):
+            continue
+        content = obj.get("message", {}).get("content")
+        if isinstance(content, str):
+            return i
+        if isinstance(content, list) and content:
+            first = content[0]
+            if isinstance(first, dict) and first.get("type") == "text":
+                return i
+        # 第一個 block 是 tool_result → 是工具結果，繼續往回找
+    return None
+
+
 def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
     """回傳「這一輪」所有 assistant 的 tool_use block（依序）。
 
@@ -41,40 +83,10 @@ def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
     """
     if not transcript_path:
         return None
-
-    try:
-        with open(transcript_path, "rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
-            start = max(0, size - _TRANSCRIPT_TAIL_BYTES)
-            fh.seek(start)
-            data = fh.read()
-    except Exception:
+    lines = _tail_lines(transcript_path)
+    if lines is None:
         return None
-
-    lines = data.decode("utf-8", errors="replace").splitlines()
-    if start > 0 and lines:
-        lines = lines[1:]  # 檔尾切片的第一行大機率被截半，丟掉
-
-    turn_start = None
-    for i in range(len(lines) - 1, -1, -1):
-        try:
-            obj = json.loads(lines[i])
-        except Exception:
-            continue
-        if obj.get("type") != "user" or obj.get("isMeta"):
-            continue
-        content = obj.get("message", {}).get("content")
-        if isinstance(content, str):
-            turn_start = i
-            break
-        if isinstance(content, list) and content:
-            first = content[0]
-            if isinstance(first, dict) and first.get("type") == "text":
-                turn_start = i
-                break
-        # 第一個 block 是 tool_result → 是工具結果，繼續往回找
-
+    turn_start = _find_turn_start(lines)
     if turn_start is None:
         return None  # 找不到輪次起點 → 判斷不出來，不猜
 
@@ -90,6 +102,39 @@ def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
             if isinstance(block, dict) and block.get("type") == "tool_use":
                 out.append(block)
     return out
+
+
+def turn_user_text(transcript_path: str) -> "str | None":
+    """回傳「這一輪」那則真人訊息的純文字；判斷不出來回 None（同樣要 fail-open）。
+
+    2026-07-30 新增，動機是 AWC-1 抓到第一個假陽性：`/insights` 這類 slash command
+    會**要求逐字輸出一段固定文案**，而那段文案結尾剛好是問句 —— 於是 AWC-1 判成
+    「該用選擇題卻沒用」。那句話根本不是模型自己寫的，用它來扣分沒有意義。
+    要分辨這種情形，就得看得到本輪 user 訊息長什麼樣。
+
+    刻意與 `iter_turn_tool_uses` 共用同一套輪次邊界判定（往回找第一個真人訊息），
+    不另寫一份掃描 —— 兩份 copy 遲早會對「哪裡算一輪」有不同答案。
+    """
+    if not transcript_path:
+        return None
+    lines = _tail_lines(transcript_path)
+    if lines is None:
+        return None
+    idx = _find_turn_start(lines)
+    if idx is None:
+        return None
+    try:
+        obj = json.loads(lines[idx])
+    except Exception:
+        return None
+    content = obj.get("message", {}).get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [b.get("text", "") for b in content
+                 if isinstance(b, dict) and b.get("type") == "text"]
+        return "\n".join(p for p in parts if p)
+    return None
 
 
 # git 的「全域選項」——放在 subcommand 之前，其中這幾個會吃掉下一個 token 當值。

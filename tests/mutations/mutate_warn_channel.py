@@ -32,15 +32,20 @@ def write(text):
 original = read()
 digest = hashlib.sha256(original.encode("utf-8")).hexdigest()
 
+# ⚠ 錨點會隨被測程式漂掉，而漂掉時這支只印一行「錨點不存在」就繼續跑完。
+#   2026-07-30 實際發生：ENC-1 把 WARN 路由從 `event == "PreToolUse"` 擴成
+#   `event in ("PreToolUse", "PostToolUse")`，**5 個變異裡有 3 個當場失效**，
+#   等於這支從那天起只在測 2 個性質——而輸出看起來仍然像跑完了。
+#   → 改到 dispatch.py 的 WARN 區塊後，這支要重跑並確認「沒有任何一行印錨點不存在」。
 MUTATIONS = [
     (
         "additionalContext 改成平鋪（3a 那個 zod 剝除坑）",
-        '"hookSpecificOutput": {\n                    "hookEventName": "PreToolUse",\n                    "additionalContext": joined,\n                }',
+        '"hookSpecificOutput": {\n                    "hookEventName": event,\n                    "additionalContext": joined,\n                }',
         '"additionalContext": joined',
     ),
     (
         "WARN 全部退回 stderr（＝改動被整個 revert）",
-        'if event == "PreToolUse":',
+        'if event in ("PreToolUse", "PostToolUse"):',
         'if False:',
     ),
     (
@@ -55,8 +60,8 @@ MUTATIONS = [
     ),
     (
         "Stop 也走 PreToolUse 形狀的 JSON（跨事件外推）",
-        'if event == "PreToolUse":',
-        'if event in ("PreToolUse", "Stop"):',
+        'if event in ("PreToolUse", "PostToolUse"):',
+        'if event in ("PreToolUse", "PostToolUse", "Stop"):',
     ),
 ]
 

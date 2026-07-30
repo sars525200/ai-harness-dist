@@ -182,8 +182,15 @@ def _log_event(session_id: str, agent_id: str = "", agent_type: str = "", **fiel
         pass  # 連記錄都失敗就放棄記錄，但不可讓這個失敗外溢影響 hook 本體
 
 
-def _log_error(session_id: str, exc: BaseException, agent_id: str = "") -> None:
-    """D7：fail-open 但不 fail-silent。例外一律放行，但留痕。"""
+def _log_error(session_id: str, exc: BaseException, agent_id: str = "",
+               raw: str = "") -> None:
+    """D7：fail-open 但不 fail-silent。例外一律放行，但留痕。
+
+    2026-07-30 補 `raw`：原本只寫例外與 traceback，於是 `hook_errors.unknown.log`
+    累積了 35 筆 JSONDecodeError 卻**查不出是誰餵進來的**——每筆 traceback 長得
+    一模一樣，看板還照著舊結論寫「全是 7/29 測 UTF-8 時手餵造成」，實際上它每天
+    都在發生。留痕要留到足以歸因；只記「有錯」等於知道出事卻查不下去。
+    """
     import traceback  # 延遲 import：見頂層註解，正常路徑不該付這 20 ms
 
     try:
@@ -191,6 +198,9 @@ def _log_error(session_id: str, exc: BaseException, agent_id: str = "") -> None:
         path = os.path.join(STATE_DIR, f"hook_errors.{_log_stem(session_id, agent_id)}.log")
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"[{_now()}] {type(exc).__name__}: {exc}\n")
+            # repr 才看得見控制字元與 U+FFFD（stdin 是 errors="replace" 解的）。
+            # 截斷 200 字：夠認出形狀，又不把整段指令內容抄進 log。
+            fh.write(f"  raw[{len(raw)}] head={raw[:200]!r}\n" if raw else "  raw=<空>\n")
             fh.write(traceback.format_exc())
             fh.write("\n")
     except Exception:
@@ -373,6 +383,7 @@ def main() -> int:
     _force_utf8_output()
     session_id = "unknown"
     agent_id = ""
+    raw = ""
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
         payload = json.loads(raw)
@@ -380,7 +391,7 @@ def main() -> int:
         agent_id = payload.get("agent_id") or ""
         return _dispatch(payload)
     except Exception as exc:
-        _log_error(session_id, exc, agent_id)
+        _log_error(session_id, exc, agent_id, raw)
         return 0  # fail-open：dispatch 本身的錯誤絕不能卡住使用者
 
 

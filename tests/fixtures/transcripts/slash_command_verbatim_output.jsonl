@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"<command-name>/insights</command-name>\n<command-message>insights</command-message>\nThe user just ran /insights to generate a usage report analyzing their Claude Code sessions.\n\nOutput the following message verbatim as your entire response:\n\nI analyzed your recent sessions. Want to dig into any section or try one of the suggestions?"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"foo.py"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"file contents here"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I analyzed your recent sessions. Want to dig into any section or try one of the suggestions?"}]}}

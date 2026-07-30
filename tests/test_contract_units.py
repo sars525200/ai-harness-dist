@@ -219,6 +219,109 @@ def _run_content_hash_cases() -> tuple[int, list[str]]:
     return passed, failures
 
 
+def _run_turn_user_text_cases() -> "tuple[int, list[str]]":
+    """`contract.turn_user_text` —— AWC-1 的「逐字輸出豁免」靠它判斷。
+
+    為什麼要獨立測（2026-07-30）：它與 `iter_turn_tool_uses` 共用同一段輪次邊界
+    掃描（`_find_turn_start`），而那段邏輯的重點是**分辨真人訊息與偽裝成 user 的
+    工具結果**。規則層 fixture 只看得到最終 ALLOW/WARN，看不出「它定位到的是哪一則」
+    ——定位錯到更早那輪，豁免會在錯的輪次生效，而判定結果表面上完全正常。
+    """
+    import json
+    import tempfile
+
+    from contract import iter_turn_tool_uses, turn_user_text
+
+    def _write(lines):
+        fd, path = tempfile.mkstemp(suffix=".jsonl")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            for obj in lines:
+                fh.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        return path
+
+    def _user(content):
+        return {"type": "user", "message": {"role": "user", "content": content}}
+
+    def _asst(blocks):
+        return {"type": "assistant", "message": {"role": "assistant", "content": blocks}}
+
+    _tool_result = [{"type": "tool_result", "tool_use_id": "t1", "content": "..."}]
+
+    cases = [
+        (
+            "content 是純字串 → 原樣回傳",
+            [_user("幫我看這個"), _asst([{"type": "text", "text": "好"}])],
+            "幫我看這個",
+        ),
+        (
+            "content 是 list（text block）→ 取出 text",
+            [_user([{"type": "text", "text": "請逐字輸出下面這段"}]),
+             _asst([{"type": "text", "text": "好"}])],
+            "請逐字輸出下面這段",
+        ),
+        (
+            "工具結果偽裝成 user 項目 → 跳過它，回真正那則真人訊息",
+            [_user("第一個問題"),
+             _asst([{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]),
+             _user(_tool_result),
+             _asst([{"type": "text", "text": "看完了"}])],
+            "第一個問題",
+        ),
+        (
+            "多輪 → 只回最後一輪那則，不回更早的",
+            [_user("舊的問題"),
+             _asst([{"type": "text", "text": "答完了"}]),
+             _user("這一輪的問題"),
+             _asst([{"type": "text", "text": "在處理"}])],
+            "這一輪的問題",
+        ),
+        (
+            "整份都是工具結果、找不到真人訊息 → None（判斷不出來，不猜）",
+            [_user(_tool_result), _asst([{"type": "text", "text": "嗯"}])],
+            None,
+        ),
+    ]
+
+    passed, failures, made = 0, [], []
+    try:
+        for name, lines, want in cases:
+            path = _write(lines)
+            made.append(path)
+            got = turn_user_text(path)
+            if got == want:
+                passed += 1
+            else:
+                failures.append(f"turn_user_text：{name} → 得到 {got!r}，期望 {want!r}")
+
+            # 與 iter_turn_tool_uses 同源：兩者對「哪裡算一輪」必須給同一個答案。
+            # AWC-1 的兩層判定疊在同一輪上，錯開就會變成「拿 A 輪的工具紀錄配 B 輪的指令」。
+            blocks = iter_turn_tool_uses(path)
+            if (blocks is None) != (got is None):
+                failures.append(
+                    f"輪次邊界不同源：{name} → iter_turn_tool_uses="
+                    f"{'None' if blocks is None else '有值'}、"
+                    f"turn_user_text={'None' if got is None else '有值'}"
+                )
+            else:
+                passed += 1
+
+        # 讀不到檔案一律回 None，讓呼叫端自己決定怎麼 fail-open
+        missing = os.path.join(tempfile.gettempdir(), "no_such_transcript_awc1.jsonl")
+        for name, path in (("空字串路徑", ""), ("檔案不存在", missing)):
+            if turn_user_text(path) is None:
+                passed += 1
+            else:
+                failures.append(f"turn_user_text：{name} 應回 None")
+    finally:
+        for p in made:
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+
+    return passed, failures
+
+
 def run() -> tuple[int, list[str]]:
     """回傳 (通過數, 失敗描述清單)。供 run_hook_tests.py 併入總計。"""
     passed, failures = 0, []
@@ -233,18 +336,23 @@ def run() -> tuple[int, list[str]]:
 
     dev_passed, dev_failures = _run_dev_matches_cases()
     hash_passed, hash_failures = _run_content_hash_cases()
+    turn_passed, turn_failures = _run_turn_user_text_cases()
     return (
-        passed + dev_passed + hash_passed,
-        failures + dev_failures + hash_failures,
+        passed + dev_passed + hash_passed + turn_passed,
+        failures + dev_failures + hash_failures + turn_failures,
     )
 
 
 def main() -> int:
     passed, failures = run()
-    total = len(PUSH_CASES)
+    # 分母＝所有子測試的斷言數，不只 PUSH_CASES。
+    # （2026-07-30 修：原本寫死 len(PUSH_CASES)，加了子測試後印出「48 / 22」這種
+    #   分子大於分母的數字——只有人眼看得出不對，腳本判 exit 是看 failures，
+    #   所以它一路綠著印錯數字。分母要從實際跑的 case 數推。）
+    total = passed + len(failures)
 
     # 零目標拒跑：沒有 case 不等於全部通過（同 run_hook_tests.py 的紀律）
-    if total == 0:
+    if total == 0 or not PUSH_CASES:
         print("FAIL: 沒有任何 case，零目標一律視為失敗")
         return 1
 

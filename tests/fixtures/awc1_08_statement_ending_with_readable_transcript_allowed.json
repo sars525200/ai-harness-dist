@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 結尾是陳述句、transcript 可讀且沒呼叫過 AskUserQuestion → ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "awc1_03 用不存在的 transcript 來證明『applies 不成立就不讀檔』，但那也讓兩層 fail-open 一起把結果撐成 ALLOW——把 applies() 改成恆真，awc1_03 照樣綠（2026-07-30 變異測試實測）。這一筆給可讀、乾淨（無 AskUserQuestion、無逐字輸出指令）的 transcript，所以 ALLOW 只能來自 applies() 真的篩掉了陳述句，不能來自 fail-open。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-08",
+    "last_assistant_message": "已經改好了，兩個 repo 都 commit 完成。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

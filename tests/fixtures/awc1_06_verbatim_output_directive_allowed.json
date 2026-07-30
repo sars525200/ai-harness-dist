@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 本輪 user 訊息要求逐字輸出（/insights）→ ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "2026-07-30 抓到的第一個真實假陽性：/insights 指令要求把一段固定文案照抄輸出，那段文案結尾剛好是問句（『Want to dig into any section…?』）。那句話不是模型自己寫的，用它判『該用選擇題卻沒用』沒有意義。豁免要綁『指令要求逐字輸出』這個事實，不是綁『這是 slash command』。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-06",
+    "last_assistant_message": "I analyzed your recent sessions. Want to dig into any section or try one of the suggestions?",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_verbatim_output.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -20,11 +20,23 @@ from __future__ import annotations
 
 import re
 
-from contract import allow, iter_turn_tool_uses, warn
+from contract import allow, iter_turn_tool_uses, turn_user_text, warn
 
 RULE_ID = "AWC-1"
 
 _ENDS_WITH_QUESTION = re.compile(r"[?？]\s*$")
+
+# slash command 常會要求「把這段照抄出去」。那段文案的結尾如果是問句，
+# 用它來判「該用選擇題卻沒用」是**假陽性**——那句話不是模型寫的。
+# 2026-07-30 實測抓到第一筆：`/insights` 的收尾文案是
+# 「Want to dig into any section or try one of the suggestions?」
+_VERBATIM_DIRECTIVE = re.compile(
+    r"verbatim"
+    r"|逐字(輸出|複製|照抄|照貼)"
+    r"|output the text between"
+    r"|as your entire response",
+    re.IGNORECASE,
+)
 
 
 def applies(ctx) -> bool:
@@ -37,6 +49,9 @@ def check(ctx):
 
     if _asked_via_tool_this_turn(ctx.transcript_path):
         return allow()  # 用了 AskUserQuestion，問號只是選項說明文字的一部分
+
+    if _verbatim_output_demanded(ctx.transcript_path):
+        return allow()  # 結尾那句是被指令要求照抄的，不是模型自己的提問
 
     tail = ctx.last_assistant_message.strip()
     tail = tail[-80:] if len(tail) > 80 else tail
@@ -53,3 +68,15 @@ def _asked_via_tool_this_turn(transcript_path: str) -> bool:
     if blocks is None:
         return True
     return any(b.get("name") == "AskUserQuestion" for b in blocks)
+
+
+def _verbatim_output_demanded(transcript_path: str) -> bool:
+    """本輪的 user 訊息有沒有要求「把某段文字照抄輸出」。
+
+    讀不到回 True（fail-open，與 `_asked_via_tool_this_turn` 同向：
+    這條是 WARN，寧可漏報也不要誤報）。
+    """
+    text = turn_user_text(transcript_path)
+    if text is None:
+        return True
+    return bool(_VERBATIM_DIRECTIVE.search(text))

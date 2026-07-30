@@ -296,13 +296,20 @@ def main() -> int:
         # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），
         # 後者驗「看板的進度圖有沒有忠實反映計畫書」。掛進這支統一入口的理由很實際 ——
         # 要記得單獨跑的測試，等於沒有測試。
+        #
+        # test_mutation_anchors 是這串裡唯一「測測試」的一層：變異腳本的錨點是
+        # 字面比對，被測程式一改就會靜默失效（7/30 實際發生，3/5 個變異死掉沒人知道）。
+        # 變異腳本本身會改動 live hook、不適合自動跑，但「錨點還在不在」是唯讀的，
+        # 拉進來每次跑，漂掉的當下就紅。
         import test_enc1_encoding
+        import test_mutation_anchors
         import test_progress_chart
         import test_warn_channel
         for run_fn, label in (
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
+            (test_mutation_anchors.run, "變異腳本錨點"),
         ):
             ex_passed, ex_failed = run_fn()
             unit_passed += ex_passed

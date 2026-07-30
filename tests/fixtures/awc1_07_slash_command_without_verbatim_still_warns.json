@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 slash command 但沒要求逐字輸出、結尾仍是自己的問句 → WARN",
+  "rule": "awc1_choices_check",
+  "why": "配對 awc1_06 的反例，證明豁免綁的是『指令要求逐字輸出』而不是『這是 slash command』。/shougong 也是 slash command，但『版號要升 minor 還是 patch？』是模型自己在問 user、該走選擇題——這種情境不能被豁免吃掉。沒有這一筆，awc1_06 過關也可能只是因為整類 slash command 被放行。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-07",
+    "last_assistant_message": "版號要升 minor 還是 patch？",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_no_verbatim.jsonl"
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "AskUserQuestion"
+  }
+}

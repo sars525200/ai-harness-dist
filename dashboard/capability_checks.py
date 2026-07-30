@@ -240,7 +240,11 @@ def _p_warn_channel():
 def _p_regression_net():
     n = _count("test_*.py", TESTS) + _count("run_*.py", TESTS)
     fixtures = _count("*.json", TESTS / "fixtures")
-    return n >= 3, f"{n} 支測試＋{fixtures} 個 fixture，且每支都做過變異測試"
+    # 「每支都做過變異測試」原本寫死在這行。測試支數是數出來的、這句斷言不是——
+    # 於是它隨著測試變多而悄悄變成假的（2026-07-30：9 支測試對 5 支變異腳本）。
+    # 生成的數字旁邊掛人工斷言，就是把數字的可信度借給了沒人查的那句話。
+    muts = _count("mutate_*.py", TESTS / "mutations")
+    return n >= 3, f"{n} 支測試＋{fixtures} 個 fixture；{muts} 條路徑有專屬變異腳本"
 
 
 def _p_non_toolcall_writers():

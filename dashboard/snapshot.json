@@ -10,6 +10,7 @@
   ],
   "enforced_rule_ids": [
     "DB-1",
+    "ENC-1",
     "R1",
     "R3"
   ],

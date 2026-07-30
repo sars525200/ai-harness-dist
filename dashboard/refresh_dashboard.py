@@ -60,6 +60,13 @@ SOURCE_GLOBS = [
     (IT_DEPT / ".claude" / "agents", "*.md"),    # 角色清冊
     (IT_DEPT / ".claude" / "skills", "*/SKILL.md"),
     (IT_DEPT / ".claude" / "rules", "*.md"),
+    # D6 那三個數字（fixture 幾個／單元測試幾支／變異腳本幾支）是**數這幾個目錄**
+    # 數出來的，所以目錄本身就是上游。2026-07-30 補：當天新增測試檔後重生器回報
+    # 「來源無變動」—— 它盯的是被列出檔案的內容雜湊，而新檔不在任何一條路徑裡。
+    # 產生器要盯的是「它讀了什麼」，不是「誰改了什麼」。
+    (HARNESS / "tests", "*.py"),
+    (HARNESS / "tests" / "fixtures", "*.json"),
+    (HARNESS / "tests" / "mutations", "*.py"),
 ]
 
 GENERATORS = [
