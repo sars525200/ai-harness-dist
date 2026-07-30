@@ -7,6 +7,7 @@
 import io
 import re
 import sys
+from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -62,7 +63,20 @@ roles = html[html.index('id="panel-roles"'):i_tools]
 ths = re.findall(r"<th>(.*?)</th>", roles)
 check(ths == ["角色", "做什麼", "工具", "閘門", "什麼時候會用到", "狀態"], "六欄表頭正確：%s" % ths)
 rows = re.findall(r"<tr>\s*<td><span class=\"cmdname\">(.*?)</span>", roles)
-check(rows == ["查詢員", "雙改檢核員"], "兩個自建角色都在：%s" % rows)
+# 不寫死角色名單 —— 第一版寫死 ["查詢員","雙改檢核員"]，新增稽核角色時它變成
+# **假紅**（內容其實是對的）。而它本來該守的性質是另一件事：
+# **看板顯示的角色數 == 實際存在的角色檔數**。7/30 的 bug 正是這個 ——
+# 手寫的表停在 2 個、實際已有 4 個，user 回報「我沒看到稽核員」。
+_agents_dir = Path(r"D:\IT-department\.claude\agents")
+_expected = sorted(p.stem for p in _agents_dir.glob("*.md")) if _agents_dir.exists() else []
+check(bool(_expected), "找得到角色目錄（找不到就無從比對，不能算通過）")
+check(sorted(rows) == _expected,
+      "看板角色數與實際角色檔一致：看板 %s vs 實際 %s" % (sorted(rows), _expected))
+# nav 徽章也要跟著 —— 表格對了但徽章還寫 2，是同一個病的第三次發作
+_badge = re.search(r'id="tab-roles"[^>]*>角色<span class="count">(\d+)</span>', html)
+check(_badge is not None and int(_badge.group(1)) == len(rows),
+      "nav「角色」徽章與表格列數一致：徽章 %s vs 表格 %d"
+      % (_badge.group(1) if _badge else "找不到", len(rows)))
 check("Explore" in roles and "omitClaudeMd" in roles, "內建角色差異有交代（omitClaudeMd）")
 check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 

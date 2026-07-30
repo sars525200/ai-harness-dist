@@ -107,7 +107,7 @@
 | **任務模式路由** | CLAUDE.md §2 五模式：ASK／VERIFY／DEV_DRY_RUN／DEPLOY／DEV，含升級安全閥 |
 | **模型路由** | §7：開室 Sonnet → 碰 [DB｜邏輯]／§8·§9 硬規則區／根因診斷／架構規劃切 Opus，目標 Opus:Sonnet ≈ 4:6 |
 | **Sub-agent／角色** | 🟢 **4 個自建角色**（檔案在 **project 層** `<repo>\.claude\agents\`）：`查詢員`（Read/Grep/Glob，無 hook——tools 白名單即邊界）／`雙改檢核員`／**`harness-auditor`**／**`project-auditor`**（後兩者 7/30 新建，唯讀稽核，Bash 被 `agent_readonly_gate.py` 收窄）。**放 `~\.claude\agents`（user 層）在 VSCode 環境永遠載不到**，那不是等重啟能解的。自建角色**會**載入 CLAUDE.md，內建 Explore／Plan 帶 `omitClaudeMd:true` **不會** |
-| **載入時機（7/30 實測）** | ⚠ **新增角色檔需重開 session 才載得到**（當場派回 `Agent type not found`），而 **skill 是熱載入**（`SKILL.md` 寫完立刻出現在可用清單）。這是「啟動時快照」那條規律的第三個實例——`hooks` 的 event key、`agents` 目錄都是，`skills` 不是。**建完角色當場派不動不是寫錯，是還沒重啟** |
+| **載入時機（7/30 實測·**已訂正**）** | 新增角色檔**有載入延遲但不必手動重啟**：建完立刻派回 `Agent type not found`，隔一段時間（同一個 session 內、未重啟）平台就自行通知新角色可用。**skill 更快**，`SKILL.md` 寫完當下就出現在可用清單。<br>⚠ 我第一版把它寫成「需重開 session」並據此 commit —— 那是**拿一次失敗就下機制結論**，錯在沒有等待與重試。正確的判準是：`not found` 只證明「此刻還沒載到」，不證明「要重啟才會載到」。（`hooks` 的 event key 才是真的需要重啟，那條有獨立實測。） |
 | **Workflow（多 agent 編排）** | 未使用 |
 
 ### 本 session 完成
