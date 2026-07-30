@@ -114,6 +114,83 @@
 
 ---
 
+## 6. 項目③：四層目錄分層（7/30 開議·**未執行，待逐項拍板**）
+
+> user 要求：`D:\.ai-harness` 一個、各專案一個、最細分到各模組一個。
+> 本節先把**機制事實**與**兩個會讓效益打折的前提**寫清楚，再談做法 —— 因為其中一個
+> 前提如果沒先講，做完會發現「分了層但 context 沒少」。
+
+### 6.1 現況盤點（7/30·查詢員實查）
+
+| 類型 | 數量 | 位置 |
+|---|---|---|
+| `CLAUDE.md` | 5 份 | 全域 1、`d:\IT-department` 1（**29,131 bytes**）、`D:\AI-Projects` 1、harness 探針 fixture 2（非真規則） |
+| `.claude/rules/` | 4 份 | **全在 `d:\IT-department`** |
+| `.claude/agents/` | 4 份 | 同上 |
+| `.claude/skills/` | 11 份 | 同上 |
+| `.github/copilot-instructions.md` | 1 份 | 只有 `SOP\`（DEV repo），`SOP_PROD\` 沒有 |
+
+**`D:\.ai-harness` 完全沒有自己的規則檔**——它的規則寄生在 IT-department：
+`dashboard-generators.md` 物理上在 `d:\IT-department\.claude\rules\`，管的卻是 harness 的看板，
+而且實測它的 `paths:` 對 `D:\.ai-harness` **不生效**（不在 project 目錄下），只靠 §8 一句索引兜底。
+
+### 6.2 載入機制（官方行為，決定一切）
+
+| 層 | 位置 | 何時載入 |
+|---|---|---|
+| L0 全域 | `~\.claude\CLAUDE.md` | 每個 session |
+| L1 磁碟 | `D:\CLAUDE.md` | **D 槽下任何 session**（Claude 從 cwd 往上走到 root，沿路全載） |
+| L2 專案 | `<repo>\CLAUDE.md` | 在該 repo 工作時 |
+| L3 模組 | `<repo>\<模組>\CLAUDE.md` | **讀到該目錄的檔案時才載入** |
+
+另一個機制事實：**`@path` import 仍在啟動時全量載入，不省 context**；真正按需的只有
+`.claude/rules/` 的 path scoping 與 L3 子目錄。
+
+### 6.3 ⚠ 兩個會讓效益打折的前提（必須先接受再動手）
+
+**前提 A：往上放不減 context。** `D:\CLAUDE.md` 在 IT-department 工作時**照樣會載入**
+（往上走的路徑上）。所以把規則從 L2 搬到 L1 **一個 byte 都不會少**，換來的是
+「AI-Projects 也吃得到」。**分層 ≠ 減量**——這兩個目標要分開談，混在一起會做完才發現沒瘦。
+
+**前提 B：這個 codebase 的模組邊界不是目錄邊界。**
+`app.js` **3.8 MB 單檔**裝下全部前端模組、`styles.css` 1.1 MB、`server.py` 753 KB。
+L3 要掛 CLAUDE.md 得有目錄可掛，而目前真的有目錄的只有 `db\`、`ops\`、`docs\` 這幾處。
+§8 佔最大宗的 workflow_status（10 條）、平台資源 save（6 條）、進出同步（5 條）
+**全部散在 app.js 裡，沒有目錄可以界定** → 這些下放不了。
+
+**L3 的適用判準**（擴充 §3.1 的表）：只有「規則該被想起的時機**必然伴隨讀該目錄的檔案**」
+才適合下放。
+- ✅ 適合：`db\*.py` 的四點對稱（要改就一定會讀 `db\`）
+- ❌ 不適合：「改 client 前要想到 server 鏡像也要改」（你往往先改 client 才想到，
+  那時 server 目錄的規則還沒載入）——**這是 path-scoped 的通病，不是新問題**。
+
+### 6.4 據此的做法（分三階段，逐段拍板）
+
+| 階段 | 做什麼 | 減 always-loaded？ | 真正得到什麼 |
+|---|---|---|---|
+| **A** | 建 `D:\.ai-harness\CLAUDE.md`，把寄生在 IT-department 的 harness 規則搬回去 | ❌（搬走的部分反而在 IT-department 看不到了） | harness 規則終於有家；`cd` 進去工作時規則齊全 |
+| **B** | 建 `D:\CLAUDE.md`，放真正跨專案的（編碼三雷、commit 紀律、驗證紀律、說停就停） | ❌ 不減（見前提 A） | AI-Projects／未來新專案自動吃到；IT-department 的 §8 可以少列幾條 |
+| **C** | `db\`、`ops\`、`docs\` 掛 L3 | ✅ 少量（那幾塊本來就不大） | 有限，見前提 B |
+
+**預估**：主檔 29,131 bytes 中，**能真正移出 always-loaded 的只有階段 C 那幾塊**，
+樂觀估 2–3 KB。階段 A 搬走的量（harness 相關約 1.5 KB）會讓 IT-department 這邊
+**失去**那些規則——那是取捨不是收益。
+
+### 6.5 待 user 拍板
+
+1. **目標優先序**：是要「組織清晰／跨專案共用」（→ 做 A+B），還是要「主檔瘦身」
+   （→ 只有 C 有效，但效益 2–3 KB）？兩者要的做法不同。
+2. **階段 A 的取捨**：harness 規則搬走後，在 IT-department 工作時就看不到了
+   （現在靠 §8 索引句兜底）。接受嗎？
+3. **要不要跑 `/adversarial-review`**：這是規則體系重構，切錯會讓規則在該觸發時不在
+   context 裡，而那種失效是**靜默**的。§2 硬規則建議 [DB｜邏輯] 類大型計畫要覆核。
+
+### 6.6 狀態
+
+**未執行**。本節只到「機制查證＋做法選項」，等 §6.5 三項拍板後才動手。
+
+---
+
 ## 5. 相關檔案
 
 - `d:\IT-department\CLAUDE.md` §6/§7/§8/§9
