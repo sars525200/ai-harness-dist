@@ -68,17 +68,27 @@ def parse_agents() -> list:
             # —— 這裡跟著明講，不要假裝這個檔存在就等於角色存在
             continue
         tools = [t.strip() for t in field("tools").split(",") if t.strip()]
+        body = text.split("---", 2)[2]
+        # 顯示名取 body 的 h1「識別名 · 顯示名」。刻意不塞進 frontmatter：
+        # 那裡的欄位是平台在解析的，加未知欄位的行為沒實測過，而 loader 對
+        # 格式問題是**靜默 return null**（ROLE_ARCH_PLAN §4.3）—— 角色會消失且不報錯。
+        # 放 body 的 h1 零風險，且顯示名跟角色定義待在同一個檔，不會分岔。
+        m_h1 = re.search(r"^#\s+(.+)$", body, re.MULTILINE)
+        display = name
+        if m_h1 and "·" in m_h1.group(1):
+            display = m_h1.group(1).split("·", 1)[1].strip()
         gate = ""
         gm = re.search(r"command:\s*'[^']*?([\w_]+\.py)", fm)
         if "hooks:" in fm and gm:
             gate = gm.group(1)
         out.append({
-            "name": name,
+            "name": name,               # subagent_type 的識別字
+            "display": display,          # 給人看的中文名
             "description": field("description"),
             "tools": tools,
             "model": field("model") or "inherit",
             "gate": gate,
-            "body": text.split("---", 2)[2],
+            "body": body,
         })
     if not out:
         raise SystemExit("角色目錄裡沒有可用角色 —— 拒絕產出空清冊。")
@@ -187,6 +197,14 @@ def build_html(agents: list, stats: dict) -> str:
     lines.append('        </ul>')
     lines.append('      </div>')
 
+    lines.append('      <div class="role-lang" role="group" aria-label="角色名顯示方式">')
+    lines.append('        <button type="button" class="rl-btn on" data-lang="zh" '
+                 'aria-pressed="true">中文名</button>')
+    lines.append('        <button type="button" class="rl-btn" data-lang="id" '
+                 'aria-pressed="false">識別名</button>')
+    lines.append('        <span class="rl-hint">識別名＝派任務時 <code>subagent_type</code> '
+                 '要填的字，點一下可整段複製</span>')
+    lines.append('      </div>')
     lines.append('      <div class="twrap">')
     lines.append('        <table class="roster roles-table">')
     lines.append('          <thead><tr><th>角色</th><th>做什麼</th><th>工具</th><th>閘門</th>'
@@ -234,7 +252,11 @@ def build_html(agents: list, stats: dict) -> str:
                     '<div class="st-note">無 hook，工具層即邊界</div>')
         tools = " ".join(f'<span class="toolname">{_esc(t)}</span>' for t in a["tools"])
         lines.append('            <tr>')
-        lines.append(f'              <td><span class="cmdname">{_esc(a["name"])}</span>'
+        # 兩個名字都輸出：顯示名給人讀、識別名給人複製去派任務（subagent_type）。
+        # 切換由前端做，不重繪表格。
+        lines.append(f'              <td><span class="cmdname role-name" '
+                     f'data-zh="{_esc(a["display"])}" data-id="{_esc(a["name"])}">'
+                     f'{_esc(a["display"])}</span>'
                      f'<div class="st-note">model: {_esc(a["model"])}</div></td>')
         lines.append(f'              <td>{cell(does, does, 20)}</td>')
         lines.append(f'              <td class="tools-cell">{tools}</td>')

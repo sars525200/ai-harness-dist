@@ -62,7 +62,11 @@ check("panel-roles" in panel_ids, "panel-roles 存在")
 roles = html[html.index('id="panel-roles"'):i_tools]
 ths = re.findall(r"<th>(.*?)</th>", roles)
 check(ths == ["角色", "做什麼", "工具", "閘門", "什麼時候會用到", "狀態"], "六欄表頭正確：%s" % ths)
-rows = re.findall(r"<tr>\s*<td><span class=\"cmdname\">(.*?)</span>", roles)
+# 抓 data-id 而不是顯示文字：表格顯示的是中文名（可切換），而 data-id 是
+# subagent_type 的識別字 —— 那才是與角色檔檔名對得起來的不變量。
+# （第一版抓 class="cmdname" 的內文，加了 role-name class 就整個抓不到，
+#   而「抓不到」在斷言上看起來像「一個角色都沒有」。）
+rows = re.findall(r'class="cmdname role-name"[^>]*data-id="([^"]+)"', roles)
 # 不寫死角色名單 —— 第一版寫死 ["查詢員","雙改檢核員"]，新增稽核角色時它變成
 # **假紅**（內容其實是對的）。而它本來該守的性質是另一件事：
 # **看板顯示的角色數 == 實際存在的角色檔數**。7/30 的 bug 正是這個 ——
