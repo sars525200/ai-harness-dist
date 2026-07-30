@@ -7,3 +7,8 @@ __pycache__/
 
 # 探針的「hook 有沒有跑過」分母證據：每次跑都重建，不是紀錄
 tests/*/fired.log
+
+# 看板重生的執行期狀態：來源快照每次重生都變（進版控只會製造 commit 雜訊），
+# 鎖檔更是純執行期。兩者都不跨機器有意義。
+dashboard/sources_state.json
+dashboard/.refresh.lock
