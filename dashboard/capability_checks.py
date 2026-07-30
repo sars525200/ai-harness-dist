@@ -93,9 +93,15 @@ def _p_on_demand():
 
 
 def _p_anti_bloat():
+    # 判準綁「有防膨脹規則 ＋ 指名了量測工具」，不綁單一指令字面值。
+    # 2026-07-30 教訓：原本寫死 "wc -c"，CLAUDE.md 改用 check_bloat.py 之後
+    # probe 當場判 False —— 能力沒消失，是判準跟著字面值一起漂了。
+    # 這正是 §8「改名/改制必先 audit 字面值」那條規則講的情形，發生在規則自己身上。
     md = _read(CLAUDE_MD)
-    has = "防膨脹" in md and "wc -c" in md
-    return has, "§4 有防膨脹量測條（含具體指令）" if has else "找不到防膨脹量測判準"
+    tools = [t for t in ("check_bloat", "wc -c") if t in md]
+    has = "防膨脹" in md and bool(tools)
+    return has, (f"§4 有防膨脹量測條（量測工具：{'／'.join(tools)}）" if has
+                 else "找不到防膨脹量測判準")
 
 
 def _p_rule_index():
