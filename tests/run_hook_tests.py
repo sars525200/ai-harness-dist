@@ -292,6 +292,24 @@ def main() -> int:
             print(f"  {'PASS' if not enc_failed else 'FAIL'}  hook 輸出編碼 {label}"
                   f"（{enc_passed}/{enc_passed + len(enc_failed)}）")
 
+        # WARN 輸出通道與進度圖產生器。兩者都驗 fixture 層看不到的性質：
+        # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），
+        # 後者驗「看板的進度圖有沒有忠實反映計畫書」。掛進這支統一入口的理由很實際 ——
+        # 要記得單獨跑的測試，等於沒有測試。
+        import test_progress_chart
+        import test_warn_channel
+        for run_fn, label in (
+            (test_warn_channel.run, "WARN 輸出通道"),
+            (test_progress_chart.run, "進度圖產生器"),
+        ):
+            ex_passed, ex_failed = run_fn()
+            unit_passed += ex_passed
+            for detail in ex_failed:
+                failed.append((label, detail))
+            unit_failed.extend(ex_failed)
+            print(f"  {'PASS' if not ex_failed else 'FAIL'}  {label}"
+                  f"（{ex_passed}/{ex_passed + len(ex_failed)}）")
+
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
     print(f"{'=' * 60}")
