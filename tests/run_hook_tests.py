@@ -302,6 +302,7 @@ def main() -> int:
         # 變異腳本本身會改動 live hook、不適合自動跑，但「錨點還在不在」是唯讀的，
         # 拉進來每次跑，漂掉的當下就紅。
         import test_budget1
+        import test_roles_topology
         import test_cost_panel
         import test_enc1_encoding
         import test_mutation_anchors
@@ -312,6 +313,7 @@ def main() -> int:
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
             (test_budget1.run, "BUDGET-1 用量閘門"),
+            (test_roles_topology.run, "角色拓樸產生器"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):

@@ -33,6 +33,7 @@ import io
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -141,9 +142,92 @@ def activity() -> dict:
                 s = slot(rec.get("agent_type"))
                 s["stops"] += 1
                 s["last"] = max(s["last"], ts)
-    for s in stats.values():
-        s["running"] = max(0, s["spawns"] - s["stops"])
+    running = running_by_role()
+    for name, s in stats.items():
+        s["running"] = running.get(name, 0)
     return stats
+
+
+def running_by_role() -> dict:
+    """此刻真的在跑的 subagent，按角色計數。**跨檔逐 session 配對**。
+
+    ⚠ 不能用全域 `spawns - stops` 相消：`agent_spawn` 是 2026-07-31 才開始記的，
+    而 `SubagentStop` 已累積了好幾天。全域相減會得到大負數 → `max(0, …)` 壓成 0
+    → **明明有 subagent 在跑卻報 0**（實測當天就發生：畫面上一邊說 0 個進行中，
+    另一邊列著一個已跑 1.3 小時的 Plan）。
+
+    正確作法是**同一個 session 內**配對：spawn 記在主檔 `events.<sid>.ndjson`，
+    stop 記在分檔 `events.<sid>.agent-*.ndjson`，同 session 同 type 相消，
+    沒被消掉的才是還在跑。這樣舊 stop 不會去消掉別的 session 的新 spawn。
+    """
+    out: dict = {}
+    if not STATE_DIR.exists():
+        return out
+    for path in STATE_DIR.glob("events.*.ndjson"):
+        stem = path.name[len("events."):-len(".ndjson")]
+        if _TEST_SESSION.match(stem) or ".agent-" in stem:
+            continue
+        spawns: dict = {}
+        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            if '"agent_spawn"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("kind") == "agent_spawn":
+                k = rec.get("subagent_type") or "?"
+                spawns[k] = spawns.get(k, 0) + 1
+        if not spawns:
+            continue
+        for sub in STATE_DIR.glob(f"events.{stem}.agent-*.ndjson"):
+            for line in sub.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+                if '"SubagentStop"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except Exception:
+                    continue
+                if rec.get("event") == "SubagentStop":
+                    k = rec.get("agent_type") or "?"
+                    if spawns.get(k):
+                        spawns[k] -= 1
+        for k, n in spawns.items():
+            if n > 0:
+                out[k] = out.get(k, 0) + n
+    return out
+
+
+# 主 session 多久沒動就不算「活動中」。一個回合常常跑好幾分鐘（長工具呼叫、
+# 等使用者回話），60 秒會把「正在思考」誤判成離線；15 分鐘又分不出「此刻在跑」
+# 與「剛剛停下來」。5 分鐘是 user 2026-07-31 定的。
+ACTIVE_WINDOW_SEC = 300
+
+
+def sessions(now: float) -> dict:
+    """主 session 的活動狀態 —— 這份資料一直都在，只是從來沒被畫出來。
+
+    每個 session 有自己的 `events.<sid>.ndjson`，**檔案 mtime 就是最後活動時間**。
+    不讀內容：這裡只要知道「還有沒有在動」，開 30 個檔去解析最後一行不划算。
+
+    排除兩種檔：`.agent-` 分檔（那是 subagent 不是 session）、
+    手寫規律 UUID（測試餵料）。
+    """
+    out = []
+    if not STATE_DIR.exists():
+        return {"active": 0, "total": 0, "rows": []}
+    for path in STATE_DIR.glob("events.*.ndjson"):
+        stem = path.name[len("events."):-len(".ndjson")]
+        if _TEST_SESSION.match(stem) or ".agent-" in stem:
+            continue
+        try:
+            age = now - path.stat().st_mtime
+        except Exception:
+            continue
+        out.append({"sid": stem[:8], "age": age})
+    out.sort(key=lambda r: r["age"])
+    active = [r for r in out if r["age"] < ACTIVE_WINDOW_SEC]
+    return {"active": len(active), "total": len(out), "rows": active[:6]}
 
 
 def _state_of(st: dict) -> "tuple[str, str]":
@@ -193,7 +277,18 @@ def _role_payload(role: dict, act: dict) -> dict:
     }
 
 
-def build_html(agents: list, act: dict) -> str:
+def _ago(seconds: float) -> str:
+    if seconds < 60:
+        return "剛剛"
+    return f"{int(seconds // 60)} 分前"
+
+
+def build_html(agents: list, act: dict, sess: dict) -> str:
+    if sess["rows"]:
+        parts = "、".join(f'{_esc(r["sid"])}…（{_ago(r["age"])}）' for r in sess["rows"])
+        sess_detail = f"　·　活動中：{parts}"
+    else:
+        sess_detail = ""
     ordered = agents + [{**b, "builtin": True} for b in BUILTIN]
     own = "\n".join(_node(a, act, i) for i, a in enumerate(agents))
     built = "\n".join(_node(b, act, len(agents) + i) for i, b in enumerate(
@@ -219,8 +314,8 @@ def build_html(agents: list, act: dict) -> str:
       <script type="application/json" id="rt-data">{payload}</script>
       <div class="rt-wrap">
         <div class="rt-hub">
-          <div class="rt-hub-name">主 session</div>
-          <div class="rt-hub-sub">派工者 · 目前 {running_total} 個 subagent 進行中</div>
+          <div class="rt-hub-name">主 session　<span class="rt-hub-live">{sess["active"]} 個活動中</span></div>
+          <div class="rt-hub-sub">派工者 · 目前 {running_total} 個 subagent 進行中{sess_detail}</div>
         </div>
         <div class="rt-cols">
           <div class="rt-col">
@@ -249,6 +344,31 @@ def _sync_badge(html: str, tab_id: str, label: str, n: int) -> str:
     return out
 
 
+def sync_snapshot_stamp(html: str, now: float, sess: dict) -> str:
+    """把 masthead 的時間戳與標籤改成產生器維護。
+
+    2026-07-31 user 問「有一個聊天室窗正在跑，為什麼沒有即時訊息」，查下去發現
+    那行 `<time>2026-07-30 約 10:00</time>` **是手寫的**，停在前一天 ——
+    這是「手寫數字會靜默過期」的**第五次發作**（前四次：六大類卡片 → 角色表 →
+    nav 角色徽章 → Skill 徽章），而且發作在整頁最顯眼的位置。
+
+    順手改掉另一個問題：原本寫「Live monitoring」，但這是靜態 artifact，
+    **什麼都沒有在 monitor**。標籤要說實話，否則看的人會用錯誤的前提解讀整頁數字。
+    """
+    stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
+    label, cnt = re.subn(
+        r'(<div class="live"><span class="dot"></span>)[^<]*(</div>)',
+        rf"\g<1>快照 · 非即時\g<2>", html, count=1)
+    if cnt != 1:
+        raise SystemExit("找不到 masthead 的 live 標籤 —— 結構變了，不靜默略過。")
+    out, cnt = re.subn(r"<time>[^<]*</time>",
+                       f"<time>{stamp} · {sess['active']} 個 session 活動中</time>",
+                       label, count=1)
+    if cnt != 1:
+        raise SystemExit("找不到 masthead 的 <time> —— 結構變了，不靜默略過。")
+    return out
+
+
 def sync_tab_badge(html: str, n_roles: int) -> str:
     """同步 nav 的「角色 N」與「Skill 與 Eval N」徽章。
 
@@ -274,11 +394,32 @@ def inject(html: str, block: str) -> str:
     return f"{head}{marker}\n{block}\n    {MARK_END}{tail}"
 
 
+def _now_arg() -> float:
+    """`--now <epoch>` 讓測試把「現在幾點」固定住。
+
+    這一頁本質上是快照，時間戳與活動判定都隨真實時間變 —— 冪等因此驗不了，
+    除非把「現在」變成**顯式輸入**。預設就是真的現在，測試才需要傳。
+    """
+    for i, a in enumerate(sys.argv):
+        if a == "--now" and i + 1 < len(sys.argv):
+            try:
+                return float(sys.argv[i + 1])
+            except ValueError:
+                raise SystemExit("--now 要給 epoch 秒數（float）")
+    return time.time()
+
+
 def main() -> None:
+    now = _now_arg()
     agents = parse_agents()
     act = activity()
+    sess = sessions(now)
     if "--check" in sys.argv:
         print(f"自建角色 {len(agents)}／內建 {len(BUILTIN)}")
+        print(f"主 session：{sess['active']}／{sess['total']} 個活動中"
+              f"（{ACTIVE_WINDOW_SEC // 60} 分鐘內算活動）")
+        for r in sess["rows"]:
+            print(f"    ● {r['sid']}…  {_ago(r['age'])}")
         for a in agents + [{**b, "builtin": True} for b in BUILTIN]:
             s = act.get(a["name"], {})
             print(f"  {a['name']:18s} spawn={s.get('spawns',0):3d} stop={s.get('stops',0):3d} "
@@ -289,7 +430,8 @@ def main() -> None:
         return
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = sync_tab_badge(inject(html, build_html(agents, act)), len(agents))
+    out = sync_tab_badge(inject(html, build_html(agents, act, sess)), len(agents))
+    out = sync_snapshot_stamp(out, now, sess)
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print(f"已注入角色拓樸圖：{len(agents)} 自建 ＋ {len(BUILTIN)} 內建"

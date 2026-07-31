@@ -42,14 +42,126 @@ HOST, PORT = "127.0.0.1", 8898
 POLL_MS = 4000
 
 
+import glob
+import json
+import re
+import time
+from datetime import datetime
+
+STATE_DIR = os.path.join(HARNESS, "state")
+_TEST_SID = re.compile(r"^(1{8}|2{8}|0{8}|ZZ|e2e-|test-|warnchan-)")
+ACTIVE_WINDOW_SEC = 300
+
+# 工具名 → 這個 session 此刻在做什麼（給人讀的）
+_DOING = {
+    "Bash": "跑指令", "PowerShell": "跑指令", "Edit": "改檔案", "Write": "寫檔案",
+    "MultiEdit": "改檔案", "NotebookEdit": "改 notebook", "Agent": "派 subagent",
+    "Skill": "跑 skill",
+}
+
+
+def _ts(s: str) -> float:
+    """event log 的 ts 是本機時間字串（無時區），轉 epoch 好算「跑多久」。"""
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S").timestamp()
+    except Exception:
+        return 0.0
+
+
+def _read_events(path: str) -> list:
+    rows = []
+    try:
+        with open(path, encoding="utf-8-sig", errors="replace") as fh:
+            for line in fh:
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return rows
+
+
+def sessions_detail(now: float) -> list:
+    """每個聊天室視窗（session）此刻在做什麼、把活交給了誰。
+
+    這才是「任務路由」的主體 —— 角色忙閒只是它的一個切面。三份資料拼起來：
+
+      主檔 `events.<sid>.ndjson`      → 最後活動、最近工具、派了哪些 subagent
+      分檔 `events.<sid>.agent-*.ndjson` → 那些 subagent 結束了沒
+      兩者按 subagent_type 相消        → 沒被消掉的就是**此刻正在跑的**
+
+    ⚠ spawn 記在主檔、stop 記在分檔，**必須跨檔配對**。只看其中一邊會得到
+    「永遠有人在跑」或「從來沒人在跑」兩種都錯的答案。
+    """
+    out = []
+    for path in glob.glob(os.path.join(STATE_DIR, "events.*.ndjson")):
+        stem = os.path.basename(path)[len("events."):-len(".ndjson")]
+        if _TEST_SID.match(stem) or ".agent-" in stem:
+            continue
+        try:
+            age = now - os.path.getmtime(path)
+        except Exception:
+            continue
+        if age >= ACTIVE_WINDOW_SEC:
+            continue                      # 只出活動中的 —— 這一頁回答的是「現在」
+
+        rows = _read_events(path)
+        # 最近一次真的動到東西的工具（applies/decision 是規則判定，不是動作）
+        doing, doing_at = "", ""
+        for r in reversed(rows):
+            if r.get("kind") == "dispatch" and r.get("tool_name"):
+                doing = r["tool_name"]
+                doing_at = r.get("ts", "")
+                break
+            if r.get("kind") == "skill":
+                doing, doing_at = "Skill", r.get("ts", "")
+                break
+
+        spawns = [r for r in rows if r.get("kind") == "agent_spawn"]
+        stops = []
+        for sub in glob.glob(os.path.join(STATE_DIR, f"events.{stem}.agent-*.ndjson")):
+            stops += [r for r in _read_events(sub) if r.get("event") == "SubagentStop"]
+        done = {}
+        for s in stops:
+            k = s.get("agent_type") or "?"
+            done[k] = done.get(k, 0) + 1
+
+        running = []
+        for s in sorted(spawns, key=lambda r: r.get("ts", "")):
+            k = s.get("subagent_type") or "?"
+            if done.get(k):
+                done[k] -= 1              # 這一筆已經有對應的結束
+                continue
+            started = _ts(s.get("ts", ""))
+            running.append({
+                "role": k,
+                "task": (s.get("task") or "").strip(),
+                "for_sec": max(0, now - started) if started else 0,
+            })
+
+        out.append({
+            "sid": stem[:8],
+            "age": age,
+            "doing": doing,
+            "doingLabel": _DOING.get(doing, doing or "—"),
+            "doingAt": doing_at[-8:] if doing_at else "",
+            "events": len(rows),
+            "running": running,
+        })
+    out.sort(key=lambda r: r["age"])
+    return out
+
+
 def snapshot() -> dict:
     """讀角色清單與活動狀態。共用看板產生器的解析，避免兩份判定漂開。"""
     import gen_roles_topology as topo  # noqa: PLC0415
 
+    now = time.time()
     try:
         agents = topo.parse_agents()
     except SystemExit as exc:
-        return {"error": str(exc), "roles": []}
+        return {"error": str(exc), "roles": [], "sessions": []}
     act = topo.activity()
     roles = []
     for a in agents + [{**b, "builtin": True} for b in topo.BUILTIN]:
@@ -67,7 +179,16 @@ def snapshot() -> dict:
             "tasks": st.get("tasks", []),
         })
     roles.sort(key=lambda r: (-r["running"], -max(r["spawns"], r["stops"]), r["name"]))
-    return {"roles": roles, "running_total": sum(r["running"] for r in roles)}
+    sess = sessions_detail(now)
+    # running_total 從 session 卡片加總，**不要另外算一次**。
+    # 2026-07-31 實測：另算的版本說「0 個進行中」，而同一畫面下方列著一個
+    # 已跑 1.3 小時的 Plan —— 同一件事兩套算法，畫面自己打自己。
+    return {
+        "roles": roles,
+        "running_total": sum(len(s["running"]) for s in sess),
+        "sessions": sess,
+        "active_sessions": len(sess),
+    }
 
 
 PAGE = """<!doctype html>
@@ -119,12 +240,33 @@ PAGE = """<!doctype html>
  .note{margin-top:22px;padding:12px 15px;background:var(--surface);border:1px solid var(--line);
    border-left:2px solid var(--accent);border-radius:4px;font-size:12.5px;color:var(--text-dim)}
  .note b{color:var(--text)}
+ h2.sec{font-family:var(--disp);font-size:17px;margin:30px 0 10px}
+ /* ── session 路由卡 ── */
+ .s{background:var(--surface);border:1px solid var(--line);border-left:2px solid var(--pass);
+   border-radius:4px;padding:13px 16px;margin-bottom:9px}
+ .s-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+ .s-id{font-family:var(--mono);font-weight:700;font-size:14px}
+ .s-age{font-size:11.5px;color:var(--text-faint);font-family:var(--mono)}
+ .s-do{margin-left:auto;font-size:12.5px}
+ .s-do b{color:var(--accent-ink)}
+ .s-do code{font-family:var(--mono);font-size:11.5px;background:var(--surface-2);
+   padding:1px 5px;border-radius:2px;margin-left:5px}
+ .s-sub{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);font-size:12.5px}
+ .s-branch{display:flex;align-items:baseline;gap:8px;color:var(--text-dim);padding:3px 0}
+ .s-branch .arm{font-family:var(--mono);color:var(--text-faint)}
+ .s-branch .who{font-weight:700;color:var(--pass)}
+ .s-branch .dur{font-family:var(--mono);font-size:11.5px}
+ .s-branch .task{color:var(--text-faint);font-size:11.5px}
+ .s-idle{color:var(--text-faint);font-size:12px;padding:3px 0}
+ .s-warn{color:var(--warn);font-size:11px;margin-top:3px}
  @media (prefers-reduced-motion:no-preference){.r{transition:border-color .2s ease,background .2s ease}}
 </style></head><body><div class="page">
-<h1>角色即時狀態</h1>
-<div class="sub">誰在工作、誰在空閒 · 每 __POLL__ 秒自動更新 · 唯讀 event log</div>
+<h1>任務路由 · 即時</h1>
+<div class="sub">哪個視窗在跑、正在做什麼、把活交給了誰 · 每 __POLL__ 秒自動更新 · 唯讀 event log</div>
 <div class="live"><span class="dot"></span><span id="tick">連線中…</span></div>
 <div class="hub" id="hub"></div>
+<div id="sessions"></div>
+<h2 class="sec">角色總覽</h2>
 <div id="list"></div>
 <div class="note">
   <b>忙閒怎麼算：</b><code>agent_spawn</code>（派出去那一刻）↔ <code>SubagentStop</code>（結束）
@@ -148,12 +290,50 @@ function row(r){
     + '<span class="st">' + st + '</span>'
     + '<span class="meta"><code>' + esc(r.model) + '</code> · ' + esc(r.tools) + '<br>' + last + '</span></div>';
 }
+function dur(sec){
+  if(sec < 60) return Math.round(sec) + ' 秒';
+  if(sec < 3600) return (sec/60).toFixed(1) + ' 分';
+  return (sec/3600).toFixed(1) + ' 小時';
+}
+function ago(sec){ return sec < 60 ? '剛剛' : Math.round(sec/60) + ' 分前'; }
+
+function sessionCard(s){
+  var branches;
+  if(s.running.length){
+    branches = s.running.map(function(r){
+      // 跑超過 30 分鐘的多半不是還在跑，是結束事件沒收到（spawn 記在主檔、
+      // stop 記在分檔，任一邊漏掉就會卡住不消）。與其假裝精確，不如講出來。
+      var warn = r.for_sec > 1800
+        ? '<div class="s-warn">※ 已超過 30 分鐘，也可能是結束事件沒收到</div>' : '';
+      return '<div class="s-branch"><span class="arm">└─</span>'
+        + '<span class="who">● ' + esc(r.role) + '</span>'
+        + '<span class="dur">已跑 ' + dur(r.for_sec) + '</span>'
+        + (r.task ? '<span class="task">' + esc(r.task) + '</span>' : '')
+        + '</div>' + warn;
+    }).join('');
+  } else {
+    branches = '<div class="s-idle">└─ 沒有進行中的 subagent —— 主 session 自己在做</div>';
+  }
+  return '<div class="s"><div class="s-h">'
+    + '<span class="s-id">' + esc(s.sid) + '…</span>'
+    + '<span class="s-age">' + ago(s.age) + ' · ' + s.events + ' 筆事件</span>'
+    + '<span class="s-do">正在 <b>' + esc(s.doingLabel) + '</b>'
+    + (s.doing ? '<code>' + esc(s.doing) + '</code>' : '')
+    + (s.doingAt ? ' <span class="s-age">' + esc(s.doingAt) + '</span>' : '')
+    + '</span></div>'
+    + '<div class="s-sub">' + branches + '</div></div>';
+}
+
 async function tick(){
   try{
     var d = await (await fetch('/api/state',{cache:'no-store'})).json();
     if(d.error){ document.getElementById('list').textContent = d.error; return; }
     document.getElementById('hub').innerHTML =
-      '<b>主 session</b><span>目前 ' + d.running_total + ' 個 subagent 進行中</span>';
+      '<b>' + d.active_sessions + ' 個視窗活動中</b><span>共 '
+      + d.running_total + ' 個 subagent 進行中 · 5 分鐘內有動作算活動</span>';
+    document.getElementById('sessions').innerHTML = d.sessions.length
+      ? d.sessions.map(sessionCard).join('')
+      : '<div class="s-idle">目前沒有活動中的視窗（5 分鐘內都沒有動作）</div>';
     document.getElementById('list').innerHTML = d.roles.map(row).join('');
     var t = new Date();
     document.getElementById('tick').textContent = '更新於 ' +
@@ -195,7 +375,19 @@ def main() -> int:
         print(snap["error"])
         return 1
     if "--check" in sys.argv:
-        print(f"目前 {snap['running_total']} 個 subagent 進行中")
+        print(f"{snap['active_sessions']} 個視窗活動中"
+              f"（{ACTIVE_WINDOW_SEC // 60} 分鐘內有動作算活動）")
+        for s in snap["sessions"]:
+            mins = s["age"] / 60
+            when = "剛剛" if s["age"] < 60 else f"{mins:.0f} 分前"
+            print(f"  ● {s['sid']}…  {when:>5s}  正在 {s['doingLabel']}"
+                  f"（{s['doing']}）@{s['doingAt']}  事件 {s['events']}")
+            for r in s["running"]:
+                print(f"      └─ ● {r['role']}  已跑 {r['for_sec'] / 60:.1f} 分"
+                      f"  {r['task'][:36]}")
+            if not s["running"]:
+                print("      └─ 沒有進行中的 subagent —— 主 session 自己在做")
+        print(f"\n目前 {snap['running_total']} 個 subagent 進行中")
         for r in snap["roles"]:
             state = (f"進行中 ×{r['running']}" if r["running"]
                      else ("空閒" if max(r["spawns"], r["stops"]) else "從未被派過"))
