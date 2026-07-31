@@ -146,55 +146,59 @@ def activity() -> dict:
     return stats
 
 
-def _node(role: dict, act: dict) -> str:
-    st = act.get(role["name"], {})
-    spawns, stops = st.get("spawns", 0), st.get("stops", 0)
-    running, last = st.get("running", 0), st.get("last", "")
-    total = max(spawns, stops)  # spawn 是 7/31 才開始記的，舊資料只有 stop
-
+def _state_of(st: dict) -> "tuple[str, str]":
+    running = st.get("running", 0)
+    total = max(st.get("spawns", 0), st.get("stops", 0))  # spawn 是 7/31 才開始記，舊資料只有 stop
     if running:
-        state_cls, state_txt = "busy", f"● 進行中 ×{running}"
-    elif total:
-        state_cls, state_txt = "idle", f"○ 空閒 · 派過 {total} 次"
-    else:
-        state_cls, state_txt = "cold", "× 從未被派過"
+        return "busy", f"● 進行中 ×{running}"
+    if total:
+        return "idle", f"○ 空閒 · 派過 {total} 次"
+    return "cold", "× 從未被派過"
 
-    gate = (f'<span class="rt-tag gate">閘門 {_esc(role["gate"])}</span>'
-            if role.get("gate") else
-            '<span class="rt-tag none">無閘門</span>')
-    kind = ('<span class="rt-tag builtin">內建·不載入 CLAUDE.md</span>'
-            if role.get("builtin") else '<span class="rt-tag own">自建</span>')
-    tasks = "".join(f"<li>{_esc(t)}</li>" for t in st.get("tasks", []))
-    tasks_block = (f'<div class="rt-k">最近任務</div><ul class="rt-tasks">{tasks}</ul>'
-                   if tasks else "")
 
-    return f"""          <details class="rt-node {state_cls}">
-            <summary>
-              <span class="rt-name">{_esc(role["name"])}</span>
-              <span class="rt-state">{state_txt}</span>
-              <span class="rt-model">{_esc(role["model"])}</span>
-            </summary>
-            <div class="rt-body">
-              <div class="rt-k">① 技能與工具</div>
-              <div class="rt-v">{_esc(role["tools"])}
-                <div class="rt-sub">角色<b>不能呼叫 skill</b>——沒有任何角色帶 <code>Skill</code> 工具，所以這一欄只有工具。</div>
-              </div>
-              <div class="rt-k">② 沙箱範圍</div>
-              <div class="rt-v">{gate} {kind}</div>
-              <div class="rt-k">③ 說明（寫給模型判讀觸發用）</div>
-              <div class="rt-v rt-desc">{_esc(role["desc"])}</div>
-              <div class="rt-k">④ 觸發歷史</div>
-              <div class="rt-v">派出 {spawns} 次 · 結束 {stops} 次 · 進行中 {running}
-                <div class="rt-sub">最後一次：{_esc(last[:16]) or "—"}　·　<b>spawn 事件 2026-07-31 才開始記</b>，在那之前只有「結束」，所以舊角色的派出數會小於結束數。</div>
-              </div>
-              {tasks_block}
-            </div>
-          </details>"""
+def _node(role: dict, act: dict, idx: int) -> str:
+    """節點只出「摘要 ＋ 一個開彈窗的按鈕」。
+
+    詳細內容不寫在節點裡：就地展開會把同欄其他節點整排推下去，長說明還得自己捲，
+    兩個問題都是「把詳細塞進清單」造成的。改成彈窗後節點高度固定，圖才讀得動。
+    """
+    st = act.get(role["name"], {})
+    state_cls, state_txt = _state_of(st)
+    return f"""          <button type="button" class="rt-node {state_cls}" data-role="{idx}"
+            aria-haspopup="dialog">
+            <span class="rt-name">{_esc(role["name"])}</span>
+            <span class="rt-state">{state_txt}</span>
+            <span class="rt-model">{_esc(role["model"])}</span>
+          </button>"""
+
+
+def _role_payload(role: dict, act: dict) -> dict:
+    """彈窗要顯示的內容。轉義交給前端（textContent），這裡只出純資料。"""
+    st = act.get(role["name"], {})
+    state_cls, state_txt = _state_of(st)
+    return {
+        "name": role["name"],
+        "state": state_txt,
+        "stateCls": state_cls,
+        "model": role.get("model", "inherit"),
+        "tools": role.get("tools", ""),
+        "gate": role.get("gate", ""),
+        "builtin": bool(role.get("builtin")),
+        "desc": role.get("desc", ""),
+        "spawns": st.get("spawns", 0),
+        "stops": st.get("stops", 0),
+        "running": st.get("running", 0),
+        "last": (st.get("last") or "")[:16],
+        "tasks": st.get("tasks", []),
+    }
 
 
 def build_html(agents: list, act: dict) -> str:
-    own = "\n".join(_node(a, act) for a in agents)
-    built = "\n".join(_node({**b, "builtin": True}, act) for b in BUILTIN)
+    ordered = agents + [{**b, "builtin": True} for b in BUILTIN]
+    own = "\n".join(_node(a, act, i) for i, a in enumerate(agents))
+    built = "\n".join(_node(b, act, len(agents) + i) for i, b in enumerate(
+        [{**x, "builtin": True} for x in BUILTIN]))
+    payload = json.dumps([_role_payload(r, act) for r in ordered], ensure_ascii=False)
     running_total = sum(v.get("running", 0) for v in act.values())
     known = {a["name"] for a in agents} | {b["name"] for b in BUILTIN}
     ghosts = sorted(n for n, v in act.items()
@@ -211,7 +215,8 @@ def build_html(agents: list, act: dict) -> str:
         <h2>角色拓樸</h2>
         <span class="sub">{len(agents)} 自建 ＋ {len(BUILTIN)} 內建 · 由 <code>gen_roles_topology.py</code> 讀 frontmatter ＋ event log 產生</span>
       </div>
-      <p class="lead">角色不是「更聰明的助手」，是<b>能力邊界</b>——把 tools 縮到剛好夠用，越權就不是「請它別做」而是它做不到。點任一節點展開它的四類設定。<b>忙閒由 <code>agent_spawn</code>↔<code>SubagentStop</code> 配對算出</b>，不是我寫的。</p>
+      <p class="lead">角色不是「更聰明的助手」，是<b>能力邊界</b>——把 tools 縮到剛好夠用，越權就不是「請它別做」而是它做不到。<b>點任一節點開它的詳細設定</b>（技能工具／沙箱／說明／觸發歷史）。忙閒由 <code>agent_spawn</code>↔<code>SubagentStop</code> 配對算出，不是我寫的。</p>
+      <script type="application/json" id="rt-data">{payload}</script>
       <div class="rt-wrap">
         <div class="rt-hub">
           <div class="rt-hub-name">主 session</div>
@@ -231,6 +236,33 @@ def build_html(agents: list, act: dict) -> str:
       {ghost_block}
       <div class="copy-note"><span>※</span><span><b>這是產生當下的快照，不是即時畫面</b>——看板是 artifact，沒有狀態能力也讀不到本機檔（7/31 查證：可用 capability 只有 <code>downloads</code>／<code>mcp</code>）。要看即時忙閒，跑本機服務。<br><b>看不到的東西也講一下</b>：dispatch matcher 不含 Read/Grep/Glob，所以唯讀角色讀了哪些檔一行都沒記——圖上畫的是「它被派去做什麼」，不是「它實際碰了什麼」。</span></div>
     </section>"""
+
+
+def _sync_badge(html: str, tab_id: str, label: str, n: int) -> str:
+    pat = re.compile(
+        rf'(id="{re.escape(tab_id)}"[^>]*>{re.escape(label)}<span class="count">)\d+(</span>)')
+    out, cnt = pat.subn(rf"\g<1>{n}\g<2>", html, count=1)
+    if cnt != 1:
+        raise SystemExit(
+            f"找不到 {tab_id} 的徽章 —— nav 結構變了。不靜默略過："
+            "徽章與內容不一致正是這批產生器要根治的問題。")
+    return out
+
+
+def sync_tab_badge(html: str, n_roles: int) -> str:
+    """同步 nav 的「角色 N」與「Skill 與 Eval N」徽章。
+
+    2026-07-31 從 `gen_roles_table.py` 接手 —— 那支隨舊表格一起移除了，
+    而它同時管著這兩個徽章。**移除一支產生器前要先問它還兼管什麼**，
+    否則手寫數字會從一個沒人注意的地方重新長回來（這正是那批產生器當初要根治的病，
+    第四次發作就是 Skill 徽章沒跟上）。
+    """
+    html = _sync_badge(html, "tab-roles", "角色", n_roles)
+    skills_dir = AGENTS_DIR.parent / "skills"
+    n_skills = len(list(skills_dir.glob("*/SKILL.md"))) if skills_dir.exists() else 0
+    if n_skills == 0:
+        raise SystemExit(f"數不到任何 skill（{skills_dir}）—— 零目標拒跑，不把徽章寫成 0。")
+    return _sync_badge(html, "tab-skills", "Skill 與 Eval", n_skills)
 
 
 def inject(html: str, block: str) -> str:
@@ -257,9 +289,11 @@ def main() -> None:
         return
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
+    out = sync_tab_badge(inject(html, build_html(agents, act)), len(agents))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
-        f.write(inject(html, build_html(agents, act)))
-    print(f"已注入角色拓樸圖：{len(agents)} 自建 ＋ {len(BUILTIN)} 內建 → {HTML_PATH.name}")
+        f.write(out)
+    print(f"已注入角色拓樸圖：{len(agents)} 自建 ＋ {len(BUILTIN)} 內建"
+          f"（含 nav 徽章同步）→ {HTML_PATH.name}")
 
 
 if __name__ == "__main__":

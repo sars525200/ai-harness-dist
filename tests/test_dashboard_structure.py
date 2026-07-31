@@ -5,6 +5,7 @@
 這裡驗的是 JS 真正用來配對的那組屬性：data-key / aria-controls / panel id。
 """
 import io
+import json
 import re
 import sys
 from pathlib import Path
@@ -60,13 +61,25 @@ for frag in ("check_structure.py", "triggers/*.jsonl 50 題", "三個假綠燈",
 print("\n角色頁籤")
 check("panel-roles" in panel_ids, "panel-roles 存在")
 roles = html[html.index('id="panel-roles"'):i_tools]
-ths = re.findall(r"<th>(.*?)</th>", roles)
-check(ths == ["角色", "做什麼", "工具", "閘門", "什麼時候會用到", "狀態"], "六欄表頭正確：%s" % ths)
-# 抓 data-id 而不是顯示文字：表格顯示的是中文名（可切換），而 data-id 是
-# subagent_type 的識別字 —— 那才是與角色檔檔名對得起來的不變量。
-# （第一版抓 class="cmdname" 的內文，加了 role-name class 就整個抓不到，
-#   而「抓不到」在斷言上看起來像「一個角色都沒有」。）
-rows = re.findall(r'class="cmdname role-name"[^>]*data-id="([^"]+)"', roles)
+# 2026-07-31：角色頁從表格改成拓樸圖＋彈窗，舊表格整段移除。
+# 斷言跟著改綁 **#rt-data**（產生器注入的 JSON），那才是彈窗真正讀的東西 ——
+# 綁節點的顯示文字會重演第一版的坑（顯示層一改，斷言就「抓不到」，
+# 而抓不到在斷言上看起來像「一個角色都沒有」）。
+# 綁**帶引號的完整 id**，不用裸子字串：`"rt-modal" in html` 對
+# `id="rt-modal-REMOVED"` 一樣成立 —— 2026-07-31 變異測試當場抓到這個假綠燈，
+# 與 feedback 檔記的「子字串檢查在同名前綴下假陽性」同族。
+check('id="rt-modal"' in html, "角色詳細彈窗存在")
+check('id="rt-close"' in html, "彈窗有關閉鈕（沒有的話只能靠 ESC）")
+check('id="rt-data"' in roles, "拓樸圖的角色資料（#rt-data）存在")
+_m = re.search(r'<script type="application/json" id="rt-data">(.*?)</script>', html, re.S)
+check(_m is not None, "#rt-data 解析得出來")
+try:
+    _payload = json.loads(_m.group(1)) if _m else []
+except Exception as _e:
+    _payload = []
+    check(False, "#rt-data 不是合法 JSON：%s" % _e)
+check(bool(_payload), "#rt-data 非空（空的話彈窗點開會是白的）")
+rows = [r["name"] for r in _payload if not r.get("builtin")]
 # 不寫死角色名單 —— 第一版寫死 ["查詢員","雙改檢核員"]，新增稽核角色時它變成
 # **假紅**（內容其實是對的）。而它本來該守的性質是另一件事：
 # **看板顯示的角色數 == 實際存在的角色檔數**。7/30 的 bug 正是這個 ——
@@ -79,7 +92,7 @@ check(sorted(rows) == _expected,
 # nav 徽章也要跟著 —— 表格對了但徽章還寫 2，是同一個病的第三次發作
 _badge = re.search(r'id="tab-roles"[^>]*>角色<span class="count">(\d+)</span>', html)
 check(_badge is not None and int(_badge.group(1)) == len(rows),
-      "nav「角色」徽章與表格列數一致：徽章 %s vs 表格 %d"
+      "nav「角色」徽章與自建角色數一致：徽章 %s vs 拓樸 %d"
       % (_badge.group(1) if _badge else "找不到", len(rows)))
 
 # Skill 徽章對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
@@ -92,7 +105,9 @@ check(_skill_files > 0, "找得到 skills 目錄（找不到無從比對）")
 check(_sbadge is not None and int(_sbadge.group(1)) == _skill_files,
       "nav「Skill」徽章與 skills 目錄一致：徽章 %s vs 實際 %d 支"
       % (_sbadge.group(1) if _sbadge else "找不到", _skill_files))
-check("Explore" in roles and "omitClaudeMd" in roles, "內建角色差異有交代（omitClaudeMd）")
+check("Explore" in roles and "omitClaudeMd" in html,
+      "內建角色差異有交代（omitClaudeMd）"
+      "——說明在彈窗 JS 裡，那段刻意放 body 直屬層，不在 panel-roles 區間內")
 check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 
 # ---- 4. 不該混進去的東西 ----

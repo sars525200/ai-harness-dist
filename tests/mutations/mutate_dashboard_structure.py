@@ -30,9 +30,17 @@ MUTATIONS = [
         'id="tab-roles" aria-controls="panel-rolez"',
     ),
     (
-        "把「閘門」欄改回「skill」欄（＝欄位定義漂掉）",
-        "<th>閘門</th>",
-        "<th>skill</th>",
+        # 2026-07-31：角色頁改拓樸圖＋彈窗，舊表格整段移除，原錨點 <th>閘門</th> 隨之失效。
+        # 換綁等價性質：**自建／內建的分類被弄錯**。第一筆 "builtin": false 是自建角色，
+        # 翻成 true 會讓它從自建清單消失 → 與角色目錄對不上 → 該紅。
+        "自建角色被誤標成內建（＝拓樸圖的分類漂掉）",
+        '"builtin": false',
+        '"builtin": true',
+    ),
+    (
+        "角色詳細彈窗的骨架被移除（節點點了沒反應）",
+        '<div class="rt-modal" id="rt-modal"',
+        '<div class="rt-modal" id="rt-modal-REMOVED"',
     ),
     (
         "Eval 段被搬到 panel-tools 裡（＝內容在檔案裡但不在該頁）",
