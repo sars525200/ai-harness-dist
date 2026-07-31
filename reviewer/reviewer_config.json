@@ -1,0 +1,6 @@
+{
+  "tool": "claude-code",
+  "model": "opus",
+  "effort": "high",
+  "note": "由 D:\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；/adversarial-review 每次執行時讀這個檔。手改也可以，改完存檔即生效（skill 是每次重讀，不快取）。"
+}
