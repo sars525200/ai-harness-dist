@@ -292,7 +292,25 @@ def _p_traces():
 
 
 def _p_cost_dashboard():
-    return False, "無成本儀表（目前靠 /usage 手動看 model 拆分）"
+    # 綁**機制**不綁字面值：看產生器在不在、看板有沒有它的注入點，
+    # 而不是掃某個檔案裡的某句話（那個判準 7/30 一天內漂掉三次）。
+    gen = HARNESS / "dashboard" / "gen_cost_panel.py"
+    if not gen.exists():
+        return False, "無成本儀表（目前靠 /usage 手動看 model 拆分）"
+    html = _read(HARNESS / "dashboard" / "harness-dashboard.html")
+    if "COST_PANEL_START" not in html:
+        return False, "有 gen_cost_panel.py 但看板沒有注入點 —— 產生器沒接上，等於沒有"
+    cache = HARNESS / "dashboard" / "cost_state.json"
+    money = ""
+    if cache.exists():
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8-sig"))
+            money = (f"，本專案累計 ${data['project_total']:,.0f}"
+                     f"（{data['matched']}/{data['project_sessions']} session 對上）")
+        except Exception:
+            money = "，金額快取存在但解析失敗"
+    return True, (f"成本／mix 分頁：transcript 自建聚合算 token 與 mix（按日、按專案），"
+                  f"金額由 ccusage 以 session UUID 交集收斂{money}")
 
 
 def _p_budget_ceiling():

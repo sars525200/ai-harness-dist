@@ -301,6 +301,7 @@ def main() -> int:
         # 字面比對，被測程式一改就會靜默失效（7/30 實際發生，3/5 個變異死掉沒人知道）。
         # 變異腳本本身會改動 live hook、不適合自動跑，但「錨點還在不在」是唯讀的，
         # 拉進來每次跑，漂掉的當下就紅。
+        import test_cost_panel
         import test_enc1_encoding
         import test_mutation_anchors
         import test_progress_chart
@@ -308,6 +309,7 @@ def main() -> int:
         for run_fn, label in (
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
+            (test_cost_panel.run, "成本／mix 產生器"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):

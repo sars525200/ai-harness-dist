@@ -13,4 +13,6 @@ tests/*/sample.*
 # 看板重生的執行期狀態：來源快照每次重生都變（進版控只會製造 commit 雜訊），
 # 鎖檔更是純執行期。兩者都不跨機器有意義。
 dashboard/sources_state.json
+# 金額快取：可由 --with-cost 重新產生，且每台機器的 transcript 不同 → 跨機無意義
+dashboard/cost_state.json
 dashboard/.refresh.lock
