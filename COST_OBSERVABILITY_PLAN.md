@@ -128,10 +128,28 @@ traces ✘（已判定過度工程，排除分母）／**成本儀表 ✘（本�
 - 順帶修掉一個 dead code：`FABLE_CEILING_PCT` 定義了沒有消費者，而 §7 的「Fable 5 <5%」
   跟 4:6 一樣是「有目標沒儀表」。現已顯示 **Fable 5.2%（已超標）**。
 
-### 待做（Phase 2，尚未開工）
+### Phase 2 已完成（2026-07-31 同日）
 
-- ⑤ Hook 的成本上限閘門：Stop hook payload 帶得到 transcript 路徑，可自算當日量並走
-  `additionalContext` 出 WARN。**先 shadow**，累積命中數再談畢業。
-- 一個本輪發現、但不在範圍內的缺陷：`capability_checks.evaluate()` 把 **probe 例外顯示成 ✘**，
-  跟「能力真的不存在」長得一模一樣（本輪 `NameError` 就這樣被顯示成「無成本儀表」）。
-  探測壞掉該長得跟能力沒有不一樣——建議加第三種狀態。
+原本的假設「Stop payload 帶得到 transcript 路徑 → 走 additionalContext 出 WARN」**錯了一半**：
+路徑確實拿得到，但 **Stop 的輸出到不了模型**。實測（`tests/stop_warn_probe/`，兩輪 `--resume`）：
+
+| 路徑 | Stop | UserPromptSubmit |
+|---|---|---|
+| `hookSpecificOutput.additionalContext` | ✘ | **✔** |
+| stderr | ✘ | ✘ |
+| 平鋪 `additionalContext` | ✘ | ✘ |
+
+→ 改成**兩段式投遞**：Stop 落便箋，下一次 UserPromptSubmit 送出（投一次即清、逾時 90 分不送）。
+
+- **AWC-1 解 shadow**：偵測從「只抓結尾問號」擴到陳述句形態（真正會犯的是後者）。
+  真實語料 161 則收尾命中率 39.8% → 8.1%。
+- **BUDGET-1 上線**：Stop 掃當日 transcript 算 output token，越 4M 出 WARN；
+  節流 20 分、一天只講一次。**⑤ Hook 5/8 → 7/8。**
+- 回歸網 252/252；新增 13 個測試案例、9 個變異，全部證明會紅。
+
+### 仍未做
+
+- `capability_checks.evaluate()` 把 **probe 例外顯示成 ✘**，跟「能力真的不存在」長得一模一樣
+  （本輪一個 `NameError` 就這樣被顯示成「無成本儀表」）。探測壞掉不該跟能力沒有同形，
+  建議加第三種狀態。**這條沒做，不是忘了，是超出本計畫範圍。**
+- BUDGET-1 的 4M 門檻是用近 14 個工作日日均（約 3.0M）的 1.35 倍推的，**尚未經使用者確認**。
