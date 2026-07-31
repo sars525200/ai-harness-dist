@@ -78,6 +78,16 @@ MUTATIONS = [
         '    if event == "UserPromptSubmit":\n        pending = _take_pending_warning(session_id)',
         '    if False:\n        pending = _take_pending_warning(session_id)',
     ),
+    (
+        "Agent 心跳不見（退回「只知道誰結束、不知道誰在跑」）",
+        '    if event == "PreToolUse" and tool_name == "Agent":',
+        "    if False:",
+    ),
+    (
+        "agent_spawn 連 prompt 一起記（任務內容外洩進共用 log）",
+        '            desc = str(ti.get("description") or "")[:60]',
+        '            desc = str(ti.get("prompt") or "")[:60]',
+    ),
 ]
 
 all_red = True

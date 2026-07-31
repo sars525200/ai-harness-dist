@@ -52,6 +52,7 @@ SOURCES = [
     DASHBOARD / "capability_checks.py",          # 檢查項清單本身
     DASHBOARD / "gen_progress_chart.py",
     DASHBOARD / "gen_roles_table.py",
+    DASHBOARD / "gen_roles_topology.py",
     IT_DEPT / "CLAUDE.md",
     IT_DEPT / ".claude" / "settings.json",
     IT_DEPT / ".claude" / "settings.local.json",
@@ -70,6 +71,7 @@ SOURCE_GLOBS = [
 ]
 
 GENERATORS = [
+    ("角色拓樸", DASHBOARD / "gen_roles_topology.py"),
     ("角色清冊", DASHBOARD / "gen_roles_table.py"),
     ("計畫進度＋八大類", DASHBOARD / "gen_progress_chart.py"),
 ]

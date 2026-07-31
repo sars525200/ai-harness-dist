@@ -209,6 +209,49 @@ def _c4c():
     assert rc2 == 0 and not out2.strip(), f"便箋被重送了：{out2!r}"
 
 
+@case("PreToolUse + Agent → 記 agent_spawn 心跳，且不記 prompt 內容")
+def _c4d():
+    """派 subagent 的「那一刻」要留痕，否則只知道誰結束了、不知道誰在跑。
+
+    這條的存在理由是它曾經整個不存在：REGISTRY 裡沒有規則的 tools 含 `Agent`，
+    於是 `if not candidates: return 0` 在心跳之前就退掉，`Agent` 一次都沒被記過
+    （實測 dispatch 只記到 Bash／Edit／PowerShell／Write）。
+    """
+    import glob
+    import json as _json
+    import os
+    sid = "warnchan-spawn-0001"
+    state = r"D:\.ai-harness\state"
+    for stale in glob.glob(os.path.join(state, f"events.{sid}*.ndjson")):
+        os.remove(stale)
+
+    saved_log = dispatch._log_event
+    dispatch._log_event = saved_log          # 這個 case 要真的落檔，不 stub
+    try:
+        rc = dispatch._dispatch({
+            "session_id": sid, "hook_event_name": "PreToolUse", "tool_name": "Agent",
+            "tool_input": {"subagent_type": "查詢員", "description": "盤點寫入點",
+                           "prompt": "SENSITIVE-TASK-BODY"},
+            "cwd": _CWD,
+        })
+        assert rc == 0, f"rc={rc}"
+        path = os.path.join(state, f"events.{sid}.ndjson")
+        assert os.path.exists(path), "Agent 呼叫沒有留下 agent_spawn —— 忙閒算不出來"
+        rows = [_json.loads(ln) for ln in open(path, encoding="utf-8") if ln.strip()]
+        spawn = [r for r in rows if r.get("kind") == "agent_spawn"]
+        assert spawn, f"沒有 agent_spawn：{rows}"
+        assert spawn[0].get("subagent_type") == "查詢員", spawn[0]
+        assert spawn[0].get("task") == "盤點寫入點", spawn[0]
+        raw = open(path, encoding="utf-8").read()
+        assert "SENSITIVE-TASK-BODY" not in raw, (
+            "prompt 被寫進共用 log —— 那是任務內容，不該收（同 kind=decision 的理由）"
+        )
+    finally:
+        dispatch._log_event = saved_log
+        for f in glob.glob(os.path.join(state, f"events.{sid}*.ndjson")):
+            os.remove(f)
+
+
 @case("PreToolUse + BLOCK + enforce → exit 2 + stderr，且不污染 stdout")
 def _c5():
     rc, out, err = _run("PreToolUse", [block("DB-1 擋下")], shadow=False)

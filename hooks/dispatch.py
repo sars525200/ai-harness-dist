@@ -275,6 +275,31 @@ def _dispatch(payload: dict) -> int:
     #
     # 只記 skill 名稱，不記 args：args 帶的是任務內容，這是跨 session 共用的 log，
     # 不該收（同 kind="decision" 只在非乾淨 ALLOW 才留痕的理由）。
+    # 2026-07-31 純觀測：派 subagent 的「那一刻」。與 Skill 那條同型（記完就 return 0，
+    # 不進規則流程），補的是一個從第一天就存在的觀測缺口：
+    #
+    #   實測 event log —— dispatch 記到的 tool_name 只有 Bash 2365／Edit 955／
+    #   PowerShell 671／Write 297，**`Agent` 一次都沒有**，而 SubagentStop 有 22 次。
+    #   settings.local.json 的 matcher 確實含 Agent（hook 有被呼叫），但 REGISTRY 裡
+    #   沒有任何規則的 tools 含 `Agent` → 下面那行 `if not candidates: return 0`
+    #   在心跳之前就退掉了。
+    #
+    # 後果是只知道「誰結束了」，不知道「誰開始了、誰派的、還在不在跑」——
+    # 「哪個角色現在忙著」這種問題整個答不出來。
+    #
+    # 只記 subagent_type 與 description（任務標題，60 字），**不記 prompt**：
+    # 那是任務內容，這是跨 session 共用的 log，不該收（同 kind="decision" 的理由）。
+    if event == "PreToolUse" and tool_name == "Agent":
+        ti = payload.get("tool_input") or {}
+        try:
+            sub_type = str(ti.get("subagent_type") or "")[:40]
+            desc = str(ti.get("description") or "")[:60]
+        except Exception:
+            sub_type, desc = "", ""   # payload 形狀非預期不該讓觀測用的一行害 hook 掛掉
+        _log_event(session_id, agent_id, agent_type, kind="agent_spawn",
+                   subagent_type=sub_type, task=desc)
+        return 0
+
     if event == "PreToolUse" and tool_name == "Skill":
         skill_name = ""
         try:
