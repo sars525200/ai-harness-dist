@@ -112,6 +112,14 @@ REGISTRY = [
         "tools": None,
     },
     {
+        "id": "BUDGET-1",
+        "module": "budget1_daily_usage",
+        # 與 AWC-1 同樣只掛 Stop：subagent 的用量已經算在同一個專案目錄裡，
+        # 掛 SubagentStop 只會讓同一筆量在一輪內被檢查很多次。
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         "id": "PR-1",
         "module": "pr1_plan_review_marker",
         # 2026-07-29（2c）：加 SubagentStop。角色化之後「開個 subagent 去寫
@@ -138,6 +146,16 @@ def _rule_module(name: str):
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+# Stop 落下的便箋能等多久才投遞。設 90 分鐘：短到不會讓「上一輪」變成
+# 「今天早上那輪」，長到足以涵蓋去吃個飯回來繼續同一件事。
+_PENDING_TTL_MIN = 90
+
+
+def _minutes_ago(minutes: int) -> str:
+    """回 `minutes` 分鐘前的時間字串，格式與 `_now()` 一致（可直接字串比較）。"""
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - minutes * 60))
 
 
 def _log_stem(session_id: str, agent_id: str = "") -> str:
@@ -266,6 +284,25 @@ def _dispatch(payload: dict) -> int:
         _log_event(session_id, agent_id, agent_type, kind="skill", skill=skill_name)
         return 0
 
+    # UserPromptSubmit 是**投遞窗口，不是判定點**：沒有任何規則掛在這個事件上，
+    # 它唯一的任務是把 Stop 留下的便箋送出去（Stop 自己的三條輸出路徑實測全部
+    # 到不了模型，見 _queue_pending_warning 上方的註解）。
+    #
+    # 必須放在 candidates／applicable 兩道守門**之前**：那兩道都會在「沒有規則
+    # 命中」時直接 return 0，而這個事件本來就不該有規則命中 —— 放在後面等於
+    # 便箋永遠送不出去，而且是靜默的那種送不出去。
+    if event == "UserPromptSubmit":
+        pending = _take_pending_warning(session_id)
+        if pending:
+            _log_event(session_id, agent_id, agent_type, kind="deliver", event=event)
+            sys.stdout.write(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": pending,
+                }
+            }, ensure_ascii=False))
+        return 0
+
     # tools=None（Stop 這類非工具事件沒有 tool_name 概念）→ 只用 event 比對，
     # 不做 tool_name in {} 判斷（空集合會讓任何 tool_name 都比對失敗，包含
     # Stop 事件本身沒有 tool_name 這件事——None 明確表達「不篩」，跟「篩出空集合」不同）。
@@ -324,7 +361,7 @@ def _dispatch(payload: dict) -> int:
 
     if warn_messages:
         joined = "\n".join(warn_messages)
-        if event in ("PreToolUse", "PostToolUse"):
+        if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):
             # 2026-07-30 實測（隔離 cwd ＋ 自帶 settings.json 的暗號探針，三條路徑同時測）：
             #   stderr + exit 0        → **完全蒸發**。hook 確實執行（落檔 marker 為證），
             #                            但模型被要求逐項列出收到的訊息時沒有它。
@@ -352,12 +389,64 @@ def _dispatch(payload: dict) -> int:
                 }
             }, ensure_ascii=False))
         else:
-            # Stop／SubagentStop 的 WARN 通道**尚未實測**（AWC-1 走這條）。
-            # 刻意不把 PreToolUse 的結論外推：hookSpecificOutput 是 per-event 的
-            # union 成員，欄位不通用，猜錯的下場就是上面那個「靜默剝掉」。
-            sys.stderr.write(joined + "\n")
+            # Stop／SubagentStop：2026-07-31 實測（tests/stop_warn_probe/，兩輪
+            # --resume 觀察下一輪 context）**三條路徑全部到不了模型**——
+            # additionalContext 巢狀 ✘、stderr ✘、平鋪 ✘。fired.log 累計 2 次
+            # 證明 hook 有跑，分母成立、是真陰性不是假陰性。
+            # 結構上也講得通：Stop 之後那一輪已經結束，沒有「接下來」可以注入。
+            #
+            # 所以改成**兩段式投遞**：這裡只落一張待送的便箋，等下一次
+            # UserPromptSubmit（使用者開口的那一刻，模型正要重新讀 context）
+            # 再送出去。同一輪實測確認 UserPromptSubmit 的 additionalContext
+            # 到得了，且模型能正確引用識別碼與規則內容。
+            _queue_pending_warning(session_id, joined)
 
     return 0
+
+
+def _pending_path(session_id: str) -> str:
+    return os.path.join(STATE_DIR, f"pending_warn.{session_id}.json")
+
+
+def _queue_pending_warning(session_id: str, message: str) -> None:
+    """把 Stop 事件的 WARN 存成便箋，等下一次 UserPromptSubmit 投遞。
+
+    fail-open：寫不進去就算了。這條是提醒，不值得讓 hook 爆掉去擋住對話。
+    """
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_pending_path(session_id), "w", encoding="utf-8") as fh:
+            json.dump({"ts": _now(), "message": message}, fh, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _take_pending_warning(session_id: str) -> str:
+    """取出並**刪除**便箋（只投一次）。
+
+    刪除發生在「即將送出」的當下：留著會在下一輪重送一次，而重複的提醒
+    正是讓閘門變成噪音的方式。
+
+    過期的便箋丟掉不送 —— 隔了幾小時才冒出來的提醒，模型與使用者都對不上是
+    哪一輪的事，那種訊息只會製造困惑。
+    """
+    path = _pending_path(session_id)
+    try:
+        if not os.path.exists(path):
+            return ""
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        os.remove(path)
+        ts = data.get("ts") or ""
+        if ts and ts < _minutes_ago(_PENDING_TTL_MIN):
+            return ""
+        return data.get("message") or ""
+    except Exception:
+        try:
+            os.remove(path)
+        except Exception:
+            pass
+        return ""
 
 
 def _force_utf8_output() -> None:

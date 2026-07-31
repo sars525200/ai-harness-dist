@@ -34,9 +34,16 @@ import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
+# BOM-safe：stdin 可能帶 UTF-8 BOM，直接 json.loads 會炸（§-0.5 發現 4）。
+try:
+    _payload = json.loads(sys.stdin.buffer.read().decode("utf-8-sig") or "{}")
+except Exception:
+    _payload = {}
+_EVENT = _payload.get("hook_event_name") or "Stop"
+
 # 分母證據：先落檔再做任何事，確保就算後面爆掉也知道 hook 跑過。
 with io.open(os.path.join(_HERE, "fired.log"), "a", encoding="utf-8") as fh:
-    fh.write("fired\n")
+    fh.write(f"fired {_EVENT}\n")
 
 for stream in (sys.stderr, sys.stdout):
     try:
@@ -44,21 +51,29 @@ for stream in (sys.stderr, sys.stdout):
     except Exception:
         pass
 
+# 每個事件用**不同識別碼**，這樣模型報出哪一個，就知道是哪條通道通的。
+# Stop 三條路徑 2026-07-31 已實測全部不可見；UserPromptSubmit 是本輪要驗的。
+_TOKENS = {
+    "Stop": ("STOP-VIA-CONTEXT-5W8J", "STOP-VIA-STDERR-7Q4M", "STOP-VIA-FLAT-2H6R"),
+    "UserPromptSubmit": ("UPS-VIA-CONTEXT-4B7N", "UPS-VIA-STDERR-8L2C", "UPS-VIA-FLAT-6D9K"),
+}
+_ctx_tok, _err_tok, _flat_tok = _TOKENS.get(_EVENT, _TOKENS["Stop"])
+
 # 對照組：現行 dispatch 對 Stop 走的就是這條（dispatch.py:358）。PreToolUse 已證實蒸發。
-sys.stderr.write("暗號 S-A（stderr 路徑）：STOP-VIA-STDERR-7Q4M\n")
+sys.stderr.write(f"暗號（stderr 路徑）：{_err_tok}\n")
 
 # 主體：AWC-1 的真實訊息形狀 —— 純陳述、來源可核對，符合已驗證的措辭紀律
 # （寫成祈使句會被判 prompt injection 而整條無視，warn_probe 四輪結論之一）。
 sys.stdout.write(json.dumps({
     "hookSpecificOutput": {
-        "hookEventName": "Stop",
+        "hookEventName": _EVENT,
         "additionalContext": (
             "CLAUDE.md §2【硬規則】：上一輪結尾把決定權交回給 user（陳述句形態，"
             "不是問句），但那一輪沒有呼叫 AskUserQuestion。需要 user 決定或釐清"
-            "一律走選擇題（2–4 選項、第一個標「(推薦)」）。識別碼 STOP-VIA-CONTEXT-5W8J。"
+            f"一律走選擇題（2–4 選項、第一個標「(推薦)」）。識別碼 {_ctx_tok}。"
         ),
     },
     # 對照組：平鋪同名欄位，預期被 zod 剝掉（3a 的 watchPaths 同一個坑）。
-    "additionalContext": "暗號 S-C（平鋪路徑）：STOP-VIA-FLAT-2H6R",
+    "additionalContext": f"暗號（平鋪路徑）：{_flat_tok}",
 }, ensure_ascii=False))
 sys.exit(0)

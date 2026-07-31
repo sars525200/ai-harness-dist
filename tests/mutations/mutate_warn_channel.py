@@ -45,7 +45,7 @@ MUTATIONS = [
     ),
     (
         "WARN 全部退回 stderr（＝改動被整個 revert）",
-        'if event in ("PreToolUse", "PostToolUse"):',
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):',
         'if False:',
     ),
     (
@@ -60,8 +60,23 @@ MUTATIONS = [
     ),
     (
         "Stop 也走 PreToolUse 形狀的 JSON（跨事件外推）",
-        'if event in ("PreToolUse", "PostToolUse"):',
-        'if event in ("PreToolUse", "PostToolUse", "Stop"):',
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):',
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"):',
+    ),
+    (
+        "Stop 不再落便箋（訊息當場蒸發，回到「有記 log 但沒人收到」）",
+        "            _queue_pending_warning(session_id, joined)",
+        "            pass",
+    ),
+    (
+        "便箋投遞後不清除（下一輪會重送 —— 重複提醒就是噪音）",
+        "        os.remove(path)\n        ts = data.get(\"ts\") or \"\"",
+        "        ts = data.get(\"ts\") or \"\"",
+    ),
+    (
+        "UserPromptSubmit 的投遞窗口移到 candidates 守門之後（永遠送不出去）",
+        '    if event == "UserPromptSubmit":\n        pending = _take_pending_warning(session_id)',
+        '    if False:\n        pending = _take_pending_warning(session_id)',
     ),
 ]
 

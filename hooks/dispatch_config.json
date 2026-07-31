@@ -2,10 +2,11 @@
   "rules": {
     "DB-1": { "shadow": false },
     "R4": { "shadow": true },
-    "AWC-1": { "shadow": true },
+    "AWC-1": { "shadow": false },
     "R1": { "shadow": false },
     "R3": { "shadow": false },
     "ENC-1": { "shadow": false },
-    "PR-1": { "shadow": true }
+    "PR-1": { "shadow": true },
+    "BUDGET-1": { "shadow": false }
   }
 }

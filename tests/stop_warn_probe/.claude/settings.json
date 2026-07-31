@@ -14,6 +14,16 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\tests\\stop_warn_probe\\probe_hook.py\""
+          }
+        ]
+      }
     ]
   }
 }

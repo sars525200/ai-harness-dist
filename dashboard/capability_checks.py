@@ -252,11 +252,25 @@ def _p_non_toolcall_writers():
 
 
 def _p_stop_warn_channel():
+    """2026-07-31 實測完成 —— 但結論是「這條路不通」，能力來自繞道。
+
+    探針（`tests/stop_warn_probe/`，兩輪 --resume 觀察下一輪 context）證明
+    Stop 的三條輸出路徑對模型**全部不可見**：additionalContext 巢狀 ✘、
+    stderr ✘、平鋪 ✘（fired.log 累計 2 次為分母，是真陰性）。
+    所以判準不是「Stop 能不能講話」——它不能——而是**訊息到底有沒有送到**：
+    Stop 落便箋、UserPromptSubmit 投遞，兩段接上才算數。
+    """
     src = _read(HOOKS / "dispatch.py")
-    # 這條刻意判「有沒有承認未驗」而不是「有沒有實作」——沒驗證就上線比沒做更糟
-    admitted = "尚未實測" in src or "未驗" in src
-    return False, ("Stop／SubagentStop 的 WARN 通道未實測（AWC-1 解 shadow 的前置）"
-                   + ("，程式碼已標註未驗、未擅自外推" if admitted else "，且沒有標註"))
+    queued = "_queue_pending_warning" in src
+    delivered = ("_take_pending_warning" in src
+                 and '"UserPromptSubmit"' in src)
+    probe = (HARNESS / "tests" / "stop_warn_probe" / "probe_hook.py").exists()
+    if not (queued and delivered):
+        return False, ("Stop 的 WARN 訊息沒有投遞路徑 —— Stop 三條輸出路徑實測皆不可見，"
+                       "沒接兩段式的話規則跑了也沒人收到")
+    return True, ("Stop→UserPromptSubmit 兩段式投遞：Stop 落便箋、下次使用者開口時"
+                  "走 additionalContext 送出（投一次即清、逾時不送）"
+                  + ("，端到端探針在版控" if probe else ""))
 
 
 # ── ⑥ Observability ──────────────────────────────────────────────────────
@@ -314,12 +328,21 @@ def _p_cost_dashboard():
 
 
 def _p_budget_ceiling():
-    # 2026-07-30 外部標的校準抓到的真缺口：faros 五層把 budget ceilings 明列在
-    # Guardrails 能力內，arxiv 2607.07405 的四閘門也有 Resource constraint gate。
-    # 我們的成本控制（CLAUDE.md §7 模型選擇）純靠模型自覺，零確定性閘門。
-    return False, ("無成本／資源上限閘門 —— §7 模型分級是 soft rule，靠模型自覺。"
-                   "user 已決定先登記不做（要先解決「hook 拿什麼當計量單位」，"
-                   "hook payload 看不到 token 數）")
+    """2026-07-31 補上。原本卡在「hook 拿什麼當計量單位（payload 看不到 token 數）」。
+
+    解法不是等 payload 給，是自己算：Stop 事件掃當日 transcript 的
+    `message.usage`。計量層本來就在 ⑥ 的成本分頁做好了，這裡只是換個消費者。
+    """
+    rules = _shadow_cfg()
+    src = _read(HOOKS / "rules" / "budget1_daily_usage.py")
+    if not src:
+        return False, ("無成本／資源上限閘門 —— §7 模型分級是 soft rule，靠模型自覺")
+    if "BUDGET-1" not in rules:
+        return False, "budget1 規則檔存在但沒進 dispatch_config —— 不會被呼叫"
+    enforced = not rules.get("BUDGET-1", {}).get("shadow", True)
+    return True, ("BUDGET-1：Stop 掃當日 transcript 算 output token，越線走"
+                  "兩段式投遞出 WARN（節流 20 分、一天只講一次）"
+                  + ("，enforce 中" if enforced else "，shadow 觀察中"))
 
 
 # ── ⑦ Verification ───────────────────────────────────────────────────────

@@ -57,8 +57,18 @@ MUTATIONS = [
     ),
     (
         "applies 放寬成全部適用（不是問句的收尾也會被唸）",
-        "    return bool(_ENDS_WITH_QUESTION.search(ctx.last_assistant_message.strip()))",
-        "    return True",
+        "    if _ENDS_WITH_QUESTION.search(msg):\n        return True",
+        "    if True:\n        return True",
+    ),
+    (
+        "待決措辭偵測整條不見（退回只抓問號 —— 2026-07-31 漏掉的正是這一類）",
+        "    if not _PENDING_DECISION.search(tail):\n        return False",
+        "    if True:\n        return False",
+    ),
+    (
+        "待決措辭不限尾段（正文中間敘述「我評估過要不要…」也會被唸）",
+        "    tail = msg[-_TAIL_CHARS:]",
+        "    tail = msg",
     ),
 ]
 

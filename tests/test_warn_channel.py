@@ -51,10 +51,13 @@ class _FakeModule:
         return self._verdict
 
 
-def _run(event, verdicts, shadow):
+def _run(event, verdicts, shadow, session_id="test-warn-channel"):
     """隔離跑一次 _dispatch，回 (rc, stdout, stderr)。
 
     verdicts 是 list —— 多條規則同時 WARN 的情境要測得到（訊息會被 join）。
+
+    session_id 可覆寫：Stop→UserPromptSubmit 的兩段式投遞用便箋檔傳遞，
+    而檔名綁 session_id。共用同一個 id 會讓不同 case 互相撿到對方的便箋。
     """
     saved = {
         "REGISTRY": dispatch.REGISTRY,
@@ -74,7 +77,7 @@ def _run(event, verdicts, shadow):
     dispatch._resolve_dev_git = lambda main_git: None  # noqa: ARG005
 
     payload = {
-        "session_id": "test-warn-channel",
+        "session_id": session_id,
         "hook_event_name": event,
         "tool_name": "Bash" if event == "PreToolUse" else "",
         "tool_input": {"command": "git push vm master"},
@@ -144,15 +147,66 @@ def _c4b():
     assert "ENC-1 訊息" in hso.get("additionalContext", "")
 
 
-@case("Stop + WARN + enforce → 走 stderr，不假裝 PreToolUse 的結論可以外推")
+@case("Stop + WARN + enforce → 落便箋等 UserPromptSubmit 投遞，當場不輸出任何通道")
 def _c4():
-    rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False)
+    """2026-07-31 改：Stop 的三條輸出路徑實測全部到不了模型。
+
+    原本這個 case 斷言「走 stderr」，那是當時的實作，但 `tests/stop_warn_probe/`
+    兩輪 --resume 實測證明 stderr／additionalContext／平鋪對下一輪 context
+    **全部不可見**（fired.log 累計 2 次為分母）。所以現在斷言的是新契約：
+    Stop 當場什麼都不送，只把訊息存成便箋。
+    """
+    import glob
+    import os
+    sid = "warnchan-stop-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    for stale in glob.glob(note):
+        os.remove(stale)
+    rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False, session_id=sid)
     assert rc == 0, f"rc={rc}"
     assert not out.strip(), (
         "Stop 事件竟然輸出了 PreToolUse 形狀的 JSON —— hookSpecificOutput 是 "
         "per-event union，欄位不通用，猜錯就是靜默失效"
     )
-    assert "AWC-1 訊息" in err
+    assert "AWC-1 訊息" not in err, (
+        "Stop 還在寫 stderr —— 那條路實測到不了模型，寫了只是製造「有在提醒」的錯覺"
+    )
+    assert os.path.exists(note), "Stop 沒有落下便箋 —— 訊息就此消失，等於沒有這條規則"
+    import json as _json
+    with open(note, encoding="utf-8-sig") as fh:
+        assert "AWC-1 訊息" in _json.load(fh).get("message", "")
+    os.remove(note)
+
+
+@case("UserPromptSubmit → 投遞便箋走 additionalContext，且只投一次")
+def _c4c():
+    """便箋只能投一次：留著會在下一輪重送，而重複提醒正是閘門變噪音的方式。"""
+    import json as _json
+    import os
+    sid = "warnchan-ups-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    _run("Stop", [warn("AWC-1 便箋內容")], shadow=False, session_id=sid)
+    assert os.path.exists(note), "前置沒成立：Stop 該落便箋"
+
+    rc, out, err = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    assert rc == 0, f"rc={rc}"
+    doc = _json.loads(out)
+    hso = doc.get("hookSpecificOutput") or {}
+    assert hso.get("hookEventName") == "UserPromptSubmit", (
+        f"hookEventName 必須是實際事件名，否則整包被 zod 剝掉：{hso}"
+    )
+    assert "AWC-1 便箋內容" in hso.get("additionalContext", ""), f"訊息沒送出：{hso}"
+    assert "additionalContext" not in doc, "平鋪欄位會被 zod 剝掉，不該用"
+    # 斷言**原始字串**而非解析後的 doc：json.loads 會把 \uXXXX 還原成中文，
+    # 所以只看 doc 是驗不出 ensure_ascii 有沒有關的。這一行是 2026-07-31 補的 ——
+    # 當時新增的投遞區塊讓 mutate_warn_channel 的 ensure_ascii 變異改到了這一處
+    # （replace(..., 1) 只換第一個出現位置），而既有 case 只守 PreToolUse 那處，
+    # 於是那個變異靜靜地不紅了。**錨點還在、卻指向別的地方**，比錨點漂掉更難發現。
+    assert "便箋內容" in out, "ensure_ascii 沒關 —— 中文變 \\uXXXX，log 與人工核對全部不可讀"
+    assert not os.path.exists(note), "投遞後便箋沒清掉 —— 下一輪會重送"
+
+    rc2, out2, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    assert rc2 == 0 and not out2.strip(), f"便箋被重送了：{out2!r}"
 
 
 @case("PreToolUse + BLOCK + enforce → exit 2 + stderr，且不污染 stdout")
