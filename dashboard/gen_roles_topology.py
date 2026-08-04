@@ -148,6 +148,73 @@ def activity() -> dict:
     return stats
 
 
+def tool_usage_by_role() -> dict:
+    """{角色: {工具: 次數}} —— 它**實際調用過**什麼。
+
+    用途不是看熱鬧，是拿來校準 `tools:`：配了卻從沒調用過 → 可以收窄邊界；
+    某工具調用量遠高於其他 → 那才是它真正需要的。
+
+    ⚠ **只涵蓋 dispatch matcher 內的工具**（Bash／PowerShell／Write／Edit／
+    MultiEdit／NotebookEdit／Agent／Skill）。`Read`／`Grep`／`Glob` 不在 matcher，
+    所以**純唯讀角色會顯示零調用**——那是觀測缺口，不是它沒工作。
+    這件事必須在畫面上講出來，否則「查詢員零工具」會被讀成「這個角色沒在用」。
+    """
+    out: dict = {}
+    if not STATE_DIR.exists():
+        return out
+    for path in STATE_DIR.glob("events.*.agent-*.ndjson"):
+        stem = path.name[len("events."):]
+        if _TEST_SESSION.match(stem):
+            continue
+        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            if '"dispatch"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("kind") != "dispatch":
+                continue
+            tool, role = rec.get("tool_name"), rec.get("agent_type")
+            if tool and role:
+                out.setdefault(role, {})
+                out[role][tool] = out[role].get(tool, 0) + 1
+    return out
+
+
+def daily_by_role(days: int = 14) -> dict:
+    """{角色: [(日期, 次數), …]} —— 最近 N 天每天跑完幾次，給走線圖用。
+
+    **以 `SubagentStop` 計**，不用 spawn：spawn 是 2026-07-31 才開始記的，
+    拿它畫時間軸會讓 7/31 之前一片空白，看起來像「以前都沒在用」。
+    stop 從一開始就有，是這條線唯一連續的訊號。
+    """
+    per: dict = {}
+    if not STATE_DIR.exists():
+        return per
+    for path in STATE_DIR.glob("events.*.ndjson"):
+        stem = path.name[len("events."):]
+        if _TEST_SESSION.match(stem):
+            continue
+        for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+            if '"SubagentStop"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("event") != "SubagentStop":
+                continue
+            role, day = rec.get("agent_type"), (rec.get("ts") or "")[:10]
+            if role and day:
+                per.setdefault(role, {})
+                per[role][day] = per[role].get(day, 0) + 1
+    if not per:
+        return per
+    all_days = sorted({d for v in per.values() for d in v})[-days:]
+    return {role: [(d, counts.get(d, 0)) for d in all_days] for role, counts in per.items()}
+
+
 def running_by_role() -> dict:
     """此刻真的在跑的 subagent，按角色計數。**跨檔逐 session 配對**。
 
@@ -256,11 +323,25 @@ def _node(role: dict, act: dict, idx: int) -> str:
           </button>"""
 
 
-def _role_payload(role: dict, act: dict) -> dict:
+def _role_payload(role: dict, act: dict, usage: dict, daily: dict) -> dict:
     """彈窗要顯示的內容。轉義交給前端（textContent），這裡只出純資料。"""
     st = act.get(role["name"], {})
     state_cls, state_txt = _state_of(st)
+    used = usage.get(role["name"], {})
+    # 宣告的工具（frontmatter）逐個對上實際調用次數 —— 這一欄就是拿來校準邊界的：
+    # 配了 0 次的可以收窄，某一項獨大的才是它真正需要的。
+    #
+    # ⚠ 只解析**自建角色**：內建角色的 tools 是一句描述（「全部工具，除 Agent／…」），
+    #   用逗號切會得到一個假工具名，表格裡就會出現「全部工具，除 Agent…／從未調用」
+    #   這種讀起來像 bug 的列。內建的只列實際調用，宣告那半用原文顯示。
+    declared = []
+    if not role.get("builtin"):
+        declared = [t.strip() for t in (role.get("tools") or "").split(",") if t.strip()]
     return {
+        "declaredTools": [{"name": t, "calls": used.get(t, 0)} for t in declared],
+        "usedTools": sorted(({"name": k, "calls": v} for k, v in used.items()),
+                            key=lambda x: -x["calls"]),
+        "daily": daily.get(role["name"], []),
         "name": role["name"],
         "state": state_txt,
         "stateCls": state_cls,
@@ -289,11 +370,14 @@ def build_html(agents: list, act: dict, sess: dict) -> str:
         sess_detail = f"　·　活動中：{parts}"
     else:
         sess_detail = ""
+    usage = tool_usage_by_role()
+    daily = daily_by_role()
     ordered = agents + [{**b, "builtin": True} for b in BUILTIN]
     own = "\n".join(_node(a, act, i) for i, a in enumerate(agents))
     built = "\n".join(_node(b, act, len(agents) + i) for i, b in enumerate(
         [{**x, "builtin": True} for x in BUILTIN]))
-    payload = json.dumps([_role_payload(r, act) for r in ordered], ensure_ascii=False)
+    payload = json.dumps([_role_payload(r, act, usage, daily) for r in ordered],
+                         ensure_ascii=False)
     running_total = sum(v.get("running", 0) for v in act.values())
     known = {a["name"] for a in agents} | {b["name"] for b in BUILTIN}
     ghosts = sorted(n for n, v in act.items()
