@@ -259,10 +259,11 @@ def _case_daily_cost_attached(fails: list) -> None:
 
 
 def _case_metric_switch(fails: list) -> None:
-    """縱軸口徑切換：金額／token／mix，且**預設是金額**。
+    """預設檢視＝走勢圖、預設口徑＝token，且**三個地方要一致**。
 
-    預設值同時寫在兩個地方 —— HTML 的 aria-pressed 與 JS 的 `metricOf`。
-    兩邊不一致的話按鈕會亮在「金額」而圖畫的是別的口徑，且完全不報錯。
+    同一個預設值寫在三處：HTML 的 `aria-pressed`、HTML 哪一格 pane 沒有 `hidden`、
+    JS 的 `metricOf`／boot 期 `render()`。任兩處不一致都**不會報錯**，
+    只會出現「亮著的按鈕跟畫出來的圖不是同一件事」或「一開頁就是空白格」。
     """
     with tempfile.TemporaryDirectory() as tmp:
         _write_transcript(os.path.join(tmp, "s1.jsonl"),
@@ -276,13 +277,22 @@ def _case_metric_switch(fails: list) -> None:
         for label in ("金額", "token", "mix"):
             if f'>{label}</button>' not in html:
                 fails.append(f"口徑選項「{label}」不見了")
-        if '<button type="button" data-metric="cost" aria-pressed="true">' not in html:
-            fails.append("預設口徑不是金額（要與 JS 的 metricOf 一致）")
-    # JS 那一半：看板檔裡的預設值必須同為 cost
+        if '<button type="button" data-metric="token" aria-pressed="true">' not in html:
+            fails.append("預設口徑不是 token")
+        if '<button type="button" data-view="trend" aria-pressed="true">' not in html:
+            fails.append("預設檢視不是走勢圖")
+        # 亮著的那顆對應的 pane 必須是唯一沒有 hidden 的那格
+        if '<div class="cv-pane" data-cv-pane="mix-trend"></div>' not in html:
+            fails.append("走勢圖那格沒有預設顯示 —— 一開頁會是空白")
+        if '<div class="cv-pane" data-cv-pane="mix-bar" hidden></div>' not in html:
+            fails.append("長條圖那格沒有預設收起 —— 會同時顯示兩張圖")
+    # JS 那一半：metricOf 與 boot 期 render 都要跟 HTML 對得上
     dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
     js = open(dash, encoding="utf-8").read()
-    if "metricOf = { mix: 'cost' }" not in js:
-        fails.append("看板 JS 的 metricOf 預設不是 cost —— 會與按鈕亮起的那顆不一致")
+    if "metricOf = { mix: 'token' }" not in js:
+        fails.append("JS 的 metricOf 預設不是 token —— 會與按鈕亮起的那顆不一致")
+    if "render('mix', 'trend');" not in js:
+        fails.append("boot 期沒有畫走勢圖 —— 預設那格會是空的")
     if "function trendValue" not in js or "function barsCost" not in js:
         fails.append("看板缺金額繪圖函式 —— 切到金額會是空白")
 

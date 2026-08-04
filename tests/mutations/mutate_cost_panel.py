@@ -72,9 +72,14 @@ MUTATIONS = [
         "chart_days = days",
     ),
     (
-        "縱軸預設改回 token（按鈕亮在金額、圖畫的卻是 token）",
-        '<button type="button" data-metric="cost" aria-pressed="true">',
-        '<button type="button" data-metric="cost" aria-pressed="false">',
+        "縱軸預設改回金額（按鈕亮在金額、JS 畫的卻是 token）",
+        '<button type="button" data-metric="token" aria-pressed="true">',
+        '<button type="button" data-metric="token" aria-pressed="false">',
+    ),
+    (
+        "預設顯示的 pane 與亮著的按鈕不同步（一開頁是空白格）",
+        '<div class="cv-pane" data-cv-pane="mix-trend"></div>',
+        '<div class="cv-pane" data-cv-pane="mix-trend" hidden></div>',
     ),
     (
         "拿掉估算與累計的對帳差（估算線看起來會跟帳單一樣可信）",

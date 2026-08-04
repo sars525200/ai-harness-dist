@@ -484,15 +484,15 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
       <script type="application/json" id="cost-data">{chart_json}</script>
       <div class="cv-bar">
         <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
-          <button type="button" data-view="bar" aria-pressed="true">長條圖</button>
-          <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
+          <button type="button" data-view="bar" aria-pressed="false">長條圖</button>
+          <button type="button" data-view="trend" aria-pressed="true">走勢圖</button>
           <button type="button" data-view="text" aria-pressed="false">文字</button>
         </div>
         <button type="button" class="cv-info" data-note="note-read" aria-expanded="false"
                 aria-controls="note-read" aria-label="讀這張表之前先知道三件事">!</button>
         <div class="cv-switch" role="group" aria-label="縱軸口徑" data-cv-metric="mix">
-          <button type="button" data-metric="cost" aria-pressed="true">金額</button>
-          <button type="button" data-metric="token" aria-pressed="false">token</button>
+          <button type="button" data-metric="cost" aria-pressed="false">金額</button>
+          <button type="button" data-metric="token" aria-pressed="true">token</button>
           <button type="button" data-metric="mix" aria-pressed="false">mix</button>
         </div>
         <button type="button" class="cv-info" data-note="note-cost" aria-expanded="false"
@@ -519,8 +519,8 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           <li><span class="chip warn">動作</span><span>真正的省錢槓桿有兩個，都不在 output 欄：①<b>模型 mix</b>——同樣一輪，Opus 的 cache_read 單價是 Sonnet 的 6 倍，把低風險維護切回 Sonnet 省的是整輪成本；②<b>context 長度</b>——cache_read 每回合按<b>當時的 context 全量</b>計費，所以長對話是複利，該 <code>/clear</code> 就 clear。金額走勢圖某天翹起來，先問這兩件，別去看 output。</span></li>
         </ul>
       </div>
-      <div class="cv-pane" data-cv-pane="mix-bar"></div>
-      <div class="cv-pane" data-cv-pane="mix-trend" hidden></div>
+      <div class="cv-pane" data-cv-pane="mix-bar" hidden></div>
+      <div class="cv-pane" data-cv-pane="mix-trend"></div>
       <div class="cv-pane" data-cv-pane="mix-text" hidden>
         <div class="twrap">
           <table class="roster">
