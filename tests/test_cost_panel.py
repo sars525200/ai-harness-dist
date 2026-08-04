@@ -329,6 +329,30 @@ def _case_notes_collapsed(fails: list) -> None:
         fails.append("浮窗沒有定位邏輯 —— 會固定黏在視窗左上角")
 
 
+def _case_chart_tip_and_unit(fails: list) -> None:
+    """圖表提示與單位標示（純看板 JS）。
+
+    三條都是「壞掉但畫面還在」型：
+      1. 用回 SVG `<title>` → 冒出瀏覽器內建提示，樣式管不到、也沒有進出場
+      2. 沒有整欄感應區 → 提示還在，但長條只有幾 px 寬，實際上滑不到
+      3. 沒有單位標 → 金額到底是美元還台幣只能靠問人（這題被問過）
+    """
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    js = open(dash, encoding="utf-8").read()
+    if "createElementNS(NS, 'title')" in js:
+        fails.append("圖表又用回 SVG <title> —— 那是瀏覽器內建提示，樣式與動畫都管不到")
+    if "function hitCol" not in js:
+        fails.append("沒有整欄感應區 —— 幾 px 寬的長條實際上滑不到")
+    if "function unitTag" not in js:
+        fails.append("沒有單位標示函式")
+    for want in ("單位：美元 USD", "單位：output token", "單位：Opus 佔 output token 的百分比"):
+        if want not in js:
+            fails.append(f"圖上少了單位標示「{want}」")
+    # aria-label 要跟著給，否則把 <title> 拿掉等於順手砍掉輔助技術讀得到的名稱
+    if "aria-label" not in js.split("function tipFor")[-1][:300]:
+        fails.append("tipFor 沒有補 aria-label —— 拿掉 <title> 會連無障礙名稱一起掉")
+
+
 def _case_escaping(fails: list) -> None:
     if "<script" in _load()._esc("<script>alert(1)</script>"):
         fails.append("_esc 沒有轉義角括號")
@@ -350,6 +374,7 @@ def run() -> "tuple[int, list]":
         ("每日金額掛進圖表且缺值為 null", _case_daily_cost_attached),
         ("縱軸口徑切換預設金額", _case_metric_switch),
         ("長文說明收進 (!) 鈕且預設收合", _case_notes_collapsed),
+        ("圖表提示不用原生 title、單位標在圖上", _case_chart_tip_and_unit),
         ("HTML 轉義", _case_escaping),
     ]
     passed = 0

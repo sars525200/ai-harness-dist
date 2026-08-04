@@ -439,19 +439,20 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         else:
             recon = "尚未產生按日資料。"
         by_model = "".join(
-            f'<tr><td><code>{_esc(m)}</code></td><td class="num">${v:,.2f}</td>'
+            f'<tr><td><code>{_esc(m)}</code></td><td class="num">US${v:,.2f}</td>'
             f'<td class="num">{v / cost["project_total"] * 100:.1f}%</td></tr>'
             for m, v in cost["by_model"].items()) if cost.get("project_total") else ""
         cost_block = f"""      <div class="twrap">
         <table class="roster">
-          <thead><tr><th>模型</th><th class="num">累計金額</th><th class="num">佔比</th></tr></thead>
+          <thead><tr><th>模型</th><th class="num">累計金額 (USD)</th><th class="num">佔比</th></tr></thead>
           <tbody>
 {by_model}
           </tbody>
         </table>
       </div>
-      <div class="copy-note"><span>※</span><span>本專案累計 <b>${cost['project_total']:,.2f}</b>
-        （全體 ${cost['all_total']:,.2f}，本專案佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
+      <div class="copy-note"><span>※</span><span>本專案累計 <b>US${cost['project_total']:,.2f}</b>
+        （全體 US${cost['all_total']:,.2f}，本專案佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
+        <b>全頁金額一律美元 USD</b>，ccusage 用的是 Anthropic 的美元價目表、沒有匯率換算 ·
         {cost['matched']}/{cost['project_sessions']} 個 session 對得上 ·
         資料截至 <code>{_esc(cost['as_of'])}</code> · 來源：{_esc(cost['source'])}。
         <b>這一欄是累計精確值</b>（session UUID 直接對應本專案）。走勢圖那條虛線是另一套算法
@@ -539,7 +540,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     <section>
       <div class="section-head">
         <h2>金額量級</h2>
-        <span class="sub">ccusage 價格表 · session UUID 交集收斂到本專案</span>
+        <span class="sub">ccusage 價格表 · <b>金額一律美元 USD</b> · session UUID 交集收斂到本專案</span>
       </div>
       <div class="cv-switch" role="group" aria-label="金額呈現方式" data-cv="cost">
         <button type="button" data-view="chart" aria-pressed="true">圖表</button>
