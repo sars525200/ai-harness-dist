@@ -99,9 +99,18 @@ def _case_lay_data_sync(fails):
         "project": {"root": "P", "claudeMd": True, "allow": 118, "deny": 12,
                     "hooks": ["Stop"], "settingsKeys": [], "skills": 14, "agents": 4,
                     "rules": 4, "commands": 0},
+        "projects": [{"name": "X", "path": "D:\\X", "exists": True, "isCurrent": True,
+                      "skills": 1, "agents": 0, "rules": 0, "hooks": [], "allow": 1,
+                      "deny": 0, "claudeMd": True}],
     }
     html = '<script type="application/json" id="lay-data">{}</script>'
     out = m.sync_layer_counts(html, s)
+    # 缺 projects 要拒跑，不能靜默補空清單（那會讓下拉是空的卻看起來正常）
+    try:
+        m.sync_layer_counts(html, {k: v for k, v in s.items() if k != "projects"})
+        fails.append("survey() 缺 projects 時沒拒跑 —— 下拉會靜默變空")
+    except SystemExit:
+        pass
     import re as _re
     mm = _re.search(r'id="lay-data">(.*?)</script>', out, _re.S)
     if not mm:
@@ -121,6 +130,50 @@ def _case_lay_data_sync(fails):
         fails.append("找不到 #lay-data 時沒拒跑 —— 數字會靜默不更新")
     except SystemExit:
         pass
+
+
+def _case_projects_listed(fails):
+    """下拉的候選專案：本專案一定在、沒有 .claude 的也要列（exists=False）。
+
+    「這個專案完全沒接 harness」是答案不是錯誤 —— 只列有 .claude 的會讓它消失，
+    而那正是最該看到的一種狀態。
+    """
+    m = _load()
+    projs = m.survey_projects()
+    if not projs:
+        fails.append("一個候選專案都沒有 —— 至少要有本專案")
+        return
+    names = [p["name"] for p in projs]
+    if not any(p["isCurrent"] for p in projs):
+        fails.append(f"沒有任何專案被標成 isCurrent：{names}")
+    cur = [p for p in projs if p["isCurrent"]][0]
+    if cur["skills"] <= 0:
+        fails.append(f"本專案 skills 掃出 {cur['skills']} —— 實際有 14 支，掃法壞了")
+    # 點名但沒有 .claude 的專案要在清單裡，且標成 exists=False
+    named = [p for p in projs if p["name"] == "AI-Projects"]
+    if named and named[0]["exists"]:
+        fails.append("AI-Projects 沒有 .claude，exists 卻是 True")
+    if not named:
+        fails.append(f"點名的 AI-Projects 沒被列出（沒有 .claude 就消失了）：{names}")
+
+
+def _case_projects_in_payload(fails):
+    """#lay-data 要帶 projects，否則下拉是空的。"""
+    m = _load()
+    s = m.survey()
+    html = '<script type="application/json" id="lay-data">{}</script>'
+    out = m.sync_layer_counts(html, s)
+    import re as _re
+    mm = _re.search(r'id="lay-data">(.*?)</script>', out, _re.S)
+    d = json.loads(mm.group(1)) if mm else {}
+    if not d.get("projects"):
+        fails.append("#lay-data 沒有 projects —— 下拉選單會是空的")
+        return
+    for p in d["projects"]:
+        for k in ("name", "path", "exists", "isCurrent", "skills", "agents", "hooks"):
+            if k not in p:
+                fails.append(f"projects 項目缺欄位 {k}：{p}")
+                return
 
 
 def _case_real_survey(fails):
@@ -143,6 +196,8 @@ def run() -> "tuple[int, list]":
         ("0 與「無」看得見且標 rt-zero", _case_zero_shown),
         ("目錄不存在時拒跑", _case_refuse_missing),
         ("#lay-data 同步且找不到就拒跑", _case_lay_data_sync),
+        ("下拉候選專案含沒接 harness 的", _case_projects_listed),
+        ("#lay-data 帶 projects", _case_projects_in_payload),
         ("真實環境掃得出兩層", _case_real_survey),
     ]
     passed = 0

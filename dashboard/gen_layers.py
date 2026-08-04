@@ -64,6 +64,75 @@ def _count(root: Path, pattern: str) -> int:
         return 0
 
 
+# 專案層下拉要列的候選。自動偵測 D:\ 下帶 `.claude\` 的目錄，再併入這裡點名的 ——
+# 點名的即使**沒有** `.claude\` 也要列出來：「這個專案完全沒接 harness」本身就是答案，
+# 而自動偵測看不到它（沒有 .claude 就掃不到）。
+EXTRA_PROJECTS = [Path(r"D:\AI-Projects")]
+SCAN_ROOT = Path("D:\\")
+
+
+def discover_projects() -> list:
+    """回候選專案路徑清單（含沒有 .claude 的點名項）。"""
+    found = []
+    try:
+        for child in sorted(SCAN_ROOT.iterdir()):
+            if child.is_dir() and (child / ".claude").is_dir():
+                found.append(child)
+    except Exception:
+        pass
+    for extra in EXTRA_PROJECTS:
+        if extra.exists() and extra not in found:
+            found.append(extra)
+    # 本專案一定要在（它是看板既有內容的來源）
+    here = PROJECT_DIR.parent
+    if here not in found:
+        found.insert(0, here)
+    return found
+
+
+def survey_dir(root: Path, settings_names: list, claude_md: Path) -> dict:
+    """盤點一個 `.claude\\` 目錄。不存在時回全零而非拋錯 —— 對專案層來說
+    「沒有 .claude」是合法狀態（那正是要顯示的事實），只有**全域層**缺失才算環境壞掉。"""
+    allow = deny = 0
+    hooks: set = set()
+    keys: set = set()
+    for name in settings_names:
+        cfg = _json(root / name)
+        if not cfg:
+            continue
+        keys |= set(cfg.keys())
+        perms = cfg.get("permissions") or {}
+        allow += len(perms.get("allow") or [])
+        deny += len(perms.get("deny") or [])
+        hooks |= set((cfg.get("hooks") or {}).keys())
+    return {
+        "root": str(root),
+        "exists": root.is_dir(),
+        "claudeMd": claude_md.exists(),
+        "allow": allow,
+        "deny": deny,
+        "hooks": sorted(hooks),
+        "settingsKeys": sorted(keys),
+        "skills": _count(root / "skills", "*/SKILL.md"),
+        "agents": _count(root / "agents", "*.md"),
+        "rules": _count(root / "rules", "*.md"),
+        "commands": _count(root / "commands", "*.md"),
+    }
+
+
+def survey_projects() -> list:
+    """所有候選專案各自的盤點結果，供下拉選單使用。"""
+    out = []
+    for proj in discover_projects():
+        d = survey_dir(proj / ".claude", ["settings.json", "settings.local.json"],
+                       proj / "CLAUDE.md")
+        d["name"] = proj.name
+        d["path"] = str(proj)
+        d["isCurrent"] = (proj == PROJECT_DIR.parent)
+        out.append(d)
+    return out
+
+
 def survey() -> dict:
     """盤點兩層。全域目錄不存在＝環境不對，拒跑（不能靜默出空表）。"""
     if not GLOBAL_DIR.exists():
@@ -101,6 +170,7 @@ def survey() -> dict:
             "rules": _count(root / "rules", "*.md"),
             "commands": _count(root / "commands", "*.md"),
         }
+    out["projects"] = survey_projects()
     return out
 
 
@@ -175,11 +245,23 @@ def sync_layer_counts(html: str, s: dict) -> str:
     顯示層改版時不會把資料一起改掉。
     """
     g = s["global"]
+    if "projects" not in s:
+        raise SystemExit("survey() 沒帶 projects —— 下拉選單會是空的，拒絕產出。"
+                         "（靜默補空清單的話，畫面上看起來就只是「沒有別的專案」）")
     payload = json.dumps({
         "globalSkills": g["skills"], "globalAgents": g["agents"],
         "globalRules": g["rules"], "globalHooks": len(g["hooks"]),
         "globalAllow": g["allow"], "globalDeny": g["deny"],
         "projectAllow": s["project"]["allow"], "projectDeny": s["project"]["deny"],
+        # 下拉選單用：每個候選專案的實掃結果。沒有 .claude 的也列（exists=false）——
+        # 「這個專案完全沒接 harness」正是要看的答案。
+        "projects": [
+            {"name": p["name"], "path": p["path"], "exists": p["exists"],
+             "isCurrent": p["isCurrent"], "skills": p["skills"], "agents": p["agents"],
+             "rules": p["rules"], "hooks": len(p["hooks"]), "allow": p["allow"],
+             "deny": p["deny"], "claudeMd": p["claudeMd"]}
+            for p in s["projects"]
+        ],
     }, ensure_ascii=False)
     out, cnt = re.subn(r'(<script type="application/json" id="lay-data">).*?(</script>)',
                        lambda m: m.group(1) + payload + m.group(2), html, count=1, flags=re.S)
