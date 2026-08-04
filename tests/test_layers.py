@@ -99,9 +99,12 @@ def _case_lay_data_sync(fails):
         "project": {"root": "P", "claudeMd": True, "allow": 118, "deny": 12,
                     "hooks": ["Stop"], "settingsKeys": [], "skills": 14, "agents": 4,
                     "rules": 4, "commands": 0},
+        # ⚠ 欄位要跟 survey_projects() 同步。缺欄位會讓 sync_layer_counts 拋 KeyError
+        #   —— 那是刻意的：新增欄位時測試炸掉，就是在提醒這裡也要跟上。
         "projects": [{"name": "X", "path": "D:\\X", "exists": True, "isCurrent": True,
                       "skills": 1, "agents": 0, "rules": 0, "hooks": [], "allow": 1,
-                      "deny": 0, "claudeMd": True}],
+                      "deny": 0, "claudeMd": True, "ops": 0, "dispatchWired": False,
+                      "foreignHooks": []}],
     }
     html = '<script type="application/json" id="lay-data">{}</script>'
     out = m.sync_layer_counts(html, s)

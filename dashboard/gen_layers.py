@@ -120,6 +120,40 @@ def survey_dir(root: Path, settings_names: list, claude_md: Path) -> dict:
     }
 
 
+def _hook_commands(root: Path, names: list) -> list:
+    """該專案的 hook 實際指向哪些指令（用來判斷 harness 規則對它生不生效）。"""
+    cmds = []
+    for name in names:
+        cfg = _json(root / name)
+        if not cfg:
+            continue
+        for _event, entries in (cfg.get("hooks") or {}).items():
+            for entry in entries or []:
+                for hk in entry.get("hooks") or []:
+                    c = hk.get("command")
+                    if c:
+                        cmds.append(c)
+    return cmds
+
+
+def count_ops(proj: Path) -> int:
+    """該專案的維運腳本數。掃 `**/ops/` 底下的 .py／.sh／.js。
+
+    刻意**不含**共用層 `D:\\.ai-harness\\hooks\\` —— 那 6 支是 harness 本體，
+    每個專案共用同一份，把它算進「這個專案的維運腳本」會讓每個專案都虛胖 6 支。
+    """
+    n = 0
+    try:
+        for d in proj.rglob("ops"):
+            if not d.is_dir():
+                continue
+            n += sum(1 for f in d.iterdir()
+                     if f.is_file() and f.suffix in (".py", ".sh", ".js"))
+    except Exception:
+        pass
+    return n
+
+
 def survey_projects() -> list:
     """所有候選專案各自的盤點結果，供下拉選單使用。"""
     out = []
@@ -129,6 +163,21 @@ def survey_projects() -> list:
         d["name"] = proj.name
         d["path"] = str(proj)
         d["isCurrent"] = (proj == PROJECT_DIR.parent)
+        d["ops"] = count_ops(proj)
+        # harness 的規則（DB-1／R1／…）只在該專案的 hook **指向 dispatch.py** 時才生效。
+        # 光看「有沒有掛 hook」會誤判：IT-deploy-tmp 掛了 Stop，但它指向的是
+        # d:\IT-department\SOP\scripts\auto_commit.ps1 —— 那是別的專案的腳本，
+        # 跟 harness 規則一點關係也沒有（2026-08-04 查到，順帶發現跨專案誤觸發）。
+        cmds = _hook_commands(proj / ".claude", ["settings.json", "settings.local.json"])
+        d["dispatchWired"] = any("dispatch.py" in c for c in cmds)
+        # ⚠ 路徑比對一律轉小寫：Windows 路徑大小寫不敏感，而設定檔裡寫的是
+        #   `d:\IT-department\...`、Path 給的是 `D:\IT-department` —— 直接比對抓到 0，
+        #   看起來像「沒有外部 hook」而其實有（2026-08-04 當場踩到）。
+        here_lc = str(PROJECT_DIR.parent).lower()
+        d["foreignHooks"] = [c for c in cmds
+                             if "dispatch.py" not in c.lower()
+                             and here_lc in c.lower()
+                             and proj != PROJECT_DIR.parent]
         out.append(d)
     return out
 
@@ -253,13 +302,18 @@ def sync_layer_counts(html: str, s: dict) -> str:
         "globalRules": g["rules"], "globalHooks": len(g["hooks"]),
         "globalAllow": g["allow"], "globalDeny": g["deny"],
         "projectAllow": s["project"]["allow"], "projectDeny": s["project"]["deny"],
+        # 規則總數讀 dispatch_config（單一真相），不寫死 —— 加一條規則徽章要自己跟上
+        "ruleCount": len((_json(Path(r"D:\.ai-harness\hooks\dispatch_config.json"))
+                          or {}).get("rules") or {}),
         # 下拉選單用：每個候選專案的實掃結果。沒有 .claude 的也列（exists=false）——
         # 「這個專案完全沒接 harness」正是要看的答案。
         "projects": [
             {"name": p["name"], "path": p["path"], "exists": p["exists"],
              "isCurrent": p["isCurrent"], "skills": p["skills"], "agents": p["agents"],
              "rules": p["rules"], "hooks": len(p["hooks"]), "allow": p["allow"],
-             "deny": p["deny"], "claudeMd": p["claudeMd"]}
+             "deny": p["deny"], "claudeMd": p["claudeMd"],
+             "ops": p["ops"], "dispatchWired": p["dispatchWired"],
+             "foreignHooks": p["foreignHooks"]}
             for p in s["projects"]
         ],
     }, ensure_ascii=False)
