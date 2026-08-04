@@ -393,9 +393,9 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
       <script type="application/json" id="cost-data">{chart_json}</script>
       <div class="cv-bar">
         <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
-          <button type="button" data-view="table" aria-pressed="true">表格</button>
+          <button type="button" data-view="bar" aria-pressed="true">長條圖</button>
           <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
-          <button type="button" data-view="bar" aria-pressed="false">長條圖</button>
+          <button type="button" data-view="text" aria-pressed="false">文字</button>
         </div>
         <div class="cv-switch cv-right" role="group" aria-label="時間單位" data-cv-unit="mix">
           <button type="button" data-unit="day" aria-pressed="true">日</button>
@@ -403,7 +403,9 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           <button type="button" data-unit="year" aria-pressed="false">年</button>
         </div>
       </div>
-      <div class="cv-pane" data-cv-pane="mix-table">
+      <div class="cv-pane" data-cv-pane="mix-bar"></div>
+      <div class="cv-pane" data-cv-pane="mix-trend" hidden></div>
+      <div class="cv-pane" data-cv-pane="mix-text" hidden>
         <div class="twrap">
           <table class="roster">
             <thead><tr><th>日期</th><th>Opus ▮ Sonnet</th><th class="num">mix</th><th class="num">離 {TARGET_OPUS_PCT}%</th><th class="num">output</th><th class="num">則數</th></tr></thead>
@@ -413,8 +415,6 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           </table>
         </div>
       </div>
-      <div class="cv-pane" data-cv-pane="mix-trend" hidden></div>
-      <div class="cv-pane" data-cv-pane="mix-bar" hidden></div>
     </section>
 
     <section>
