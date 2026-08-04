@@ -166,6 +166,127 @@ def _case_no_cost_cache(fails: list) -> None:
             fails.append("沒有金額快取時整頁掛掉 —— 金額應該是選配")
 
 
+def _chart_data(html: str) -> dict:
+    import re
+    m = re.search(r'id="cost-data">(.*?)</script>', html, re.S)
+    return json.loads(m.group(1)) if m else {}
+
+
+def _case_daily_by_model(fails: list) -> None:
+    """按日按**精確模型名**聚合 —— 分攤金額的分母靠它。
+
+    刻意不共用 `aggregate_tokens()`：那支按 family（opus／sonnet）併，
+    而 ccusage 的金額是按 `claude-opus-5`／`claude-opus-4-8` 分別給的。
+    用 family 當分母會把兩個不同單價的模型混在一起分攤，錯得無聲無息。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_transcript(os.path.join(tmp, "s1.jsonl"), [
+            ("2026-01-01", "claude-opus-5", 100, 1000),
+            ("2026-01-01", "claude-opus-4-8", 100, 1000),
+            ("2026-01-02", "claude-sonnet-5", 50, 500),
+        ])
+        m = _load()
+        m.PROJECT_DIR = __import__("pathlib").Path(tmp)
+        d = m.daily_by_model()
+        if set(d.get("2026-01-01", {})) != {"claude-opus-5", "claude-opus-4-8"}:
+            fails.append(f"同一天的兩個 opus 版本被併掉了：{d.get('2026-01-01')}")
+        # 每筆 10 input + 100 output + 100 cache_creation + 1000 cache_read = 1210
+        if d.get("2026-01-01", {}).get("claude-opus-5") != 1210:
+            fails.append(f"token 沒有四種全加（應 1210，實得 "
+                         f"{d.get('2026-01-01', {}).get('claude-opus-5')}）")
+        if "2026-01-02" not in d:
+            fails.append("第二天整天不見了")
+
+
+def _case_daily_cost_attached(fails: list) -> None:
+    """每日金額要掛進 #cost-data，且**沒有資料的日子必須是 null 不是 0**。
+
+    這是走勢圖唯一分得出「那天沒有金額資料」與「那天沒花錢」的依據。
+    寫成 0 的話圖會畫一條掉到底的線，讀起來像「那天免費」——完全是假的。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_transcript(os.path.join(tmp, "s1.jsonl"), [
+            ("2026-01-01", "claude-opus-5", 800, 1000),
+            ("2026-01-02", "claude-sonnet-5", 200, 500),
+        ])
+        m = _load()
+        m.PROJECT_DIR = __import__("pathlib").Path(tmp)
+        by_day, _ = m.aggregate_tokens()
+        cost = {
+            "project_total": 100.0, "all_total": 200.0, "matched": 1, "project_sessions": 1,
+            "by_model": {"claude-opus-5": 100.0}, "as_of": "2026-01-01T00:00:00",
+            "source": "test",
+            "daily_cost": [{"d": "2026-01-01", "machine": 50.0, "project": 30.0}],
+        }
+        html = m.build_html(by_day, m.event_usage(), cost, *m.roster())
+        rows = {r["d"]: r for r in _chart_data(html).get("daily", [])}
+        if rows.get("2026-01-01", {}).get("cm") != 50.0:
+            fails.append(f"有資料的日子沒掛上全機器金額：{rows.get('2026-01-01')}")
+        if rows.get("2026-01-01", {}).get("cp") != 30.0:
+            fails.append(f"有資料的日子沒掛上本專案估算：{rows.get('2026-01-01')}")
+        if rows.get("2026-01-02", {}).get("cm") is not None:
+            fails.append(f"沒有金額資料的日子被填成 {rows.get('2026-01-02', {}).get('cm')}"
+                         "，應為 null（0 會被讀成「那天沒花錢」）")
+        if _chart_data(html).get("hasCost") is not True:
+            fails.append("hasCost 沒有反映快取裡有每日金額")
+        # 圖不吃表格的 DAYS_SHOWN 截斷 —— 截了的話「月／年」只彙總得出一兩根
+        m.DAYS_SHOWN = 1
+        wide = _chart_data(m.build_html(by_day, m.event_usage(), cost, *m.roster()))
+        if len(wide.get("daily", [])) < 2:
+            fails.append(f"圖表被 DAYS_SHOWN 截斷成 {len(wide.get('daily', []))} 天"
+                         "（表格該截，圖不該——月／年彙總會廢掉）")
+        # 對帳差要印在頁面上 —— 不印的話估算線看起來會跟帳單一樣可信
+        if "%（分攤法會把共用 cache 算進來）" not in html:
+            fails.append("按日估算與累計的差沒有印出來")
+
+        # 只有金額、沒有 transcript 的日子也要進圖 —— 那天沒開本專案但機器有花錢，
+        # 漏掉的話全機器那條線會憑空少一段，而畫面上完全看不出來少了。
+        cost3 = dict(cost)
+        cost3["daily_cost"] = cost["daily_cost"] + [
+            {"d": "2025-12-31", "machine": 7.0, "project": 0.0}]
+        rows3 = {r["d"]: r for r in _chart_data(
+            m.build_html(by_day, m.event_usage(), cost3, *m.roster())).get("daily", [])}
+        if "2025-12-31" not in rows3:
+            fails.append("只有金額沒有 transcript 的日子被丟掉了 —— 全機器線會缺一段")
+
+        # 快取沒有 daily_cost（舊快取）時要全 null，不能炸也不能填 0
+        cost2 = dict(cost)
+        cost2.pop("daily_cost")
+        rows2 = {r["d"]: r for r in _chart_data(
+            m.build_html(by_day, m.event_usage(), cost2, *m.roster())).get("daily", [])}
+        if rows2.get("2026-01-01", {}).get("cm") is not None:
+            fails.append("舊快取（無 daily_cost）沒有退回 null")
+
+
+def _case_metric_switch(fails: list) -> None:
+    """縱軸口徑切換：金額／token／mix，且**預設是金額**。
+
+    預設值同時寫在兩個地方 —— HTML 的 aria-pressed 與 JS 的 `metricOf`。
+    兩邊不一致的話按鈕會亮在「金額」而圖畫的是別的口徑，且完全不報錯。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_transcript(os.path.join(tmp, "s1.jsonl"),
+                          [("2026-01-01", "claude-opus-5", 800, 1000)])
+        m = _load()
+        m.PROJECT_DIR = __import__("pathlib").Path(tmp)
+        by_day, _ = m.aggregate_tokens()
+        html = m.build_html(by_day, m.event_usage(), None, *m.roster())
+        if 'data-cv-metric="mix"' not in html:
+            fails.append("縱軸口徑切換整組不見了")
+        for label in ("金額", "token", "mix"):
+            if f'>{label}</button>' not in html:
+                fails.append(f"口徑選項「{label}」不見了")
+        if '<button type="button" data-metric="cost" aria-pressed="true">' not in html:
+            fails.append("預設口徑不是金額（要與 JS 的 metricOf 一致）")
+    # JS 那一半：看板檔裡的預設值必須同為 cost
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    js = open(dash, encoding="utf-8").read()
+    if "metricOf = { mix: 'cost' }" not in js:
+        fails.append("看板 JS 的 metricOf 預設不是 cost —— 會與按鈕亮起的那顆不一致")
+    if "function trendValue" not in js or "function barsCost" not in js:
+        fails.append("看板缺金額繪圖函式 —— 切到金額會是空白")
+
+
 def _case_escaping(fails: list) -> None:
     if "<script" in _load()._esc("<script>alert(1)</script>"):
         fails.append("_esc 沒有轉義角括號")
@@ -183,6 +304,9 @@ def run() -> "tuple[int, list]":
         ("資料源斷掉時拒絕產出", _case_refuse_empty),
         ("固定輸入冪等", _case_idempotent),
         ("無金額快取時不擋 mix", _case_no_cost_cache),
+        ("按日按精確模型名聚合", _case_daily_by_model),
+        ("每日金額掛進圖表且缺值為 null", _case_daily_cost_attached),
+        ("縱軸口徑切換預設金額", _case_metric_switch),
         ("HTML 轉義", _case_escaping),
     ]
     passed = 0

@@ -57,6 +57,31 @@ MUTATIONS = [
         "        delta = abs(pct - TARGET_OPUS_PCT)",
     ),
     (
+        "沒有金額資料的日子填 0（走勢圖會畫成「那天免費」）",
+        '"cm": c["machine"] if c else None,',
+        '"cm": c["machine"] if c else 0,',
+    ),
+    (
+        "分攤分母漏掉 cache_read（佔比全歪，而 cache_read 正是大宗）",
+        '+ (u.get("cache_read_input_tokens") or 0))',
+        "+ 0)",
+    ),
+    (
+        "圖表跟著表格截成 14 天（月／年彙總只剩一兩根，切換等於壞的）",
+        "chart_days = sorted(set(by_day) | set(dcost))",
+        "chart_days = days",
+    ),
+    (
+        "縱軸預設改回 token（按鈕亮在金額、圖畫的卻是 token）",
+        '<button type="button" data-metric="cost" aria-pressed="true">',
+        '<button type="button" data-metric="cost" aria-pressed="false">',
+    ),
+    (
+        "拿掉估算與累計的對帳差（估算線看起來會跟帳單一樣可信）",
+        "——按日、按 token 佔比分攤——{_esc(recon)}",
+        "——按日、按 token 佔比分攤——",
+    ),
+    (
         "拿掉 HTML 轉義",
         'return (str(t).replace("&", "&amp;").replace("<", "&lt;")',
         'return (str(t).replace("&", "&").replace("<", "<")',
@@ -86,5 +111,5 @@ finally:
 same = hashlib.sha256(read().encode("utf-8")).hexdigest() == digest
 print("\n" + "=" * 60)
 print(f"產生器還原：{'✔ 雜湊一致' if same else '✘ 還原失敗'}")
-print("六個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
 sys.exit(0 if (all_red and same) else 1)

@@ -191,6 +191,61 @@ def roster() -> "tuple[list, list]":
 
 # ── 資料源 3：ccusage → 金額（快取，不進熱路徑） ────────────────────────────
 
+def _ccusage(args: list) -> dict:
+    """跑一次 ccusage 並回 JSON。失敗一律拋 SystemExit —— 金額是選配，
+    但**跑了卻失敗**不能靜默當成「沒有金額」，那會讓快取悄悄留著舊值。"""
+    cmd = ["npx", "--yes", "ccusage@latest"] + args
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=300, shell=(os.name == "nt"))
+    except Exception as exc:
+        raise SystemExit(f"ccusage {' '.join(args)} 執行失敗：{type(exc).__name__}: {exc}")
+    raw = proc.stdout or ""
+    i = raw.find("{")
+    if i < 0:
+        raise SystemExit(f"ccusage {' '.join(args)} 沒有回 JSON（exit={proc.returncode}）："
+                         f"{raw[:200]}")
+    return json.loads(raw[i:])
+
+
+def daily_by_model() -> dict:
+    """本專案每日每模型的 token 總量 —— 用來把 ccusage 的全機器金額分攤到本專案。
+
+    刻意獨立於 `aggregate_tokens()`：那支按 family（opus／sonnet）聚合，
+    而 ccusage 的金額是按**精確模型名**（claude-opus-5／claude-opus-4-8）給的，
+    用 family 對應會把兩個不同單價的模型混在一起算比例。
+    """
+    out: dict = {}
+    if not PROJECT_DIR.exists():
+        return out
+    for fp in PROJECT_DIR.glob("*.jsonl"):
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        for line in text.splitlines():
+            if '"usage"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            msg = rec.get("message") or {}
+            u, model = msg.get("usage"), msg.get("model")
+            if not u or not model or model == "<synthetic>":
+                continue
+            day = (rec.get("timestamp") or "")[:10]
+            if not day:
+                continue
+            tot = ((u.get("input_tokens") or 0) + (u.get("output_tokens") or 0)
+                   + (u.get("cache_creation_input_tokens") or 0)
+                   + (u.get("cache_read_input_tokens") or 0))
+            out.setdefault(day, {})
+            out[day][model] = out[day].get(model, 0) + tot
+    return out
+
+
 def refresh_cost_cache(sessions: set) -> dict:
     """跑 ccusage 取金額，用 session UUID 交集收斂到本專案，寫進快取。"""
     cmd = ["npx", "--yes", "ccusage@latest", "session", "--json"]
@@ -215,12 +270,37 @@ def refresh_cost_cache(sessions: set) -> dict:
         for mb in r.get("modelBreakdowns", []):
             by_model[mb["modelName"]] += mb.get("cost", 0.0)
     latest = max((r.get("metadata", {}).get("lastActivity") or "") for r in hit) if hit else ""
+
+    # 每日金額：ccusage daily 是**全機器**口徑（它沒有按專案過濾的能力）。
+    # 本專案那條用分攤估算 —— 同一天同一模型，按 token 佔比切。
+    # ⚠ 這是估算不是帳單：本專案與其他專案的 token 組成（cache_read 佔比等）
+    #   若差很多，分攤就會偏。所以畫成虛線並在圖例標明。
+    proj_daily = daily_by_model()
+    daily_rows = _ccusage(["daily", "--json"]).get("daily") or []
+    daily_cost = []
+    for r in daily_rows:
+        day = r.get("period") or r.get("date") or ""
+        if not day:
+            continue
+        machine = float(r.get("totalCost") or 0.0)
+        est = 0.0
+        for mb in r.get("modelBreakdowns") or []:
+            name = mb.get("modelName")
+            m_tok = ((mb.get("inputTokens") or 0) + (mb.get("outputTokens") or 0)
+                     + (mb.get("cacheCreationTokens") or 0) + (mb.get("cacheReadTokens") or 0))
+            p_tok = (proj_daily.get(day) or {}).get(name, 0)
+            if m_tok > 0 and p_tok > 0:
+                est += float(mb.get("cost") or 0.0) * min(1.0, p_tok / m_tok)
+        daily_cost.append({"d": day, "machine": round(machine, 2), "project": round(est, 2)})
+    daily_cost.sort(key=lambda x: x["d"])
+
     cache = {
         "project_total": round(sum(r.get("totalCost", 0.0) for r in hit), 2),
         "all_total": round(sum(r.get("totalCost", 0.0) for r in rows), 2),
         "matched": len(hit),
         "project_sessions": len(sessions),
         "by_model": {k: round(v, 2) for k, v in by_model.most_common()},
+        "daily_cost": daily_cost,
         "as_of": latest[:19],
         "source": "ccusage session --json（session UUID 交集收斂到本專案）",
     }
@@ -312,18 +392,31 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     #   走勢圖 → mix 比例隨時間怎麼走（趨勢，看得出「哪天開始全 Opus」）
     #   長條圖 → 每日 output 量的高低（規模，看得出「哪天特別重」）
     # 兩者都畫在同一份 daily 上，所以只注入一次。日期由舊到新（圖是左到右）。
+    # 每日金額（快取裡有才掛得上）。cm＝全機器實際、cp＝本專案分攤估算。
+    # 對不上的日子給 None —— 圖上要**斷線**而不是畫成 $0，
+    # 「那天沒有金額資料」與「那天沒花錢」是兩件完全不同的事。
+    dcost = {r["d"]: r for r in ((cost or {}).get("daily_cost") or [])}
+    # 圖的日期軸**不吃 DAYS_SHOWN 的截斷**。表格截到 14 天是為了讀得完，
+    # 圖不是 —— 截了的話「月／年」永遠只彙總得出一兩根，那個切換等於壞的。
+    # 併入只有金額沒有 transcript 的日子（那天沒開本專案，但機器有花錢），
+    # 否則全機器那條線會憑空少一段。
+    chart_days = sorted(set(by_day) | set(dcost))
     chart = {"daily": [], "cost": []}
-    for d in days:
-        fams = by_day[d]
+    for d in chart_days:
+        fams = by_day.get(d) or {}
         o = fams.get("opus", {}).get("out", 0)
         s = fams.get("sonnet", {}).get("out", 0)
         total = sum(v.get("out", 0) for v in fams.values())
+        c = dcost.get(d)
         chart["daily"].append({
             "d": d, "opus": o, "sonnet": s, "total": total,
             "n": sum(v.get("n", 0) for v in fams.values()),
             # mix 沒有 Opus／Sonnet 時給 None，圖上要斷線而不是畫成 0%
             "pct": (o * 100.0 / (o + s)) if (o + s) else None,
+            "cm": c["machine"] if c else None,
+            "cp": c["project"] if c else None,
         })
+    chart["hasCost"] = any(x["cm"] is not None for x in chart["daily"])
     if cost and cost.get("project_total"):
         chart["cost"] = [{"model": m, "amount": v}
                          for m, v in cost["by_model"].items()]
@@ -336,6 +429,15 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
 
     # 金額
     if cost:
+        # 兩套算法的對帳差：累計是精確的（session UUID 直接對應），按日是估的。
+        # 差幾 % 一定要印出來 —— 不印的話，虛線看起來就跟實線一樣可信。
+        est = sum(r["project"] for r in (cost.get("daily_cost") or []))
+        if est and cost.get("project_total"):
+            gap = (est - cost["project_total"]) / cost["project_total"] * 100
+            recon = (f"加總後是 ${est:,.0f}，比左表累計{'高' if gap >= 0 else '低'} "
+                     f"{abs(gap):.0f}%（分攤法會把共用 cache 算進來）。")
+        else:
+            recon = "尚未產生按日資料。"
         by_model = "".join(
             f'<tr><td><code>{_esc(m)}</code></td><td class="num">${v:,.2f}</td>'
             f'<td class="num">{v / cost["project_total"] * 100:.1f}%</td></tr>'
@@ -352,8 +454,8 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         （全體 ${cost['all_total']:,.2f}，本專案佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
         {cost['matched']}/{cost['project_sessions']} 個 session 對得上 ·
         資料截至 <code>{_esc(cost['as_of'])}</code> · 來源：{_esc(cost['source'])}。
-        <b>這是累計不是按日</b>——按日金額需要拆 1h／5m cache 的不同單價，ccusage 已把兩者合併，
-        硬拆出來的數字會是假精確。</span></div>"""
+        <b>這一欄是累計精確值</b>（session UUID 直接對應本專案）。走勢圖那條虛線是另一套算法
+        ——按日、按 token 佔比分攤——{_esc(recon)}<b>兩者不一致是正常的，看趨勢用虛線、對帳用這裡。</b></span></div>"""
     else:
         cost_block = """      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
         <code>py -3 D:\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
@@ -387,7 +489,15 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <ul>
           <li><span class="chip warn">判讀</span><span><b>偏離目標 ≠ 違規。</b>§7 明列「碰硬規則區／多檔協調／根因診斷／架構規劃 → 切 Opus」，所以做 harness 的那幾天 100:0 是<b>規則允許的</b>。這一頁的定位是<b>讓偏離可見且可解釋</b>，不是叫——只比比例就發警報會變成假警報製造機，三次之後就被無視。</span></li>
           <li><span class="chip pass">口徑</span><span>mix 用 <b>output token</b>（生成成本主體、最接近付費結構），則數列為輔助。範圍<b>只含本專案</b>（<code>{_esc(PROJECT_DIR.name)}</code>）——§7 是本專案的規則，混進別的專案會讓數字看起來比實際健康。</span></li>
-          <li><span class="chip block">精度</span><span>金額是<b>累計精確值</b>，不做按日分攤。ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%（fable-5 為 0%，方法本身沒錯，是資訊已遺失）。<b>寧可只出累計，也不出按日的假精確。</b></span></li>
+          <li><span class="chip block">精度</span><span>走勢圖的<b>金額有兩條線</b>：實線是 ccusage 的<b>全機器每日實付</b>（帳單口徑、準）；虛線是<b>本專案分攤估算</b>——同一天同一模型按 token 佔比切。之所以只能估，是 ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%。<b>看趨勢用虛線，對帳一律用實線與下方累計值。</b></span></li>
+        </ul>
+      </div>
+      <div class="criteria">
+        <h4>要評估花費，看這三件事（不是看 output token）</h4>
+        <ul>
+          <li><span class="chip block">陷阱</span><span><b>表格的 output 欄不能拿來推估花費。</b>實測 7/30 當天：<code>cache_read 12.5 億 token × $0.5/M ≈ $625</code>，而 <code>output 386 萬 × $20/M ≈ $77</code>——<b>八成的錢花在 cache_read，而它根本沒出現在這張表裡</b>。「output 高＝那天貴」是錯的推論。</span></li>
+          <li><span class="chip pass">口徑</span><span>各欄意思：<b>mix</b>＝Opus:Sonnet 的 output token 比；<b>離 {TARGET_OPUS_PCT}%</b>＝距 §7 目標幾個百分點（<code>+</code>＝Opus 用得比目標多）；<b>output</b>＝當日生成 token；<b>則數</b>＝助理訊息數。這四欄回答的是「<b>模型選得對不對</b>」，不是「花了多少」。</span></li>
+          <li><span class="chip warn">動作</span><span>真正的省錢槓桿有兩個，都不在 output 欄：①<b>模型 mix</b>——同樣一輪，Opus 的 cache_read 單價是 Sonnet 的 6 倍，把低風險維護切回 Sonnet 省的是整輪成本；②<b>context 長度</b>——cache_read 每回合按<b>當時的 context 全量</b>計費，所以長對話是複利，該 <code>/clear</code> 就 clear。金額走勢圖某天翹起來，先問這兩件，別去看 output。</span></li>
         </ul>
       </div>
       <script type="application/json" id="cost-data">{chart_json}</script>
@@ -396,6 +506,11 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           <button type="button" data-view="bar" aria-pressed="true">長條圖</button>
           <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
           <button type="button" data-view="text" aria-pressed="false">文字</button>
+        </div>
+        <div class="cv-switch" role="group" aria-label="縱軸口徑" data-cv-metric="mix">
+          <button type="button" data-metric="cost" aria-pressed="true">金額</button>
+          <button type="button" data-metric="token" aria-pressed="false">token</button>
+          <button type="button" data-metric="mix" aria-pressed="false">mix</button>
         </div>
         <div class="cv-switch cv-right" role="group" aria-label="時間單位" data-cv-unit="mix">
           <button type="button" data-unit="day" aria-pressed="true">日</button>
