@@ -484,22 +484,6 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <span class="sub">{len(by_day)} 天 · token 與 mix 由 <code>gen_cost_panel.py</code> 讀 transcript 聚合 · 金額來自 ccusage</span>
       </div>
       <p class="lead">CLAUDE.md §7 訂了 <b>Opus:Sonnet ≈ 4:6</b>，但在這一頁出現之前，驗收手段只有「手動跑 <code>/usage</code>」——<b>有目標、沒儀表，等於那條規則沒人知道有沒有被遵守</b>。最近 {len(recent)} 個工作日實際 <b>{r_pct:.0f}:{100-r_pct:.0f}</b>（output token 口徑）· {fable_note}。</p>
-      <div class="criteria">
-        <h4>讀這張表之前先知道三件事</h4>
-        <ul>
-          <li><span class="chip warn">判讀</span><span><b>偏離目標 ≠ 違規。</b>§7 明列「碰硬規則區／多檔協調／根因診斷／架構規劃 → 切 Opus」，所以做 harness 的那幾天 100:0 是<b>規則允許的</b>。這一頁的定位是<b>讓偏離可見且可解釋</b>，不是叫——只比比例就發警報會變成假警報製造機，三次之後就被無視。</span></li>
-          <li><span class="chip pass">口徑</span><span>mix 用 <b>output token</b>（生成成本主體、最接近付費結構），則數列為輔助。範圍<b>只含本專案</b>（<code>{_esc(PROJECT_DIR.name)}</code>）——§7 是本專案的規則，混進別的專案會讓數字看起來比實際健康。</span></li>
-          <li><span class="chip block">精度</span><span>走勢圖的<b>金額有兩條線</b>：實線是 ccusage 的<b>全機器每日實付</b>（帳單口徑、準）；虛線是<b>本專案分攤估算</b>——同一天同一模型按 token 佔比切。之所以只能估，是 ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%。<b>看趨勢用虛線，對帳一律用實線與下方累計值。</b></span></li>
-        </ul>
-      </div>
-      <div class="criteria">
-        <h4>要評估花費，看這三件事（不是看 output token）</h4>
-        <ul>
-          <li><span class="chip block">陷阱</span><span><b>表格的 output 欄不能拿來推估花費。</b>實測 7/30 當天：<code>cache_read 12.5 億 token × $0.5/M ≈ $625</code>，而 <code>output 386 萬 × $20/M ≈ $77</code>——<b>八成的錢花在 cache_read，而它根本沒出現在這張表裡</b>。「output 高＝那天貴」是錯的推論。</span></li>
-          <li><span class="chip pass">口徑</span><span>各欄意思：<b>mix</b>＝Opus:Sonnet 的 output token 比；<b>離 {TARGET_OPUS_PCT}%</b>＝距 §7 目標幾個百分點（<code>+</code>＝Opus 用得比目標多）；<b>output</b>＝當日生成 token；<b>則數</b>＝助理訊息數。這四欄回答的是「<b>模型選得對不對</b>」，不是「花了多少」。</span></li>
-          <li><span class="chip warn">動作</span><span>真正的省錢槓桿有兩個，都不在 output 欄：①<b>模型 mix</b>——同樣一輪，Opus 的 cache_read 單價是 Sonnet 的 6 倍，把低風險維護切回 Sonnet 省的是整輪成本；②<b>context 長度</b>——cache_read 每回合按<b>當時的 context 全量</b>計費，所以長對話是複利，該 <code>/clear</code> 就 clear。金額走勢圖某天翹起來，先問這兩件，別去看 output。</span></li>
-        </ul>
-      </div>
       <script type="application/json" id="cost-data">{chart_json}</script>
       <div class="cv-bar">
         <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
@@ -507,16 +491,36 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
           <button type="button" data-view="text" aria-pressed="false">文字</button>
         </div>
+        <button type="button" class="cv-info" data-note="note-read" aria-expanded="false"
+                aria-controls="note-read" aria-label="讀這張表之前先知道三件事">!</button>
         <div class="cv-switch" role="group" aria-label="縱軸口徑" data-cv-metric="mix">
           <button type="button" data-metric="cost" aria-pressed="true">金額</button>
           <button type="button" data-metric="token" aria-pressed="false">token</button>
           <button type="button" data-metric="mix" aria-pressed="false">mix</button>
         </div>
+        <button type="button" class="cv-info" data-note="note-cost" aria-expanded="false"
+                aria-controls="note-cost" aria-label="要評估花費，看這三件事">!</button>
         <div class="cv-switch cv-right" role="group" aria-label="時間單位" data-cv-unit="mix">
           <button type="button" data-unit="day" aria-pressed="true">日</button>
           <button type="button" data-unit="month" aria-pressed="false">月</button>
           <button type="button" data-unit="year" aria-pressed="false">年</button>
         </div>
+      </div>
+      <div class="criteria cv-note" id="note-read" hidden>
+        <h4>讀這張表之前先知道三件事</h4>
+        <ul>
+          <li><span class="chip warn">判讀</span><span><b>偏離目標 ≠ 違規。</b>§7 明列「碰硬規則區／多檔協調／根因診斷／架構規劃 → 切 Opus」，所以做 harness 的那幾天 100:0 是<b>規則允許的</b>。這一頁的定位是<b>讓偏離可見且可解釋</b>，不是叫——只比比例就發警報會變成假警報製造機，三次之後就被無視。</span></li>
+          <li><span class="chip pass">口徑</span><span>mix 用 <b>output token</b>（生成成本主體、最接近付費結構），則數列為輔助。範圍<b>只含本專案</b>（<code>{_esc(PROJECT_DIR.name)}</code>）——§7 是本專案的規則，混進別的專案會讓數字看起來比實際健康。</span></li>
+          <li><span class="chip block">精度</span><span>走勢圖的<b>金額有兩條線</b>：實線是 ccusage 的<b>全機器每日實付</b>（帳單口徑、準）；虛線是<b>本專案分攤估算</b>——同一天同一模型按 token 佔比切。之所以只能估，是 ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%。<b>看趨勢用虛線，對帳一律用實線與下方累計值。</b></span></li>
+        </ul>
+      </div>
+      <div class="criteria cv-note" id="note-cost" hidden>
+        <h4>要評估花費，看這三件事（不是看 output token）</h4>
+        <ul>
+          <li><span class="chip block">陷阱</span><span><b>表格的 output 欄不能拿來推估花費。</b>實測 7/30 當天：<code>cache_read 12.5 億 token × $0.5/M ≈ $625</code>，而 <code>output 386 萬 × $20/M ≈ $77</code>——<b>八成的錢花在 cache_read，而它根本沒出現在這張表裡</b>。「output 高＝那天貴」是錯的推論。</span></li>
+          <li><span class="chip pass">口徑</span><span>各欄意思：<b>mix</b>＝Opus:Sonnet 的 output token 比；<b>離 {TARGET_OPUS_PCT}%</b>＝距 §7 目標幾個百分點（<code>+</code>＝Opus 用得比目標多）；<b>output</b>＝當日生成 token；<b>則數</b>＝助理訊息數。這四欄回答的是「<b>模型選得對不對</b>」，不是「花了多少」。</span></li>
+          <li><span class="chip warn">動作</span><span>真正的省錢槓桿有兩個，都不在 output 欄：①<b>模型 mix</b>——同樣一輪，Opus 的 cache_read 單價是 Sonnet 的 6 倍，把低風險維護切回 Sonnet 省的是整輪成本；②<b>context 長度</b>——cache_read 每回合按<b>當時的 context 全量</b>計費，所以長對話是複利，該 <code>/clear</code> 就 clear。金額走勢圖某天翹起來，先問這兩件，別去看 output。</span></li>
+        </ul>
       </div>
       <div class="cv-pane" data-cv-pane="mix-bar"></div>
       <div class="cv-pane" data-cv-pane="mix-trend" hidden></div>

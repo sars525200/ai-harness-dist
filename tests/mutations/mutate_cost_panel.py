@@ -82,6 +82,16 @@ MUTATIONS = [
         "——按日、按 token 佔比分攤——",
     ),
     (
+        "說明區拿掉 hidden（又變回常駐長文，簡約版面白做）",
+        '<div class="criteria cv-note" id="note-read" hidden>',
+        '<div class="criteria cv-note" id="note-read">',
+    ),
+    (
+        "(!) 鈕的 aria-controls 指向不存在的區塊（點了沒反應）",
+        'data-note="note-cost" aria-expanded="false"',
+        'data-note="note-cozt" aria-expanded="false"',
+    ),
+    (
         "拿掉 HTML 轉義",
         'return (str(t).replace("&", "&amp;").replace("<", "&lt;")',
         'return (str(t).replace("&", "&").replace("<", "<")',

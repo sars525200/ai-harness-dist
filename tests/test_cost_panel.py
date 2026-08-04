@@ -287,6 +287,41 @@ def _case_metric_switch(fails: list) -> None:
         fails.append("看板缺金額繪圖函式 —— 切到金額會是空白")
 
 
+def _case_notes_collapsed(fails: list) -> None:
+    """長篇判讀說明收進 (!) 鈕，預設收合。
+
+    三件事一起驗，因為少任何一件都會靜默壞掉：
+      1. 鈕在（沒鈕＝內容永遠打不開，等於刪掉）
+      2. `hidden` 在（漏了就變回常駐長文，簡約版面白做）
+      3. aria-controls 指得到真的存在的 id（指錯不會報錯，只是點了沒反應）
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_transcript(os.path.join(tmp, "s1.jsonl"),
+                          [("2026-01-01", "claude-opus-5", 800, 1000)])
+        m = _load()
+        m.PROJECT_DIR = __import__("pathlib").Path(tmp)
+        by_day, _ = m.aggregate_tokens()
+        html = m.build_html(by_day, m.event_usage(), None, *m.roster())
+
+        import re
+        btns = re.findall(r'class="cv-info" data-note="([^"]+)" aria-expanded="([^"]+)"', html)
+        if len(btns) != 2:
+            fails.append(f"(!) 說明鈕應有 2 顆，實得 {len(btns)}")
+        for note_id, expanded in btns:
+            if expanded != "false":
+                fails.append(f"{note_id} 預設就是展開的（簡約版面白做）")
+            if f'id="{note_id}" hidden' not in html:
+                fails.append(f"aria-controls 指向的 {note_id} 不存在或沒有 hidden")
+        # 這一段裡不該再有常駐的 criteria —— 有的話就是漏改了一塊
+        for mm in re.finditer(r'class="criteria([^"]*)"', html):
+            if "cv-note" not in mm.group(1):
+                fails.append("成本頁還有沒收進 (!) 的常駐長文說明")
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    js = open(dash, encoding="utf-8").read()
+    if ".cv-info[data-note]" not in js:
+        fails.append("看板 JS 沒有 (!) 鈕的展開處理 —— 按鈕點了不會有反應")
+
+
 def _case_escaping(fails: list) -> None:
     if "<script" in _load()._esc("<script>alert(1)</script>"):
         fails.append("_esc 沒有轉義角括號")
@@ -307,6 +342,7 @@ def run() -> "tuple[int, list]":
         ("按日按精確模型名聚合", _case_daily_by_model),
         ("每日金額掛進圖表且缺值為 null", _case_daily_cost_attached),
         ("縱軸口徑切換預設金額", _case_metric_switch),
+        ("長文說明收進 (!) 鈕且預設收合", _case_notes_collapsed),
         ("HTML 轉義", _case_escaping),
     ]
     passed = 0
