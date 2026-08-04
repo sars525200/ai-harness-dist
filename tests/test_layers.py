@@ -179,6 +179,36 @@ def _case_projects_in_payload(fails):
                 return
 
 
+def _case_global_brief(fails):
+    """全域層說明有長短兩版，且**由 CSS 切、不是由 JS 重繪**。
+
+    專案層有東西在顯示時，全域層只是對照 —— 讓它佔掉整個第一屏是喧賓奪主。
+    但選「無」時它就是這一頁的全部，必須講完整。三件事都得成立：
+
+      1. 五個受影響分頁**每一頁**都要有一行版（少一頁 → 那一頁維持大區塊，看起來像沒改到）
+      2. CSS 兩個方向都要寫（只寫顯示 brief、沒寫隱藏 full → 變成兩份都出來）
+      3. 一行版要真的掛進 DOM（只定義字串不 append 等於沒做）
+    """
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    js = open(dash, encoding="utf-8").read()
+    n = js.count("        brief: '")
+    if n != 5:
+        fails.append(f"一行版只有 {n} 頁有（受影響的是 5 頁）—— 少的那頁會維持大區塊")
+    for sel in ('html[data-proj="current"] .panel.has-layers .lay-brief',
+                'html[data-proj="other"] .panel.has-layers .lay-brief',
+                'html[data-proj="current"] .panel.has-layers .lay-full',
+                'html[data-proj="other"] .panel.has-layers .lay-full'):
+        if sel not in js:
+            fails.append(f"CSS 少了切換規則：{sel}")
+    if "host.appendChild(brief)" not in js:
+        fails.append("一行版沒有掛進 DOM —— 定義了字串卻沒用")
+    if "box.className = 'lay-note lay-full'" not in js:
+        fails.append("完整版沒有標 lay-full —— CSS 切不掉它，兩份會同時出現")
+    # data-proj="none" 時不能把 brief 顯示出來（那時要看完整版）
+    if 'html[data-proj="none"] .panel.has-layers .lay-brief' in js:
+        fails.append("選「無」時也顯示一行版 —— 那時全域層是唯一內容，該講完整")
+
+
 def _case_real_survey(fails):
     """真實環境掃得出東西：兩層都要有 root，且專案層 skills > 0。"""
     m = _load()
@@ -201,6 +231,7 @@ def run() -> "tuple[int, list]":
         ("#lay-data 同步且找不到就拒跑", _case_lay_data_sync),
         ("下拉候選專案含沒接 harness 的", _case_projects_listed),
         ("#lay-data 帶 projects", _case_projects_in_payload),
+        ("全域層說明長短兩版由 CSS 切", _case_global_brief),
         ("真實環境掃得出兩層", _case_real_survey),
     ]
     passed = 0
