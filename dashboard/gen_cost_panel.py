@@ -308,6 +308,27 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         + ("，<b>已超標</b>" if f_pct > FABLE_CEILING_PCT else "，仍在範圍內")
         + f"，近 {len(span)} 個工作日 output 口徑）")
 
+    # 圖表資料。表格已經有精確數字，圖要回答的是另外兩個問題：
+    #   走勢圖 → mix 比例隨時間怎麼走（趨勢，看得出「哪天開始全 Opus」）
+    #   長條圖 → 每日 output 量的高低（規模，看得出「哪天特別重」）
+    # 兩者都畫在同一份 daily 上，所以只注入一次。日期由舊到新（圖是左到右）。
+    chart = {"daily": [], "cost": []}
+    for d in days:
+        fams = by_day[d]
+        o = fams.get("opus", {}).get("out", 0)
+        s = fams.get("sonnet", {}).get("out", 0)
+        total = sum(v.get("out", 0) for v in fams.values())
+        chart["daily"].append({
+            "d": d, "opus": o, "sonnet": s, "total": total,
+            "n": sum(v.get("n", 0) for v in fams.values()),
+            # mix 沒有 Opus／Sonnet 時給 None，圖上要斷線而不是畫成 0%
+            "pct": (o * 100.0 / (o + s)) if (o + s) else None,
+        })
+    if cost and cost.get("project_total"):
+        chart["cost"] = [{"model": m, "amount": v}
+                         for m, v in cost["by_model"].items()]
+    chart_json = json.dumps(chart, ensure_ascii=False)
+
     # 金額
     if cost:
         by_model = "".join(
@@ -364,14 +385,24 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
           <li><span class="chip block">精度</span><span>金額是<b>累計精確值</b>，不做按日分攤。ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%（fable-5 為 0%，方法本身沒錯，是資訊已遺失）。<b>寧可只出累計，也不出按日的假精確。</b></span></li>
         </ul>
       </div>
-      <div class="twrap">
-        <table class="roster">
-          <thead><tr><th>日期</th><th>Opus ▮ Sonnet</th><th class="num">mix</th><th class="num">離 {TARGET_OPUS_PCT}%</th><th class="num">output</th><th class="num">則數</th></tr></thead>
-          <tbody>
-{rows}
-          </tbody>
-        </table>
+      <script type="application/json" id="cost-data">{chart_json}</script>
+      <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
+        <button type="button" data-view="table" aria-pressed="true">表格</button>
+        <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
+        <button type="button" data-view="bar" aria-pressed="false">長條圖</button>
       </div>
+      <div class="cv-pane" data-cv-pane="mix-table">
+        <div class="twrap">
+          <table class="roster">
+            <thead><tr><th>日期</th><th>Opus ▮ Sonnet</th><th class="num">mix</th><th class="num">離 {TARGET_OPUS_PCT}%</th><th class="num">output</th><th class="num">則數</th></tr></thead>
+            <tbody>
+{rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="cv-pane" data-cv-pane="mix-trend" hidden></div>
+      <div class="cv-pane" data-cv-pane="mix-bar" hidden></div>
     </section>
 
     <section>
@@ -379,7 +410,14 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <h2>金額量級</h2>
         <span class="sub">ccusage 價格表 · session UUID 交集收斂到本專案</span>
       </div>
+      <div class="cv-switch" role="group" aria-label="金額呈現方式" data-cv="cost">
+        <button type="button" data-view="text" aria-pressed="true">文字</button>
+        <button type="button" data-view="chart" aria-pressed="false">圖表</button>
+      </div>
+      <div class="cv-pane" data-cv-pane="cost-text">
 {cost_block}
+      </div>
+      <div class="cv-pane" data-cv-pane="cost-chart" hidden></div>
     </section>
 
     <section>
