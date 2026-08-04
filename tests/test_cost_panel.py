@@ -320,6 +320,13 @@ def _case_notes_collapsed(fails: list) -> None:
     js = open(dash, encoding="utf-8").read()
     if ".cv-info[data-note]" not in js:
         fails.append("看板 JS 沒有 (!) 鈕的展開處理 —— 按鈕點了不會有反應")
+    # 浮窗（不是就地展開）：三件事缺一就退回會推版面／定位失效的舊行為
+    if "position:fixed" not in js.split(".criteria.cv-note{")[-1][:400]:
+        fails.append("說明區不是 fixed 浮窗 —— 會退回就地展開，每點一次版面跳一次")
+    if "document.body.appendChild(box)" not in js:
+        fails.append("浮窗沒搬到 body 底下 —— .panel 進場動畫的 transform 會讓 fixed 失效")
+    if "function placeNote" not in js:
+        fails.append("浮窗沒有定位邏輯 —— 會固定黏在視窗左上角")
 
 
 def _case_escaping(fails: list) -> None:
