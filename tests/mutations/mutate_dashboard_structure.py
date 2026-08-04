@@ -25,9 +25,12 @@ with io.open(SRC, "r", encoding="utf-8", newline="") as f:
 
 MUTATIONS = [
     (
+        # 2026-08-04：原錨點是 `id="tab-roles" aria-controls="panel-roles"`，
+        # 但 tab-roles 中間插了 `data-layered` 之後就對不上了。改綁 aria-controls
+        # 單獨一段 —— 它是配對的關鍵屬性，中間再插什麼屬性都不影響。
         "頁籤指向不存在的 panel（＝按了沒反應，最該抓到的錯）",
-        'id="tab-roles" aria-controls="panel-roles"',
-        'id="tab-roles" aria-controls="panel-rolez"',
+        'aria-controls="panel-roles"',
+        'aria-controls="panel-rolez"',
     ),
     (
         # 2026-07-31：角色頁改拓樸圖＋彈窗，舊表格整段移除，原錨點 <th>閘門</th> 隨之失效。
