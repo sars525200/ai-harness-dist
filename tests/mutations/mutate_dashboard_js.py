@@ -55,6 +55,11 @@ MUTATIONS = [
         'html[data-proj="none"] .panel.has-layers .lay-brief,',
     ),
     (
+        "一行說明沒有底部留白（下一個標題會壓在它的下框線上）",
+        "padding:9px 13px; margin-bottom:34px; }",
+        "padding:9px 13px; }",
+    ),
+    (
         "JS 預設口徑改回金額（按鈕亮在 token、圖畫的卻是金額）",
         "var metricOf = { mix: 'token' };",
         "var metricOf = { mix: 'cost' };",

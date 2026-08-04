@@ -207,6 +207,17 @@ def _case_global_brief(fails):
     # data-proj="none" 時不能把 brief 顯示出來（那時要看完整版）
     if 'html[data-proj="none"] .panel.has-layers .lay-brief' in js:
         fails.append("選「無」時也顯示一行版 —— 那時全域層是唯一內容，該講完整")
+    # 底部留白：後面接的 <section> 與 .section-head 都不出上緣留白，
+    # 說明框自己不留的話，下一個 <h2> 會直接壓在它的下框線上（實際發生過）。
+    import re as _re
+    for rule in (".lay-brief{", ".lay-note{"):
+        i = js.find(rule)
+        if i < 0:
+            fails.append(f"找不到 {rule} 規則")
+            continue
+        body = js[i:js.find("}", i)]
+        if "margin-bottom" not in body:
+            fails.append(f"{rule} 沒有 margin-bottom —— 下一個標題會壓在它的下框線上")
 
 
 def _case_real_survey(fails):
