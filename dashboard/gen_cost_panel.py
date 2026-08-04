@@ -327,6 +327,11 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     if cost and cost.get("project_total"):
         chart["cost"] = [{"model": m, "amount": v}
                          for m, v in cost["by_model"].items()]
+    # 使用率也要能畫圖：skill／角色各自的觸發次數
+    chart["usage"] = {
+        "skills": [{"name": s, "n": ev["skills"].get(s, {}).get("n", 0)} for s in skills],
+        "agents": [{"name": a, "n": ev["agents"].get(a, {}).get("n", 0)} for a in agents],
+    }
     chart_json = json.dumps(chart, ensure_ascii=False)
 
     # 金額
@@ -386,10 +391,17 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         </ul>
       </div>
       <script type="application/json" id="cost-data">{chart_json}</script>
-      <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
-        <button type="button" data-view="table" aria-pressed="true">表格</button>
-        <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
-        <button type="button" data-view="bar" aria-pressed="false">長條圖</button>
+      <div class="cv-bar">
+        <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
+          <button type="button" data-view="table" aria-pressed="true">表格</button>
+          <button type="button" data-view="trend" aria-pressed="false">走勢圖</button>
+          <button type="button" data-view="bar" aria-pressed="false">長條圖</button>
+        </div>
+        <div class="cv-switch cv-right" role="group" aria-label="時間單位" data-cv-unit="mix">
+          <button type="button" data-unit="day" aria-pressed="true">日</button>
+          <button type="button" data-unit="month" aria-pressed="false">月</button>
+          <button type="button" data-unit="year" aria-pressed="false">年</button>
+        </div>
       </div>
       <div class="cv-pane" data-cv-pane="mix-table">
         <div class="twrap">
@@ -411,13 +423,13 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <span class="sub">ccusage 價格表 · session UUID 交集收斂到本專案</span>
       </div>
       <div class="cv-switch" role="group" aria-label="金額呈現方式" data-cv="cost">
-        <button type="button" data-view="text" aria-pressed="true">文字</button>
-        <button type="button" data-view="chart" aria-pressed="false">圖表</button>
+        <button type="button" data-view="chart" aria-pressed="true">圖表</button>
+        <button type="button" data-view="text" aria-pressed="false">文字</button>
       </div>
-      <div class="cv-pane" data-cv-pane="cost-text">
+      <div class="cv-pane" data-cv-pane="cost-chart"></div>
+      <div class="cv-pane" data-cv-pane="cost-text" hidden>
 {cost_block}
       </div>
-      <div class="cv-pane" data-cv-pane="cost-chart" hidden></div>
     </section>
 
     <section>
@@ -427,18 +439,25 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
       </div>
       <p class="lead">這張表跟角色分頁的狀態欄同源：<b>次數不是我寫的，是 event log 數出來的</b>。目前 <b>{len(zero_sk)}/{len(skills)}</b> 支 skill 在記錄期間零觸發。</p>
       <div class="copy-note"><span>※</span><span><b>分母只有這麼長</b>：event log 自 <code>{_esc(ev['since'][:16])}</code> 起記錄（hook 上線日），到 <code>{_esc(ev['until'][:16])}</code>。<b>「零次」可能是沒人用，也可能是情境還沒發生</b>（<code>/diagnose-bug</code> 沒 bug 就不會用、<code>/data-incident</code> 沒事故就不該用）——不標起始日的使用率表會把這兩件事混為一談，那比沒有表更誤導。</span></div>
-      <div class="cost-two">
-        <div class="twrap">
-          <table class="roster">
-            <thead><tr><th>Skill</th><th class="num">次數</th><th>最後一次</th></tr></thead>
-            <tbody>{sk_rows}</tbody>
-          </table>
-        </div>
-        <div class="twrap">
-          <table class="roster">
-            <thead><tr><th>角色</th><th class="num">實派</th><th>最後一次</th></tr></thead>
-            <tbody>{ag_rows}</tbody>
-          </table>
+      <div class="cv-switch" role="group" aria-label="使用率呈現方式" data-cv="usage">
+        <button type="button" data-view="chart" aria-pressed="true">圖表</button>
+        <button type="button" data-view="text" aria-pressed="false">文字</button>
+      </div>
+      <div class="cv-pane" data-cv-pane="usage-chart"></div>
+      <div class="cv-pane" data-cv-pane="usage-text" hidden>
+        <div class="cost-two">
+          <div class="twrap">
+            <table class="roster">
+              <thead><tr><th>Skill</th><th class="num">次數</th><th>最後一次</th></tr></thead>
+              <tbody>{sk_rows}</tbody>
+            </table>
+          </div>
+          <div class="twrap">
+            <table class="roster">
+              <thead><tr><th>角色</th><th class="num">實派</th><th>最後一次</th></tr></thead>
+              <tbody>{ag_rows}</tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>"""
