@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,10 @@ SOURCES = [
     DASHBOARD / "capability_checks.py",          # 檢查項清單本身
     DASHBOARD / "gen_progress_chart.py",
     DASHBOARD / "gen_roles_topology.py",
+    DASHBOARD / "gen_layers.py",
+    # 全域層設定 —— 兩層對照直接讀它。放進 SOURCES 的理由：全域 permissions
+    # 改了（例如哪天終於把 227 條收斂）看板要跟著動，否則又是一個靜默過期的數字。
+    Path(os.path.expanduser(r"~\.claude\settings.json")),
     IT_DEPT / "CLAUDE.md",
     IT_DEPT / ".claude" / "settings.json",
     IT_DEPT / ".claude" / "settings.local.json",
@@ -70,6 +75,7 @@ SOURCE_GLOBS = [
 ]
 
 GENERATORS = [
+    ("兩層對照", DASHBOARD / "gen_layers.py"),
     ("角色拓樸", DASHBOARD / "gen_roles_topology.py"),
     ("計畫進度＋八大類", DASHBOARD / "gen_progress_chart.py"),
 ]

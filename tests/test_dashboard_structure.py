@@ -31,8 +31,8 @@ def check(cond, msg):
 # ---- 1. nav 按鈕與 panel 的配對（select() 就是靠這組） ----
 nav = re.search(r'<nav class="tabs".*?</nav>', html, re.S).group(0)
 tabs = re.findall(r'id="(tab-[\w-]+)"[^>]*aria-controls="(panel-[\w-]+)"[^>]*data-key="([\w-]+)"', nav)
-panel_ids = set(re.findall(r'<div class="panel" id="(panel-[\w-]+)"', html))
-labelled = dict(re.findall(r'<div class="panel" id="(panel-[\w-]+)"[^>]*aria-labelledby="(tab-[\w-]+)"', html))
+panel_ids = set(re.findall(r'<div class="panel[^"]*" id="(panel-[\w-]+)"', html))
+labelled = dict(re.findall(r'<div class="panel[^"]*" id="(panel-[\w-]+)"[^>]*aria-labelledby="(tab-[\w-]+)"', html))
 
 print("頁籤 ↔ 面板配對")
 check(len(tabs) == len(panel_ids), "tab 數(%d) == panel 數(%d)" % (len(tabs), len(panel_ids)))
