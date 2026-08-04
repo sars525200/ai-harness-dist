@@ -434,10 +434,9 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         est = sum(r["project"] for r in (cost.get("daily_cost") or []))
         if est and cost.get("project_total"):
             gap = (est - cost["project_total"]) / cost["project_total"] * 100
-            recon = (f"加總後是 ${est:,.0f}，比左表累計{'高' if gap >= 0 else '低'} "
-                     f"{abs(gap):.0f}%（分攤法會把共用 cache 算進來）。")
+            recon = (f"加總 ${est:,.0f}、比累計{'高' if gap >= 0 else '低'} {abs(gap):.0f}%——")
         else:
-            recon = "尚未產生按日資料。"
+            recon = "尚未產生按日資料——"
         by_model = "".join(
             f'<tr><td><code>{_esc(m)}</code></td><td class="num">US${v:,.2f}</td>'
             f'<td class="num">{v / cost["project_total"] * 100:.1f}%</td></tr>'
@@ -451,12 +450,9 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         </table>
       </div>
       <div class="copy-note"><span>※</span><span>本專案累計 <b>US${cost['project_total']:,.2f}</b>
-        （全體 US${cost['all_total']:,.2f}，本專案佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
-        <b>全頁金額一律美元 USD</b>，ccusage 用的是 Anthropic 的美元價目表、沒有匯率換算 ·
-        {cost['matched']}/{cost['project_sessions']} 個 session 對得上 ·
-        資料截至 <code>{_esc(cost['as_of'])}</code> · 來源：{_esc(cost['source'])}。
-        <b>這一欄是累計精確值</b>（session UUID 直接對應本專案）。走勢圖那條虛線是另一套算法
-        ——按日、按 token 佔比分攤——{_esc(recon)}<b>兩者不一致是正常的，看趨勢用虛線、對帳用這裡。</b></span></div>"""
+        （全體 US${cost['all_total']:,.2f}，佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
+        {cost['matched']}/{cost['project_sessions']} session 對得上 · 截至 <code>{_esc(cost['as_of'])}</code>。
+        <b>這欄是精確值</b>；走勢圖虛線是按日分攤的估算，{_esc(recon)}<b>對帳用這裡</b>。</span></div>"""
     else:
         cost_block = """      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
         <code>py -3 D:\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
@@ -482,9 +478,9 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     return f"""    <section>
       <div class="section-head">
         <h2>成本與模型 mix</h2>
-        <span class="sub">{len(by_day)} 天 · token 與 mix 由 <code>gen_cost_panel.py</code> 讀 transcript 聚合 · 金額來自 ccusage</span>
+        <span class="sub">{len(by_day)} 天 · mix 讀 transcript · 金額來自 ccusage</span>
       </div>
-      <p class="lead">CLAUDE.md §7 訂了 <b>Opus:Sonnet ≈ 4:6</b>，但在這一頁出現之前，驗收手段只有「手動跑 <code>/usage</code>」——<b>有目標、沒儀表，等於那條規則沒人知道有沒有被遵守</b>。最近 {len(recent)} 個工作日實際 <b>{r_pct:.0f}:{100-r_pct:.0f}</b>（output token 口徑）· {fable_note}。</p>
+      <p class="lead">CLAUDE.md §7 訂了 <b>Opus:Sonnet ≈ 4:6</b>，這一頁是它的儀表。最近 {len(recent)} 個工作日實際 <b>{r_pct:.0f}:{100-r_pct:.0f}</b>（output token 口徑）· {fable_note}。</p>
       <script type="application/json" id="cost-data">{chart_json}</script>
       <div class="cv-bar">
         <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
@@ -540,7 +536,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     <section>
       <div class="section-head">
         <h2>金額量級</h2>
-        <span class="sub">ccusage 價格表 · <b>金額一律美元 USD</b> · session UUID 交集收斂到本專案</span>
+        <span class="sub">美元 USD · 本專案累計</span>
       </div>
       <div class="cv-switch" role="group" aria-label="金額呈現方式" data-cv="cost">
         <button type="button" data-view="chart" aria-pressed="true">圖表</button>
@@ -557,8 +553,8 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <h2>建好了，有人用嗎</h2>
         <span class="sub">skill {len(skills)} 支 · 角色 {len(agents)} 個 · 由 event log 反推</span>
       </div>
-      <p class="lead">這張表跟角色分頁的狀態欄同源：<b>次數不是我寫的，是 event log 數出來的</b>。目前 <b>{len(zero_sk)}/{len(skills)}</b> 支 skill 在記錄期間零觸發。</p>
-      <div class="copy-note"><span>※</span><span><b>分母只有這麼長</b>：event log 自 <code>{_esc(ev['since'][:16])}</code> 起記錄（hook 上線日），到 <code>{_esc(ev['until'][:16])}</code>。<b>「零次」可能是沒人用，也可能是情境還沒發生</b>（<code>/diagnose-bug</code> 沒 bug 就不會用、<code>/data-incident</code> 沒事故就不該用）——不標起始日的使用率表會把這兩件事混為一談，那比沒有表更誤導。</span></div>
+      <p class="lead">次數由 event log 數出來，不是手寫的。目前 <b>{len(zero_sk)}/{len(skills)}</b> 支 skill 在記錄期間零觸發。</p>
+      <div class="copy-note"><span>※</span><span><b>分母只有這麼長</b>：<code>{_esc(ev['since'][:16])}</code> 到 <code>{_esc(ev['until'][:16])}</code>（hook 上線日起）。<b>零次可能是沒人用，也可能是情境沒發生</b>——<code>/data-incident</code> 沒事故就不該用。</span></div>
       <div class="cv-switch" role="group" aria-label="使用率呈現方式" data-cv="usage">
         <button type="button" data-view="chart" aria-pressed="true">圖表</button>
         <button type="button" data-view="text" aria-pressed="false">文字</button>

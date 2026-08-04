@@ -236,7 +236,7 @@ def _case_daily_cost_attached(fails: list) -> None:
             fails.append(f"圖表被 DAYS_SHOWN 截斷成 {len(wide.get('daily', []))} 天"
                          "（表格該截，圖不該——月／年彙總會廢掉）")
         # 對帳差要印在頁面上 —— 不印的話估算線看起來會跟帳單一樣可信
-        if "%（分攤法會把共用 cache 算進來）" not in html:
+        if "比累計" not in html or "對帳用這裡" not in html:
             fails.append("按日估算與累計的差沒有印出來")
 
         # 只有金額、沒有 transcript 的日子也要進圖 —— 那天沒開本專案但機器有花錢，
@@ -345,9 +345,14 @@ def _case_chart_tip_and_unit(fails: list) -> None:
         fails.append("沒有整欄感應區 —— 幾 px 寬的長條實際上滑不到")
     if "function unitTag" not in js:
         fails.append("沒有單位標示函式")
-    for want in ("單位：美元 USD", "單位：output token", "單位：Opus 佔 output token 的百分比"):
+    # 綁完整呼叫式，不綁裸字串 —— 「美元 USD」在頁面上到處都是，
+    # 只驗子字串的話 unitTag 整個被拿掉也照樣綠。
+    for want in ("unitTag(s, W, padR, '美元 USD')",      # 金額長條
+                 "unitTag(s, W, 0, '美元 USD')",         # 金額量級
+                 "'美元 USD' : 'output token'",          # 走勢圖隨口徑切
+                 "unitTag(s, W, padR, 'Opus 佔 output token %')"):
         if want not in js:
-            fails.append(f"圖上少了單位標示「{want}」")
+            fails.append(f"圖上少了單位標示：{want}")
     # aria-label 要跟著給，否則把 <title> 拿掉等於順手砍掉輔助技術讀得到的名稱
     if "aria-label" not in js.split("function tipFor")[-1][:300]:
         fails.append("tipFor 沒有補 aria-label —— 拿掉 <title> 會連無障礙名稱一起掉")
