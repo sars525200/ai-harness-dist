@@ -56,6 +56,16 @@ department: 設計組
    數字看起來沒改善，而你會以為自己白做了。
 10. **專案有雙份副本就必雙改**（看 `PROJECT_CONTEXT.md`「雙目錄同步」節有沒有定義）：
     兩個目錄都要改並升版號。交付時把**兩端路徑都列出來**，只列一端等於自我宣告漏改。
+11. **浮層「被切一半」先查祖先鏈，不要調 `z-index`。** 下拉／候選面板／月曆／tooltip 只露出一部分時，
+    根因幾乎都是祖先上有 `overflow`(非 visible)／`transform`／`filter`／`backdrop-filter`／`contain:paint`
+    ——**這不是層級問題，調 `z-index` 一次都不會有用**。
+    改 `position:fixed` 也救不了：`transform`／`filter` 祖先會成為 fixed 的包含塊，
+    它的 `overflow:hidden` 照樣裁 ⇒ **必須連 DOM 一起搬到 `body` 下**，再自己算座標。
+    搬出去之後**必補三件事**：捲動／縮放時重新定位、下方空間不足往上開、
+    **外層容器關閉時手動收**（搬出去的浮層不會隨它消失）。
+    驗證只認 `document.elementFromPoint()` 打浮層四角內側 ——
+    `getBoundingClientRect()` 不受 overflow 影響、**量不出裁切**，拿它當證據等於沒驗。
+    專案若有對應規則檔（如 `.claude/rules/overlay-clipping.md`），實作細節以那份為準。
 
 ## 能力邊界
 
