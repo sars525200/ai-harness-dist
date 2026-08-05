@@ -495,6 +495,35 @@ def _force_utf8_output() -> None:
             pass  # 編碼是呈現層，不該讓 fail-open 的 dispatch 連帶爆掉
 
 
+def _entry_probe(raw: str) -> None:
+    """【臨時診斷・2026-08-05】無條件記一行「dispatch 被呼叫了」。
+
+    要分辨的是：Stop 事件在 5 個回合裡只有 3 次落進 events log —— 是 Claude Code
+    根本沒呼叫這支，還是呼叫了但後續早退／出錯？這支在**任何解析與判定之前**寫，
+    所以只要行程被啟動就一定留下痕跡。比對方式：
+
+        probe 的 Stop 筆數 == events 的 Stop 筆數  → Claude Code 沒呼叫（問題在上游）
+        probe 的 Stop 筆數 >  events 的 Stop 筆數  → 呼叫了但 dispatch 內部沒走完
+
+    ⚠ 這是診斷碼，查清楚後移除；追蹤在 IT 專案的 PENDING_VERIFY.md。
+    整段包在 try/except：診斷絕不能讓 fail-open 的 dispatch 變成 fail-closed。
+    """
+    try:
+        import datetime
+        ev = sid = "?"
+        try:
+            d = json.loads(raw)
+            ev = d.get("hook_event_name") or "?"
+            sid = (d.get("session_id") or "?")[:8]
+        except Exception:
+            pass
+        line = f"{datetime.datetime.now():%Y-%m-%dT%H:%M:%S}\t{ev}\t{sid}\t{len(raw)}\n"
+        with open(os.path.join(STATE_DIR, "stop_probe.log"), "a", encoding="utf-8", newline="\n") as f:
+            f.write(line)
+    except Exception:
+        pass
+
+
 def main() -> int:
     _force_utf8_output()
     session_id = "unknown"
@@ -502,6 +531,7 @@ def main() -> int:
     raw = ""
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
+        _entry_probe(raw)
         payload = json.loads(raw)
         session_id = payload.get("session_id", "unknown")
         agent_id = payload.get("agent_id") or ""
