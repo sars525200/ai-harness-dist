@@ -37,6 +37,8 @@ Log 分工（state/events.<session_id>.ndjson，單一檔案＋kind 欄位區分
                         （尤其 Bash/PowerShell 這種高頻 matcher）大量收進共用 log。
     每個 session 各自的檔案（同一 session 內的 hook 呼叫是序列執行，
     不會有並行 append 的競態；跨 session 才會並行，所以分檔）。
+
+【核心層】單一 entry point 與事件路由。換一個部門只換 REGISTRY 裡的規則清單，不換這支。
 """
 from __future__ import annotations
 

@@ -10,6 +10,8 @@
      這裡只寫檔案，不輸出任何東西。
    * **一律 exit 0** —— 任何例外都吞掉（fail-open，§6）。
    * 只寫入 D:\\.ai-harness\\state\\spike\\，不碰任何專案檔。
+
+【核心層】探測平台的 hook 契約，跟被服務的是哪個專案無關。
 """
 import sys, json, os, time
 

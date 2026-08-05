@@ -19,6 +19,8 @@ CLAUDE.md §9：「ops timer 腳本跑 /srv/it-asset-backup/ 副本→git push �
 跟 R1 同一套設計：掛 git push vm 這個 push 邊界，不是攔截 scp 指令本身
 ——在忘記 scp 之前、push 當下就提醒，比事後驗證 scp 有沒有做對更早也更有用。
 理由同 D5：掛在別的時機容易變成疲勞或抓不到重點。
+
+【專案層】ops timer 腳本跑在 /srv/it-asset-backup 副本，綁本平台的 VM 佈署。
 """
 from __future__ import annotations
 

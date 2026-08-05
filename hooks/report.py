@@ -8,6 +8,8 @@
     * would-block 清單——非 ALLOW 判定的完整內容，逐筆人工確認有沒有誤判。
 
 只讀 state/*.ndjson，不寫、不刪、不影響任何 session。
+
+【核心層】彙總 would-block 與命中數，與規則內容無關。
 """
 from __future__ import annotations
 

@@ -31,6 +31,8 @@ CLAUDE.md §7 訂了 Opus:Sonnet ≈ 4:6 的目標，但驗收手段一直是「
 那幾天 100:0 是規則允許的。**只比比例就發警報＝假警報製造機，三次之後就被無視**
 （跟 probe 綁字面值同型的病：判準綁錯層）。這一頁的定位是「讓偏離可見且可解釋」，
 把「那幾天在幹嘛」留給人判讀。要叫的是絕對量閘門，那個跟任務性質無關——留給 Phase 2。
+
+【核心層】模型 mix 與花費是任何部門都要看的東西。
 """
 from __future__ import annotations
 
@@ -54,7 +56,8 @@ COST_STATE = DASHBOARD_DIR / "cost_state.json"
 
 IT_DEPT = Path(r"D:\IT-department")
 SKILLS_DIR = IT_DEPT / ".claude" / "skills"
-AGENTS_DIR = IT_DEPT / ".claude" / "agents"
+# 角色 2026-08-05 搬到 harness repo（見 gen_roles_topology.AGENTS_DIR 的說明）。
+AGENTS_DIR = HARNESS_ROOT / "agents"
 # 平台把專案路徑轉成目錄名的規則：非字母數字一律換 `-`（`d:\IT-department` → `d--IT-department`）
 PROJECT_DIR = Path.home() / ".claude" / "projects" / "d--IT-department"
 
@@ -450,9 +453,15 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         </table>
       </div>
       <div class="copy-note"><span>※</span><span>本專案累計 <b>US${cost['project_total']:,.2f}</b>
-        （全體 US${cost['all_total']:,.2f}，佔 {cost['project_total']/cost['all_total']*100:.1f}%）·
-        {cost['matched']}/{cost['project_sessions']} session 對得上 · 截至 <code>{_esc(cost['as_of'])}</code>。
-        <b>這欄是精確值</b>；走勢圖虛線是按日分攤的估算，{_esc(recon)}<b>對帳用這裡</b>。</span></div>"""
+        （佔全體 {cost['project_total']/cost['all_total']*100:.1f}%）· <b>這欄是精確值，對帳用這裡</b>。
+        <button type="button" class="cv-info" data-note="note-cost-recon" aria-expanded="false"
+                aria-controls="note-cost-recon" aria-label="全體金額、比對得上的 session 數、走勢圖虛線是估算值">!</button></span></div>
+      <div class="criteria cv-note" id="note-cost-recon" hidden>
+        <h4>金額對帳</h4>
+        <p>全體 <b>US${cost['all_total']:,.2f}</b>，本專案佔 {cost['project_total']/cost['all_total']*100:.1f}%；
+        <b>{cost['matched']}/{cost['project_sessions']}</b> session 對得上；截至 <code>{_esc(cost['as_of'])}</code>。</p>
+        <p><b>這欄是精確值</b>；走勢圖虛線是按日分攤的估算，{_esc(recon)}<b>對帳一律用這裡，不用走勢圖</b>。</p>
+      </div>"""
     else:
         cost_block = """      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
         <code>py -3 D:\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
@@ -480,7 +489,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <h2>成本與模型 mix</h2>
         <span class="sub">{len(by_day)} 天 · mix 讀 transcript · 金額來自 ccusage</span>
       </div>
-      <p class="lead">CLAUDE.md §7 訂了 <b>Opus:Sonnet ≈ 4:6</b>，這一頁是它的儀表。最近 {len(recent)} 個工作日實際 <b>{r_pct:.0f}:{100-r_pct:.0f}</b>（output token 口徑）· {fable_note}。</p>
+      <p class="lead">CLAUDE.md §7 訂了 <b>Opus:Sonnet ≈ 4:6</b>。最近 {len(recent)} 個工作日實際 <b>{r_pct:.0f}:{100-r_pct:.0f}</b> · {fable_note}。</p>
       <script type="application/json" id="cost-data">{chart_json}</script>
       <div class="cv-bar">
         <div class="cv-switch" role="group" aria-label="mix 呈現方式" data-cv="mix">
@@ -553,8 +562,14 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <h2>建好了，有人用嗎</h2>
         <span class="sub">skill {len(skills)} 支 · 角色 {len(agents)} 個 · 由 event log 反推</span>
       </div>
-      <p class="lead">次數由 event log 數出來，不是手寫的。目前 <b>{len(zero_sk)}/{len(skills)}</b> 支 skill 在記錄期間零觸發。</p>
-      <div class="copy-note"><span>※</span><span><b>分母只有這麼長</b>：<code>{_esc(ev['since'][:16])}</code> 到 <code>{_esc(ev['until'][:16])}</code>（hook 上線日起）。<b>零次可能是沒人用，也可能是情境沒發生</b>——<code>/data-incident</code> 沒事故就不該用。</span></div>
+      <p class="lead">次數由 event log 數出來——目前 <b>{len(zero_sk)}/{len(skills)}</b> 支 skill 在記錄期間零觸發。
+        <button type="button" class="cv-info" data-note="note-usage-lead" aria-expanded="false"
+                aria-controls="note-usage-lead" aria-label="分母多長、零次代表什麼">!</button></p>
+      <div class="criteria cv-note" id="note-usage-lead" hidden>
+        <h4>零次是什麼意思</h4>
+        <p><b>分母只有這麼長</b>：<code>{_esc(ev['since'][:16])}</code> 到 <code>{_esc(ev['until'][:16])}</code>（hook 上線日起）。</p>
+        <p><b>零次可能是沒人用，也可能是情境沒發生</b>——<code>/data-incident</code> 沒事故就不該用。</p>
+      </div>
       <div class="cv-switch" role="group" aria-label="使用率呈現方式" data-cv="usage">
         <button type="button" data-view="chart" aria-pressed="true">圖表</button>
         <button type="button" data-view="text" aria-pressed="false">文字</button>

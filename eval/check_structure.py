@@ -20,6 +20,8 @@
 【假綠燈防護】（§5）
     · 零 skill 一律視為失敗，不報通過
     · 跳過的檢查列進 NOT COVERED，不揭露的略過等同謊報覆蓋率
+
+【核心層】skill 的機械層檢查。
 """
 from __future__ import annotations
 

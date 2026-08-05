@@ -26,6 +26,8 @@
         （零次真實 git push）時，這條規則被誤觸發 5 次。改用 shlex 依 shell
         語彙斷詞判斷（見 `contract.is_push_to_remote`，2026-07-28 寫 R1 時
         從這裡升格成共用工具，兩條規則同一套邏輯，不重複實作）。
+
+【專案層】DEV/PROD 雙目錄＋?v= 版號＋push vm 是本平台獨有的部署形狀。別的部門沒有這個結構，這條規則對他們只會製造摩擦。
 """
 from __future__ import annotations
 

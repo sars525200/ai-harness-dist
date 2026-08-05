@@ -13,6 +13,8 @@
 【為什麼反例不可省】（§3.1）
 只有正例的觸發測試恆真：每支 skill 都能被自己的 description 觸發。
 真正要防的是「description 寫太廣，把不相干的情境也吸進來」，那只有反例測得到。
+
+【核心層】測「該觸發的有沒有觸發」，題庫才是專案相關的。
 """
 from __future__ import annotations
 

@@ -23,6 +23,8 @@ Claude 的設定有兩層會被自動載入：
 它是 hooks／dashboard／tests 的實體所在，但 **Claude 不會自動載入它** ——
 它是被專案層 `settings.local.json` 用絕對路徑引用的**共用元件**。
 所以它不做成可切換的層，只在專案層裡標明「實作在共用元件，換專案要重新接線」。
+
+【核心層】講的是 harness 自己的層級結構。
 """
 from __future__ import annotations
 
@@ -265,7 +267,13 @@ def build_html(s: dict) -> str:
         <h2>兩層對照</h2>
         <span class="sub">由 <code>gen_layers.py</code> 實掃兩個目錄產生</span>
       </div>
-      <p class="lead">Claude 會自動載入<b>兩層</b>設定：全域 <code>~\\.claude\\</code>（跨所有專案）與專案 <code>&lt;repo&gt;\\.claude\\</code>。右上角可切換視角——<b>切到全域層，你會看到它幾乎是空的</b>，那正是這張表要講的話。</p>
+      <p class="lead">Claude 會自動載入<b>兩層</b>設定：全域 <code>~\\.claude\\</code>（跨所有專案）與專案 <code>&lt;repo&gt;\\.claude\\</code>。<button type="button" class="cv-info" data-note="note-layers" aria-expanded="false" aria-controls="note-layers" aria-label="這張表在講什麼、D:\\.ai-harness 是不是第三層">!</button></p>
+      <div class="criteria cv-note" id="note-layers" hidden>
+        <h4>兩層對照怎麼讀</h4>
+        <p>右上角可切換視角——<b>切到全域層，你會看到它幾乎是空的</b>，那正是這張表要講的話。</p>
+        <p><b>看板原本只講了一半。</b>Hook 分頁寫「allow 115 條（7/29 由 187 收斂）」——那是專案層；全域層還有 <b>{g["allow"]} 條</b>從沒收斂過、deny <b>{g["deny"]}</b>。真實曝險面比看板顯示的大，這是「片面數字誤導」的第六次發作。</p>
+        <p><b><code>D:\\.ai-harness\\</code> 不是第三層</b>：Claude 不會自動載入它，它是被專案層 <code>settings.local.json</code> 用絕對路徑引用的共用元件。所以它不做成可切換的層——但這也意味著<b>換專案要重新接線</b>，不是複製一個資料夾就有 harness。</p>
+      </div>
       <div class="twrap">
         <table class="roster">
           <thead><tr><th>項目</th><th>全域 <code>~\\.claude\\</code></th><th>專案 <code>&lt;repo&gt;\\.claude\\</code></th></tr></thead>
@@ -274,7 +282,6 @@ def build_html(s: dict) -> str:
           </tbody>
         </table>
       </div>
-      <div class="copy-note"><span>※</span><span><b>看板原本只講了一半。</b>Hook 分頁寫「allow 115 條（7/29 由 187 收斂）」——那是專案層；全域層還有 <b>{g["allow"]} 條</b>從沒收斂過、deny <b>{g["deny"]}</b>。真實曝險面比看板顯示的大，這是「片面數字誤導」的第六次發作。<br><b><code>D:\\.ai-harness\\</code> 不是第三層</b>：Claude 不會自動載入它，它是被專案層 <code>settings.local.json</code> 用絕對路徑引用的共用元件。所以它不做成可切換的層——但這也意味著<b>換專案要重新接線</b>，不是複製一個資料夾就有 harness。</span></div>
     </section>"""
 
 

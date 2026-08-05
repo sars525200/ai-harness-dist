@@ -21,6 +21,8 @@
 `❌ 不做`（3b）與 `🔻 降級`（0e）是**評估後的決定**，不是待辦。把它們算進分母會讓
 「認真評估後決定不做」看起來像「還沒做完」，那會鼓勵下次為了衝百分比硬做。
 所以分母＝`完成 + 緩做`，被排除的項目在圖上另外明講，不靜默消失。
+
+【核心層】讀 harness 自己的計畫書產生進度圖。
 """
 from __future__ import annotations
 
@@ -147,10 +149,18 @@ def build_html(phases: list) -> str:
     lines.append(f'        <span class="sub">{len(phases)} 個 Phase · {total} 項 · '
                  f'由 <code>HARNESS_ROLE_ARCH_PLAN.md</code> §3 產生</span>')
     lines.append('      </div>')
-    lines.append('      <p class="lead">單一真相是計畫書 §3 的那四張表，本圖由 '
-                 '<code>dashboard\\gen_progress_chart.py</code> 解析產生——計畫書標一項完成，'
-                 '重跑腳本圖就更新，不需要手改看板。<b>分母刻意排除「評估後決定不做」的項目</b>，'
+    lines.append('      <p class="lead">單一真相是計畫書 §3 的那四張表，改完重跑腳本圖就更新。'
+                 '<button type="button" class="cv-info" data-note="note-progress-lead" '
+                 'aria-expanded="false" aria-controls="note-progress-lead" '
+                 'aria-label="怎麼產生的、分母為什麼排除評估後不做">!</button></p>')
+    lines.append('      <div class="criteria cv-note" id="note-progress-lead" hidden>')
+    lines.append('        <h4>怎麼讀這張圖</h4>')
+    lines.append('        <p>本圖由 <code>dashboard\\gen_progress_chart.py</code> 解析 '
+                 '<code>HARNESS_ROLE_ARCH_PLAN.md</code> §3 產生——計畫書標一項完成，'
+                 '重跑腳本圖就更新，不需要手改看板。</p>')
+    lines.append('        <p><b>分母刻意排除「評估後決定不做」的項目</b>，'
                  '否則認真評估過的決定會看起來像沒做完。</p>')
+    lines.append('      </div>')
 
     lines.append('      <div class="hprog">')
     # ── hero ──
@@ -256,10 +266,22 @@ def build_capability_html() -> str:
     lines.append(f'        <span class="sub">{have} / {total} 項已具備 · 由 '
                  f'<code>capability_checks.py</code> 逐項探測實際狀態</span>')
     lines.append('      </div>')
-    lines.append('      <p class="lead">這裡<b>不打分數</b>——「Sandbox 要做到什麼程度才算 100%」'
-                 '沒有答案，硬畫進度條會讀成假的。改成逐項可查證的具體能力：有就是有，'
-                 '比例是數出來的。<b>⑦⑧ 是 7/30 對照外部標的後新增的兩類</b>'
+    lines.append('      <p class="lead">這裡<b>不打分數</b>——改成逐項可查證的具體能力，'
+                 '比例是數出來的。'
+                 '<button type="button" class="cv-info" data-note="note-cap-lead" '
+                 'aria-expanded="false" aria-controls="note-cap-lead" '
+                 'aria-label="為什麼不打分數、⑦⑧ 從哪來、檢查項的循環論證風險">!</button></p>')
+    lines.append('      <div class="criteria cv-note" id="note-cap-lead" hidden>')
+    lines.append('        <h4>為什麼不打分數</h4>')
+    lines.append('        <p>「Sandbox 要做到什麼程度才算 100%」沒有答案，硬畫進度條會讀成假的。'
+                 '改成逐項可查證的具體能力：有就是有。</p>')
+    lines.append('        <p><b>⑦⑧ 是 7/30 對照外部標的後新增的兩類</b>'
                  '（三份標的都列為一級維度，而我們原本沒有——驗證能力一直被埋在 ⑥ 裡）。</p>')
+    lines.append('        <div class="copy-note"><span>※</span><span>檢查項是從現有實作反推的，'
+                 '有「自己定義標準自己達標」的循環論證風險——所以 <code>/audit</code> 的必查項之一'
+                 '就是「比對外部標的，有沒有一級維度是清單裡完全沒有的」。'
+                 '成本上限閘門就是這樣被抓出來的。</span></div>')
+    lines.append('      </div>')
 
     lines.append('      <div class="hprog hcap">')
     lines.append('        <div class="hprog-lanes">')
@@ -299,10 +321,6 @@ def build_capability_html() -> str:
     lines.append('          <span><i class="dropped">✘</i>尚缺（明細裡有原因）</span>')
     lines.append('        </div>')
     lines.append('      </div>')
-    lines.append('      <div class="copy-note"><span>※</span><span>檢查項是從現有實作反推的，'
-                 '有「自己定義標準自己達標」的循環論證風險——所以 <code>/audit</code> 的必查項之一'
-                 '就是「比對外部標的，有沒有一級維度是清單裡完全沒有的」。'
-                 '成本上限閘門就是這樣被抓出來的。</span></div>')
     lines.append('    </section>')
     return "\n".join(lines)
 

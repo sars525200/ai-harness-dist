@@ -4,14 +4,18 @@ r"""角色即時狀態頁 —— 誰在工作、誰在空閒（本機服務，�
     py -3 D:\.ai-harness\reviewer\roles_live.py          # 啟動並自動開瀏覽器
     py -3 D:\.ai-harness\reviewer\roles_live.py --check  # 只印一次現況，不起服務
 
-## 為什麼要有這一支（看板不夠嗎）
+## ⚠ 2026-08-05 起：預設不啟動（user 要求所有內容收進同一個網頁）
 
-看板的角色拓樸圖是**產生當下的快照**：artifact 沒有狀態能力、也讀不到本機檔
-（2026-07-31 向 control plane 查證，可用 capability 只有 `downloads`／`mcp`）。
-「誰**現在**在跑」這個問題本質上要輪詢，只有本機服務答得了。
+這一頁原本獨有的「工作視窗卡片」（哪個視窗在跑、正在做什麼、把活交給了誰、跑多久）
+**已經併進看板的角色分頁**，所以日常看看板那一個網址就夠了，不必再開這支。
 
-兩邊共用同一份判定邏輯（`gen_roles_topology.activity()`），不留第二份 copy ——
-兩份遲早會對「什麼叫進行中」有不同答案。
+它沒有被刪，因為看板本質上答不了「誰**現在**在跑」：artifact 沒有狀態能力、
+也讀不到本機檔（2026-07-31 向 control plane 查證，可用 capability 只有 `downloads`／`mcp`），
+所以看板上那一區永遠是**產生當下的快照**。真的需要盯著看的時候再開這支。
+
+判定邏輯**一份都不留在這裡**：`sessions_detail` 與角色統計全部 delegate 給
+`gen_roles_topology`。兩份實作遲早會對「什麼叫進行中」給不同答案 ——
+這個病 2026-08-05 剛發作過（看板說 48 次、這頁說從未被派過）。
 
 ## 忙閒怎麼算
 
@@ -22,6 +26,8 @@ r"""角色即時狀態頁 —— 誰在工作、誰在空閒（本機服務，�
 ## 安全
 
 只綁 `127.0.0.1`。它唯讀 event log，不寫任何東西。
+
+【核心層】即時狀態頁；判定邏輯已全部委派給產生器，這裡只剩呈現。
 """
 from __future__ import annotations
 
@@ -83,74 +89,14 @@ def _read_events(path: str) -> list:
 
 
 def sessions_detail(now: float) -> list:
-    """每個聊天室視窗（session）此刻在做什麼、把活交給了誰。
+    """委派給看板產生器 —— 這裡不留第二份實作。
 
-    這才是「任務路由」的主體 —— 角色忙閒只是它的一個切面。三份資料拼起來：
-
-      主檔 `events.<sid>.ndjson`      → 最後活動、最近工具、派了哪些 subagent
-      分檔 `events.<sid>.agent-*.ndjson` → 那些 subagent 結束了沒
-      兩者按 subagent_type 相消        → 沒被消掉的就是**此刻正在跑的**
-
-    ⚠ spawn 記在主檔、stop 記在分檔，**必須跨檔配對**。只看其中一邊會得到
-    「永遠有人在跑」或「從來沒人在跑」兩種都錯的答案。
+    2026-08-05：原本這支自己算一份，看板另算一份，兩者對「進行中」給不同答案
+    （畫面上一邊說 0 個 subagent 在跑、另一邊某角色掛著進行中 ×1）。
+    現在唯一實作在 `gen_roles_topology.sessions_detail`。
     """
-    out = []
-    for path in glob.glob(os.path.join(STATE_DIR, "events.*.ndjson")):
-        stem = os.path.basename(path)[len("events."):-len(".ndjson")]
-        if _TEST_SID.match(stem) or ".agent-" in stem:
-            continue
-        try:
-            age = now - os.path.getmtime(path)
-        except Exception:
-            continue
-        if age >= ACTIVE_WINDOW_SEC:
-            continue                      # 只出活動中的 —— 這一頁回答的是「現在」
-
-        rows = _read_events(path)
-        # 最近一次真的動到東西的工具（applies/decision 是規則判定，不是動作）
-        doing, doing_at = "", ""
-        for r in reversed(rows):
-            if r.get("kind") == "dispatch" and r.get("tool_name"):
-                doing = r["tool_name"]
-                doing_at = r.get("ts", "")
-                break
-            if r.get("kind") == "skill":
-                doing, doing_at = "Skill", r.get("ts", "")
-                break
-
-        spawns = [r for r in rows if r.get("kind") == "agent_spawn"]
-        stops = []
-        for sub in glob.glob(os.path.join(STATE_DIR, f"events.{stem}.agent-*.ndjson")):
-            stops += [r for r in _read_events(sub) if r.get("event") == "SubagentStop"]
-        done = {}
-        for s in stops:
-            k = s.get("agent_type") or "?"
-            done[k] = done.get(k, 0) + 1
-
-        running = []
-        for s in sorted(spawns, key=lambda r: r.get("ts", "")):
-            k = s.get("subagent_type") or "?"
-            if done.get(k):
-                done[k] -= 1              # 這一筆已經有對應的結束
-                continue
-            started = _ts(s.get("ts", ""))
-            running.append({
-                "role": k,
-                "task": (s.get("task") or "").strip(),
-                "for_sec": max(0, now - started) if started else 0,
-            })
-
-        out.append({
-            "sid": stem[:8],
-            "age": age,
-            "doing": doing,
-            "doingLabel": _DOING.get(doing, doing or "—"),
-            "doingAt": doing_at[-8:] if doing_at else "",
-            "events": len(rows),
-            "running": running,
-        })
-    out.sort(key=lambda r: r["age"])
-    return out
+    import gen_roles_topology as topo  # noqa: PLC0415
+    return topo.sessions_detail(now)
 
 
 def snapshot() -> dict:
@@ -162,24 +108,43 @@ def snapshot() -> dict:
         agents = topo.parse_agents()
     except SystemExit as exc:
         return {"error": str(exc), "roles": [], "sessions": []}
-    act = topo.activity()
+    # 2026-08-05 跟著看板換源：歷史那半讀平台的 subagent 紀錄，只有「進行中」還走
+    # hook log。**兩個頁面必須用同一份判定**，否則同一個角色在看板說「派過 48 次」、
+    # 在即時頁說「從未被派過」，看的人不知道該信哪個。
+    try:
+        hist = topo.history()
+    except SystemExit:
+        hist = {}                       # 即時頁不因為歷史撈不到就整頁掛掉
+    # 從活動中的視窗加總，**不呼叫 running_by_role()**：後者是跨檔全域配對，
+    # 會把已關閉視窗裡沒收到 stop 的殘留 spawn 永遠算成進行中 ——
+    # 於是頁尾說「2 個進行中」、角色清單加起來卻是 3（2026-08-05 當場咬到）。
+    sess = sessions_detail(now)
+    running = topo.running_from_sessions(sess)
+    # 被派過但沒有角色檔的（插件角色 claude-code-guide、或改名／刪掉而歷史還在的）。
+    # 看板把它們畫進「外援」，這裡也要有 —— 否則兩頁角色數不一樣，
+    # 而「同一份判定邏輯」的說法就只剩一半是真的。
+    known = {a["name"] for a in agents} | {b["name"] for b in topo.BUILTIN}
+    ghosts = [{"name": n, "tools": "", "model": "", "gate": "", "builtin": True,
+               "external": True, "department": "外援"}
+              for n in sorted(hist) if n not in known and n != "?"]
     roles = []
-    for a in agents + [{**b, "builtin": True} for b in topo.BUILTIN]:
-        st = act.get(a["name"], {})
+    for a in agents + [{**b, "builtin": True} for b in topo.BUILTIN] + ghosts:
+        h = hist.get(a["name"], {})
         roles.append({
             "name": a["name"],
             "builtin": bool(a.get("builtin")),
+            "department": a.get("department", ""),
+            "external": bool(a.get("external")),
             "model": a.get("model", "inherit"),
             "tools": a.get("tools", ""),
             "gate": a.get("gate", ""),
-            "spawns": st.get("spawns", 0),
-            "stops": st.get("stops", 0),
-            "running": st.get("running", 0),
-            "last": (st.get("last") or "")[:19],
-            "tasks": st.get("tasks", []),
+            "runs": h.get("runs", 0),
+            "toolCalls": h.get("toolCalls", 0),
+            "running": running.get(a["name"], 0),
+            "last": h.get("last", ""),
+            "tasks": h.get("tasks", []),
         })
-    roles.sort(key=lambda r: (-r["running"], -max(r["spawns"], r["stops"]), r["name"]))
-    sess = sessions_detail(now)
+    roles.sort(key=lambda r: (-r["running"], -r["runs"], r["name"]))
     # running_total 從 session 卡片加總，**不要另外算一次**。
     # 2026-07-31 實測：另算的版本說「0 個進行中」，而同一畫面下方列著一個
     # 已跑 1.3 小時的 Plan —— 同一件事兩套算法，畫面自己打自己。
@@ -237,6 +202,7 @@ PAGE = """<!doctype html>
  .tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;margin-left:6px}
  .tag.b{background:var(--block-wash);color:var(--block)}
  .tag.g{background:var(--warn-wash);color:var(--warn);font-family:var(--mono)}
+ .tag.d{background:var(--surface-2);color:var(--text-dim)}
  .note{margin-top:22px;padding:12px 15px;background:var(--surface);border:1px solid var(--line);
    border-left:2px solid var(--accent);border-radius:4px;font-size:12.5px;color:var(--text-dim)}
  .note b{color:var(--text)}
@@ -270,22 +236,25 @@ PAGE = """<!doctype html>
 <div id="list"></div>
 <div class="note">
   <b>忙閒怎麼算：</b><code>agent_spawn</code>（派出去那一刻）↔ <code>SubagentStop</code>（結束）
-  按角色數量相消，沒被消掉的就是還在跑。<b>spawn 事件 2026-07-31 才開始記</b>，
-  在那之前只有「結束」——所以舊角色會出現結束數大於派出數，那不是錯，是資料起點不同。
-  <br><b>看不到的：</b>dispatch matcher 不含 Read／Grep／Glob，唯讀角色讀了哪些檔一行都沒記。
-  這裡畫的是「它被派去做什麼」，不是「它實際碰了什麼」。
+  按角色數量相消，沒被消掉的就是還在跑 —— 這半仍讀 hook 的 event log，因為平台的
+  subagent 紀錄沒有結束事件，算不出誰還在跑。
+  <br><b>派過幾次、用了多少工具：</b>2026-08-05 起改讀平台自己的 subagent 紀錄
+  （<code>~/.claude/projects/…/subagents/</code>），它從第一天就有而且含 Read／Grep／Glob。
+  舊的 hook log 是 7/31 才開始記的，拿它算歷史會低估 —— 實測 Explore 被派 48 次而 hook log 說 0 次。
 </div>
 </div>
 <script>
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function row(r){
-  var cls = r.running ? 'busy' : (Math.max(r.spawns,r.stops) ? 'idle' : 'cold');
+  var cls = r.running ? 'busy' : (r.runs ? 'idle' : 'cold');
   var st = r.running ? ('● 進行中 ×' + r.running)
-         : (Math.max(r.spawns,r.stops) ? ('○ 空閒 · 派過 ' + Math.max(r.spawns,r.stops) + ' 次')
-                                       : '× 從未被派過');
-  var tags = (r.builtin ? '<span class="tag b">內建·不載入 CLAUDE.md</span>' : '')
+         : (r.runs ? ('○ 派過 ' + r.runs + ' 次 · 工具 ' + r.toolCalls + ' 次')
+                   : '× 從未被派過');
+  var tags = (r.department ? '<span class="tag d">' + esc(r.department) + '</span>' : '')
+           + (r.external ? '<span class="tag d">無角色檔</span>'
+                         : (r.builtin ? '<span class="tag b">內建·不載入 CLAUDE.md</span>' : ''))
            + (r.gate ? '<span class="tag g">' + esc(r.gate) + '</span>' : '');
-  var last = r.last ? ('最後 ' + esc(r.last.replace('T',' ').slice(0,16))) : '—';
+  var last = r.last ? ('最後 ' + esc(r.last)) : '—';
   return '<div class="r ' + cls + '"><span class="nm">' + esc(r.name) + tags + '</span>'
     + '<span class="st">' + st + '</span>'
     + '<span class="meta"><code>' + esc(r.model) + '</code> · ' + esc(r.tools) + '<br>' + last + '</span></div>';
@@ -390,9 +359,9 @@ def main() -> int:
         print(f"\n目前 {snap['running_total']} 個 subagent 進行中")
         for r in snap["roles"]:
             state = (f"進行中 ×{r['running']}" if r["running"]
-                     else ("空閒" if max(r["spawns"], r["stops"]) else "從未被派過"))
-            print(f"  {r['name']:18s} {state:14s} spawn={r['spawns']:3d} stop={r['stops']:3d} "
-                  f"last={r['last'][:16] or '—'}")
+                     else ("空閒" if r["runs"] else "從未被派過"))
+            print(f"  {r['name']:18s} {r.get('department',''):6s} {state:14s} "
+                  f"派={r['runs']:3d} 工具={r['toolCalls']:5d} last={r['last'] or '—'}")
         return 0
     url = f"http://{HOST}:{PORT}/"
     print(f"角色即時狀態：{url}　（每 {POLL_MS // 1000} 秒更新，Ctrl+C 結束）")

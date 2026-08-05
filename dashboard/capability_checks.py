@@ -21,6 +21,8 @@
 
 監察員（`harness-auditor`）**唯讀**，它只回報「這份清單與實際是否相符」、
 「有沒有該加的檢查項」。改清單是主 session 的事 —— 稽核者改被稽核的東西是利益衝突。
+
+【核心層】八大類能力是 harness 對自己的評估，跟被服務的專案無關。
 """
 from __future__ import annotations
 
@@ -37,7 +39,9 @@ HOOKS = HARNESS / "hooks"
 TESTS = HARNESS / "tests"
 IT_DEPT = Path(r"D:\IT-department")
 CLAUDE_MD = IT_DEPT / "CLAUDE.md"
-AGENTS_DIR = IT_DEPT / ".claude" / "agents"
+# 角色 2026-08-05 搬到 harness repo（全域層，家目錄 .claude/agents 用 junction 接過去）。
+# 這裡跟著搬 —— 留在舊路徑會靜默數到 0 支角色，能力分數跟著掉而不報錯。
+AGENTS_DIR = HARNESS / "agents"
 SKILLS_DIR = IT_DEPT / ".claude" / "skills"
 RULES_DIR = IT_DEPT / ".claude" / "rules"
 SETTINGS = IT_DEPT / ".claude" / "settings.json"

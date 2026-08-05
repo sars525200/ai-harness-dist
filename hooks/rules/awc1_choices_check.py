@@ -28,6 +28,8 @@ CLAUDE.md §2【硬規則・6/15】：「需 user 決定/釐清一律 AskUserQue
 
 輪次邊界的掃描邏輯已抽到 contract.iter_turn_tool_uses（PR-1 用同一段，
 不留第二份 copy）。
+
+【核心層】「需要使用者決定就給選擇題」是協作紀律，跟業務內容無關。
 """
 from __future__ import annotations
 

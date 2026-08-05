@@ -20,6 +20,8 @@ skill 是 prose 不是函式，沒有回傳值可斷言。它最常見的靜默�
 
 【fixture 格式】eval/fixtures/skill_<name>.json，沿用 db1_*.json 的 `why` 慣例：
     缺 `why` 的 fixture 一律視為失敗——防「為了湊數而寫的測試」（§7 Q5）。
+
+【核心層】檢查 skill 引用的東西還在不在，機制與引用內容無關。
 """
 from __future__ import annotations
 

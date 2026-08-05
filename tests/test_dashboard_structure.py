@@ -79,16 +79,32 @@ except Exception as _e:
     _payload = []
     check(False, "#rt-data 不是合法 JSON：%s" % _e)
 check(bool(_payload), "#rt-data 非空（空的話彈窗點開會是白的）")
-rows = [r["name"] for r in _payload if not r.get("builtin")]
+# 2026-08-05 角色正式命名：`name` 改成**中文顯示名**，識別字移到 `agentType`。
+# 這裡比對的是識別字（＝檔名），不是顯示名 —— 顯示名的性質另外驗（見下）。
+rows = [r["agentType"] for r in _payload if not r.get("builtin")]
 # 不寫死角色名單 —— 第一版寫死 ["查詢員","雙改檢核員"]，新增稽核角色時它變成
 # **假紅**（內容其實是對的）。而它本來該守的性質是另一件事：
 # **看板顯示的角色數 == 實際存在的角色檔數**。7/30 的 bug 正是這個 ——
 # 手寫的表停在 2 個、實際已有 4 個，user 回報「我沒看到稽核員」。
-_agents_dir = Path(r"D:\IT-department\.claude\agents")
+# 2026-08-05 角色搬到 harness repo（全域層，`~/.claude/agents` 用 junction 接過去）。
+# 綁實體路徑而不是 junction 路徑：junction 沒建起來時要能看出「角色不在該在的地方」，
+# 走 junction 讀會讓「連結斷了」偽裝成「角色目錄是空的」。
+_agents_dir = Path(__file__).resolve().parent.parent / "agents"
 _expected = sorted(p.stem for p in _agents_dir.glob("*.md")) if _agents_dir.exists() else []
 check(bool(_expected), "找得到角色目錄（找不到就無從比對，不能算通過）")
 check(sorted(rows) == _expected,
       "看板角色數與實際角色檔一致：看板 %s vs 實際 %s" % (sorted(rows), _expected))
+# 顯示以中文為主（user 2026-08-05 要求）：每個自建角色都要有正式中文名，
+# 且不得等於英文識別字 —— 相等代表 `display_name:` 沒填而退回識別字，
+# 那時畫面會混著中英文，而「沒填」跟「刻意同名」在畫面上看起來一樣。
+_nodisp = sorted(r["agentType"] for r in _payload
+                 if not r.get("builtin") and r["name"] == r["agentType"])
+check(not _nodisp, "每個自建角色都有中文顯示名（缺 display_name：%s）" % (_nodisp or "無"))
+# 內建角色也要有中文顯示名，否則畫面上會出現 Plan／Explore 夾在中文之間
+_nodisp_b = sorted(r["agentType"] for r in _payload
+                   if r.get("builtin") and not r.get("external")
+                   and r["name"] == r["agentType"])
+check(not _nodisp_b, "內建角色也有中文顯示名（缺：%s）" % (_nodisp_b or "無"))
 # nav 徽章也要跟著 —— 表格對了但徽章還寫 2，是同一個病的第三次發作
 _badge = re.search(r'id="tab-roles"[^>]*>角色<span class="count">(\d+)</span>', html)
 check(_badge is not None and int(_badge.group(1)) == len(rows),
@@ -112,14 +128,23 @@ check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 
 # ---- 4. 不該混進去的東西 ----
 print("\n負向檢查（避免自己造假綠燈）")
-check("**" not in roles, "沒把 markdown 粗體寫進 HTML")
+# 這條守的是「我自己在版面文字裡寫了 markdown 粗體」（會原樣顯示成兩個星號）。
+# **資料 JSON 要排除**：2026-08-05 起工具目標樣本會進 #rt-data，而 Glob 的 pattern
+# 本來就長得像 `**/SOFTWARE_LICENSE_PLAN*.md` —— 那是合法輸入不是排版錯誤。
+# 不排除的話這條會變成「只要有人用過 Glob 就紅」，那種紅沒有訊息量。
+_roles_prose = re.sub(r'<script type="application/json" id="rt-data">.*?</script>',
+                      '', roles, flags=re.S)
+check("**" not in _roles_prose, "沒把 markdown 粗體寫進 HTML（版面文字，資料 JSON 除外）")
 check("<repo>" not in roles, "角度括號已 escape（未生出未知標籤）")
 check(html.count('class="tab"') == len(tabs), "沒有多餘的 .tab 元素")
 
 # ---- 5. 行尾與標籤平衡 ----
 print("\n檔案完整性")
 check("\r\n" not in html, "仍為純 LF")
-check(html.count("<section>") == html.count("</section>"), "section 標籤平衡")
+# 用 `<section`（不含收尾角括號）計數：2026-08-05 部門區塊是 `<section class="rt-dept">`，
+# 只數 `<section>` 會漏掉所有帶屬性的開標籤，於是「開 17 收 23」被判成不平衡 ——
+# 那是判準看不見帶屬性的標籤，不是檔案真的壞了。`</section>` 不會被 `<section` 匹配到。
+check(html.count("<section") == html.count("</section>"), "section 標籤平衡（含帶屬性的開標籤）")
 check(html.count("<table") == html.count("</table>"), "table 標籤平衡")
 check(html.count("<tbody>") == html.count("</tbody>"), "tbody 標籤平衡")
 

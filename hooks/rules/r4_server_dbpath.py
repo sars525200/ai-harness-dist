@@ -38,6 +38,8 @@ database_list==副本，否則誤寫正式庫」——已犯一次，後果是�
 **已知漏判（fail-open 方向，刻意不猜）**：路徑存在變數裡再傳給 connect
 （`p = "...SOP_PROD..."; connect(p)`）抓不到。要抓得靠資料流分析，
 誤判成本高於漏判成本。
+
+【專案層】server.py 的 DB_PATH 單例是本平台的資料層形狀。
 """
 from __future__ import annotations
 

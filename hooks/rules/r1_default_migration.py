@@ -22,6 +22,8 @@ Object.assign({},預設,saved)→saved 蓋過·必一併遷移 saved（已咬三
 會被蓋過的 getter 模式——這條規則沒辦法分辨「這個常數有沒有對應的
 saved 覆寫邏輯」，抓到就一律提醒，可能有無關的 false positive。
 WARN 級可以接受這個代價換覆蓋率。
+
+【專案層】綁 app_settings 的 DEFAULT_* 遷移語意，那是本平台的設定儲存形狀。
 """
 from __future__ import annotations
 

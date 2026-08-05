@@ -23,6 +23,8 @@ frontmatter 的四個欄位**（name／description／tools／model），正文�
 
 每次存檔先把原檔複製成 `<name>.md.bak`（覆蓋上一份）。角色檔進 git，真出事
 `git checkout` 更快，但 `.bak` 讓「改壞了想立刻比對」不必開 git。
+
+【核心層】角色設定頁，它編輯的是各部門自己的角色檔。
 """
 from __future__ import annotations
 
@@ -39,7 +41,10 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-AGENTS_DIR = r"D:\IT-department\.claude\agents"
+# 角色 2026-08-05 搬到 harness repo（全域層，家目錄 .claude/agents 用 junction 接過去）。
+# 這支是「真的能寫角色檔」的設定頁 —— 指錯路徑會讓它寫進一個不存在的目錄，
+# 而畫面上看起來一切正常。
+AGENTS_DIR = os.path.join(os.path.dirname(HERE), "agents")
 HOST, PORT = "127.0.0.1", 8897
 
 # 可選工具。與平台的工具名逐字對齊 —— 打錯字不會報錯，只會讓角色少一個工具，

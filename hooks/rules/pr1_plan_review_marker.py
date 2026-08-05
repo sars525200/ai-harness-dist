@@ -68,6 +68,8 @@ subagent 寫計畫書」的路徑天然免疫。掛上 `SubagentStop` 才補得�
 讀哪一份 transcript 由 `ctx.turn_transcript_path` 決定（見 contract.py）：
 subagent 與主 session 共用 `session_id`，只有 `agent_transcript_path`
 分得出來。
+
+【核心層】大型工作先寫計畫書、討論過才執行，是流程紀律不是業務規則。
 """
 from __future__ import annotations
 

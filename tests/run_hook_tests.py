@@ -303,6 +303,7 @@ def main() -> int:
         # 拉進來每次跑，漂掉的當下就紅。
         import test_budget1
         import test_layers
+        import test_layer_marks
         import test_roles_topology
         import test_cost_panel
         import test_enc1_encoding
@@ -316,6 +317,7 @@ def main() -> int:
             (test_budget1.run, "BUDGET-1 用量閘門"),
             (test_roles_topology.run, "角色拓樸產生器"),
             (test_layers.run, "兩層對照產生器"),
+            (test_layer_marks.run, "分層標註覆蓋率"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):

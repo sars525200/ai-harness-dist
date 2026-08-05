@@ -18,6 +18,8 @@
 
 **快取**：同一次 hook 呼叫內同樣的查詢會重複（例如 show 同一個 index.html）。
     每個 instance 一份 cache，hook 進程結束即消失，無失效問題。
+
+【核心層】git 存取的真實實作，規則介面的另一半；任何部門的規則都靠它讀 git 狀態。
 """
 from __future__ import annotations
 

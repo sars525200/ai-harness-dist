@@ -23,6 +23,8 @@ BOM／cp950／CRLF 相關至少**六個 session** 各賠上一輪返工。而這
 - `.ps1` 純 ASCII 沒 BOM **不報**。BOM 是為了讓 cp950 終端正確解讀中文；純英文腳本沒有
   這個問題，一律要求會製造假警報，而假警報會讓人開始無視整套規則（Skill Eval L1 的教訓）。
 - 二進位副檔名整個跳過（`.png`／`.pdf`／`.sqlite`…）——那裡的 `\\x00` 是正常的。
+
+【核心層】cp950／UTF-8 混用是 Windows 環境的通病，不限本專案。
 """
 from __future__ import annotations
 

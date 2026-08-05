@@ -116,14 +116,23 @@ def _case_stamp_replaced(fails):
 
 
 def _case_idempotent(fails):
-    """固定 now ＋ 固定 state → 兩次輸出必須逐字相同。"""
+    """固定 now ＋ 固定 state ＋ 固定歷史 → 兩次輸出必須逐字相同。
+
+    2026-08-05：歷史那半換成平台的 subagent 紀錄後，**不能拿真實歷史來驗冪等** ——
+    那份資料每回合都在長，第二次跑時輸入真的變了，冪等會永遠紅（同成本分頁的坑）。
+    所以這裡餵一份寫死的 hist 快照，驗的是「同一份輸入兩次輸出一樣」這個性質本身。
+    """
+    hist = {"查詢員": {"runs": 3, "toolCalls": 12, "last": "2026-08-01 10:00",
+                       "tools": {"Read": 8, "Grep": 4}, "targets": {"Read": ["a.js", "b.js"]},
+                       "roots": {"d:\\IT-department": 8}, "days": {"2026-08-01": 3},
+                       "models": {"sonnet": 3}, "tasks": ["查一個函式"], "depths": {"1": 3}}}
     with tempfile.TemporaryDirectory() as tmp:
         outs = []
         for _ in range(2):
             m = _load()
             now = _fake_state(tmp, {"aaaaaaaa-1111": 30})
             m.STATE_DIR = __import__("pathlib").Path(tmp)
-            outs.append(m.build_html(m.parse_agents(), {}, m.sessions(now)))
+            outs.append(m.build_html(m.parse_agents(), hist, m.sessions(now), now))
         if outs[0] != outs[1]:
             fails.append("固定輸入下兩次輸出不同 —— 不冪等")
 

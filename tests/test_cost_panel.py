@@ -315,8 +315,14 @@ def _case_notes_collapsed(fails: list) -> None:
 
         import re
         btns = re.findall(r'class="cv-info" data-note="([^"]+)" aria-expanded="([^"]+)"', html)
-        if len(btns) != 2:
-            fails.append(f"(!) 說明鈕應有 2 顆，實得 {len(btns)}")
+        # 2026-08-05：原本寫死「應有 2 顆」，於是多收一段長文進 (!) 就變**假紅**
+        # （內容其實更好了）。它本來要守的性質是另一件事：
+        # **每顆鈕都有對應浮窗、且預設收合** —— 那才是「簡約版面」真正依賴的，
+        # 數量多少是編輯決策。下界仍要有：一顆都沒有代表整套機制掉了。
+        if len(btns) < 2:
+            fails.append(f"(!) 說明鈕至少該有 2 顆（mix 與金額各一），實得 {len(btns)}")
+        if len({b[0] for b in btns}) != len(btns):
+            fails.append("有兩顆 (!) 指向同一個浮窗 —— 其中一顆點了會開錯內容")
         for note_id, expanded in btns:
             if expanded != "false":
                 fails.append(f"{note_id} 預設就是展開的（簡約版面白做）")
@@ -326,6 +332,19 @@ def _case_notes_collapsed(fails: list) -> None:
         for mm in re.finditer(r'class="criteria([^"]*)"', html):
             if "cv-note" not in mm.group(1):
                 fails.append("成本頁還有沒收進 (!) 的常駐長文說明")
+
+    # 上面那段是 amounts=None 的分支，**有金額時才產生的 (!) 它驗不到**
+    # （2026-08-05 跑變異時發現：改壞金額那顆，測試照樣全綠）。
+    # 這裡改掃產生器原始碼，涵蓋所有分支 —— 靜態但不漏。
+    src = open(os.path.join(ROOT, "dashboard", "gen_cost_panel.py"), encoding="utf-8").read()
+    all_btns = re.findall(r'class="cv-info" data-note="([^"]+)" aria-expanded="([^"]+)"', src)
+    if len(all_btns) < 3:
+        fails.append(f"產生器裡的 (!) 鈕少於 3 顆（實得 {len(all_btns)}）—— 含只在有金額時才出現的那顆")
+    for note_id, expanded in all_btns:
+        if expanded != "false":
+            fails.append(f"{note_id} 在原始碼裡就是展開的（含未被 None 分支涵蓋的）")
+        if f'id="{note_id}"' not in src:
+            fails.append(f"{note_id} 沒有對應的浮窗容器 —— 點了會開空的")
     dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
     js = open(dash, encoding="utf-8").read()
     if ".cv-info[data-note]" not in js:
