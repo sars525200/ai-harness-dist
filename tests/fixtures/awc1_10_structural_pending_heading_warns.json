@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 以待辦性標題收尾、內文無徵詢措辭 → WARN（結構偵測）",
+  "rule": "awc1_choices_check",
+  "why": "措辭偵測抓不到的形態：用 markdown 標題把待辦圈起來，內文卻是純敘述（一個「要不要」「待你」都沒有）。這一筆是 _structural_pending 的唯一守門——把它整條拿掉就會紅。內文刻意不含任何措辭骨架命中的字，否則測不出結構那半邊。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-10",
+    "last_assistant_message": "三處修正都已部署，服務正常。\n\n## 下一步\n\n把 PC-00117 開起來，看 5 格有沒有填滿。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "WARN"
+  }
+}

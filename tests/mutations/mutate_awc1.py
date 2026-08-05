@@ -61,9 +61,24 @@ MUTATIONS = [
         "    if True:\n        return True",
     ),
     (
-        "待決措辭偵測整條不見（退回只抓問號 —— 2026-07-31 漏掉的正是這一類）",
-        "    if not _PENDING_DECISION.search(tail):\n        return False",
-        "    if True:\n        return False",
+        "待決措辭偵測整條不見（只剩問號＋結構 —— 2026-07-31 漏掉的正是這一類）",
+        "    return bool(_PENDING_DECISION.search(tail)) or _structural_pending(msg)",
+        "    return _structural_pending(msg)",
+    ),
+    (
+        "結構偵測整條不見（2026-08-05「## 待你確認」那類靠它兜底）",
+        "    return bool(_PENDING_DECISION.search(tail)) or _structural_pending(msg)",
+        "    return bool(_PENDING_DECISION.search(tail))",
+    ),
+    (
+        "措辭骨架退回逐詞白名單（＝2026-08-05 之前的版本，差一個字就漏）",
+        '    r"[待等留交給讓](你|您)"',
+        '    r"等你(指示|確認|回覆|點頭|說|挑|選)"',
+    ),
+    (
+        "結構偵測不限標題到結尾的長度（章節標題會被當成收尾交辦）",
+        "    return (len(msg) - last.end()) < _HEAD_TAIL_LIMIT",
+        "    return True",
     ),
     (
         "待決措辭不限尾段（正文中間敘述「我評估過要不要…」也會被唸）",
