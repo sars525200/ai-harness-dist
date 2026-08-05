@@ -71,6 +71,21 @@ FABLE_CEILING_PCT = 5         # §7：Fable 5 <5%
 # 測試餵料用的 session_id（手寫規律 UUID），與 gen_roles_table.py 同一套判準
 _TEST_SESSION = re.compile(r"^(1{8}|2{8}|0{8}|ZZ)")
 
+# ── G2 階段成本歸因（MODEL_ROUTING_PLAN.md M-2／M-4 定案）───────────────────
+# 全域 CLAUDE.md §2 的自我宣告多了「階段」欄，本檔離線從 transcript 撈宣告行歸因。
+STAGES = ("Research", "Design", "Execute", "Review", "Fix")
+UNMARKED = "未標記"
+STAGE_RULE_SINCE = "2026-08-06"   # 宣告規則生效日（**當地日期**）——之前的紀錄沒有這一欄
+_STAGE_RE = re.compile(r"階段\s*[:：]?\s*(Research|Design|Execute|Review|Fix)\b")
+
+# 單價表（USD／M token；值＝該家族 input 單價）。來源：/claude-api skill 官方快取
+# 2026-06-24。衍生規則（官方定價頁）：output=in×5、cache read=in×0.1、
+# cache write 5m TTL=in×1.25、1h TTL=in×2。**價格會變**——對帳差突然拉大時
+# 先懷疑這張表過期，重跑 /claude-api 取新價再改，不憑記憶調。
+# sonnet-5 至 2026-08-31 有 $2/$10 優惠價；這裡沿用標準價（與 ccusage 同口徑），
+# 差額會反映在對帳差裡而不是被藏起來。
+PRICE_IN = {"opus": 5.0, "sonnet": 3.0, "haiku": 1.0, "fable": 10.0}
+
 
 def _esc(t: str) -> str:
     return (str(t).replace("&", "&amp;").replace("<", "&lt;")
@@ -130,6 +145,146 @@ def aggregate_tokens() -> "tuple[dict, set]":
     if not by_day:
         raise SystemExit("transcript 解析不到任何 usage 紀錄 —— 拒絕產出空表。")
     return by_day, sessions
+
+
+# ── 資料源 1b：transcript → 按「階段」的 token 與估算金額（G2）─────────────
+
+def stage_attribution(since: str = STAGE_RULE_SINCE) -> "tuple[dict, dict]":
+    """回 ({階段: {family: {n,in,out,cw5,cw1,cr}}}, meta)。
+
+    **只看 `since` 當天以後的紀錄**。這不是效能考量，是口徑正確性：規則上線前的
+    紀錄本來就沒有機會標階段，把它們算進「未標記」會讓這個數字**永遠是 100%**
+    ——32 天的歷史成本會把新資料淹掉好幾週，於是「未標記佔比＝宣告紀律」這個
+    量測從第一天起就是壞的。分母要跟規則同齡。
+
+    三條跟 `aggregate_tokens()` 不同的紀律，都是這裡才需要的：
+
+    1. **宣告與 usage 都只認 assistant 紀錄**。user／tool_result 轉述的「階段 X」
+       （引用規則文、貼舊對話）不能改變歸因——宣告是模型自己開工時說的那一行。
+       同理只掃 text block：tool_use 的 input 可能含有正在寫入檔案的字面值。
+    2. **按 message id 去重**。同一則 API 訊息在 transcript 拆多筆（每個 content
+       block 一筆、usage 完全相同；2026-08-06 實測 45% 是重複、同 id usage
+       零不一致）。mix 是比例還能互相抵消，金額不去重就是直接灌水近一倍。
+    3. **cache write 按 5m／1h 明細分開計價**。ccusage 把兩種不同價的 cache 併成
+       一欄導致反解殘差 36%（見模組 docstring），但原始 transcript 的
+       `usage.cache_creation` 其實有分——這正是自算比外包準的地方。
+       缺明細的舊紀錄整筆當 5m（單價較低：寧可低估，不虛構）。
+
+    宣告行自己的 usage 歸入**新**階段（那一則就是新任務的開場白）。
+    宣告之前的紀錄歸「未標記」——未標記佔比就是宣告紀律的量測，照實顯示。
+    """
+    if not PROJECT_DIR.exists():
+        raise SystemExit(f"找不到 transcript 目錄 {PROJECT_DIR} —— 零目標拒跑，不產空表。")
+    stages: dict = {}
+    cutoff = _utc_cutoff(since)
+    meta = {"first_decl": "", "decl_n": 0, "dup_skipped": 0,
+            "since": since, "cutoff": cutoff}
+    seen: set = set()
+    for fp in sorted(PROJECT_DIR.glob("*.jsonl")):
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        # 只認帶 usage 的 assistant 紀錄：宣告本身就寫在助理訊息的 text block 裡，
+        # 而那筆紀錄一定帶 usage（同一則訊息的每個 block 各存一筆、usage 相同）。
+        # ⚠ **不要用原始行的 `"階段" in line` 當前置過濾**：實測同一份 transcript
+        #   兩種編碼都有（字面 CJK 與 `\uXXXX` 逃逸），字面比對會靜默漏掉逃逸那半。
+        recs = []
+        for line in text.splitlines():
+            if '"usage"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if rec.get("type") != "assistant":
+                continue
+            msg = rec.get("message") or {}
+            if not msg.get("usage") or not msg.get("model") or msg.get("model") == "<synthetic>":
+                continue
+            if (rec.get("timestamp") or "") < cutoff:
+                continue
+            recs.append(rec)
+
+        # 先把「哪一則訊息宣告了哪個階段」解出來，再照順序歸因 —— 兩段式是必要的：
+        # 一則訊息的 thinking block 會排在 text block 前面且各存一筆，
+        # 邊走邊判的話宣告那一則的 usage 會被算進**上一個**階段。
+        decl_of: dict = {}
+        for rec in recs:
+            mid = (rec.get("message") or {}).get("id")
+            if not mid or mid in decl_of:
+                continue
+            for blk in (rec.get("message") or {}).get("content") or []:
+                if isinstance(blk, dict) and blk.get("type") == "text":
+                    m = _STAGE_RE.search(blk.get("text") or "")
+                    if m:
+                        decl_of[mid] = (m.group(1), rec.get("timestamp") or "")
+                        break
+
+        # 每個檔（＝每個 session）各自從「未標記」起算：新 session 沒有上一輪的
+        # 脈絡，本來就該重新宣告。
+        # ⚠ 已知邊界：續接／分支出來的 session 會把舊訊息複製進新檔，那些 id 已被
+        #   前一個檔認領（去重是跨檔的，因為同一則 API 訊息只該計費一次），於是
+        #   **複製進來的宣告不會再次生效**。金額仍正確，只有階段延續會退回未標記。
+        cur = UNMARKED
+        for rec in recs:
+            msg = rec["message"]
+            usage, model, mid = msg["usage"], msg["model"], msg.get("id")
+            if mid in seen:
+                meta["dup_skipped"] += 1
+                continue
+            if mid:
+                seen.add(mid)
+            if mid in decl_of:
+                cur, ts = decl_of[mid]
+                meta["decl_n"] += 1
+                if ts and (not meta["first_decl"] or ts < meta["first_decl"]):
+                    meta["first_decl"] = ts
+            fam = _family(model)
+            slot = stages.setdefault(cur, {}).setdefault(
+                fam, {"n": 0, "in": 0, "out": 0, "cw5": 0, "cw1": 0, "cr": 0})
+            slot["n"] += 1
+            slot["in"] += usage.get("input_tokens", 0) or 0
+            slot["out"] += usage.get("output_tokens", 0) or 0
+            cc = usage.get("cache_creation") or {}
+            cw5, cw1 = cc.get("ephemeral_5m_input_tokens"), cc.get("ephemeral_1h_input_tokens")
+            if cw5 is None and cw1 is None:
+                slot["cw5"] += usage.get("cache_creation_input_tokens", 0) or 0
+            else:
+                slot["cw5"] += cw5 or 0
+                slot["cw1"] += cw1 or 0
+            slot["cr"] += usage.get("cache_read_input_tokens", 0) or 0
+    return stages, meta
+
+
+def _utc_cutoff(local_date: str) -> str:
+    """把「當地日期的 00:00」換算成可與 transcript 直接比對的 UTC ISO 字串。
+
+    **transcript 的 `timestamp` 是 UTC**（`…Z`），而規則生效日是人用當地日期講的。
+    直接拿 `timestamp[:10] < "2026-08-06"` 比會**整段砍掉當地今天的前 8 小時**
+    ——2026-08-06 01:15（當地）在 UTC 還是 08-05T17:15，於是整個工作階段被排除，
+    表格靜默變空。時區換算不能省，也不能寫死 +8（換一個部門就錯）：用本機時區。
+    """
+    from datetime import datetime, timezone
+    dt = datetime.fromisoformat(local_date).astimezone()      # 當地午夜（帶本機時區）
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _stage_cost(fams: dict) -> float:
+    """五項公式（M-4 定案）：in×P + out×5P + cw5×1.25P + cw1×2P + cr×0.1P。
+
+    兩項公式（圖上的 in+out）在本專案會漏掉大宗——實測 cache read 是 output 的
+    355 倍。沒有單價的家族（other）跳過不計：寧可少算並讓則數欄看得出來，不虛構價格。
+    """
+    usd = 0.0
+    for fam, t in fams.items():
+        p = PRICE_IN.get(fam)
+        if p is None:
+            continue
+        usd += (t.get("in", 0) * p + t.get("out", 0) * p * 5
+                + t.get("cw5", 0) * p * 1.25 + t.get("cw1", 0) * p * 2
+                + t.get("cr", 0) * p * 0.1) / 1e6
+    return usd
 
 
 # ── 資料源 2：event log → skill／角色實際使用 ───────────────────────────────
@@ -368,8 +523,113 @@ def _mix_row(day: str, fams: dict) -> str:
             f"<td class=\"num\">{o_n + s_n + sum(d.get('n', 0) for d in others.values())}</td></tr>")
 
 
+def _stage_block(stage: "tuple[dict, dict] | None", cost: "dict | None" = None) -> str:
+    """階段成本歸因（G2）。沒有資料時整段不出現——不畫空表。"""
+    if not stage:
+        return ""
+    stages, meta = stage
+    if not stages:
+        # 窗口內一筆都沒有 ≠ 這一頁不存在。**整段消失是最糟的呈現**——看起來像
+        # 功能沒做，而真相是「規則剛上線、還沒有資料」。把窗口講出來，人才知道
+        # 是不是時區／起算日設錯了（2026-08-06 就是這樣抓到 UTC 比對的 bug）。
+        return f"""
+    <section>
+      <div class="section-head">
+        <h2>階段成本歸因</h2>
+        <span class="sub">{_esc(meta.get("since", ""))} 起 · 尚無紀錄</span>
+      </div>
+      <p class="lead">宣告規則自 <code>{_esc(meta.get("since", ""))}</code>（當地）起算，
+        對應 UTC <code>{_esc(meta.get("cutoff", ""))}</code>，此窗口內尚無任何助理訊息。
+        下一輪開工後就會有資料。</p>
+    </section>
+"""
+    rows_data = []
+    for name in list(STAGES) + [UNMARKED]:
+        fams = stages.get(name)
+        if not fams:
+            continue
+        rows_data.append((name, fams, _stage_cost(fams)))
+    if not rows_data:
+        return ""
+    total = sum(r[2] for r in rows_data) or 1.0
+    unmarked_usd = sum(r[2] for r in rows_data if r[0] == UNMARKED)
+    un_pct = unmarked_usd * 100.0 / total
+
+    body = ""
+    for name, fams, usd in rows_data:
+        n = sum(f.get("n", 0) for f in fams.values())
+        out = sum(f.get("out", 0) for f in fams.values())
+        cr = sum(f.get("cr", 0) for f in fams.values())
+        o_out = fams.get("opus", {}).get("out", 0)
+        s_out = fams.get("sonnet", {}).get("out", 0)
+        mix = f"{o_out*100/(o_out+s_out):.0f}:{100-o_out*100/(o_out+s_out):.0f}" \
+            if (o_out + s_out) else "—"
+        cls = ' class="st-dim"' if name == UNMARKED else ""
+        body += (f'            <tr{cls}><td>{_esc(name)}</td>'
+                 f'<td class="num">US${usd:,.2f}</td>'
+                 f'<td class="num">{usd*100/total:.1f}%</td>'
+                 f'<td class="num">{mix}</td>'
+                 f'<td class="num">{_fmt(out)}</td>'
+                 f'<td class="num">{_fmt(cr)}</td>'
+                 f'<td class="num">{n}</td></tr>\n')
+
+    since = (meta.get("first_decl") or "")[:10]
+    # 對帳：自算總額 vs ccusage 累計。差幾 % 一定要印 —— 不印的話這張表看起來
+    # 會跟帳單一樣可信，而它是兩套獨立算法（我方單價表 vs 它的價格表）。
+    recon = ""
+    if cost and cost.get("project_total"):
+        gap = (total - cost["project_total"]) / cost["project_total"] * 100
+        miss = cost.get("project_sessions", 0) - cost.get("matched", 0)
+        recon = (f'<li><span class="chip warn">對帳</span><span>自算合計 '
+                 f'<b>US${total:,.0f}</b>，ccusage 累計 <b>US${cost["project_total"]:,.0f}</b>，'
+                 f'差 <b>{gap:+.0f}%</b>。兩個已知來源：ccusage 有 <b>{miss}</b> 個 session 對不上'
+                 f'（它少算），且 sonnet-5 到 2026-08-31 是優惠價而本表用標準價（我方多算）。'
+                 f'<b>對帳仍以 ccusage 累計為準</b>，這張表要回答的是「錢花在哪個階段」。</span></li>')
+    return f"""
+    <section>
+      <div class="section-head">
+        <h2>階段成本歸因</h2>
+        <span class="sub">{_esc(meta.get("since", ""))} 起 · 五項公式自算 · 未標記 {un_pct:.0f}%</span>
+      </div>
+      <p class="lead">自我宣告的<b>階段</b>欄（全域 CLAUDE.md §2）撈自 transcript，
+        金額用<b>五項公式</b>自算：<code>in + out×5 + cache_write(5m×1.25／1h×2) + cache_read×0.1</code>，
+        單價以各家族 input 價為基準。
+        <button type="button" class="cv-info" data-note="note-stage" aria-expanded="false"
+                aria-controls="note-stage" aria-label="這欄金額跟上面累計值為什麼對不起來">!</button></p>
+      <div class="criteria cv-note" id="note-stage" hidden>
+        <h4>這張表怎麼讀</h4>
+        <ul>
+          <li><span class="chip warn">分母</span><span><b>「未標記」不是雜項，是紀律的量測。</b>
+            <b>本表只含 <code>{_esc(meta.get("since", ""))}</code> 起的紀錄</b>——規則上線前的紀錄
+            本來就沒有機會標階段，算進來會讓未標記<b>永遠是 100%</b>（32 天歷史成本會把新資料
+            淹掉好幾週），這個量測從第一天起就壞掉。<b>分母要跟規則同齡。</b>
+            落在未標記的代表那一輪確實沒宣告。共 <b>{meta.get('decl_n', 0)}</b> 次宣告
+            {(f"，首次 <code>{_esc(since)}</code>" if since else "")}。</span></li>
+          <li><span class="chip pass">口徑</span><span>金額是<b>自算</b>不是 ccusage：
+            按 <code>message.id</code> 去重（同一則 API 訊息在 transcript 會拆成多筆、usage 相同，
+            本次跳過 <b>{meta.get('dup_skipped', 0)}</b> 筆），且 cache write 依
+            <code>ephemeral_5m</code>／<code>ephemeral_1h</code> <b>分開計價</b>——
+            ccusage 把兩種不同價的合併成一欄，那正是它反解單價殘差 36% 的原因。</span></li>
+          {recon}
+          <li><span class="chip block">精度</span><span>單價寫在產生器的 <code>PRICE_IN</code>，
+            <b>價格會變</b>。與上方 ccusage 累計值對不起來時<b>先懷疑這張表過期</b>，
+            重查官方定價再改，不憑記憶調。無單價的家族（other）不計入。</span></li>
+        </ul>
+      </div>
+      <div class="twrap">
+        <table class="roster">
+          <thead><tr><th>階段</th><th class="num">估算金額</th><th class="num">佔比</th>
+            <th class="num">mix</th><th class="num">output</th><th class="num">cache read</th><th class="num">則數</th></tr></thead>
+          <tbody>
+{body}          </tbody>
+        </table>
+      </div>
+    </section>
+"""
+
+
 def build_html(by_day: dict, ev: dict, cost: "dict | None",
-               skills: list, agents: list) -> str:
+               skills: list, agents: list, stage: "tuple[dict, dict] | None" = None) -> str:
     days = sorted(by_day)[-DAYS_SHOWN:]
     rows = "\n".join(_mix_row(d, by_day[d]) for d in reversed(days))
 
@@ -556,7 +816,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
 {cost_block}
       </div>
     </section>
-
+{_stage_block(stage, cost)}
     <section>
       <div class="section-head">
         <h2>建好了，有人用嗎</h2>
@@ -615,6 +875,7 @@ def main() -> None:
     by_day, sessions = aggregate_tokens()
     ev = event_usage()
     skills, agents = roster()
+    stage = stage_attribution()
     cost = refresh_cost_cache(sessions) if "--with-cost" in sys.argv else load_cost_cache()
 
     if "--check" in sys.argv:
@@ -629,11 +890,20 @@ def main() -> None:
         print(f"角色 {len(agents)} 個，實派：{ {a: ev['agents'].get(a, {}).get('n', 0) for a in agents} }")
         print(f"金額快取：{'有' if cost else '無'}"
               + (f"，本專案累計 ${cost['project_total']:,.2f}" if cost else ""))
+        st, meta = stage
+        tot = sum(_stage_cost(f) for f in st.values()) or 1.0
+        print(f"\n階段歸因：宣告 {meta['decl_n']} 次、去重跳過 {meta['dup_skipped']} 筆")
+        for name in list(STAGES) + [UNMARKED]:
+            if name in st:
+                usd = _stage_cost(st[name])
+                print(f"  {name:<10} ${usd:>9,.2f}  {usd*100/tot:>5.1f}%"
+                      f"  則數 {sum(v.get('n', 0) for v in st[name].values())}")
         return
 
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = _sync_badge(inject(html, build_html(by_day, ev, cost, skills, agents)), len(by_day))
+    out = _sync_badge(inject(html, build_html(by_day, ev, cost, skills, agents, stage)),
+                      len(by_day))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print(f"已注入成本分頁：{len(by_day)} 天 · skill {len(skills)} 支 · 角色 {len(agents)} 個"

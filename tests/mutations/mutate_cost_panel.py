@@ -97,6 +97,70 @@ MUTATIONS = [
         'data-note="note-cozt" aria-expanded="false"',
     ),
     (
+        "階段歸因不去重（同一則訊息拆多筆全算，金額灌水近一倍）",
+        "            if mid in seen:\n                meta[\"dup_skipped\"] += 1\n                continue",
+        "            if False:\n                meta[\"dup_skipped\"] += 1\n                continue",
+    ),
+    (
+        "階段宣告也認 user 訊息（貼一句規則文就能改寫成本歸因）",
+        '            if rec.get("type") != "assistant":\n                continue\n            msg = rec.get("message") or {}\n            if not msg.get("usage")',
+        '            if rec.get("type") not in ("assistant", "user"):\n                continue\n            msg = rec.get("message") or {}\n            if not msg.get("usage")',
+    ),
+    (
+        # ⚠ 錨點必須帶 `recs = []`：`aggregate_tokens()` 有**逐字相同**的三行迴圈，
+        #   只用那三行的話 `.replace(…, 1)` 會改到前面那支，於是測試紅了卻是紅在
+        #   mix 聚合上——變異看起來被抓到，實際上這個變異根本沒被測到（2026-08-06 踩過）。
+        "退回原始行字面比對前置過濾（\\uXXXX 逃逸的宣告會靜默漏掉）",
+        "        recs = []\n        for line in text.splitlines():\n            if '\"usage\"' not in line:\n                continue",
+        "        recs = []\n        for line in text.splitlines():\n            if '\"usage\"' not in line or '階段' not in line:\n                continue",
+    ),
+    (
+        "邊走邊判階段（宣告那則的 usage 會被算進上一個階段）",
+        "            if mid in decl_of:\n                cur, ts = decl_of[mid]",
+        "            if mid in decl_of and False:\n                cur, ts = decl_of[mid]",
+    ),
+    (
+        "5m 與 1h cache write 併成同價（ccusage 就是這樣殘差 36% 的）",
+        '+ t.get("cw5", 0) * p * 1.25 + t.get("cw1", 0) * p * 2',
+        '+ t.get("cw5", 0) * p * 1.25 + t.get("cw1", 0) * p * 1.25',
+    ),
+    (
+        "階段金額漏掉 cache_read（本專案的大宗，漏了等於算錯）",
+        '+ t.get("cr", 0) * p * 0.1) / 1e6',
+        "+ 0) / 1e6",
+    ),
+    (
+        "未知模型家族套用預設單價（虛構價格）",
+        "        p = PRICE_IN.get(fam)\n        if p is None:\n            continue",
+        "        p = PRICE_IN.get(fam, 5.0)\n        if False:\n            continue",
+    ),
+    (
+        "階段歸因不限規則上線後（歷史成本淹掉新資料，未標記永遠 100%）",
+        '            if (rec.get("timestamp") or "") < cutoff:\n                continue',
+        '            if False:\n                continue',
+    ),
+    (
+        "起算日不做時區換算（當地今天的前幾小時被砍掉，表格靜默變空）",
+        '    dt = datetime.fromisoformat(local_date).astimezone()      # 當地午夜（帶本機時區）\n'
+        '    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")',
+        '    return local_date + "T00:00:00.000Z"',
+    ),
+    (
+        "窗口零紀錄時整段消失（看起來像功能沒做）",
+        "    if not stages:\n        # 窗口內一筆都沒有",
+        "    if not stages:\n        return ''\n        # 窗口內一筆都沒有",
+    ),
+    (
+        "零宣告時整段藏起來（沒人會知道這件事該做）",
+        "    rows_data = []",
+        "    if not any(k in stages for k in STAGES):\n        return ''\n    rows_data = []",
+    ),
+    (
+        "拿掉自算與 ccusage 的對帳差（自算表看起來會跟帳單一樣可信）",
+        "    if cost and cost.get(\"project_total\"):\n        gap =",
+        "    if False and cost.get(\"project_total\"):\n        gap =",
+    ),
+    (
         "拿掉 HTML 轉義",
         'return (str(t).replace("&", "&amp;").replace("<", "&lt;")',
         'return (str(t).replace("&", "&").replace("<", "<")',

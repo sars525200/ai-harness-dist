@@ -387,6 +387,205 @@ def _case_chart_tip_and_unit(fails: list) -> None:
         fails.append("tipFor 沒有補 aria-label —— 拿掉 <title> 會連無障礙名稱一起掉")
 
 
+def _write_stage_transcript(path: str, rows: list, ascii_esc: bool = True) -> None:
+    """rows: [(day, model, out, cr, decl_text|None, msg_id, role)]
+
+    寫成貼近真實 transcript 的形狀：`type` 欄、`message.id`、content 是 block 陣列。
+    階段歸因跟 mix 不同，**必須**認得 assistant/user 的差別與 message id，
+    所以不能沿用 `_write_transcript()` 那個簡化格式。
+
+    `ascii_esc` 控制中文寫成 `\\uXXXX` 逃逸還是字面 UTF-8 —— **真實 transcript
+    兩種都有**（2026-08-06 實測同一個檔同時命中），所以兩種都要測得到。
+    預設 True（逃逸）是刻意的：第一版產生器拿原始行做 `"階段" in line` 前置過濾，
+    只有逃逸這半會漏，預設走那條才抓得住回歸。
+    """
+    with open(path, "w", encoding="utf-8") as f:
+        for day, model, out, cr, decl, mid, role in rows:
+            content = [{"type": "text", "text": decl}] if decl else [{"type": "text", "text": "ok"}]
+            f.write(json.dumps({
+                "type": role, "timestamp": f"{day}T10:00:00.000Z",
+                "message": {"id": mid, "model": model, "content": content, "usage": {
+                    "input_tokens": 10, "output_tokens": out,
+                    "cache_creation_input_tokens": 100,
+                    "cache_creation": {"ephemeral_5m_input_tokens": 100,
+                                       "ephemeral_1h_input_tokens": 0},
+                    "cache_read_input_tokens": cr}},
+            }, ensure_ascii=ascii_esc) + "\n")
+
+
+def _case_stage_attribution(fails: list) -> None:
+    """階段歸因的四條性質，每條壞掉都是**靜默**的（表照樣長得很正常）。"""
+    import pathlib
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"), [
+            # 宣告前 → 未標記
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "m1", "assistant"),
+            # 宣告行自己也要算進新階段（那一則就是新任務的開場白）
+            ("2026-08-06", "claude-opus-5", 200, 1000,
+             "模式 DEV / 任務分類 [邏輯] / 階段 Execute / 修改檔案 …", "m2", "assistant"),
+            ("2026-08-06", "claude-opus-5", 300, 1000, None, "m3", "assistant"),
+            ("2026-08-06", "claude-sonnet-5", 50, 500,
+             "階段 Review", "m4", "assistant"),
+        ])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        st, meta = m.stage_attribution()
+        if st.get(m.UNMARKED, {}).get("opus", {}).get("out") != 100:
+            fails.append(f"宣告前的紀錄沒歸未標記：{ {k: v for k, v in st.items()} }")
+        if st.get("Execute", {}).get("opus", {}).get("out") != 500:
+            fails.append(f"宣告行自己沒算進新階段，或後續沒延續（應 200+300=500，"
+                         f"實得 {st.get('Execute', {}).get('opus', {}).get('out')}）")
+        if st.get("Review", {}).get("sonnet", {}).get("out") != 50:
+            fails.append("第二次宣告沒有切換階段")
+        if meta["decl_n"] != 2:
+            fails.append(f"宣告次數算錯（應 2，實得 {meta['decl_n']}）")
+
+    # user 訊息裡出現「階段 X」不得改變歸因 —— 貼規則文／引用舊對話都會命中字串，
+    # 讓使用者的一句引用改寫成本歸因是最陰的一種錯。
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"), [
+            ("2026-08-06", "claude-opus-5", 100, 1000,
+             "規則長這樣：階段 Research", "u1", "user"),
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "m1", "assistant"),
+        ])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        st, meta = m.stage_attribution()
+        if "Research" in st or meta["decl_n"] != 0:
+            fails.append("user 訊息裡的「階段 X」被當成宣告 —— 引用一句話就能改寫成本歸因")
+
+    # 同一則 API 訊息在 transcript 會拆成多筆（每個 content block 一筆、usage 相同）。
+    # 不去重的話金額直接灌水近一倍 —— 實測真實 transcript 有 45% 是重複。
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"), [
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "same", "assistant"),
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "same", "assistant"),
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "other", "assistant"),
+        ])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        st, meta = m.stage_attribution()
+        if st[m.UNMARKED]["opus"]["out"] != 200:
+            fails.append(f"同 message id 沒去重（應 200，實得 "
+                         f"{st[m.UNMARKED]['opus']['out']}）—— 金額會灌水近一倍")
+        if meta["dup_skipped"] != 1:
+            fails.append(f"去重筆數沒被記錄（應 1，實得 {meta['dup_skipped']}）")
+
+    # 分母要跟規則同齡：規則上線前的紀錄不能算進未標記，否則那個佔比**永遠是 100%**
+    # （歷史成本會把新資料淹掉好幾週），紀律量測從第一天起就是壞的。
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"), [
+            ("2026-07-01", "claude-opus-5", 999999, 999999, None, "old", "assistant"),
+            ("2026-08-06", "claude-opus-5", 100, 1000, None, "new", "assistant"),
+        ])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        st, meta = m.stage_attribution(since="2026-07-15")
+        got = st.get(m.UNMARKED, {}).get("opus", {}).get("out")
+        if got != 100:
+            fails.append(f"規則上線前的紀錄沒有被排除（應只算 100，實得 {got}）"
+                         "—— 未標記佔比會永遠是 100%")
+        if meta.get("since") != "2026-07-15":
+            fails.append("meta 沒有帶出起算日 —— 頁面上講不出分母是哪一段")
+
+    # 起算日是**當地日期**，transcript 是 UTC。時區沒換算的話，當地今天的前幾個
+    # 小時（UTC 還在昨天）會被整段砍掉，表格靜默變空 —— 2026-08-06 真的踩到。
+    m = _load()
+    cutoff = m._utc_cutoff("2026-08-06")
+    if not cutoff.endswith("Z") or len(cutoff) != 24:
+        fails.append(f"_utc_cutoff 沒回可直接比對的 UTC ISO 字串：{cutoff}")
+    import datetime as _dt
+    off = _dt.datetime.fromisoformat("2026-08-06").astimezone().utcoffset()
+    if off and off.total_seconds() > 0 and not cutoff.startswith("2026-08-05"):
+        fails.append(f"東半球時區下 cutoff 應落在前一天 UTC，實得 {cutoff}"
+                     " —— 當地今天的前幾小時會被砍掉")
+
+
+def _case_stage_empty_window(fails: list) -> None:
+    """窗口內零紀錄時**不可以整段消失** —— 那看起來像功能沒做，
+    而真相是「規則剛上線」或「起算日／時區設錯」。後者正是 2026-08-06 的實例。"""
+    import pathlib
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"),
+                                [("2026-01-01", "claude-opus-5", 100, 1000, None, "m1", "assistant")])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        st, meta = m.stage_attribution(since="2026-08-06")
+        if st:
+            fails.append("窗口外的紀錄沒被排除")
+        by_day, _ = m.aggregate_tokens()
+        html = m.build_html(by_day, m.event_usage(), None, *m.roster(), (st, meta))
+        if "階段成本歸因" not in html:
+            fails.append("窗口內零紀錄時整段消失 —— 看起來像功能沒做")
+        if "尚無紀錄" not in html or "UTC" not in html:
+            fails.append("零紀錄時沒有講出窗口與 UTC 換算 —— 設錯起算日／時區時查不出來")
+
+    # 兩種中文編碼都要認得。真實 transcript 同一個檔就同時有字面 UTF-8 與 \uXXXX
+    # 逃逸兩種，只認一種會**靜默漏掉另一半的宣告**，而漏掉的部分會安靜地落進
+    # 「未標記」——看起來只是紀律差，其實是解析器壞了。
+    for esc, label in ((True, "\\uXXXX 逃逸"), (False, "字面 UTF-8")):
+        with tempfile.TemporaryDirectory() as tmp:
+            _write_stage_transcript(os.path.join(tmp, "s1.jsonl"), [
+                ("2026-08-06", "claude-opus-5", 100, 1000,
+                 "模式 DEV / 階段 Design / 修改檔案 …", "m1", "assistant"),
+            ], ascii_esc=esc)
+            m = _load()
+            m.PROJECT_DIR = pathlib.Path(tmp)
+            st, meta = m.stage_attribution()
+            if "Design" not in st:
+                fails.append(f"{label} 寫法的宣告沒被認出來 —— 會靜默落進未標記")
+
+
+def _case_stage_cost_formula(fails: list) -> None:
+    """五項公式：漏掉任何一項都是靜默低估，而 cache_read 正是本專案的大宗。"""
+    m = _load()
+    fams = {"opus": {"n": 1, "in": 1_000_000, "out": 1_000_000,
+                     "cw5": 1_000_000, "cw1": 1_000_000, "cr": 1_000_000}}
+    # opus in=$5 → 5 + 25 + 6.25 + 10 + 0.5 = 46.75
+    got = m._stage_cost(fams)
+    if abs(got - 46.75) > 0.001:
+        fails.append(f"五項公式算錯（應 46.75，實得 {got:.4f}）")
+    # 5m 與 1h 必須不同價 —— ccusage 合併成一欄正是它反解殘差 36% 的原因，
+    # 我們自算的價值就在這裡；併成同價的話等於白做。
+    a = m._stage_cost({"opus": {"cw5": 1_000_000, "cw1": 0}})
+    b = m._stage_cost({"opus": {"cw5": 0, "cw1": 1_000_000}})
+    if abs(a - b) < 0.001:
+        fails.append(f"5m 與 1h cache write 同價（{a} vs {b}）—— 分開計價白做了")
+    # 沒有單價的家族不能憑空給價
+    if m._stage_cost({"other": {"out": 10_000_000}}) != 0.0:
+        fails.append("未知模型家族被套用了單價 —— 應跳過不計，不虛構價格")
+
+
+def _case_stage_html(fails: list) -> None:
+    """零宣告時仍要出表並把「未標記 100%」講出來 —— 那是紀律量測的初始狀態，
+    不是錯誤。整段藏起來的話，就沒有人會知道這件事該做。"""
+    import pathlib
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_stage_transcript(os.path.join(tmp, "s1.jsonl"),
+                                [("2026-08-06", "claude-opus-5", 100, 1000, None, "m1", "assistant")])
+        m = _load()
+        m.PROJECT_DIR = pathlib.Path(tmp)
+        by_day, _ = m.aggregate_tokens()
+        html = m.build_html(by_day, m.event_usage(), None, *m.roster(), m.stage_attribution())
+        if "階段成本歸因" not in html:
+            fails.append("零宣告時整段消失 —— 沒人會知道這件事該做")
+        if "未標記 100%" not in html:
+            fails.append("未標記佔比沒有顯示在標題列")
+        # 沒傳 stage 時（舊呼叫端）不能炸，也不該憑空生出表
+        if "階段成本歸因" in m.build_html(by_day, m.event_usage(), None, *m.roster()):
+            fails.append("沒有階段資料時仍畫出階段表")
+        # (!) 說明鈕與浮窗要成對且預設收合（與 _case_notes_collapsed 同一條紀律）
+        if 'id="note-stage" hidden' not in html:
+            fails.append("階段說明浮窗不存在或沒有 hidden")
+        # 對帳差：有 ccusage 金額時必須印出來，否則自算表看起來會跟帳單一樣可信
+        cost = {"project_total": 100.0, "all_total": 200.0, "matched": 3,
+                "project_sessions": 5, "by_model": {"claude-opus-5": 100.0},
+                "as_of": "2026-01-01T00:00:00", "source": "test"}
+        h2 = m.build_html(by_day, m.event_usage(), cost, *m.roster(), m.stage_attribution())
+        if "自算合計" not in h2 or "以 ccusage 累計為準" not in h2:
+            fails.append("自算 vs ccusage 的對帳差沒有印出來")
+
+
 def _case_escaping(fails: list) -> None:
     if "<script" in _load()._esc("<script>alert(1)</script>"):
         fails.append("_esc 沒有轉義角括號")
@@ -409,6 +608,10 @@ def run() -> "tuple[int, list]":
         ("縱軸口徑切換預設金額", _case_metric_switch),
         ("長文說明收進 (!) 鈕且預設收合", _case_notes_collapsed),
         ("圖表提示不用原生 title、單位標在圖上", _case_chart_tip_and_unit),
+        ("階段歸因：宣告邊界／來源／去重", _case_stage_attribution),
+        ("階段金額五項公式且 5m≠1h", _case_stage_cost_formula),
+        ("階段表零宣告仍出表且有對帳差", _case_stage_html),
+        ("窗口零紀錄時不整段消失", _case_stage_empty_window),
         ("HTML 轉義", _case_escaping),
     ]
     passed = 0

@@ -152,12 +152,33 @@ def _case_projects_listed(fails):
     cur = [p for p in projs if p["isCurrent"]][0]
     if cur["skills"] <= 0:
         fails.append(f"本專案 skills 掃出 {cur['skills']} —— 實際有 14 支，掃法壞了")
-    # 點名但沒有 .claude 的專案要在清單裡，且標成 exists=False
-    named = [p for p in projs if p["name"] == "AI-Projects"]
-    if named and named[0]["exists"]:
-        fails.append("AI-Projects 沒有 .claude，exists 卻是 True")
-    if not named:
-        fails.append(f"點名的 AI-Projects 沒被列出（沒有 .claude 就消失了）：{names}")
+    # 1) `exists` 必須跟磁碟一致 —— 這是恆真性質，量測而非寫死。
+    #    ⚠ 原本這裡寫死「AI-Projects 沒有 .claude」，2026-08-06 那個目錄被建出來，
+    #    測試就變成**假紅**（產生器是對的、環境變了）。環境現況不可以寫進斷言。
+    import pathlib
+    for p in projs:
+        real = (pathlib.Path(p["path"]) / ".claude").is_dir()
+        if bool(p["exists"]) != real:
+            fails.append(f"{p['name']} 的 exists={p['exists']} 與磁碟實況 {real} 不符")
+
+    # 2) 點名清單裡只要目錄存在就必須被列出（有沒有 .claude 都一樣）
+    for extra in m.EXTRA_PROJECTS:
+        if extra.exists() and extra.name not in names:
+            fails.append(f"點名的 {extra.name} 沒被列出：{names}")
+
+    # 3) 「沒有 .claude 也要列、且標 exists=False」——這條性質不能靠環境剛好成立
+    #    來驗（現在機器上可能一個都沒有，就變成空跑）。造一個臨時目錄當受控樣本。
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        bare = pathlib.Path(tmp) / "bare-project"
+        bare.mkdir()
+        m2 = _load()
+        m2.EXTRA_PROJECTS = list(m2.EXTRA_PROJECTS) + [bare]
+        got = [p for p in m2.survey_projects() if p["name"] == "bare-project"]
+        if not got:
+            fails.append("沒有 .claude 的專案整個消失了 —— 那正是最該看到的狀態")
+        elif got[0]["exists"]:
+            fails.append("沒有 .claude 的專案 exists 卻是 True")
 
 
 def _case_projects_in_payload(fails):
