@@ -5,6 +5,7 @@ description: 稽核一個專案的文件與程式碼是否還對得上。要確�
 tools: Read, Grep, Glob, Bash, Skill
 model: inherit
 department: 稽核組
+icon: clipboard-check
 hooks:
   PreToolUse:
     - matcher: 'Bash|PowerShell'

@@ -5,6 +5,7 @@ description: 照既有規格改檔的施作角色。已經有明確規格或明�
 tools: Read, Grep, Glob, Edit, Write
 model: inherit
 department: 施作組
+icon: wrench
 ---
 
 # executor · 施作員

@@ -6,6 +6,7 @@ description: 網頁視覺與版面角色。畫面「看起來不對」時派給�
 tools: Read, Grep, Glob, Edit, Bash
 model: sonnet
 department: 設計組
+icon: brush
 ---
 
 # 美編人員

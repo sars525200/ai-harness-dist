@@ -199,6 +199,80 @@ def _case_builtin_flag(fails):
         fails.append("內建清單有缺 name 的項目")
 
 
+def _case_every_role_has_badge(fails):
+    """每個自建角色都要配到 icon，而且是 registry 認得的那些。
+
+    沒配 icon **不會報錯**：`role_badges.svg()` 會畫一個問號圓框，而問號在一排
+    徽章裡看起來就像「這個角色比較特別」——正是靜默缺漏最擅長的偽裝。
+    所以判準綁「角色檔數 == 有效 icon 數」，新增角色忘了配就當場現形。
+    """
+    m = _load()
+    rb = m.role_badges
+    for a in m.parse_agents():
+        icon = a.get("icon", "")
+        if not icon:
+            fails.append(f"{a['name']} 沒有 icon:（會被畫成問號）")
+        elif icon not in rb.ICONS:
+            fails.append(f"{a['name']} 的 icon「{icon}」不在 role_badges.ICONS")
+    for b in m.BUILTIN:
+        if b.get("icon") not in rb.ICONS:
+            fails.append(f"內建角色 {b['name']} 的 icon 不在 registry")
+
+
+def _case_every_dept_has_group(fails):
+    """每個部門都要對得到職能群 —— 對不到就沒有顏色，靜靜變中性灰。
+
+    這條專治「DEPT_ORDER 加了新部門但忘了配色」：施作組就這樣缺席過一次
+    （畫面上是一行橘字警告，但那警告講的是部門排序，不是顏色）。
+    """
+    m = _load()
+    rb = m.role_badges
+    for dept in m.DEPT_ORDER:
+        if not rb.group_of(dept):
+            fails.append(f"部門「{dept}」沒有對應職能群（FUNCTION_GROUPS 要補）")
+    for a in m.parse_agents():
+        d = a.get("department", "")
+        if d and not rb.group_of(d):
+            fails.append(f"{a['name']} 的部門「{d}」對不到職能群")
+
+
+def _case_badge_css_present(fails):
+    """職能群色的 CSS 要真的產出來，而且 class 名與 GROUP_CLS 對得上。
+
+    產生器輸出 `rb-build` 但 CSS 只定義 `rb-exec` 這種錯配**不會報錯**，
+    只是那一群的徽章沒有顏色 —— 跟「這群刻意用中性灰」長得一模一樣。
+    """
+    m = _load()
+    rb = m.role_badges
+    css = rb.css()
+    for grp, cls in rb.GROUP_CLS.items():
+        if not rb.FUNCTION_GROUPS[grp]["light"]:
+            continue                      # 外援刻意沒有色，走 .rb-ext 的中性灰
+        if f".rb-{cls}{{" not in css.replace(" ", ""):
+            fails.append(f"職能群「{grp}」缺 .rb-{cls} 樣式")
+        if f"--rb-{cls}:" not in css:
+            fails.append(f"職能群「{grp}」缺 --rb-{cls} 色票")
+    if "prefers-color-scheme: dark" not in css:
+        fails.append("徽章色沒有深色模式那一套")
+
+
+def _case_caps_table_matches_agents(fails):
+    """沙盒頁的能力邊界表列數 == 角色檔數。
+
+    這張表 2026-08-06 之前是手寫的，停在 5 個角色、施作員加進來後靜默少一列，
+    子分頁徽章也還寫著 5。改成產生後，這條就是防它再退回手寫的網。
+    """
+    m = _load()
+    agents = m.parse_agents()
+    table = m.build_caps_table(agents)
+    n = table.count("<tr><td>")
+    if n != len(agents):
+        fails.append(f"能力表 {n} 列，角色檔 {len(agents)} 個")
+    for a in agents:
+        if a["name"] not in table:
+            fails.append(f"能力表少了 {a['name']}")
+
+
 def run() -> "tuple[int, list]":
     cases = [
         ("主 session 活動窗（5 分鐘）判定正確", _case_active_window),
@@ -208,6 +282,10 @@ def run() -> "tuple[int, list]":
         ("角色目錄空時拒跑", _case_refuse_empty),
         ("進行中的 subagent 跨檔逐 session 配對", _case_running_cross_file),
         ("自建／內建分類正確", _case_builtin_flag),
+        ("每個角色都配到 registry 認得的 icon", _case_every_role_has_badge),
+        ("每個部門都對得到職能群（有顏色）", _case_every_dept_has_group),
+        ("徽章色 CSS 與 GROUP_CLS 對得上（含深色）", _case_badge_css_present),
+        ("能力邊界表列數 == 角色檔數", _case_caps_table_matches_agents),
     ]
     passed = 0
     failures: list = []

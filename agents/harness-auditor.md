@@ -5,6 +5,7 @@ description: 稽核 AI harness 的實際狀態與文件宣稱是否相符。要�
 tools: Read, Grep, Glob, Bash, Skill
 model: inherit
 department: 稽核組
+icon: shield-check
 hooks:
   PreToolUse:
     - matcher: 'Bash|PowerShell'

@@ -6,6 +6,7 @@ description: 唯讀查詢角色。要在 codebase 裡定位東西時派給它—
 tools: Read, Grep, Glob
 model: sonnet
 department: 查證組
+icon: search
 ---
 
 # 查詢員

@@ -56,6 +56,7 @@ _HERE = Path(__file__).resolve().parent
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 import subagent_stats  # noqa: E402  （必須在 sys.path 補上之後）
+import role_badges  # noqa: E402  角色徽章（icon 形狀＋職能群色）的單一真相
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -78,6 +79,11 @@ SKILLS_DIR = PROJECT_ROOT / ".claude" / "skills"
 
 MARK_START = "<!-- ROLES_TOPOLOGY_START"
 MARK_END = "<!-- ROLES_TOPOLOGY_END -->"
+# 沙盒頁的「角色能力邊界」表。2026-08-06 從手寫改成產生 —— 手寫那版停在 5 個角色，
+# 施作員加進來之後它靜靜少了一列，子分頁徽章也還寫著 5。
+# 「有可靠來源的內容一律用產生器」（看板規範），這張表的來源就是同一批 frontmatter。
+CAPS_START = "<!-- ROLE_CAPS_START"
+CAPS_END = "<!-- ROLE_CAPS_END -->"
 
 # 測試餵料的 session 前綴。2026-08-05 從 reviewer/roles_live.py 併過來 ——
 # 那邊的版本多了 `e2e-`／`test-`／`warnchan-` 三種，而這邊沒有，於是同一批檔案
@@ -94,7 +100,7 @@ _DOING = {
 # 部門顯示順序。**不是自動推導的**：順序是編輯決策（先看查證再看稽核），
 # 沒有可靠來源，所以寫死在這裡並在畫面上按這個順序排。
 # 角色檔填了清單外的 department 值 → 排在最後並標出來，不靜默併進「未編組」。
-DEPT_ORDER = ["查證組", "稽核組", "品管組", "設計組", "規劃組", "外援"]
+DEPT_ORDER = ["查證組", "稽核組", "品管組", "設計組", "施作組", "規劃組", "外援"]
 DEPT_UNSET = "未編組"
 
 # 內建角色：平台自帶，沒有角色檔可讀，但實際會被派。
@@ -103,7 +109,7 @@ BUILTIN = [
     {"name": "Plan", "tools": "全部工具，除 Agent／Edit／Write／NotebookEdit",
      "desc": "軟體架構規劃。對抗式覆核（/adversarial-review）預設派的就是它——有 Read/Grep/Bash 可查證、沒有寫入能力。",
      "gate": "", "model": "inherit", "department": "規劃組", "boundary": "可執行",
-     "display": "規劃師",
+     "display": "規劃師", "icon": "route",
      # 這個角色身上掛著一份**可編輯的技能設定**：`/adversarial-review` 派的就是
      # `subagent_type: "Plan"`，而 reviewer_config.json 決定用哪個工具／模型／強度跑它。
      # 設定屬於「誰去做這件事」，所以入口放在那個人身上，不另開一個分頁區塊。
@@ -113,13 +119,13 @@ BUILTIN = [
     {"name": "Explore", "tools": "全部工具，除 Agent／Edit／Write／NotebookEdit",
      "desc": "唯讀廣度搜尋，讀片段而非整檔。定位程式碼用，不做審查或稽核。",
      "gate": "", "model": "inherit", "department": "查證組", "boundary": "可執行",
-     "display": "探查員"},
+     "display": "探查員", "icon": "compass"},
     # ⚠ desc 會經過 _esc()，所以這裡一律寫純文字 —— markdown 粗體會原樣顯示成兩個星號，
     #   而看板的結構驗證有一條負向檢查專門擋這個（2026-07-31 當場被它擋下）。
     {"name": "general-purpose", "tools": "全部",
      "desc": "萬用兜底。有寫入能力且不載入 CLAUDE.md——派它動檔案風險最高。",
      "gate": "", "model": "inherit", "department": "外援", "boundary": "可派人",
-     "display": "通用助手"},
+     "display": "通用助手", "icon": "sparkle"},
 ]
 
 
@@ -177,6 +183,9 @@ def parse_agents() -> list:
             "model": field("model", "inherit"),
             "desc": field("description"),
             "department": field("department", ""),
+            # 徽章形狀。**沒填不補預設**：`role_badges.svg()` 會畫成問號，
+            # 那正是要在畫面上看見的事（留空會跟「配好了」長得一樣）。
+            "icon": field("icon", ""),
             "gate": gate,
             "builtin": False,
             "bodyLines": len([ln for ln in body.splitlines() if ln.strip()]),
@@ -526,9 +535,12 @@ def _node(role: dict, hist: dict, running: dict, idx: int) -> str:
     shown = role.get("display") or role["name"]
     idname = ("" if shown == role["name"]
               else f'<span class="rt-id">{_esc(role["name"])}</span>')
+    # 徽章 aria-hidden：卡片的 aria-label 已經念出角色名與能力邊界，
+    # 徽章再念一次只是重複 —— 它是給眼睛的捷徑，不是資訊來源。
+    bdg = role_badges.badge(role.get("icon", ""), role.get("department", ""))
     return f"""            <button type="button" class="rt-node {state_cls}" data-role="{idx}"
               aria-haspopup="dialog" aria-label="{_esc(shown)}，{state_txt[2:]}，能力邊界{bd}">
-              <span class="rt-name">{_esc(shown)}{idname}{ext}</span>
+              <span class="rt-name">{bdg}{_esc(shown)}{idname}{ext}</span>
               <span class="rt-model">{_esc(role.get("model") or "—")}</span>
               <span class="rt-state">{state_txt}</span>
               <span class="rt-cap cap-{_CAP_CLS.get(bd, 'unknown')}">{sym} {bd}</span>
@@ -580,6 +592,15 @@ def _role_payload(role: dict, hist: dict, running: dict, daily: dict) -> dict:
         "builtin": bool(role.get("builtin")),
         "external": bool(role.get("external")),
         "desc": role.get("desc", ""),
+
+        # 徽章：形狀認角色、顏色認職能群。**SVG 由產生器產好再帶進 payload**，
+        # 前端只負責塞進 DOM —— icon path 只存在 role_badges.py 一份，
+        # 前端另寫一份對照表就是「同一個東西兩個真相」的老病。
+        "icon": role.get("icon", ""),
+        "iconSvg": role_badges.svg(role.get("icon", "")),
+        "group": role_badges.group_of(role.get("department") or ""),
+        "groupCls": role_badges.GROUP_CLS.get(
+            role_badges.group_of(role.get("department") or ""), "none"),
 
         # ── ① 規範 ──
         "loadsClaudeMd": not role.get("builtin"),
@@ -646,7 +667,7 @@ def _dur(sec: float) -> str:
     return f"{sec / 3600:.1f} 小時"
 
 
-def _session_cards(detail: list) -> str:
+def _session_cards(detail: list, by_key: dict | None = None) -> str:
     """每個活動中的視窗一張卡：在做什麼、派了誰、跑多久。
 
     2026-08-05 從即時頁併過來（user 要求兩個網頁收成一個）。
@@ -658,9 +679,18 @@ def _session_cards(detail: list) -> str:
     cards = []
     for s in detail:
         if s["running"]:
+            # event log 存的是識別字（`locator`）。這裡對回角色檔換成中文名＋徽章 ——
+            # **對不到就照原字顯示**，不硬塞一個徽章：對不到本身就是要看見的事
+            # （角色被改名而歷史還留著舊識別字，正是 merged_stats 在處理的那個病）。
+            def _kid_name(k: str) -> str:
+                meta = (by_key or {}).get(k)
+                if not meta:
+                    return _esc(k)
+                return (role_badges.badge(meta.get("icon", ""), meta.get("department", ""))
+                        + _esc(meta.get("display") or k))
             kids = "".join(
                 f'<div class="rt-kid"><span class="rt-kid-mark">└─ ●</span>'
-                f'<span class="rt-kid-role">{_esc(r["role"])}</span>'
+                f'<span class="rt-kid-role">{_kid_name(r["role"])}</span>'
                 f'<span class="rt-kid-for">已跑 {_dur(r["for_sec"])}</span>'
                 f'<span class="rt-kid-task">{_esc(r["task"][:40])}</span></div>'
                 for r in s["running"])
@@ -691,7 +721,7 @@ def build_html(agents: list, hist: dict, sess: dict, now: float) -> str:
     for a in agents:
         known.update(_keys_of(a))
     ghosts = [{"name": n, "display": n, "tools": "", "model": "", "desc": "", "gate": "",
-               "builtin": True, "external": True, "department": "外援"}
+               "builtin": True, "external": True, "department": "外援", "icon": "book"}
               for n in sorted(hist) if n not in known and n != "?"]
 
     ordered = (agents + [{**b, "builtin": True} for b in BUILTIN] + ghosts)
@@ -717,12 +747,19 @@ def build_html(agents: list, hist: dict, sess: dict, now: float) -> str:
             </div>
           </section>""")
     depts_html = "\n".join(blocks)
-    sess_cards = _session_cards(detail)
+    # 識別字（含改名前的 alias）→ 角色，給 session 卡片把 event log 的英文字對回中文名。
+    by_key = {k: r for r in ordered for k in _keys_of(r)}
+    sess_cards = _session_cards(detail, by_key)
     stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
     total_runs = sum(v.get("runs", 0) for v in hist.values())
     total_calls = sum(v.get("toolCalls", 0) for v in hist.values())
 
-    return f"""    <section>
+    # 徽章樣式跟著產生器輸出，不手寫進 HTML —— 手寫的會在改色／加職能群時漂掉，
+    # 而 CSS 漂掉不會報錯，只是某一組的徽章靜靜變成中性灰。
+    return f"""    <style>
+{role_badges.css()}
+    </style>
+    <section>
       <div class="section-head">
         <h2>角色編制</h2>
         <span class="sub">{len(agents)} 自建 ＋ {len(BUILTIN)} 內建 ＋ {len(ghosts)} 外援 · 由 <code>gen_roles_topology.py</code> 讀角色檔 frontmatter ＋ 平台 subagent 紀錄產生</span>
@@ -816,6 +853,67 @@ def sync_tab_badge(html: str, n_roles: int) -> str:
     return _sync_badge(html, "st-orch-1", "Skill 清冊", n_skills)
 
 
+def _gate_chip(role: dict) -> str:
+    """Bash 閘門欄。**由 tools ＋ hooks 推導，不手寫** —— 手寫的那版正是這次要修的東西。
+
+    三種狀態各自的意思不同：沒有 Bash 就不需要閘門（能力本來就不存在）、
+    有 Bash 且掛了 agent-scoped hook 是收窄成唯讀、有 Bash 卻沒掛就是真的沒守門。
+    """
+    names = {t.strip() for t in (role.get("tools") or "").split(",")}
+    if not (names & {"Bash", "PowerShell"}):
+        return '<span class="chip pass">不需要</span>'
+    if role.get("gate"):
+        return '<span class="chip warn">收窄成唯讀</span>'
+    return '<span class="chip block">無角色閘門</span>'
+
+
+def build_caps_table(agents: list) -> str:
+    """沙盒頁的角色能力邊界表：一列一個**自建**角色。
+
+    只列自建角色 —— 內建角色的 `tools` 是一句描述句（「全部工具，除 Agent／…」），
+    拆成清單會得到假工具名（同 `_role_payload` 那段註解的理由）。
+    """
+    # 排序與角色編制頁一致（部門順序），不是檔名字母序 —— 同一批角色在兩頁
+    # 排法不同會讓人以為是兩份不同的清單。
+    ordered = [m for _dept, members in group_by_dept(agents) for m in members]
+    rows = []
+    for a in ordered:
+        tools = " · ".join(
+            (f"<b>{_esc(t.strip())}</b>" if t.strip() in {"Edit", "Write", "MultiEdit"}
+             else _esc(t.strip()))
+            for t in (a.get("tools") or "").split(",") if t.strip())
+        bd = _boundary(a)
+        shown = a.get("display") or a["name"]
+        bdg = role_badges.badge(a.get("icon", ""), a.get("department", ""))
+        rows.append(
+            f'            <tr><td>{bdg}{_esc(shown)}</td>'
+            f'<td class="path">{_esc(a["name"])}</td>'
+            f'<td class="msg-sm">{tools}</td>'
+            f'<td>{_gate_chip(a)}</td>'
+            f'<td><span class="rt-cap cap-{_CAP_CLS.get(bd, "unknown")}">'
+            f'{_CAP_SYM.get(bd, "·")} {bd}</span></td></tr>')
+    body = "\n".join(rows)
+    return f"""      <div class="twrap">
+        <table>
+          <thead><tr><th>角色</th><th>識別字</th><th>工具</th><th>Bash 閘門</th><th>能力邊界</th></tr></thead>
+          <tbody>
+{body}
+          </tbody>
+        </table>
+      </div>"""
+
+
+def inject_caps(html: str, agents: list) -> str:
+    """把能力邊界表填進 marker，並同步子分頁徽章（表對了徽章沒跟上是同一個病換地方發作）。"""
+    if CAPS_START not in html or CAPS_END not in html:
+        raise SystemExit(f"HTML 缺 {CAPS_START} … {CAPS_END} 標記 —— 不猜插入位置。")
+    head, rest = html.split(CAPS_START, 1)
+    _old, tail = rest.split(CAPS_END, 1)
+    marker = CAPS_START + " 由 dashboard/gen_roles_topology.py 產生，勿手改 -->"
+    out = f"{head}{marker}\n{build_caps_table(agents)}\n      {CAPS_END}{tail}"
+    return _sync_badge(out, "st-sandbox-0", "角色能力邊界", len(agents))
+
+
 def inject(html: str, block: str) -> str:
     if MARK_START not in html or MARK_END not in html:
         raise SystemExit(f"HTML 缺 {MARK_START} … {MARK_END} 標記 —— 不猜插入位置。")
@@ -877,6 +975,7 @@ def main() -> None:
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     out = sync_tab_badge(inject(html, build_html(agents, hist, sess, now)), len(agents))
+    out = inject_caps(out, agents)
     out = sync_snapshot_stamp(out, now, sess)
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)

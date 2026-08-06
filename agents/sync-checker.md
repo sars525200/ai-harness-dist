@@ -6,6 +6,7 @@ description: 檢核「同一份程式碼維護兩份副本」的專案裡兩端�
 tools: Read, Grep, Glob, Bash, Skill
 model: inherit
 department: 品管組
+icon: compare
 hooks:
   PreToolUse:
     - matcher: 'Bash|PowerShell'
