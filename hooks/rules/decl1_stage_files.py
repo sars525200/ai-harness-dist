@@ -48,14 +48,28 @@ _QUOTING = re.compile(
 )
 
 
+# 結構性排除（2026-08-07 上線第一輪就咬到，而且咬的是誤報）：
+#   ① markdown 表格列 —— 那天的誤報是我自己報告裡的測試案例表：
+#      `| **階段 Execute**（缺欄） | applies → decision WARN |`
+#      真正的宣告永遠是獨立一行，不會長在表格格子裡。
+#   ② 行內程式碼 —— 被反引號包起來的是**引用**不是宣告
+#      （`修改檔案 \`app.js\`` 這種真宣告，欄名在反引號外面，剝掉不影響判定）。
+# 用結構判準而不是再往 `_QUOTING` 加詞：加詞是白名單，永遠差一個
+# （AWC-1 的註解記過同一件事，兩版都死在「差一個字」）。
+_TABLE_ROW = re.compile(r"^\s*\|")
+_INLINE_CODE = re.compile(r"`[^`]*`")
+
+
 def _decl_lines(msg: str) -> list:
-    """回這則訊息裡的宣告行（已排除引用規則的句子）。"""
+    """回這則訊息裡的宣告行（已排除表格列、行內程式碼與引用規則的句子）。"""
     out = []
     for line in DECL_LINE.findall(msg):
-        if _QUOTING.search(line):
+        if _TABLE_ROW.match(line):
             continue
-        if STAGE.search(line):
-            out.append(line)
+        bare = _INLINE_CODE.sub("", line)      # 剝掉行內程式碼再判定
+        if _QUOTING.search(bare) or not STAGE.search(bare):
+            continue
+        out.append(line)
     return out
 
 

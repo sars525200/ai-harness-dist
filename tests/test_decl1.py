@@ -95,6 +95,16 @@ def run() -> "tuple[int, list]":
           verdict("階段分佈：Research 34、Execute 30、Review 12、Fix 9") == "allow")
     check("選擇題選項裡的階段字樣不算宣告",
           verdict("- 階段欄五選一＝Research／Design／Execute／Review／Fix") == "allow")
+    # ⚠ 下面兩條是**上線第一輪的真實誤報**（2026-08-07）：我在報告裡用表格列出
+    #    自己的測試案例，那一格長得跟宣告一模一樣，於是規則咬了自己。
+    #    修法是結構判準（表格列／行內程式碼），不是往關鍵詞白名單再加一個詞。
+    check("表格列裡的宣告樣本不算宣告（上線第一輪的真實誤報）",
+          verdict("| `**階段 Execute**`（缺欄） | applies → decision WARN → 便箋落檔 ✔ |")
+          == "allow")
+    check("被反引號包住的宣告是引用不是宣告",
+          verdict("寫成 `**階段 Execute**` 就會被咬。") == "allow")
+    check("真宣告裡的反引號檔名不受影響（剝碼後欄名還在）",
+          verdict("**階段 Execute ／ 修改檔案 `app.js`、`index.html`**") == "allow")
 
     # ---- 4. 兩份判準要逐字相同（hooks 不 import dashboard，所以只能靠測試綁）----
     src_gen = open(_GEN, encoding="utf-8").read()

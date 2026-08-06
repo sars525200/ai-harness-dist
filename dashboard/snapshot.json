@@ -3,6 +3,7 @@
     "AWC-1",
     "BUDGET-1",
     "DB-1",
+    "DECL-1",
     "ENC-1",
     "PR-1",
     "R1",
@@ -13,20 +14,22 @@
     "AWC-1",
     "BUDGET-1",
     "DB-1",
+    "DECL-1",
     "ENC-1",
     "R1",
     "R3"
   ],
   "would_block": {
-    "AWC-1": 9,
-    "DB-1": 13,
+    "AWC-1": 12,
+    "DB-1": 14,
     "ENC-1": 46,
     "PR-1": 1,
     "BUDGET-1": 1,
+    "DECL-1": 1,
     "R1": 0,
     "R3": 0,
     "R4": 0
   },
   "skill_count": 15,
-  "tool_raw_count": 28
+  "tool_raw_count": 29
 }
