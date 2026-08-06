@@ -221,7 +221,10 @@ check(all('data-copy="' in seg for seg in re.findall(r'<button type="button" cla
       "複製鈕都帶 data-copy（空的話按了什麼都不會發生）")
 # 徽章＝**預設狀態下會顯示的項數**（專案層預設本專案、全域預設關）。
 # 靜態值與 JS 算出來的必須是同一個語意，否則同一顆徽章兩種意思（Tools 那顆咬過）。
-_cur = re.search(r'"name": "([^"]+)", "path": "[^"]*", "exists": true, "isCurrent": true', html)
+# ⚠ 綁「name 之後某處有 isCurrent:true」而不是逐欄位寫死順序：
+#    2026-08-06 在中間插了 `colorClass` 欄，寫死順序的版本當場抓不到，
+#    而抓不到在斷言上看起來像「認不出本專案」——那是判準脆，不是資料壞。
+_cur = re.search(r'"name": "([^"]+)"(?:(?!"name")[\s\S])*?"isCurrent": true', html)
 _curname = _cur.group(1) if _cur else None
 check(_curname is not None, "從 #lay-data 認得出「本專案」是哪一個")
 if _curname:
@@ -233,6 +236,29 @@ if _curname:
           "待辦徽章＝預設顯示項數（本專案 %s）：徽章 %s vs 實際 %d"
           % (_curname, _tb.group(1) if _tb else "找不到", _n))
 check('id="todo-empty"' in _todo, "兩層都關時有話可說（空白畫面跟壞掉長得一樣）")
+
+# ---- 3d. 專案分類色跨頁一致（2026-08-06 user：統一全平台，包含右上）----
+# 這條守的是分類色**唯一的意義**：同色＝同一個東西。三個地方各自算一次的話，
+# 同一個 IT-department 會在遵循度表是藍、待辦是洋紅、右上角是灰。
+print("\n專案分類色")
+_lay = re.search(r'<script type="application/json" id="lay-data">(.*?)</script>', html, re.S)
+_layjson = json.loads(_lay.group(1)) if _lay else {}
+_declared = {p["name"]: p.get("colorClass") for p in _layjson.get("projects", [])}
+check(bool(_declared) and all(_declared.values()),
+      "#lay-data 每個專案都帶 colorClass（右上角下拉要靠它上色）：%s" % _declared)
+_todo_cls = dict((n, c) for c, n in
+                 re.findall(r'class="wfc-pn (\w+) todo-proj">([^<]+)</span>', _todo))
+for _n, _c in _todo_cls.items():
+    if _n == "全域":
+        continue
+    check(_declared.get(_n) == _c,
+          "待辦列的 %s 用 %s，與 #lay-data 宣告的 %s 一致" % (_n, _c, _declared.get(_n)))
+_wfc = panel_slice("panel-workflow")
+_wfc_cls = dict((n, c) for c, n in re.findall(r'wfc-pn (\w+)">([\w.-]+)</b>', _wfc))
+for _n, _c in _wfc_cls.items():
+    if _n in _declared:
+        check(_declared[_n] == _c,
+              "遵循度表的 %s 用 %s，與 #lay-data 宣告的 %s 一致" % (_n, _c, _declared[_n]))
 
 # ---- 3c. 外觀切換（2026-08-06 改本機服務後補：不能只靠系統設定）----
 print("\n外觀切換")

@@ -73,6 +73,19 @@ EXTRA_PROJECTS = [Path(r"D:\AI-Projects")]
 SCAN_ROOT = Path("D:\\")
 
 
+def _proj_color_classes() -> dict:
+    """專案 → 分類色 class。規則本體在 `project_colors.py`（單一真相）。"""
+    try:
+        import importlib.util  # noqa: PLC0415
+        spec = importlib.util.spec_from_file_location(
+            "_pc_from_layers", Path(__file__).resolve().parent / "project_colors.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.classes()
+    except Exception:
+        return {}
+
+
 def discover_projects() -> list:
     """回候選專案路徑清單（含沒有 .claude 的點名項）。"""
     found = []
@@ -316,6 +329,10 @@ def sync_layer_counts(html: str, s: dict) -> str:
         # 「這個專案完全沒接 harness」正是要看的答案。
         "projects": [
             {"name": p["name"], "path": p["path"], "exists": p["exists"],
+             # 分類色 class（p0／p1／pn）。**同一支 `project_colors.py` 決定**，
+             # 右上角下拉、待辦列、遵循度表因此永遠是同一個顏色 ——
+             # 各自算的話，同一個專案在三個地方會是三種顏色。
+             "colorClass": _proj_color_classes().get(p["name"], "pn"),
              "isCurrent": p["isCurrent"], "skills": p["skills"], "agents": p["agents"],
              "rules": p["rules"], "hooks": len(p["hooks"]), "allow": p["allow"],
              "deny": p["deny"], "claudeMd": p["claudeMd"],

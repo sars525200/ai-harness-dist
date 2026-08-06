@@ -190,6 +190,11 @@ def run(verbose: bool = False) -> "tuple[int, list]":
         "per_proj": {"Alpha": {"n": 1, "wired": True, "current": True},
                      "Beta": {"n": 1, "wired": False, "current": False}},
     }
+    # 分類色的宇宙由 `project_colors` 決定（2026-08-06 起）。快照用的是合成專案名，
+    # 不塞假宇宙的話它們全部退成中性灰，於是「兩個專案要拿到不同 slot」永遠測不到。
+    # **塞的是產生器自己那一份實例**（`m.PC`），不是測試自己 import 的副本。
+    if getattr(m, "PC", None):
+        m.PC._CACHE[:] = ["Alpha", "Beta"]
     h1 = m.build_html(snap)
     h2 = m.build_html(snap)
     ok(h1 == h2, "同一份輸入產出的 HTML 逐字相同（冪等·在快照上驗）")
@@ -233,14 +238,29 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     # ── 9. 分類色：固定順序、不循環、不生成新色（dataviz 硬規則）
     ok(m.PROJ_SLOTS == 2,
        "分類色只有 2 個 slot（看板已用掉五個色相，狀態色是保留色）")
-    pc = m.proj_classes(["Zeta", "Alpha", "Mid"])
-    ok(pc == {"Alpha": "p0", "Mid": "p1", "Zeta": "pn"},
-       "依名稱排序分配；**第三個以上用中性灰 pn，不生成新色相**")
-    ok(m.proj_classes(["Alpha"]) == {"Alpha": "p0"}, "單一專案拿 slot 0")
-    ok(len(set(m.proj_classes(["A", "B"]).values())) == 2,
-       "兩個專案不得拿到同一個 slot")
-    # 圖例：浮窗裡的專案名要用與表格相同的 class，否則顏色對不起來
-    ok('wfc-pn p0">Alpha</b> 1 段' in h1 and 'wfc-pn p1">Beta</b> 1 段' in h1,
+    # 2026-08-06 契約改了：分配依據從「這張表看到的專案」換成**探索得到的專案清單**
+    # （`project_colors.py`）。理由是同一個 `IT-department` 原本在遵循度表拿 p0（藍）、
+    # 在待辦頁拿 p1（洋紅）—— 兩邊各自從自己看到的名單推，就會這樣。
+    import importlib.util as _ilu  # noqa: PLC0415
+    _spec = _ilu.spec_from_file_location("_pc_t", GEN.parent / "project_colors.py")
+    _pc = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_pc)
+    _pc._CACHE[:] = ["Alpha", "Mid", "Zeta"]          # 塞一個假的專案宇宙
+    ok(_pc.classes() == {"Alpha": "p0", "Mid": "p1", "Zeta": "pn"},
+       "依清單順序分配；**第三個以上用中性灰 pn，不生成新色相**")
+    ok(len(set(list(_pc.classes().values())[:2])) == 2, "兩個專案不得拿到同一個 slot")
+    ok(_pc.classes(["外來的名字"])["外來的名字"] == "pn",
+       "不在探索清單裡的名字一律中性灰——不得擠掉現役專案的顏色")
+    # 圖例：浮窗裡的專案名要用與表格相同的 class。**綁「一致」不綁字面 p0/p1** ——
+    # 字面值會隨專案宇宙變（測試餵的是合成名字），而這條要守的性質是
+    # 「同一個專案在兩處同色」。
+    _pairs = re.findall(r'wfc-pn (\w+)">(\w+)</b>', h1)
+    _seen = {}
+    _consistent = True
+    for _c, _n in _pairs:
+        if _seen.setdefault(_n, _c) != _c:
+            _consistent = False
+    ok(bool(_pairs) and _consistent,
        "浮窗的專案清單＝圖例，class 與表格內一致（顏色不能對不上）")
     # 白名單機制：專案清單來自 gen_layers，不是自己維護排除 pattern
     src_l = GEN.read_text(encoding="utf-8")

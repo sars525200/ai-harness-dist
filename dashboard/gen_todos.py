@@ -511,7 +511,19 @@ def _when(ts: int) -> str:
     return time.strftime("%m-%d", time.localtime(ts)) if ts else "—"
 
 
-def _item_html(item: dict, root: str, uid: str) -> str:
+def _proj_classes() -> dict:
+    """專案 → 分類色 class。**跟工作流程遵循度表問同一支**（`project_colors.py`）——
+    同一個專案在兩個分頁不同色的話，分類色就完全失去意義。"""
+    try:
+        spec = importlib.util.spec_from_file_location("_pc", DASHBOARD / "project_colors.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.classes()
+    except Exception:
+        return {}
+
+
+def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
     k = KINDS[item["kind"]]
     p = PRIO[item["prio"]]
     scope_label = "全域" if item["scope"] == "__global__" else item["scope"]
@@ -525,10 +537,16 @@ def _item_html(item: dict, root: str, uid: str) -> str:
         '            <span class="todo-prio %s" aria-label="優先 %s%s">'
         '<span aria-hidden="true">%s</span>%s</span>'
         % (p["cls"], p["label"], prio_note, p["glyph"], p["label"]),
-        '            <span class="todo-proj">%s</span>' % _html.escape(scope_label),
+        '            <span class="wfc-pn %s todo-proj">%s</span>'
+        % (pcls.get(item["scope"], "pn"), _html.escape(scope_label)),
+        # 標題｜時間 · 類型：時間跟著該專案的分類色，類型退成小字灰。
+        # 三段黏在一起（`｜` 與 `·` 是分隔字元不是欄位），列尾就不會參差不齊。
         '            <span class="todo-t">%s</span>' % _html.escape(item["title"]),
-        '            <span class="todo-kind %s">%s</span>' % (k["cls"], k["label"]),
-        '            <span class="todo-when">%s</span>' % _when(item.get("added", 0)),
+        '            <span class="todo-meta"><span class="todo-sep">｜</span>'
+        '<span class="wfc-pn %s todo-when">%s</span>'
+        '<span class="todo-sep">·</span>'
+        '<span class="todo-kind %s">%s</span></span>'
+        % (pcls.get(item["scope"], "pn"), _when(item.get("added", 0)), k["cls"], k["label"]),
         '            <button type="button" class="todo-copy" data-copy="%s" '
         'aria-label="複製這一項的續作提示">複製</button>'
         % _html.escape(_copy_text(item, root), quote=True).replace("\n", "&#10;"),
@@ -588,9 +606,10 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: l
                     'aria-label="複製本區全部項目">複製全部</button>')
     head.append("      </div>")
     rows = []
+    pcls = _proj_classes()
     for i in items:
         seq[0] += 1
-        rows.append(_item_html(i, root, "td-%d" % seq[0]))
+        rows.append(_item_html(i, root, "td-%d" % seq[0], pcls))
     body = ['      <ul class="todo-list">'] + rows + ["      </ul>"]
     if not items:
         body = ['      <p class="todo-none">這一層目前沒有登記待辦。'

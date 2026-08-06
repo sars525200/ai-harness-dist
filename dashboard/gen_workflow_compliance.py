@@ -130,22 +130,36 @@ def _esc(t: str) -> str:
 PROJ_SLOTS = 2
 
 
-def proj_classes(names: list) -> dict:
-    """回 {專案名: css class}。**按名稱排序依序分配，超過色盤就用中性灰。**
+def _load_project_colors():
+    """在**模組層**載入一次（不是每次呼叫都 exec 一份）。
 
-    為什麼是排序而不是 hash：hash 分配在只有 2 個 slot 時撞色率 50%，撞了就得有一個
-    退位——反而更不穩。排序分配的代價是「新增專案可能讓既有專案換色」，
-    而分類色的通則正是**顏色跟著實體、不跟著排名**（filter 改變數量時不得重繪存活者）。
-    這裡刻意接受那個代價，理由：**專案集合不隨畫面互動變化**，它只在真的多開一個
-    工作區時才變一次；那條通則防的是「篩選一下顏色就全洗牌」，不是這個情境。
-
-    第三個以上的專案**不生成新色相**——生成的色相不可能保證與五個既有狀態色都分得開。
-    退路是中性灰，靠文字本身辨識（分類色的硬規則：固定順序、不循環、不生成新色）。
+    兩個理由：①每次 exec 都要重掃一次 `D:\\` 找專案，白花錢
+    ②測試要能塞一個假的專案宇宙進去（`m.PC._CACHE[:] = [...]`）——
+    每次呼叫都新建一份的話，測試改到的永遠是別人的副本。
     """
-    out = {}
-    for i, name in enumerate(sorted(names)):
-        out[name] = f"p{i}" if i < PROJ_SLOTS else "pn"
-    return out
+    try:
+        import importlib.util  # noqa: PLC0415
+        spec = importlib.util.spec_from_file_location(
+            "_pc_wfc", Path(__file__).resolve().parent / "project_colors.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+PC = _load_project_colors()
+
+
+def proj_classes(names: list) -> dict:
+    """回 {專案名: css class}。**規則本體搬到 `project_colors.py`**（2026-08-06）。
+
+    搬家的理由不是整理：這裡原本用「**這張表看得到的專案**」當分配依據，
+    待辦頁籤用「所有探索得到的專案」，於是同一個 `IT-department`
+    在兩個分頁拿到不同顏色 —— 而分類色的全部意義就是「同色＝同一個東西」。
+    現在兩邊都問同一支要顏色，這張表看得到、探索清單卻沒有的名字一律中性灰。
+    """
+    return PC.classes(names) if PC else {n: "pn" for n in names}
 
 
 def _utc_cutoff(local_date: str) -> str:
