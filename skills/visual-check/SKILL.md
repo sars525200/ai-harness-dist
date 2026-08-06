@@ -115,11 +115,10 @@ py -3 <harness>/tools/shot.py --url <頁> --out <png> [--size WxH] [--scale 2] [
 
 ## 已知限制（2026-08-05 建立時實測）
 
-- **新建／改名 skill 當下的 session 叫不到**：skill 清單在 session 起始就列好，
-  這支剛建好時 `Skill(visual-check)` 回 `Unknown skill`。frontmatter 與既有 15 支同構、
-  junction 也確認生效，所以是**列表時機**問題不是檔案問題——下一個 session 才會出現。
-  （與角色不同：`.claude/agents` 新增檔案有延遲但同 session 內會生效。）
-  在它可用之前，直接照本檔的步驟手動跑那兩支工具，效果一樣。
+- **新建的全域 skill 有載入延遲，但不必重啟**：剛建好時 `Skill(visual-check)` 回
+  `Unknown skill`，數分鐘後同一個 session 就出現在清單裡了。**跟角色是同一個行為**
+  （`.claude/agents` 也是這樣），別像 2026-07-30 那次一樣拿一次 `not found` 就斷言要重啟。
+  真的等不到時，直接照本檔步驟手動跑那兩支工具，效果一樣。
 - **不能真的操作瀏覽器**（點擊、填字、hover）：這是不裝 Playwright 換來的可攜性。
   互動態改用「probe 頁內注入 JS 觸發事件」達成（`dispatchEvent`／`click()`／直接改 DOM），
   真的需要跨頁流程或持久 session 時才考慮上 Playwright。
