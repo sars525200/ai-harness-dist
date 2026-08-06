@@ -146,7 +146,9 @@ LIVE_UI = """
 /* 顏色**一律走看板自己的 token**，不自帶一套。自帶的話，使用者用右上角
    把外觀切成深色時，這顆徽章會留在淺色 —— 而且只有它一個，看起來像壞掉。
    （fallback 值只是為了萬一 token 不存在時仍可讀，不是第二套配色。） */
-#hd-live{ position:fixed; right:14px; bottom:14px; z-index:9998;
+/* 左上角：跟右上角的層別／外觀控制列對稱，而且**不會壓到內容**
+   （版面置中，左側是空白邊）。原本在右下角，user 2026-08-06 要求移過來。 */
+#hd-live{ position:fixed; left:14px; top:10px; z-index:9998;
           display:flex; align-items:center; gap:8px; cursor:pointer;
           font:12px/1.4 -apple-system,'Segoe UI','Noto Sans TC',sans-serif;
           background:var(--surface,#fff); color:var(--text,#1B1F26);
@@ -157,6 +159,8 @@ LIVE_UI = """
 #hd-live.warn .dot{ background:var(--warn,#A9762E); }
 #hd-live.dead .dot{ background:var(--block,#B23B34); }
 #hd-live .sub{ color:var(--text-faint,#8A8F98); }
+/* 窄畫面時版面沒有左側空白邊了，固定在左上會壓到標題 —— 退回左下（那裡沒有內容）。 */
+@media (max-width:900px){ #hd-live{ top:auto; bottom:14px; } }
 @media (prefers-reduced-motion: no-preference){
   #hd-live{ transition:border-color .18s ease, box-shadow .18s ease; }
   #hd-live .dot{ animation:hd-pulse 2.4s ease-in-out infinite; }
