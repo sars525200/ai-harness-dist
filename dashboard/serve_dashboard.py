@@ -143,19 +143,20 @@ def watcher(interval: float) -> None:
 LIVE_UI = """
 <style>
 /* 本機服務注入（serve_dashboard.py）—— 不在 harness-dashboard.html 裡 */
+/* 顏色**一律走看板自己的 token**，不自帶一套。自帶的話，使用者用右上角
+   把外觀切成深色時，這顆徽章會留在淺色 —— 而且只有它一個，看起來像壞掉。
+   （fallback 值只是為了萬一 token 不存在時仍可讀，不是第二套配色。） */
 #hd-live{ position:fixed; right:14px; bottom:14px; z-index:9998;
           display:flex; align-items:center; gap:8px; cursor:pointer;
           font:12px/1.4 -apple-system,'Segoe UI','Noto Sans TC',sans-serif;
-          background:#fff; color:#1B1F26; border:1px solid rgba(20,24,31,.28);
+          background:var(--surface,#fff); color:var(--text,#1B1F26);
+          border:1px solid var(--line-strong,rgba(20,24,31,.28));
           border-radius:20px; padding:7px 13px; box-shadow:0 2px 12px rgba(0,0,0,.16); }
-#hd-live .dot{ width:8px; height:8px; border-radius:50%; background:#3E8E52; flex-shrink:0; }
-#hd-live.warn .dot{ background:#A9762E; }
-#hd-live.dead .dot{ background:#B23B34; }
-#hd-live .sub{ color:#8A8F98; }
-@media (prefers-color-scheme: dark){
-  #hd-live{ background:#1B1F27; color:#E7E9EE; border-color:rgba(231,233,238,.3); }
-  #hd-live .sub{ color:#9AA1AC; }
-}
+#hd-live .dot{ width:8px; height:8px; border-radius:50%;
+               background:var(--pass,#3E8E52); flex-shrink:0; }
+#hd-live.warn .dot{ background:var(--warn,#A9762E); }
+#hd-live.dead .dot{ background:var(--block,#B23B34); }
+#hd-live .sub{ color:var(--text-faint,#8A8F98); }
 @media (prefers-reduced-motion: no-preference){
   #hd-live{ transition:border-color .18s ease, box-shadow .18s ease; }
   #hd-live .dot{ animation:hd-pulse 2.4s ease-in-out infinite; }

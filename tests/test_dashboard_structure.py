@@ -199,6 +199,22 @@ if _curname:
           % (_curname, _tb.group(1) if _tb else "找不到", _n))
 check('id="todo-empty"' in _todo, "兩層都關時有話可說（空白畫面跟壞掉長得一樣）")
 
+# ---- 3c. 外觀切換（2026-08-06 改本機服務後補：不能只靠系統設定）----
+print("\n外觀切換")
+check('id="lay-theme-btn"' in html, "外觀切換鈕存在")
+check(html.index('id="lay-theme-btn"') < html.index('id="lay-global-btn"'),
+      "外觀鈕在右上角那組控制項裡（跟層別切換同一處，不另開一個入口）")
+# 三份 token 缺一不可：只有 media query 就切不動，只有 data-theme 就不跟隨系統
+check(html.count("@media (prefers-color-scheme: dark){") >= 2, "系統深色的 token 還在")
+check(html.count(':root[data-theme="dark"]{') >= 2, "手動深色的 token 存在（兩組色都要）")
+check(html.count(':root[data-theme="light"]{') >= 2, "手動淺色的 token 存在（系統深色時要壓得回來）")
+# FOUC：套用偏好的程式必須在內容之前跑，否則會先閃一下淺色
+_boot = html.find("localStorage.getItem('harness-theme')")
+check(_boot != -1 and _boot < html.index('<div class="page">'),
+      "偏好在畫面畫出來之前就套用（避免閃一下淺色）")
+check("var MODES = ['system', 'dark', 'light'];" in html,
+      "三態循環（跟隨系統／深色／淺色）——砍成兩態等於強迫在兩個固定值裡選")
+
 # ---- 4. 不該混進去的東西 ----
 print("\n負向檢查（避免自己造假綠燈）")
 # 這條守的是「我自己在版面文字裡寫了 markdown 粗體」（會原樣顯示成兩個星號）。
