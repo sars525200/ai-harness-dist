@@ -159,10 +159,18 @@ def main() -> None:
     for r in reasons:
         print(f"  - {r}")
     print()
-    print("下一步：讀 dashboard/harness-dashboard.html，針對上面差異編輯對應分頁，")
-    print("用 Artifact 工具帶 url 重新發布，發布後跑：")
-    print("  py -3 D:\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
-    print("把這次的數字寫回 snapshot.json（別忘了 commit）。")
+    # 規則計數不要再手動改：2026-08-06 起那張表由產生器填（marker 內手改會被蓋掉）。
+    # 手動改是這張表長期過期的原因，也是它改錯的原因——上一版把 ENC-1 停在 0，
+    # 而它其實已經累積 46 筆真陽性。
+    print("下一步：")
+    if any("would-block" in r or "規則" in r for r in reasons):
+        print("  ① 規則計數差異 → 跑產生器，**不要手動改表格**：")
+        print("     py -3 D:\\.ai-harness\\dashboard\\gen_hook_rules.py")
+    print("  ② 其餘差異（skill／tool 原始檔案數等）→ 讀 dashboard/harness-dashboard.html")
+    print("     編輯對應分頁（那些還是手寫的）。")
+    print("  ③ 用 Artifact 工具帶 url 重新發布，發布後跑：")
+    print("     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
+    print("     把這次的數字寫回 snapshot.json（別忘了 commit）。")
     sys.exit(1)
 
 

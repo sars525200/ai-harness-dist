@@ -64,7 +64,12 @@ SOURCES = [
     IT_DEPT / ".claude" / "settings.local.json",
 ]
 SOURCE_GLOBS = [
-    (IT_DEPT / ".claude" / "agents", "*.md"),    # 角色清冊
+    # 角色清冊 2026-08-05 搬到 harness repo（`~\.claude\agents` 是 junction）。
+    # ⚠ 8/6 前這條還指著 `<repo>\.claude\agents`，那個目錄已經不存在 ——
+    #   glob 掃不到不會報錯，只是**角色檔怎麼改都不再觸發重生**。
+    #   跟 gen_roles_topology／capability_checks／gen_cost_panel 的 AGENTS_DIR
+    #   同一批漏網：搬目錄時只改了其中一支。
+    (HARNESS / "agents", "*.md"),
     (IT_DEPT / ".claude" / "skills", "*/SKILL.md"),
     (IT_DEPT / ".claude" / "rules", "*.md"),
     # D6 那三個數字（fixture 幾個／單元測試幾支／變異腳本幾支）是**數這幾個目錄**
@@ -81,6 +86,11 @@ GENERATORS = [
     ("角色拓樸", DASHBOARD / "gen_roles_topology.py"),
     ("計畫進度＋八大類", DASHBOARD / "gen_progress_chart.py"),
 ]
+# ⚠ `gen_cost_panel.py` 與 `gen_hook_rules.py` **刻意不在這裡**。
+#    它們的上游（transcript／state 的 event log）每個回合都在長，接進 Stop 熱路徑
+#    等於每輪重生一次整個看板。兩支都改由收工流程（`/shougong` 步驟 3.5）跑，
+#    而「該不該跑」由 `check_freshness.py` 判斷。
+#    要加進來之前先想清楚：熱路徑的預算是 20–30ms。
 VERIFIER = HARNESS / "tests" / "test_dashboard_structure.py"
 
 

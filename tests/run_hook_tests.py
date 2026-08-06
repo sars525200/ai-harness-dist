@@ -307,6 +307,7 @@ def main() -> int:
         import test_roles_topology
         import test_cost_panel
         import test_enc1_encoding
+        import test_hook_rules
         import test_mutation_anchors
         import test_progress_chart
         import test_warn_channel
@@ -319,6 +320,7 @@ def main() -> int:
             (test_layers.run, "兩層對照產生器"),
             (test_layer_marks.run, "分層標註覆蓋率"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
+            (test_hook_rules.run, "hook 規則表產生器"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):
             ex_passed, ex_failed = run_fn()

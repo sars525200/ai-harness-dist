@@ -1,0 +1,251 @@
+# -*- coding: utf-8 -*-
+r"""hook 規則表產生器的回歸網（2026-08-06）。
+
+這一頁在變成產生器之前是**手寫的**，而手寫的下場是：ENC-1 的 would-block 在頁面上
+停在 0，實際已累積 46 筆真陽性。所以這裡要守的不是「跑不跑得動」，是**數字對不對**
+——因為算錯不會有人發現：表格看起來永遠很合理。
+
+五個最容易靜默壞掉的性質：
+  1. probe session（`ZZ-` 開頭）要排除 —— 混進來的是自己 30 秒前造的測試資料
+  2. bypass 不算 would-block —— 那是被明確放行的，算進去「擋了幾次」就變謊話
+  3. enforce／shadow 要分得出來 —— 兩者的意義完全不同（真的擋了 vs 只是記錄）
+  4. applies=0 要看得見 —— D7：零命中是故障訊號不是安全訊號
+  5. 資料源斷掉要拒絕產出，不能把計數靜默寫成 0
+"""
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import os
+import sys
+import tempfile
+
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+GEN_PATH = os.path.join(ROOT, "dashboard", "gen_hook_rules.py")
+
+
+def _load():
+    spec = importlib.util.spec_from_file_location("gen_hook_rules_under_test", GEN_PATH)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _write_events(dirpath: str, session: str, rows: list) -> None:
+    """rows: [dict]，直接寫成 ndjson（形狀比照真實 event log）"""
+    p = os.path.join(dirpath, f"events.{session}.ndjson")
+    with open(p, "a", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def _stats_with(tmp: str):
+    """把 report.py 的 STATE_DIR 指到臨時目錄，回 collect() 的結果。
+
+    ⚠ 不能只改 gen_hook_rules 的常數 —— 它刻意**不自己掃**，掃描邏輯借 report.py
+    的（probe 排除規則只能有一份真相）。所以要換的是 report 那一支的 STATE_DIR。
+    """
+    m = _load()
+    real_loader = m._load_report
+
+    def patched():
+        rep = real_loader()
+        rep.STATE_DIR = tmp
+        return rep
+
+    m._load_report = patched
+    return m, m.collect()
+
+
+def _case_probe_excluded(fails: list) -> None:
+    """`ZZ-` 開頭是手動餵 payload 的接線探針，不是真實足跡。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_events(tmp, "real1234", [
+            {"kind": "applies", "rule_id": "DB-1"},
+            {"kind": "decision", "rule_id": "DB-1", "decision": "BLOCK"},
+        ])
+        _write_events(tmp, "ZZ-probe", [
+            {"kind": "applies", "rule_id": "DB-1"},
+            {"kind": "decision", "rule_id": "DB-1", "decision": "BLOCK"},
+        ])
+        _, stats = _stats_with(tmp)
+        if stats["DB-1"]["applies"] != 1:
+            fails.append(f"probe 的 applies 被算進來（應 1，實得 {stats['DB-1']['applies']}）")
+        if stats["DB-1"]["block"] != 1:
+            fails.append(f"probe 的 would-block 被算進來（應 1，實得 {stats['DB-1']['block']}）")
+
+
+def _case_bypass_not_counted(fails: list) -> None:
+    """bypass ＝ 明確放行，不是「擋下來」。混進去會讓這一欄變謊話。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_events(tmp, "s1", [
+            {"kind": "applies", "rule_id": "R1"},
+            {"kind": "decision", "rule_id": "R1", "decision": "WARN"},
+            {"kind": "decision", "rule_id": "R1", "decision": "WARN", "bypassed": True},
+        ])
+        _, stats = _stats_with(tmp)
+        if stats["R1"]["block"] != 1:
+            fails.append(f"bypass 被算成 would-block（應 1，實得 {stats['R1']['block']}）")
+
+
+def _case_enforce_shadow_split(fails: list) -> None:
+    """「真的擋了」與「只是記錄」意義完全不同，不能併成一個數字。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_events(tmp, "s1", [
+            {"kind": "applies", "rule_id": "X-1"},
+            {"kind": "decision", "rule_id": "X-1", "decision": "BLOCK"},
+            {"kind": "decision", "rule_id": "X-1", "decision": "BLOCK", "shadow": True},
+            {"kind": "decision", "rule_id": "X-1", "decision": "BLOCK", "shadow": True},
+        ])
+        m, stats = _stats_with(tmp)
+        s = stats["X-1"]
+        if (s["enforce"], s["shadow"]) != (1, 2):
+            fails.append(f"enforce／shadow 拆錯（應 1／2，實得 {s['enforce']}／{s['shadow']}）")
+        html = m.build_html(stats, {})
+        if "1 enforce · 2 shadow" not in html:
+            fails.append("混合時沒有把組成印出來 —— 讀者分不出有幾筆是真的擋了")
+        # 全 enforce 與全 shadow 兩種單一形態的措辭也要分得出來
+        if "筆真擋" not in m.build_html({"X-1": dict(s, enforce=3, shadow=0, block=3)}, {}):
+            fails.append("全 enforce 時沒有標「真擋」")
+        if "全部 shadow" not in m.build_html({"X-1": dict(s, enforce=0, shadow=3, block=3)}, {}):
+            fails.append("全 shadow 時沒有標出來 —— 會被讀成真的擋了 3 次")
+
+
+def _case_zero_applies_visible(fails: list) -> None:
+    """D7：applies=0 是**故障訊號**（matcher 沒接對），不是「還沒發生」。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        _write_events(tmp, "s1", [{"kind": "applies", "rule_id": "DB-1"}])
+        m, stats = _stats_with(tmp)
+        html = m.build_html(stats, {})
+        # ⚠ 必須**逐欄**驗，不能只問「整段 HTML 裡有沒有 rt-zero」——
+        #   would-block 那欄也用同一個 class，所以整段比對時把 applies 欄的
+        #   rt-zero 拿掉照樣會綠（2026-08-06 變異實測到的假綠燈）。
+        import re
+        rows = re.findall(
+            r'<td class="path">([A-Z0-9-]+)<.*?'
+            r'<td class="num">(.*?)</td>\s*<td class="num">(.*?)</td>',
+            html, re.S)
+        by_rule = {r[0]: {"applies": r[1], "block": r[2]} for r in rows}
+        zero_a = [rid for rid, c in by_rule.items() if ">0<" in c["applies"]
+                  or c["applies"].strip() == "0"]
+        if not zero_a:
+            fails.append("測試資料沒造出 applies=0 的規則 —— 這個 case 等於沒測到")
+        for rid in zero_a:
+            if 'class="rt-zero"' not in by_rule[rid]["applies"]:
+                fails.append(f"{rid} 的 applies=0 沒標 rt-zero —— 零命中是故障訊號，"
+                             "留白會被讀成「還沒發生」")
+        if "情境未發生" not in html:
+            fails.append("would-block 為 0 時沒有講出原因")
+
+
+def _case_refuse_empty(fails: list) -> None:
+    """資料源斷掉時拒絕產出 —— 靜默寫 0 會讓「沒事」與「沒接上」分不出來。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = _load()
+        real = m._load_report
+
+        def patched():
+            rep = real()
+            rep.STATE_DIR = tmp          # 空目錄
+            return rep
+
+        m._load_report = patched
+        try:
+            m.collect()
+            fails.append("event log 空的時候沒有拒跑 —— 會把所有計數靜默寫成 0")
+        except SystemExit as exc:
+            if "event" not in str(exc):
+                fails.append(f"拒跑了但理由指向別的地方：{str(exc)[:60]}")
+
+
+def _case_bar_scale(fails: list) -> None:
+    """量級跨 176 倍，線性長條會讓小值全部消失。"""
+    m = _load()
+    big = m._bar(1400, 1400, 50)
+    small = m._bar(8, 1400, 50)
+    if not big or not small:
+        fails.append("長條沒有畫出來")
+    import re
+    wb = int(re.search(r"width:(\d+)px", big).group(1))
+    ws = int(re.search(r"width:(\d+)px", small).group(1))
+    if wb != 50:
+        fails.append(f"最大值沒有對應到滿長（應 50，實得 {wb}）")
+    if ws < 2:
+        fails.append(f"小值被壓成看不見（{ws}px）—— 線性尺度的病，應該用 sqrt")
+    if ws > 12:
+        fails.append(f"小值畫得太長（{ws}px）—— 尺度失去比較意義")
+    if m._bar(0, 1400, 50) != "":
+        fails.append("0 也畫了長條 —— 會看起來像有值")
+
+
+def _case_marker_and_idempotent(fails: list) -> None:
+    """marker 缺失要拒跑；固定輸入要冪等。"""
+    m = _load()
+    try:
+        m.inject("<p>沒有標記</p>", "x")
+        fails.append("找不到 marker 時沒拒跑 —— 會猜插入位置")
+    except SystemExit:
+        pass
+    stats = {"DB-1": {"applies": 5, "block": 2, "enforce": 2, "shadow": 0}}
+    if m.build_html(stats, {}) != m.build_html(stats, {}):
+        fails.append("固定輸入連跑兩次結果不同 —— 不冪等")
+    # 真實看板必須有 marker，否則這支永遠注入不進去
+    html = io.open(os.path.join(ROOT, "dashboard", "harness-dashboard.html"),
+                   encoding="utf-8", newline="").read()
+    if m.MARK_START not in html or m.MARK_END not in html:
+        fails.append("看板缺 HOOK_RULES marker —— 產生器注入不進去")
+
+
+def _case_desc_coverage(fails: list) -> None:
+    """有事件的規則都要有敘述，否則表格會出現「—」。
+
+    這條會隨新規則上線而自然變紅 —— 那正是要的：新規則加了卻沒寫判準，
+    表格上就是一格破洞，而破洞不會有人主動發現。
+    """
+    m = _load()
+    try:
+        stats = m.collect()
+    except SystemExit:
+        return                      # 真實 event log 不在時跳過，別假紅
+    missing = sorted(set(stats) - set(m.DESC))
+    if missing:
+        fails.append(f"這些規則有事件卻沒有敘述：{missing}（表格會顯示「—」）")
+
+
+def run() -> "tuple[int, list]":
+    cases = [
+        ("probe session 被排除", _case_probe_excluded),
+        ("bypass 不算 would-block", _case_bypass_not_counted),
+        ("enforce／shadow 分得出來", _case_enforce_shadow_split),
+        ("applies=0 看得見（故障訊號）", _case_zero_applies_visible),
+        ("資料源斷掉時拒絕產出", _case_refuse_empty),
+        ("長條用 sqrt 尺度、0 不畫", _case_bar_scale),
+        ("marker 守門與冪等", _case_marker_and_idempotent),
+        ("有事件的規則都有敘述", _case_desc_coverage),
+    ]
+    passed, failures = 0, []
+    for name, fn in cases:
+        fails: list = []
+        try:
+            fn(fails)
+        except Exception as exc:  # noqa: BLE001
+            fails.append(f"例外：{type(exc).__name__}: {exc}")
+        if fails:
+            failures.append(f"{name}：{fails[0]}")
+            print(f"  FAIL {name}")
+            for f in fails:
+                print(f"       {f}")
+        else:
+            passed += 1
+            print(f"  ok   {name}")
+    return passed, failures
+
+
+if __name__ == "__main__":
+    p, f = run()
+    print(f"\nhook 規則表產生器：{p} 通過、{len(f)} 失敗")
+    sys.exit(1 if f else 0)
