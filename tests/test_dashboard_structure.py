@@ -246,6 +246,24 @@ _layjson = json.loads(_lay.group(1)) if _lay else {}
 _declared = {p["name"]: p.get("colorClass") for p in _layjson.get("projects", [])}
 check(bool(_declared) and all(_declared.values()),
       "#lay-data 每個專案都帶 colorClass（右上角下拉要靠它上色）：%s" % _declared)
+# 自訂配色（2026-08-06）：色塊鈕在專案選單旁邊，色票是「淺／深一對」
+check('id="lay-color-btn"' in html and 'id="lay-swatch"' in html, "右上角有專案配色鈕")
+_pal = re.search(r"var PALETTE = \[(.*?)\];", html, re.S)
+_entries = re.findall(r"\['([^']+)', '(#[0-9A-Fa-f]{6})', '(#[0-9A-Fa-f]{6})'\]",
+                      _pal.group(1) if _pal else "")
+check(len(_entries) >= 8, "色票夠選（%d 個色相）" % len(_entries))
+# 每個色票必須是**兩個不同的值**：同一個 hex 不可能在兩個主題都達 4.5:1
+check(all(l.lower() != d.lower() for _n, l, d in _entries),
+      "每個色票都是淺／深一對，不是同一個 hex 用兩次")
+# 紅與琥珀是狀態保留色：借去當專案色會被讀成「這個專案出事了」
+check(not any(l.lower() in ("#b23b34", "#a9762e") or d.lower() in ("#e2685e", "#d9a54b")
+              for _n, l, d in _entries),
+      "色票沒有借用狀態色（block 紅／warn 琥珀）")
+check("--wfc-pnc" in html,
+      "中性那一格也留了可覆寫的變數（否則色盤用完的專案永遠改不了色）")
+# 存的是一對值 → 換主題要重挑一邊，靠這個事件通知
+check("harness-theme-change" in html and html.count("harness-theme-change") >= 2,
+      "換主題會廣播並被配色那支接住（發與收各一）")
 _todo_cls = dict((n, c) for c, n in
                  re.findall(r'class="wfc-pn (\w+) todo-proj">([^<]+)</span>', _todo))
 for _n, _c in _todo_cls.items():
