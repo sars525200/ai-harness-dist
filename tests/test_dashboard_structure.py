@@ -163,6 +163,42 @@ check("Explore" in roles and "omitClaudeMd" in html,
       "——說明在彈窗 JS 裡，那段刻意放 body 直屬層，不在 panel-roles 區間內")
 check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 
+# ---- 3b. 待辦（2026-08-06 從總覽子分頁拉成主頁籤）----
+# 上面的 tab↔panel 配對已經自動涵蓋「點得到、打得開」。這裡驗的是**另外三件事**：
+# 內容真的是產生器填的、徽章與畫面預設狀態一致、每一項都能複製。
+print("\n待辦頁籤")
+check("panel-todo" in panel_ids, "panel-todo 存在")
+check("待辦" not in html.split('<div class="subtabs" role="tablist" aria-label="總覽 子分頁">')[1]
+      .split("</div>")[0], "總覽子分頁裡已經沒有『待辦』（單一入口，不留兩個）")
+_todo = panel_slice("panel-todo")
+check("TODOS_START" in _todo and "TODOS_END" in _todo, "待辦區間有 marker（內容由產生器填）")
+_secs = re.findall(r'<section class="todo-sec" data-todo-scope="([^"]+)"', _todo)
+check(bool(_secs), "至少有一個待辦分區（沒有＝產生器沒跑或注入位置錯了）")
+check("__global__" in _secs, "有全域層分區")
+# 專案區必須排在全域區前面 —— user 要的「排序 專案 > 全域」是靠 DOM 順序達成的，
+# 不是 JS 重排。順序錯了畫面上不會報錯，只是全域待辦跑到專案上面。
+check(_secs[-1] == "__global__", "全域區排在最後（專案在上、全域在下）：%s" % _secs)
+_rows = re.findall(r'<li class="todo-row" data-kind="(\w+)"', _todo)
+check(len(_rows) >= 10, "待辦項數合理（%d 項）" % len(_rows))
+_copy = _todo.count('class="todo-copy"')
+check(_copy == len(_rows), "每一項都有複製鈕：%d 顆 vs %d 項" % (_copy, len(_rows)))
+check(all('data-copy="' in seg for seg in re.findall(r'<button type="button" class="todo-copy"[^>]*>', _todo)),
+      "複製鈕都帶 data-copy（空的話按了什麼都不會發生）")
+# 徽章＝**預設狀態下會顯示的項數**（專案層預設本專案、全域預設關）。
+# 靜態值與 JS 算出來的必須是同一個語意，否則同一顆徽章兩種意思（Tools 那顆咬過）。
+_cur = re.search(r'"name": "([^"]+)", "path": "[^"]*", "exists": true, "isCurrent": true', html)
+_curname = _cur.group(1) if _cur else None
+check(_curname is not None, "從 #lay-data 認得出「本專案」是哪一個")
+if _curname:
+    _seg = re.search(r'<section class="todo-sec" data-todo-scope="%s".*?</section>' % re.escape(_curname),
+                     _todo, re.S)
+    _n = len(re.findall(r'<li class="todo-row"', _seg.group(0))) if _seg else -1
+    _tb = re.search(r'id="tab-todo"[^>]*>待辦<span class="count">(\d+)</span>', html)
+    check(_tb is not None and int(_tb.group(1)) == _n,
+          "待辦徽章＝預設顯示項數（本專案 %s）：徽章 %s vs 實際 %d"
+          % (_curname, _tb.group(1) if _tb else "找不到", _n))
+check('id="todo-empty"' in _todo, "兩層都關時有話可說（空白畫面跟壞掉長得一樣）")
+
 # ---- 4. 不該混進去的東西 ----
 print("\n負向檢查（避免自己造假綠燈）")
 # 這條守的是「我自己在版面文字裡寫了 markdown 粗體」（會原樣顯示成兩個星號）。

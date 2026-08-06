@@ -310,6 +310,7 @@ def main() -> int:
         import test_hook_rules
         import test_mutation_anchors
         import test_progress_chart
+        import test_todos
         import test_warn_channel
         import test_workflow_compliance
         for run_fn, label in (
@@ -323,6 +324,7 @@ def main() -> int:
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
             (test_hook_rules.run, "hook 規則表產生器"),
             (test_workflow_compliance.run, "工作流程遵循度產生器"),
+            (test_todos.run, "待辦產生器"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):
             ex_passed, ex_failed = run_fn()

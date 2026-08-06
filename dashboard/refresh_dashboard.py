@@ -56,6 +56,7 @@ SOURCES = [
     DASHBOARD / "gen_progress_chart.py",
     DASHBOARD / "gen_roles_topology.py",
     DASHBOARD / "gen_layers.py",
+    DASHBOARD / "gen_todos.py",
     # 全域層設定 —— 兩層對照直接讀它。放進 SOURCES 的理由：全域 permissions
     # 改了（例如哪天終於把 227 條收斂）看板要跟著動，否則又是一個靜默過期的數字。
     Path(os.path.expanduser(r"~\.claude\settings.json")),
@@ -80,11 +81,22 @@ SOURCE_GLOBS = [
     (HARNESS / "tests" / "fixtures", "*.json"),
     (HARNESS / "tests" / "mutations", "*.py"),
 ]
+# 有些產生器讀的檔**不能在這裡寫死**：待辦的來源是各專案 `PROJECT_CONTEXT.md`
+# 的「待辦來源」表決定的，新專案填了表就會多幾個檔。寫死清單必然漂，而漂掉的症狀
+# 是「改了 PENDING_VERIFY 但看板沒更新」—— 看起來像產生器壞了，其實是沒人盯那個檔。
+# 所以改成**問產生器自己讀了什麼**（模組要提供 `watch_paths()`）。
+SOURCE_PROVIDERS = [
+    (DASHBOARD / "gen_todos.py", "watch_paths"),
+]
 
 GENERATORS = [
     ("兩層對照", DASHBOARD / "gen_layers.py"),
     ("角色拓樸", DASHBOARD / "gen_roles_topology.py"),
     ("計畫進度＋八大類", DASHBOARD / "gen_progress_chart.py"),
+    # 待辦的上游是**人在編輯的檔**（TODOS.md／PENDING_VERIFY.md／計畫書），
+    # 不是每回合都在長的 event log —— 所以它可以待在熱路徑。
+    # 實測：盯 85 個檔的雜湊 10ms，真的要重生時 80ms。
+    ("待辦", DASHBOARD / "gen_todos.py"),
 ]
 # ⚠ `gen_cost_panel.py` 與 `gen_hook_rules.py` **刻意不在這裡**。
 #    它們的上游（transcript／state 的 event log）每個回合都在長，接進 Stop 熱路徑
@@ -101,6 +113,21 @@ def _hash_file(p: Path) -> str:
         return "missing"
 
 
+def _provider_paths(script: Path, fn_name: str) -> list:
+    """跟產生器要「它會讀哪些檔」。問不到時**要留下痕跡**——
+    靜靜當成沒有來源，會讓那一整類的更新永久停擺而畫面看起來正常。"""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location("_prov_" + script.stem, script)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return list(getattr(mod, fn_name)())
+    except Exception as exc:
+        print(f"⚠ {script.name}.{fn_name}() 問不到來源清單（{exc}）——"
+              f"該產生器的上游這次沒被盯到")
+        return []
+
+
 def current_state() -> dict:
     state = {}
     for p in SOURCES:
@@ -111,6 +138,9 @@ def current_state() -> dict:
                 state[str(p)] = _hash_file(p)
         else:
             state[str(root) + "/" + pattern] = "missing-dir"
+    for script, fn_name in SOURCE_PROVIDERS:
+        for p in _provider_paths(script, fn_name):
+            state[str(p)] = _hash_file(Path(p))
     return state
 
 
