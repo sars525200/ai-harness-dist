@@ -59,6 +59,10 @@ GLOBAL_REGISTRY = HARNESS / "TODOS.md"
 
 MARK_START = "<!-- TODOS_START"
 MARK_END = "<!-- TODOS_END -->"
+# 分類列是**另一個區間**：它要貼在面板標題正下方（平台所有分頁的子頁籤都在那個
+# 位置），而清單在說明文字之後 —— 兩塊中間隔著手寫內容，所以不能共用一個區間。
+FMARK_START = "<!-- TODO_FILTERS_START"
+FMARK_END = "<!-- TODO_FILTERS_END -->"
 
 # 顯示用的類型徽章。`trust` 決定要不要在畫面上警告「這是粗抓的」。
 KINDS = {
@@ -597,9 +601,7 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: l
 
 def build_html(buckets: dict, roots: dict, current: str) -> str:
     seq = [0]
-    # 分類列的初始數字＝**預設狀態下看得到的那些**（本專案＋全域關），
-    # 與頁籤徽章同一個口徑。JS 會在切層時重算，兩邊語意必須一致。
-    parts = [_filter_bar(buckets.get(current, []))]
+    parts = []
     # 專案區先寫進 DOM —— 「排序 專案 > 全域」靠 DOM 順序達成，不靠 JS 重排
     for scope in sorted(k for k in buckets if k != "__global__"):
         parts.append(_group_html(
@@ -611,13 +613,18 @@ def build_html(buckets: dict, roots: dict, current: str) -> str:
     return "\n".join(parts)
 
 
-def inject(html: str, block: str, default_count: int) -> str:
-    if MARK_START not in html or MARK_END not in html:
-        raise SystemExit(f"HTML 缺 {MARK_START} … {MARK_END} 標記 —— 不猜插入位置。")
-    head, rest = html.split(MARK_START, 1)
-    _old, tail = rest.split(MARK_END, 1)
-    marker = MARK_START + " 由 dashboard/gen_todos.py 產生，勿手改 -->"
-    out = f"{head}{marker}\n{block}\n    {MARK_END}{tail}"
+def _fill(html: str, start: str, end: str, block: str, tail_indent: str) -> str:
+    if start not in html or end not in html:
+        raise SystemExit(f"HTML 缺 {start} … {end} 標記 —— 不猜插入位置。")
+    head, rest = html.split(start, 1)
+    _old, tail = rest.split(end, 1)
+    marker = start + " 由 dashboard/gen_todos.py 產生，勿手改 -->"
+    return f"{head}{marker}\n{block}\n{tail_indent}{end}{tail}"
+
+
+def inject(html: str, bar: str, block: str, default_count: int) -> str:
+    out = _fill(html, FMARK_START, FMARK_END, bar, "    ")
+    out = _fill(out, MARK_START, MARK_END, block, "    ")
     # 徽章＝**預設狀態（本專案＋全域關）下會顯示的項數**。JS 之後會依層同步，
     # 兩邊語意必須一致 —— 一顆徽章兩種意思是這個看板犯過的老病。
     out2, n = re.subn(r'(id="tab-todo"[^>]*>待辦<span class="count">)\d+(</span>)',
@@ -668,7 +675,10 @@ def main() -> None:
 
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = inject(html, build_html(buckets, roots, current), len(buckets.get(current, [])))
+    # 分類列的初始數字＝**預設狀態下看得到的那些**（本專案＋全域關），與頁籤徽章
+    # 同一個口徑；JS 會在切層時重算，兩邊語意必須一致。
+    out = inject(html, _filter_bar(buckets.get(current, [])),
+                 build_html(buckets, roots, current), len(buckets.get(current, [])))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print("已注入待辦：%d 項（%s）" % (

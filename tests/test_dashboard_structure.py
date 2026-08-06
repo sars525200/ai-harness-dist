@@ -182,6 +182,14 @@ _rows = re.findall(r'<li class="todo-row" data-kind="(\w+)" data-prio="(\w+)"', 
 # 分類列（來源類型）：全部＋四類，用 aria-pressed（篩選語意）不是 aria-selected（分頁語意）
 _fb = re.search(r'<div class="subtabs todo-filters".*?</div>', _todo, re.S)
 check(_fb is not None, "有分類列")
+# 位置：**貼在面板標題正下方**，跟平台每一個分頁的子頁籤同一個位置。
+# 2026-08-06 user 回報「跟平台不統一」，量下來按鈕樣式完全相同 —— 差的就是位置
+# （原本被壓在說明文字底下）。所以要釘的是順序，不是顏色。
+check(_todo.index('class="subtabs todo-filters"') < _todo.index('class="lead"'),
+      "分類列在說明文字之前（＝貼著面板標題，與其他分頁一致）")
+# 間距不得另外覆寫：同一套元件差 4px 就會被讀成兩套
+check(".todo-filters{ margin-bottom" not in html,
+      "分類列沒有自訂 margin（沿用 .subtabs 的間距）")
 if _fb:
     _kinds = re.findall(r'data-kind="(\w+)"', _fb.group(0))
     check(_kinds == ["all", "registry", "pending", "plan", "prose"],
