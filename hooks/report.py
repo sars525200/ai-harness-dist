@@ -16,6 +16,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 from collections import Counter, defaultdict
 
 STATE_DIR = r"D:\.ai-harness\state"
@@ -35,13 +36,21 @@ def _split_stem(stem: str) -> tuple[str, str]:
     return stem, ""
 
 
-# 手動餵 payload 給 dispatch.py 的接線探針一律用 `ZZ-` 開頭的假 session id
-# （`ZZ-1c`／`ZZ-0d-ma`／`ZZ-2c-probe`…）。這些不是真實工作足跡，卻會混進
-# would-block 清單與 applies 計數——2026-07-29 就發生過：收工要取看板數字時，
-# PR-1 的 would-block 裡躺著一筆自己 30 秒前造的測試資料。
-# 排除規則寫在這裡而不是靠每次記得手動刪 state 檔：忘了刪不會有任何徵兆，
-# 統計看起來只是「多了一筆」。
-_PROBE_SESSION_PREFIX = "ZZ-"
+# 測試餵料的 session_id 不是真實工作足跡，卻會混進 would-block 清單與 applies 計數
+# ——2026-07-29 就發生過：收工要取看板數字時，PR-1 的 would-block 裡躺著一筆自己
+# 30 秒前造的測試資料。排除規則寫在程式裡而不是靠每次記得手動刪 state 檔：
+# 忘了刪不會有任何徵兆，統計看起來只是「多了一筆」。
+#
+# ⚠ **這份 pattern 必須與 `dashboard/subagent_stats.TEST_SESSION` 逐字相同**，
+# 由 `tests/test_hook_rules.py` 的一致性斷言守著。
+# 不 import 那一份的理由是分層：`hooks/` 不該依賴 `dashboard/`（通用化後
+# dashboard 可能不存在）。所以刻意留兩份 ＋ 一條測試，而不是讓 hook 層往上依賴。
+#
+# 2026-08-06 稽核抓到這裡原本只認 `ZZ-` 一種前綴，而真相那份已經加了
+# `e2e-|test-|warnchan-` 三個 —— 於是 `events.e2e-awc1-0001.ndjson` 這類合成檔
+# 被算進 AWC-1／BUDGET-1 的 WARN 數（實際各多報 1 筆）。**漏排除比多排除更難發現**：
+# 多排除會讓數字掉下來有人問，漏排除只是「看起來多了一筆」。
+_PROBE_SESSION_RE = re.compile(r"^(1{8}|2{8}|0{8}|ZZ|e2e-|test-|warnchan-)")
 
 
 def _load_all_events(include_probes: bool = False) -> list[dict]:
@@ -49,7 +58,7 @@ def _load_all_events(include_probes: bool = False) -> list[dict]:
     for path in glob.glob(os.path.join(STATE_DIR, "events.*.ndjson")):
         stem = os.path.basename(path)[len("events."):-len(".ndjson")]
         session_id, agent_id = _split_stem(stem)
-        if not include_probes and session_id.startswith(_PROBE_SESSION_PREFIX):
+        if not include_probes and _PROBE_SESSION_RE.match(session_id):
             continue
         with open(path, encoding="utf-8-sig") as fh:
             for line in fh:

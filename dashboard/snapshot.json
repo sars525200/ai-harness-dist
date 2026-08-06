@@ -18,15 +18,15 @@
     "R3"
   ],
   "would_block": {
-    "AWC-1": 9,
+    "AWC-1": 8,
     "DB-1": 13,
     "ENC-1": 46,
     "PR-1": 1,
-    "BUDGET-1": 2,
+    "BUDGET-1": 1,
     "R1": 0,
     "R3": 0,
     "R4": 0
   },
-  "skill_count": 14,
+  "skill_count": 15,
   "tool_raw_count": 28
 }

@@ -68,8 +68,14 @@ DAYS_SHOWN = 14
 TARGET_OPUS_PCT = 40          # §7：Opus:Sonnet ≈ 4:6
 FABLE_CEILING_PCT = 5         # §7：Fable 5 <5%
 
-# 測試餵料用的 session_id（手寫規律 UUID），與 gen_roles_table.py 同一套判準
-_TEST_SESSION = re.compile(r"^(1{8}|2{8}|0{8}|ZZ)")
+# 測試餵料用的 session_id 過濾。**單一真相在 `subagent_stats.TEST_SESSION`。**
+#
+# 這裡原本自己存一份 `^(1{8}|2{8}|0{8}|ZZ)`，註解還寫「與 gen_roles_table.py 同一套
+# 判準」—— 但那份真相後來加了 `e2e-|test-|warnchan-` 三個前綴，這份沒跟上。
+# 2026-08-06 稽核抓到的現象是「合成檔在污染看板數字」，根因就是這種**複製一份常數**：
+# 漂移的徵兆只是「數字看起來多了一筆」，沒有人會發現。
+import subagent_stats                                   # noqa: E402
+_TEST_SESSION = subagent_stats.TEST_SESSION
 
 # ── G2 階段成本歸因（MODEL_ROUTING_PLAN.md M-2／M-4 定案）───────────────────
 # 全域 CLAUDE.md §2 的自我宣告多了「階段」欄，本檔離線從 transcript 撈宣告行歸因。

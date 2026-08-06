@@ -79,6 +79,45 @@ def _case_probe_excluded(fails: list) -> None:
             fails.append(f"probe 的 would-block 被算進來（應 1，實得 {stats['DB-1']['block']}）")
 
 
+def _case_probe_pattern_single_truth(fails: list) -> None:
+    """`report.py` 與 `dashboard/subagent_stats.py` 的過濾 pattern 必須逐字相同。
+
+    刻意留兩份（`hooks/` 不該依賴 `dashboard/`，通用化後後者可能不存在），
+    **代價是會漂 —— 所以用這條斷言代替依賴**。
+
+    2026-08-06 稽核抓到的實況：report 那份只認 `ZZ-`，真相那份已經加了
+    `e2e-|test-|warnchan-` 三個前綴 → `events.e2e-awc1-0001.ndjson` 這類合成檔
+    被算進 AWC-1／BUDGET-1 的 WARN 數。**漏排除比多排除難發現**：多排除會讓數字
+    掉下來有人問，漏排除只是「看起來多了一筆」。
+    """
+    # ⚠ 這支檔的 `_load()` 載入的是**產生器** `gen_hook_rules`，不是 `report.py`
+    #   —— 兩支都在守 hook 規則表，名字很近。要 report 就自己載。
+    here = os.path.dirname(os.path.abspath(__file__))
+
+    def _load_by_path(rel: str, name: str):
+        spec = importlib.util.spec_from_file_location(
+            name, os.path.join(here, "..", *rel.split("/")))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    try:
+        rep = _load_by_path("hooks/report.py", "rep_for_consistency")
+        mod = _load_by_path("dashboard/subagent_stats.py", "sa_for_consistency")
+    except Exception as exc:
+        fails.append(f"讀不到 report／subagent_stats（{type(exc).__name__}: {exc}）"
+                     f"——一致性無從驗證")
+        return
+    a, b = rep._PROBE_SESSION_RE.pattern, mod.TEST_SESSION.pattern
+    if a != b:
+        fails.append(f"過濾 pattern 已漂開：report={a!r} vs subagent_stats={b!r}")
+    # 兩份都必須真的認得所有已知的合成前綴（防「兩邊一起漏」——一致但都錯）
+    for probe in ("ZZ-1c", "e2e-awc1-0001", "test-2way-0001",
+                  "warnchan-x", "11111111-2222-4333-8444-555555555555"):
+        if not rep._PROBE_SESSION_RE.match(probe):
+            fails.append(f"report 的 pattern 認不出合成 session {probe!r}")
+
+
 def _case_bypass_not_counted(fails: list) -> None:
     """bypass ＝ 明確放行，不是「擋下來」。混進去會讓這一欄變謊話。"""
     with tempfile.TemporaryDirectory() as tmp:
@@ -219,6 +258,8 @@ def _case_desc_coverage(fails: list) -> None:
 def run() -> "tuple[int, list]":
     cases = [
         ("probe session 被排除", _case_probe_excluded),
+        ("兩份過濾 pattern 沒漂開（且都認得所有合成前綴）",
+         _case_probe_pattern_single_truth),
         ("bypass 不算 would-block", _case_bypass_not_counted),
         ("enforce／shadow 分得出來", _case_enforce_shadow_split),
         ("applies=0 看得見（故障訊號）", _case_zero_applies_visible),

@@ -176,13 +176,19 @@ def _c11():
     assert once.count("PROGRESS_CHART_START") == 1, "marker 被重複寫入"
 
 
-@case("真實計畫書：解析得出 4 個 Phase、18 項，且與 dispatch 的規則現況不矛盾")
+@case("真實計畫書：解析得出 5 個 Phase、23 項，且與 dispatch 的規則現況不矛盾")
 def _c12():
     md = open(g.PLAN_PATH, encoding="utf-8").read()
     phases = g.parse_plan(md)
     total = sum(len(p["items"]) for p in phases)
-    assert len(phases) == 4, f"Phase 數 {len(phases)}"
-    assert total >= 18, f"項數 {total} —— 少於 18 表示有表格沒被收到"
+    # **Phase 數刻意寫死**：新增／刪除 Phase 時這條要紅，逼人確認「圖上真的多一段」
+    # 而不是靜默跟著跑。2026-08-06 新增 Phase 4（工作流本身）時它就叫了一次。
+    #
+    # ⚠ 項數只算**已結案**的項（`STATUS_MAP` 的四種符號）。Phase 4 有三項尚未結案，
+    #   刻意寫在表格外的清單裡 —— 硬塞進表格會被解析器靜默跳過，
+    #   而「跳過」與「沒這一項」在畫面上長得一樣。
+    assert len(phases) == 5, f"Phase 數 {len(phases)}"
+    assert total >= 23, f"項數 {total} —— 少於 23 表示有表格沒被收到"
     # Phase 1 是「解除 shadow」，它全數完成就代表 DB-1／R1／R3 都該是 enforce。
     # 這條把圖表與 dispatch_config 綁在一起，避免圖上說做完了、設定檔還是 shadow。
     p1 = next(p for p in phases if p["phase"] == "Phase 1")

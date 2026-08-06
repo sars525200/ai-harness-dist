@@ -39,6 +39,11 @@ HOOKS = HARNESS / "hooks"
 TESTS = HARNESS / "tests"
 IT_DEPT = Path(r"D:\IT-department")
 CLAUDE_MD = IT_DEPT / "CLAUDE.md"
+# **全域 CLAUDE.md 也是 always-loaded**，而 2026-08-05～06 起通則（5 模式路由、
+# 升級安全閥、選擇題、五階段工作流）全部搬到那裡，專案檔只留指標句。
+# 只讀專案檔的 probe 會把「規則搬家」讀成「能力消失」—— 2026-08-06 稽核抓到
+# 3 項假陰性（④modes・⑧choices・⑧escalate），真實分數 37/46 其實是 40/46。
+GLOBAL_CLAUDE_MD = Path.home() / ".claude" / "CLAUDE.md"
 # 角色 2026-08-05 搬到 harness repo（全域層，家目錄 .claude/agents 用 junction 接過去）。
 # 這裡跟著搬 —— 留在舊路徑會靜默數到 0 支角色，能力分數跟著掉而不報錯。
 AGENTS_DIR = HARNESS / "agents"
@@ -179,8 +184,11 @@ def _p_worktree_isolation():
 
 # ── ④ Orchestration ──────────────────────────────────────────────────────
 def _p_mode_routing():
-    md = _read(CLAUDE_MD)
-    has = "ASK" in md and "DEV_DRY_RUN" in md and "DEPLOY" in md
+    # ⚠ 判準字面值原本寫 `DEV_DRY_RUN`，而**兩個 CLAUDE.md 都沒有這個字串**
+    # （全域 §2 寫的是 `DRY_RUN`）—— 就算把讀取層改對，綁錯字面值仍會永遠 ✘。
+    # 2026-08-06 稽核抓到：這一項是「綁錯層」與「綁錯字面值」兩個病疊在一起。
+    has = any("ASK" in h and "DRY_RUN" in h and "DEPLOY" in h
+              for h in _rule_haystacks())
     return has, "§2 五模式路由＋升級安全閥" if has else "無任務模式路由"
 
 
@@ -366,17 +374,31 @@ def _p_adversarial():
                 + ("（憑證綁內容 hash，改了自動失效）" if ok else ""))
 
 
+def _rule_haystacks() -> list:
+    """規則的**所有**落腳處。綁機制不綁字面值住在哪一層。
+
+    2026-07-30 同一個坑一天咬三次（綁 `wc -c`／綁「防膨脹」三個字／綁 §8），
+    2026-08-06 又咬一次：通則搬到**全域** `CLAUDE.md` 後，只讀專案檔的 probe
+    判 False，而那些規則一個字都沒少。**兩個 CLAUDE.md 都是 always-loaded。**
+
+    抽成共用函式的理由：`_p_red_first` 已經為這件事加固過，但同檔 17 行後的
+    `_p_selftest_discipline` 沒跟上 —— 加固寫在一支 probe 裡就只有那一支受益。
+    """
+    out = [_read(CLAUDE_MD), _read(GLOBAL_CLAUDE_MD)]
+    for root, pattern in ((SKILLS_DIR, "*/SKILL.md"), (RULES_DIR, "*.md")):
+        if root.exists():
+            out += [_read(p) for p in sorted(root.glob(pattern))]
+    return out
+
+
 def _p_red_first():
-    """規則會搬家，機制不會 —— 所以掃「規則的三層」而不是只讀 CLAUDE.md。
+    """規則會搬家，機制不會 —— 所以掃「規則的所有層」而不是只讀 CLAUDE.md。
 
     這條 2026-07-30 第三次被同一個坑咬：前兩次是綁 `wc -c`、綁「防膨脹」三個字，
     這次是綁 §8 —— 規則搬進 `/verify-rules` 參考型 skill 後 probe 判 False，
     但那條紀律一個字都沒少。**能力在不在，跟它住在哪一層無關。**
     """
-    haystacks = [_read(CLAUDE_MD)]
-    for root, pattern in ((SKILLS_DIR, "*/SKILL.md"), (RULES_DIR, "*.md")):
-        if root.exists():
-            haystacks += [_read(p) for p in sorted(root.glob(pattern))]
+    haystacks = _rule_haystacks()
     hit = next((h for h in haystacks
                 if "會紅" in h and ("tight loop" in h or "沒紅訊號" in h)), None)
     return bool(hit), ("硬規則：先建會紅的 tight loop，沒紅訊號不准進 hypothesis"
@@ -407,16 +429,21 @@ def _p_contract_tests():
 
 # ── ⑧ Human-in-the-Loop ──────────────────────────────────────────────────
 def _p_choices_gate():
-    md = _read(CLAUDE_MD)
-    rule = "AskUserQuestion" in md
+    # ⚠ 原本綁工具名 `AskUserQuestion`，而**規則的措辭是「問題一律用選擇題」**
+    # ——兩個 CLAUDE.md 都沒有那個工具名。綁工具名會漏掉規則本體（2026-08-06 稽核）。
+    rule = any("選擇題" in h for h in _rule_haystacks())
     gate = (HOOKS / "rules" / "awc1_choices_check.py").exists()
-    return rule and gate, (f"需 user 決定一律走選擇題（§2 硬規則）"
-                           + ("＋AWC-1 閘門在守（目前 shadow）" if gate else "，但無閘門"))
+    # 狀態**讀設定檔不寫死**：原本這裡寫「（目前 shadow）」，而 AWC-1 7/31 就轉
+    # enforce 了，敘述在畫面上掛了一整週。同檔 `_shadow_cfg()` 一直讀得到真值。
+    shadow = bool((_shadow_cfg().get("AWC-1") or {}).get("shadow"))
+    state = "shadow" if shadow else "enforce"
+    return rule and gate, ("需 user 決定一律走選擇題（全域 §1 硬規則）"
+                           + (f"＋AWC-1 閘門在守（目前 {state}）" if gate else "，但無閘門"))
 
 
 def _p_no_auto_escalate():
-    md = _read(CLAUDE_MD)
-    has = "禁自動升級" in md or "不可自動升級" in md
+    # 這條規則 2026-08-05 搬到全域 §2，專案檔只留「通則全部在全域」指標句。
+    has = any("禁自動升級" in h or "不可自動升級" in h for h in _rule_haystacks())
     return has, ("模式升級安全閥：ASK/VERIFY→DEV、DEV→DEPLOY 禁自動，須 user 明確說"
                  if has else "無升級安全閥")
 
