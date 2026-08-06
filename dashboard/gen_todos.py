@@ -168,6 +168,16 @@ def _clip(text: str, n: int) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def line_sha(raw: str) -> str:
+    r"""那一行的內容指紋，給「完成」按鈕當**樂觀鎖**。
+
+    看板是快照，而多 session 並行是這個環境的常態 —— 只憑行號寫回，
+    別人在上面插了兩行就會**改到別人的東西**，而且改完看起來一切正常。
+    所以按下完成時要把這個值送回來比對，不符就拒絕並請使用者重新整理。
+    """
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
 def _load_layers():
     """借 gen_layers 的專案探索 —— 專案清單只能有一份真相，
     兩份會漂到「下拉列得到、待辦列不到」那種最難查的形狀。"""
@@ -228,7 +238,8 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
         out.append({
             "scope": scope, "kind": kind, "title": title,
             "detail": plain(cells[1]), "next": plain(cells[2]), "who": plain(cells[3]),
-            "src": src, "line": lineno, "prio": prio, "prio_manual": prio is not None,
+            "src": src, "line": lineno, "sha": line_sha(ln),
+            "prio": prio, "prio_manual": prio is not None,
         })
     return out
 
@@ -287,7 +298,8 @@ def parse_plan_open(text: str, src: str, scope: str) -> list:
             "scope": scope, "kind": "plan", "title": _clip(title, 120),
             "detail": _clip(detail, 240),
             "next": "開 " + src + " 第 %d 行看上下文再決定下一步" % lineno,
-            "who": who, "src": src, "line": lineno, "prio": None, "prio_manual": False,
+            "who": who, "src": src, "line": lineno, "sha": line_sha(ln),
+            "prio": None, "prio_manual": False,
         })
     return out
 
@@ -312,7 +324,8 @@ def parse_prose(text: str, src: str, scope: str) -> list:
         out.append({
             "scope": scope, "kind": "prose", "title": _clip(head or body, 110),
             "detail": _clip(rest, 260), "next": "開 %s 第 %d 行看完整脈絡" % (src, lineno),
-            "who": "", "src": src, "line": lineno, "prio": None, "prio_manual": False,
+            "who": "", "src": src, "line": lineno, "sha": line_sha(ln),
+            "prio": None, "prio_manual": False,
         })
     return out
 
@@ -531,8 +544,12 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
     clipped = _clip(brief, BRIEF_MAX)
     prio_note = "" if item.get("prio_manual") else "（推導）"
     bits = [
-        '        <li class="todo-row" data-kind="%s" data-prio="%s">'
-        % (item["kind"], item["prio"]),
+        # 身分四件套：**完成**按鈕靠它們指回來源檔的那一行。
+        # `data-sha` 是樂觀鎖（見 `line_sha`），少了它就會在別人剛改過檔案時寫錯行。
+        '        <li class="todo-row" data-kind="%s" data-prio="%s" data-scope="%s" '
+        'data-src="%s" data-line="%d" data-sha="%s">'
+        % (item["kind"], item["prio"], _html.escape(item["scope"], quote=True),
+           _html.escape(item["src"], quote=True), item["line"], item.get("sha", "")),
         '          <div class="todo-l1">',
         '            <span class="todo-prio %s" aria-label="優先 %s%s">'
         '<span aria-hidden="true">%s</span>%s</span>'
@@ -550,6 +567,10 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
         '            <button type="button" class="todo-copy" data-copy="%s" '
         'aria-label="複製這一項的續作提示">複製</button>'
         % _html.escape(_copy_text(item, root), quote=True).replace("\n", "&#10;"),
+        # 完成：**只有透過本機服務開啟時才會動作**（它需要服務給的 token）。
+        # 直接開檔案看時按下去會告訴你原因，而不是靜靜沒反應。
+        '            <button type="button" class="todo-done" '
+        'aria-label="標記完成（會改來源檔，先跳確認）">完成</button>',
         "          </div>",
         # 下半：描述一行帶過，點了才展開。**用 button 不用 div**：鍵盤要按得到，
         # 而 `aria-expanded` 也只有在可聚焦元素上才有意義。

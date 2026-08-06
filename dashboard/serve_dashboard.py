@@ -38,9 +38,13 @@ user 2026-08-06 定：**完全不對外**。artifact 是 claude.ai 上一個可�
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import io
 import json
 import os
+import re
+import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -52,6 +56,14 @@ from pathlib import Path
 # 直接 `sys.stdout.reconfigure(...)` 會在 import 期就 AttributeError，
 # 程序當場死掉而**畫面上什麼都不會發生** —— 2026-08-06 實際踩到：
 # 從終端機跑好好的（pythonw 會繼承父行程的主控台），從 Startup 的 .vbs 跑就是不上線。
+#    修法是**一開始就把 None 換成 devnull 並且不還原**：這個行程本來就沒有主控台，
+#    而換掉之後，任何在這裡被 import 的產生器（它們開頭都有 reconfigure）都不會炸。
+#    只在 import 時暫時換、用完還原是不夠的 —— `collect()` 執行到一半還會再
+#    import `gen_layers`，那時已經還原成 None（第一次就是這樣修錯的）。
+if sys.stdout is None:
+    sys.stdout = io.open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = io.open(os.devnull, "w", encoding="utf-8")
 for _s in (sys.stdout, sys.stderr):
     try:
         _s.reconfigure(encoding="utf-8")
@@ -71,6 +83,52 @@ MIN_GAP = 2.0               # 秒。手動重查與開頁重生的最小間隔�
 
 _lock = threading.Lock()
 _state = {"checked": 0.0, "ok": True, "note": "尚未檢查", "changed": 0.0}
+
+
+# ---------------------------------------------------------------------------
+# 「完成」寫回（2026-08-06）
+# ---------------------------------------------------------------------------
+# 服務會**改使用者的來源檔**，所以四道守門缺一不可：
+#   ① token —— loopback 擋不住「別的網頁對 127.0.0.1 送 POST」。token 只存在
+#      這個 process 與它吐出的頁面裡，猜不到。
+#   ② 白名單靠**重算待辦清單**：只有真的在清單上的那一行可以被改。
+#      不是比對路徑字串 —— 那種白名單遲早被 `..` 或大小寫繞過。
+#   ③ 樂觀鎖（那一行的 sha）：多 session 並行是常態，行號會漂。
+#   ④ 寫前整檔備份到 state\todo_undo\（user 選的「只備份＋可復原」）。
+TOKEN = secrets.token_hex(12)
+UNDO_DIR = HARNESS / "state" / "todo_undo"
+
+# 各類來源的「完成」語意不同 —— 一律刪列是錯的（user 2026-08-06 定）：
+#   pending／registry：規則本來就寫「做完把該列刪掉，歷史交給 git log」
+#   plan：計畫書是汗錄，刪了就看不出做過什麼 → 狀態格 ⏳ 改成 ✅
+#   prose：那些 bullet 常是段落的一部分，刪掉上下文會斷 → 行首加 ✅
+_DEL_KINDS = ("pending", "registry")
+_PLAN_STATUS = re.compile(r"(⏳|🔄|🚧)")
+_PLAN_TEXT = re.compile(r"(進行中|待做|待施工|待動工|未開工|規劃中|待評估|待討論|待排程|待產出)")
+
+
+def plan_edit(kind: str, raw: str) -> "tuple[str | None, str]":
+    """回 (新的那一行, 人看得懂的動作描述)；`None` 代表整行刪掉。
+
+    純函式、不碰檔案 —— 這樣「會變成什麼樣子」可以在測試裡逐類驗，
+    也可以在按下確認前先給使用者看（dry-run 用的就是這一支）。
+    """
+    if kind in _DEL_KINDS:
+        return None, "刪掉整列（做完就清掉，歷史交給 git log）"
+    if kind == "plan":
+        if _PLAN_STATUS.search(raw):
+            return _PLAN_STATUS.sub("✅", raw, count=1), "狀態格改成 ✅（計畫書不刪列）"
+        if _PLAN_TEXT.search(raw):
+            return _PLAN_TEXT.sub("✅ 已完成", raw, count=1), "狀態格改成「✅ 已完成」（計畫書不刪列）"
+        return None, ""      # 找不到狀態就別亂改 —— 呼叫端會擋下來
+    if kind == "prose":
+        m = re.match(r"^(\s*[-*]\s+)(.*)$", raw)
+        if not m:
+            return None, ""
+        if m.group(2).lstrip().startswith("✅"):
+            return raw, "這一條已經標過 ✅ 了"
+        return m.group(1) + "✅ " + m.group(2), "行首加 ✅（散文不刪行，刪了上下文會斷）"
+    return None, ""
 
 
 def _log(msg: str) -> None:
@@ -116,6 +174,113 @@ def do_refresh(force: bool = False) -> dict:
         if after != before:
             _state["changed"] = time.time()
         return dict(_state)
+
+
+def _load_gen_todos():
+    r"""在服務行程裡 import 產生器。
+
+    ⚠ **`pythonw` 底下 `sys.stdout` 是 `None`**，而每一支產生器開頭都有
+    `sys.stdout.reconfigure(...)` —— 直接 import 會在那一行 AttributeError，
+    而錯誤訊息（「'NoneType' object has no attribute」）看起來完全不像
+    「因為沒有主控台」。背景重生那條走的是子行程（有自己的 stdout）所以正常，
+    只有這條 in-process 的路徑會炸 —— 2026-08-06 實際踩到。
+    這裡補上臨時的假串流，一個地方涵蓋所有產生器。
+    """
+    spec = importlib.util.spec_from_file_location("_gt_srv", DASHBOARD / "gen_todos.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _roots() -> dict:
+    """scope → 那個 scope 的根目錄。`__global__` 是 harness 自己。"""
+    out = {"__global__": HARNESS}
+    try:
+        gt = _load_gen_todos()
+        for p in gt._load_layers().discover_projects():
+            out[p.name] = p
+    except Exception:
+        pass
+    return out
+
+
+def complete(payload: dict, dry: bool) -> dict:
+    """驗證 → （dry 時只回預覽）→ 備份 → 寫回。回給前端的都是可直接顯示的字。"""
+    scope = str(payload.get("scope") or "")
+    src = str(payload.get("src") or "")
+    line = int(payload.get("line") or 0)
+    kind = str(payload.get("kind") or "")
+    sha = str(payload.get("sha") or "")
+
+    # ② 白名單：**重算一次待辦清單**，只有真的在清單上的那一行可以動。
+    #    比對路徑字串的白名單遲早被繞過；這種「由建構方式保證」的白名單繞不過。
+    try:
+        gt = _load_gen_todos()
+        buckets = gt.collect()
+    except Exception as exc:
+        return {"ok": False, "msg": "重算待辦清單失敗：%r" % (exc,)}
+    item = next((i for i in buckets.get(scope, [])
+                 if i["src"] == src and i["line"] == line and i["kind"] == kind), None)
+    if not item:
+        return {"ok": False, "msg": "這一項已經不在清單上了（來源檔可能剛被改過）。請重新整理再試。"}
+
+    root = _roots().get(scope)
+    if not root:
+        return {"ok": False, "msg": "認不出這個層別：%s" % scope}
+    path = (root / src).resolve()
+    if root.resolve() not in path.parents:
+        return {"ok": False, "msg": "路徑不在該專案底下，拒絕。"}
+
+    try:
+        with io.open(path, "r", encoding="utf-8", newline="") as f:
+            text = f.read()
+    except OSError as exc:
+        return {"ok": False, "msg": "讀不到來源檔：%s" % exc}
+    # ⚠ 用 splitlines(True) 保留原本的行尾（這個 repo 有 CRLF 檔，
+    #    用 splitlines() 再 join 會把整個檔翻成 LF，變成一個巨大的假 diff）
+    lines = text.splitlines(True)
+    if not (1 <= line <= len(lines)):
+        return {"ok": False, "msg": "行號超出檔案範圍，請重新整理。"}
+    raw = lines[line - 1].rstrip("\r\n")
+
+    # ③ 樂觀鎖
+    if sha and gt.line_sha(raw) != sha:
+        return {"ok": False, "msg": "來源檔那一行已經被改過（不是看板上看到的內容了）。"
+                                   "請重新整理再確認一次。"}
+
+    new_line, how = plan_edit(kind, raw)
+    if not how:
+        return {"ok": False, "msg": "這一類（%s）在這一行上找不到可以標完成的位置，"
+                                   "請直接開來源檔處理。" % kind}
+    preview = {"file": str(path), "line": line, "how": how,
+               "before": raw, "after": ("（整列刪除）" if new_line is None else new_line),
+               "title": item["title"]}
+    if dry:
+        return {"ok": True, "dry": True, "preview": preview,
+                "undo": str(UNDO_DIR / (path.name + ".<時間戳>"))}
+
+    # ④ 先備份整檔（user 選「只備份＋可復原」）
+    try:
+        UNDO_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        backup = UNDO_DIR / ("%s.%s" % (path.name, stamp))
+        shutil.copy2(path, backup)
+    except Exception as exc:
+        return {"ok": False, "msg": "備份失敗，沒有動來源檔：%r" % (exc,)}
+
+    if new_line is None:
+        del lines[line - 1]
+    else:
+        eol = lines[line - 1][len(raw):]          # 原本的行尾照抄回去
+        lines[line - 1] = new_line + eol
+    try:
+        with io.open(path, "w", encoding="utf-8", newline="") as f:
+            f.write("".join(lines))
+    except OSError as exc:
+        return {"ok": False, "msg": "寫回失敗：%s（來源檔未變，備份在 %s）" % (exc, backup)}
+    _log("完成：%s %s:%d（%s）備份 %s" % (scope, src, line, how, backup.name))
+    do_refresh(force=True)                        # 立刻重生，頁面靠輪詢自己換掉
+    return {"ok": True, "dry": False, "preview": preview, "undo": str(backup)}
 
 
 def _stat() -> tuple:
@@ -225,7 +390,10 @@ def page_bytes() -> bytes:
     html = io.open(HTML_PATH, "r", encoding="utf-8", newline="").read()
     if not st["ok"]:
         html = STALE_BANNER + html
-    return (html + LIVE_UI).encode("utf-8")
+    # 權杖只塞進**服務吐出去的那一份**：直接開檔案看的時候沒有它，
+    # 「完成」按下去會說「請從 127.0.0.1 開這一頁」，而不是靜靜沒反應。
+    token = '<script>window.__hdToken=%s;</script>' % json.dumps(TOKEN)
+    return (html + token + LIVE_UI).encode("utf-8")
 
 
 def state_bytes() -> bytes:
@@ -278,6 +446,43 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
     do_HEAD = do_GET
+
+    def do_POST(self) -> None:  # noqa: N802
+        """`/_done`：標記完成（會改來源檔）。四道守門見檔頭 `TOKEN` 那段。"""
+        if self.client_address[0] not in ("127.0.0.1", "::1"):
+            self._send(403, b"local only", "text/plain; charset=utf-8")
+            return
+        if self.path.split("?", 1)[0] != "/_done":
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
+        # 跨站防護：①Content-Type 必須是 json（逼出 preflight，簡單請求送不了）
+        #           ②Origin 只收自己 ③token 只有這個 process 吐出的頁面有
+        if "application/json" not in (self.headers.get("Content-Type") or ""):
+            self._send(415, b"json only", "text/plain; charset=utf-8")
+            return
+        origin = self.headers.get("Origin") or ""
+        if origin and not origin.startswith("http://127.0.0.1"):
+            self._send(403, b"bad origin", "text/plain; charset=utf-8")
+            return
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            payload = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+        except Exception:
+            self._send(400, b"bad json", "text/plain; charset=utf-8")
+            return
+        if payload.get("token") != TOKEN:
+            self._send(403, json.dumps(
+                {"ok": False, "msg": "沒有權杖：請從 http://127.0.0.1:%d/ 開這一頁再試"
+                                     % self.server.server_address[1]}).encode("utf-8"),
+                "application/json")
+            return
+        try:
+            res = complete(payload, bool(payload.get("dry")))
+        except Exception as exc:                  # 任何沒想到的例外都要回成訊息，
+            _log("完成處理例外：%r" % (exc,))     # 讓畫面說得出話，而不是靜靜失敗
+            res = {"ok": False, "msg": "處理時出錯：%r" % (exc,)}
+        self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"),
+                   "application/json")
 
     def log_message(self, fmt, *args):     # 預設會把每個請求印到 stderr（含 2 秒一次的輪詢）
         return                              # —— 那會把 log 洗滿，真正該記的事走 _log()

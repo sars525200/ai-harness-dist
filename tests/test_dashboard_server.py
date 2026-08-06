@@ -84,6 +84,37 @@ def run() -> "tuple[int, list]":
     check("pythonw 情境（stdout=None）下 import 不會炸", r.returncode == 0,
           f"exit={r.returncode} {(r.stderr or '').strip()[-200:]}")
 
+    # ---- 「完成」寫回：四類來源的語意不同，一律刪列是錯的 ----
+    _del, _how = m.plan_edit("pending", "| **甲** | 為何 | 指令 | user |")
+    check("待驗＝刪掉整列", _del is None and "刪" in _how, f"{_del!r} / {_how}")
+    _del, _how = m.plan_edit("registry", "| **乙** | 現況 | 下一步 | 我 |")
+    check("登記＝刪掉整列", _del is None and "刪" in _how, f"{_del!r} / {_how}")
+    _new, _how = m.plan_edit("plan", "| D18 雙門檻 | ⏳ 待產出 | 高 |")
+    check("計畫＝改狀態不刪列（emoji 狀態）",
+          _new is not None and "✅" in _new and "⏳" not in _new, f"{_new!r}")
+    _new, _how = m.plan_edit("plan", "| 員編前台 | 規劃中 | 說明 |")
+    check("計畫＝改狀態不刪列（文字狀態）",
+          _new is not None and "✅" in _new and "規劃中" not in _new, f"{_new!r}")
+    _new, _how = m.plan_edit("plan", "| 沒有狀態的一列 | 只是敘述 |")
+    check("計畫：找不到狀態就拒絕（不亂改）", not _how, f"{_new!r} / {_how}")
+    _new, _how = m.plan_edit("prose", "- ⏳ 剩餘待辦（等 IT 擷取硬體）：4 台靠名字猜")
+    check("粗抓＝行首加 ✅，不刪行（刪了上下文會斷）",
+          _new is not None and _new.startswith("- ✅ "), f"{_new!r}")
+    _new, _how = m.plan_edit("prose", "- ✅ 這條已經標過了")
+    check("粗抓：已標過的不重複加", _new is not None and _new.count("✅") == 1, f"{_new!r}")
+
+    # ---- CRLF：這個 repo 有 CRLF 檔，改一行不能把整檔翻成 LF ----
+    # （`feedback-python-write-crlf-preserve` 記過這個坑：翻行尾會產生巨量假 diff）
+    _crlf = "| 項目 | 狀態 |\r\n| A | ⏳ 待產出 |\r\n| B | 別動我 |\r\n"
+    _lines = _crlf.splitlines(True)
+    _raw = _lines[1].rstrip("\r\n")
+    _new, _ = m.plan_edit("plan", _raw)
+    _lines[1] = _new + _lines[1][len(_raw):]
+    _out = "".join(_lines)
+    check("改一行之後行尾仍是 CRLF",
+          _out.count("\r\n") == 3 and "✅" in _out and "別動我" in _out,
+          repr(_out))
+
     # 起一份真的服務，打四條路由
     port = _free_port()
     httpd = None
@@ -112,6 +143,25 @@ def run() -> "tuple[int, list]":
         s = json.loads(body)
         check("/_state 回得出 mtime／size／ok", {"mtime", "size", "ok", "ago"} <= set(s),
               f"實得 {sorted(s)}")
+
+        # 沒有權杖就不准寫檔：loopback 擋不住「別的網頁對 127.0.0.1 送 POST」
+        _req = urllib.request.Request(
+            base + "/_done", data=b'{"dry":true}',
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(_req, timeout=60)
+            check("沒帶權杖的 POST 被擋", False, "竟然通過了 —— 任何本機網頁都能改你的檔")
+        except urllib.error.HTTPError as exc:
+            check("沒帶權杖的 POST 被擋（403）", exc.code == 403, f"回 {exc.code}")
+        # 非 JSON 的 POST 也要擋（簡單請求送不出 application/json，這條逼出 preflight）
+        _req2 = urllib.request.Request(
+            base + "/_done", data=b"x=1",
+            headers={"Content-Type": "text/plain"}, method="POST")
+        try:
+            urllib.request.urlopen(_req2, timeout=60)
+            check("非 JSON 的 POST 被擋", False, "竟然通過了")
+        except urllib.error.HTTPError as exc:
+            check("非 JSON 的 POST 被擋（415）", exc.code == 415, f"回 {exc.code}")
 
         for bad in ("/serve_dashboard.py", "/../../Windows/win.ini", "/state/events.ndjson",
                     "/%2e%2e/%2e%2e/Windows/win.ini"):
