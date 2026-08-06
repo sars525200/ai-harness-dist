@@ -39,10 +39,14 @@ r"""產生看板「待辦」頁籤：把散在各處的未完成事項收成一�
 from __future__ import annotations
 
 import html as _html
+import hashlib
 import importlib.util
 import io
+import json
 import re
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -64,6 +68,37 @@ KINDS = {
     "prose": {"label": "粗抓", "trust": "loose", "cls": "k-prose"},
 }
 KIND_ORDER = ["registry", "pending", "plan", "prose"]
+
+# 優先程度：**手填優先，沒填才推導**（user 2026-08-06 定）。
+# 推導綁的是「誰跑」欄的實際寫法，不是理論分類 —— 先把 98 項的那一欄倒出來數過
+# （`user` 47、空白 13、`本 session` 3、`我，下次…` 一堆），規則才照著真實文字寫。
+PRIO = {
+    "high": {"label": "高", "glyph": "▲", "cls": "p-high"},
+    "mid": {"label": "中", "glyph": "▬", "cls": "p-mid"},
+    "low": {"label": "低", "glyph": "▽", "cls": "p-low"},
+}
+PRIO_ORDER = ["high", "mid", "low"]
+_PRIO_WORDS = {"高": "high", "中": "mid", "低": "low",
+               "high": "high", "mid": "mid", "medium": "mid", "low": "low"}
+# 這一兩輪就要處理的
+_P_HIGH = re.compile(r"本 ?session|下一輪|下一則|下次開場|收工時|立即|馬上")
+# 有明確觸發條件、但在等某件事發生的
+_P_MID = re.compile(r"^(我|user)|逐支補|下次施工|自然發生時|遇到時|需要時|觀察|"
+                    r"決定.*時|待產出|觸發|授權")
+# 沒有觸發條件的（低）＝其餘，含空白
+
+
+def derive_priority(item: dict) -> str:
+    """沒有手填時的推導。**畫面上會標明是推導的**，不假裝是人定的。"""
+    who = item.get("who") or ""
+    if _P_HIGH.search(who):
+        return "high"
+    if item["kind"] in ("plan", "prose"):
+        # 粗抓兩類本來就只當指路用，沒有明確的「誰、什麼時候」就不該排在人前面
+        return "mid" if _P_HIGH.search(who) else "low"
+    if _P_MID.search(who):
+        return "mid"
+    return "low"
 
 # 未結案狀態：必須出現在**某一格的開頭**才算（放寬會把比較表整批吃進來）。
 # 再分兩級是因為量出來的兩種誤判形狀不同：
@@ -156,7 +191,7 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
 
     排除靠**章節標題**（`_NOT_TODO_SECTION`），不靠「第幾張表」。
     """
-    out, in_tbl, skip_section = [], False, False
+    out, in_tbl, skip_section, prio_idx = [], False, False, None
     for lineno, ln in enumerate(text.splitlines(), 1):
         if ln.startswith("#"):
             in_tbl = False
@@ -165,6 +200,11 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
         if not in_tbl:
             if not skip_section and re.match(r"^\|\s*項目\s*\|", ln):
                 in_tbl = True
+                # 前四欄固定（項目｜現況｜下一步｜誰），**「優先」是選配**：
+                # 用表頭找它在第幾欄，而不是規定它一定在第幾欄 ——
+                # 規定位置的話，既有那些沒有這一欄的表全部要一起改。
+                heads = split_row(ln)
+                prio_idx = next((i for i, h in enumerate(heads) if "優先" in h), None)
             continue
         if ln.startswith("|---") or not ln.strip():
             continue
@@ -178,10 +218,13 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
         # 整格被 ~~刪除線~~ 劃掉的 → plain() 後是空字串 → 那是已收掉的列
         if not title:
             continue
+        prio = None
+        if prio_idx is not None and prio_idx < len(cells):
+            prio = _PRIO_WORDS.get(plain(cells[prio_idx]).lower())
         out.append({
             "scope": scope, "kind": kind, "title": title,
             "detail": plain(cells[1]), "next": plain(cells[2]), "who": plain(cells[3]),
-            "src": src, "line": lineno,
+            "src": src, "line": lineno, "prio": prio, "prio_manual": prio is not None,
         })
     return out
 
@@ -240,7 +283,7 @@ def parse_plan_open(text: str, src: str, scope: str) -> list:
             "scope": scope, "kind": "plan", "title": _clip(title, 120),
             "detail": _clip(detail, 240),
             "next": "開 " + src + " 第 %d 行看上下文再決定下一步" % lineno,
-            "who": who, "src": src, "line": lineno,
+            "who": who, "src": src, "line": lineno, "prio": None, "prio_manual": False,
         })
     return out
 
@@ -265,7 +308,7 @@ def parse_prose(text: str, src: str, scope: str) -> list:
         out.append({
             "scope": scope, "kind": "prose", "title": _clip(head or body, 110),
             "detail": _clip(rest, 260), "next": "開 %s 第 %d 行看完整脈絡" % (src, lineno),
-            "who": "", "src": src, "line": lineno,
+            "who": "", "src": src, "line": lineno, "prio": None, "prio_manual": False,
         })
     return out
 
@@ -303,6 +346,62 @@ def project_sources(proj_root: Path) -> list:
     return out
 
 
+# --------------------------------------------------------------------------
+# 加入時間：來源檔那一行是什麼時候被寫進去的
+# --------------------------------------------------------------------------
+BLAME_CACHE = HARNESS / "state" / "todo_blame_cache.json"
+
+
+def _blame_times(repo: Path, rel: str, content_hash: str) -> list:
+    r"""回該檔每一行的 commit 時間（epoch 秒），index 0 ＝第 1 行。
+
+    **語意是「那一行最後一次被寫入的時間」**，不是「最初加入的時間」——
+    後者要 `git log -S` 逐項掃，對 98 項來說貴太多。畫面上照這個語意標字，
+    不要寫成「建立時間」（那會是假的）。
+
+    未 commit 的行 `git blame` 會給一個當下時間戳，剛好就是我們要的答案。
+    這支跑一次約 70–380ms，所以**用內容雜湊當 key 快取**：gen_todos 只在來源
+    變動時跑，而變動通常只有一個檔 —— 沒快取的話每次都要重付全部檔案的錢。
+    """
+    cache = {}
+    try:
+        cache = json.loads(BLAME_CACHE.read_text(encoding="utf-8"))
+    except Exception:
+        cache = {}
+    key = str(repo / rel)
+    hit = cache.get(key)
+    if isinstance(hit, dict) and hit.get("hash") == content_hash:
+        return hit.get("times") or []
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "blame", "--line-porcelain", "--", rel],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60)
+        if r.returncode != 0:
+            return []
+        times = [int(ln.split()[1]) for ln in r.stdout.splitlines()
+                 if ln.startswith("author-time ")]
+    except Exception:
+        return []
+    cache[key] = {"hash": content_hash, "times": times}
+    try:
+        BLAME_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        BLAME_CACHE.write_text(json.dumps(cache), encoding="utf-8")
+    except Exception:
+        pass                      # 快取寫不進去就每次重算，不該讓產生器失敗
+    return times
+
+
+def attach_added_time(items: list, repo: Path, rel: str, text: str) -> None:
+    """把 `added`（epoch 秒）補進這一批項目。拿不到就留 0 ——
+    畫面上顯示「—」而不是編一個時間出來。"""
+    if not items:
+        return
+    times = _blame_times(repo, rel, hashlib.sha256(text.encode("utf-8")).hexdigest()[:16])
+    for it in items:
+        idx = it["line"] - 1
+        it["added"] = times[idx] if 0 <= idx < len(times) else 0
+
+
 def watch_paths() -> list:
     r"""回這支產生器**實際會讀的每一個檔**，給 `refresh_dashboard.py` 盯內容雜湊。
 
@@ -332,12 +431,17 @@ def collect() -> dict:
 
     if not GLOBAL_REGISTRY.exists():
         raise SystemExit(f"找不到全域登記簿 {GLOBAL_REGISTRY} —— 拒絕產出空清單。")
-    buckets["__global__"] += parse_registry(
-        _read(GLOBAL_REGISTRY), GLOBAL_REGISTRY.name, "__global__")
+    _txt = _read(GLOBAL_REGISTRY)
+    _items = parse_registry(_txt, GLOBAL_REGISTRY.name, "__global__")
+    attach_added_time(_items, HARNESS, GLOBAL_REGISTRY.name, _txt)
+    buckets["__global__"] += _items
 
     # harness 自己的計畫書未結案列也算全域待辦
     for p in sorted(HARNESS.glob("*_PLAN.md")):
-        buckets["__global__"] += parse_plan_open(_read(p), p.name, "__global__")
+        _txt = _read(p)
+        _items = parse_plan_open(_txt, p.name, "__global__")
+        attach_added_time(_items, HARNESS, p.name, _txt)   # 只 blame 真的有項目的檔
+        buckets["__global__"] += _items
 
     layers = _load_layers()
     for proj in layers.discover_projects():
@@ -350,16 +454,27 @@ def collect() -> dict:
                 rel = f.relative_to(proj).as_posix()
                 text = _read(f)
                 if kind == "pending":
-                    buckets[name] += parse_table_todos(text, rel, "pending", name)
+                    got = parse_table_todos(text, rel, "pending", name)
                 elif kind == "plan":
-                    buckets[name] += parse_plan_open(text, rel, name)
+                    got = parse_plan_open(text, rel, name)
                 elif kind == "prose":
-                    buckets[name] += parse_prose(text, rel, name)
+                    got = parse_prose(text, rel, name)
                 elif kind == "registry":
-                    buckets[name] += parse_registry(text, rel, name)
+                    got = parse_registry(text, rel, name)
+                else:
+                    got = []
+                attach_added_time(got, proj, rel, text)
+                buckets[name] += got
 
     for scope in buckets:
-        buckets[scope].sort(key=lambda it: (KIND_ORDER.index(it["kind"]), it["src"], it["line"]))
+        for it in buckets[scope]:
+            it.setdefault("added", 0)
+            if not it.get("prio"):
+                it["prio"] = derive_priority(it)      # 手填優先，沒填才推導
+        # 排序：優先度 → 新的在前 → 來源檔 → 行號。
+        # 「新的在前」是刻意的：舊項目通常是卡住的，天天排在最上面只會被視而不見。
+        buckets[scope].sort(key=lambda it: (PRIO_ORDER.index(it["prio"]),
+                                            -it["added"], it["src"], it["line"]))
     return buckets
 
 
@@ -383,35 +498,81 @@ def _copy_text(item: dict, root: str) -> str:
     return "\n".join(lines)
 
 
-def _item_html(item: dict, root: str) -> str:
+BRIEF_MAX = 50            # 描述在收合狀態下最多顯示幾個字（user 2026-08-06 指定）
+
+
+def _when(ts: int) -> str:
+    """列表上只給 `MM-DD`（掃視用），完整時間留到展開後 —— 一列裡塞完整時間戳
+    會把標題擠掉，而標題才是掃視時在讀的東西。"""
+    return time.strftime("%m-%d", time.localtime(ts)) if ts else "—"
+
+
+def _item_html(item: dict, root: str, uid: str) -> str:
     k = KINDS[item["kind"]]
+    p = PRIO[item["prio"]]
+    scope_label = "全域" if item["scope"] == "__global__" else item["scope"]
+    brief = item["detail"] or item["next"] or "（沒有描述）"
+    clipped = _clip(brief, BRIEF_MAX)
+    prio_note = "" if item.get("prio_manual") else "（推導）"
     bits = [
-        '        <li class="todo-row" data-kind="%s">' % item["kind"],
-        '          <div class="todo-main">',
-        '            <div class="todo-head"><span class="todo-kind %s">%s</span>'
-        '<span class="todo-t">%s</span></div>' % (k["cls"], k["label"], _html.escape(item["title"])),
+        '        <li class="todo-row" data-kind="%s" data-prio="%s">'
+        % (item["kind"], item["prio"]),
+        '          <div class="todo-l1">',
+        '            <span class="todo-prio %s" aria-label="優先 %s%s">'
+        '<span aria-hidden="true">%s</span>%s</span>'
+        % (p["cls"], p["label"], prio_note, p["glyph"], p["label"]),
+        '            <span class="todo-proj">%s</span>' % _html.escape(scope_label),
+        '            <span class="todo-t">%s</span>' % _html.escape(item["title"]),
+        '            <span class="todo-kind %s">%s</span>' % (k["cls"], k["label"]),
+        '            <span class="todo-when">%s</span>' % _when(item.get("added", 0)),
+        '            <button type="button" class="todo-copy" data-copy="%s" '
+        'aria-label="複製這一項的續作提示">複製</button>'
+        % _html.escape(_copy_text(item, root), quote=True).replace("\n", "&#10;"),
+        "          </div>",
+        # 下半：描述一行帶過，點了才展開。**用 button 不用 div**：鍵盤要按得到，
+        # 而 `aria-expanded` 也只有在可聚焦元素上才有意義。
+        '          <button type="button" class="todo-l2" aria-expanded="false" '
+        'aria-controls="%s"><span class="todo-chev" aria-hidden="true">▸</span>'
+        '<span class="todo-brief">%s</span></button>' % (uid, _html.escape(clipped)),
+        '          <div class="todo-more" id="%s" hidden>' % uid,
     ]
     if item["detail"]:
         bits.append('            <p class="todo-d">%s</p>' % _html.escape(item["detail"]))
     if item["next"]:
         bits.append('            <p class="todo-n"><span class="todo-k">下一步</span>%s</p>'
                     % _html.escape(item["next"]))
-    meta = "%s:%d" % (item["src"], item["line"])
-    who = ('<span class="todo-who">%s</span>' % _html.escape(item["who"])) if item["who"] else ""
-    bits.append('            <p class="todo-m"><span class="todo-src">%s</span>%s</p>'
-                % (_html.escape(meta), who))
+    meta = ['<span class="todo-src">%s:%d</span>' % (_html.escape(item["src"]), item["line"])]
+    if item["who"]:
+        meta.append('<span class="todo-who">%s</span>' % _html.escape(item["who"]))
+    if item.get("added"):
+        meta.append('<span class="todo-who">登記 %s</span>'
+                    % time.strftime("%Y-%m-%d %H:%M", time.localtime(item["added"])))
+    meta.append('<span class="todo-who">優先 %s%s</span>' % (p["label"], prio_note))
+    bits.append('            <p class="todo-m">%s</p>' % "".join(meta))
     bits.append("          </div>")
-    bits.append('          <button type="button" class="todo-copy" data-copy="%s" '
-                'aria-label="複製這一項的續作提示">複製</button>'
-                % _html.escape(_copy_text(item, root), quote=True).replace("\n", "&#10;"))
     bits.append("        </li>")
     return "\n".join(bits)
 
 
-def _group_html(scope: str, items: list, root: str, title: str, sub: str) -> str:
-    loose = sum(1 for i in items if KINDS[i["kind"]]["trust"] == "loose")
-    counts = " · ".join("%s %d" % (KINDS[k]["label"], sum(1 for i in items if i["kind"] == k))
-                        for k in KIND_ORDER if any(i["kind"] == k for i in items))
+def _filter_bar(items: list) -> str:
+    """分類列。外觀沿用子分頁（`.subtabs`／`.subtab`），但**語意是篩選不是分頁** ——
+    所以用 `role="group"` ＋ `aria-pressed`，不是 tablist／tabpanel：
+    這裡沒有「另一塊內容」，只是同一張清單少顯示幾列。"""
+    btns = ['      <div class="subtabs todo-filters" role="group" aria-label="待辦分類">',
+            '        <button type="button" class="subtab" data-kind="all" aria-pressed="true">'
+            '全部<span class="count">%d</span></button>' % len(items)]
+    for k in KIND_ORDER:
+        n = sum(1 for i in items if i["kind"] == k)
+        btns.append('        <button type="button" class="subtab" data-kind="%s" '
+                    'aria-pressed="false">%s<span class="count">%d</span></button>'
+                    % (k, KINDS[k]["label"], n))
+    btns.append("      </div>")
+    return "\n".join(btns)
+
+
+def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: list) -> str:
+    counts = " · ".join("%s %d" % (PRIO[p]["label"], sum(1 for i in items if i["prio"] == p))
+                        for p in PRIO_ORDER if any(i["prio"] == p for i in items))
     head = [
         '      <div class="todo-gh">',
         '        <h3>%s<span class="todo-n-badge">%d</span></h3>' % (_html.escape(title), len(items)),
@@ -422,7 +583,11 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str) -> str
         head.append('        <button type="button" class="todo-copy-all" '
                     'aria-label="複製本區全部項目">複製全部</button>')
     head.append("      </div>")
-    body = ['      <ul class="todo-list">'] + [_item_html(i, root) for i in items] + ["      </ul>"]
+    rows = []
+    for i in items:
+        seq[0] += 1
+        rows.append(_item_html(i, root, "td-%d" % seq[0]))
+    body = ['      <ul class="todo-list">'] + rows + ["      </ul>"]
     if not items:
         body = ['      <p class="todo-none">這一層目前沒有登記待辦。'
                 '專案的待辦來源寫在該專案 <code>.claude\\PROJECT_CONTEXT.md</code> 的「待辦來源」表。</p>']
@@ -430,16 +595,19 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str) -> str
             % (_html.escape(scope, quote=True), "\n".join(head), "\n".join(body)))
 
 
-def build_html(buckets: dict, roots: dict) -> str:
-    parts = []
+def build_html(buckets: dict, roots: dict, current: str) -> str:
+    seq = [0]
+    # 分類列的初始數字＝**預設狀態下看得到的那些**（本專案＋全域關），
+    # 與頁籤徽章同一個口徑。JS 會在切層時重算，兩邊語意必須一致。
+    parts = [_filter_bar(buckets.get(current, []))]
     # 專案區先寫進 DOM —— 「排序 專案 > 全域」靠 DOM 順序達成，不靠 JS 重排
     for scope in sorted(k for k in buckets if k != "__global__"):
         parts.append(_group_html(
             scope, buckets[scope], roots.get(scope, ""),
-            "專案：" + scope, roots.get(scope, "")))
+            "專案：" + scope, roots.get(scope, ""), seq))
     parts.append(_group_html(
         "__global__", buckets["__global__"], str(HARNESS),
-        "全域（harness 共用層）", "跨專案／harness 本體的事，登記在 TODOS.md"))
+        "全域（harness 共用層）", "跨專案／harness 本體的事，登記在 TODOS.md", seq))
     return "\n".join(parts)
 
 
@@ -500,7 +668,7 @@ def main() -> None:
 
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = inject(html, build_html(buckets, roots), len(buckets.get(current, [])))
+    out = inject(html, build_html(buckets, roots, current), len(buckets.get(current, [])))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print("已注入待辦：%d 項（%s）" % (

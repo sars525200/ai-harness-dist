@@ -178,7 +178,34 @@ check("__global__" in _secs, "有全域層分區")
 # 專案區必須排在全域區前面 —— user 要的「排序 專案 > 全域」是靠 DOM 順序達成的，
 # 不是 JS 重排。順序錯了畫面上不會報錯，只是全域待辦跑到專案上面。
 check(_secs[-1] == "__global__", "全域區排在最後（專案在上、全域在下）：%s" % _secs)
-_rows = re.findall(r'<li class="todo-row" data-kind="(\w+)"', _todo)
+_rows = re.findall(r'<li class="todo-row" data-kind="(\w+)" data-prio="(\w+)"', _todo)
+# 分類列（來源類型）：全部＋四類，用 aria-pressed（篩選語意）不是 aria-selected（分頁語意）
+_fb = re.search(r'<div class="subtabs todo-filters".*?</div>', _todo, re.S)
+check(_fb is not None, "有分類列")
+if _fb:
+    _kinds = re.findall(r'data-kind="(\w+)"', _fb.group(0))
+    check(_kinds == ["all", "registry", "pending", "plan", "prose"],
+          "分類列涵蓋全部＋四類來源：%s" % _kinds)
+    check(_fb.group(0).count('aria-pressed="true"') == 1,
+          "分類列恰好一個選中（多個或零個都會讓畫面跟數字對不上）")
+# 兩層列（user 2026-08-06）：上半定位資訊、下半一行描述可展開
+check(len(re.findall(r'class="todo-l1"', _todo)) == len(_rows), "每列都有上半（優先｜專案｜標題｜時間）")
+check(len(re.findall(r'class="todo-l2"', _todo)) == len(_rows), "每列都有下半（可點展開的描述）")
+check(all(p in ("high", "mid", "low") for _k, p in _rows),
+      "每列都有優先程度：%s" % sorted({p for _k, p in _rows}))
+# 描述在收合時**不能整段塞進來**：50 字是 user 指定的上限，超過就失去「一列兩行」的意義
+# ⚠ 量的是**還原後的顯示字數**：HTML escape 會把 `<` 變成 `&lt;`（一個字變四個），
+#    量原始碼會高估到 60，然後讓人跑去改一個其實沒問題的截斷邏輯。
+import html as _htmlmod  # noqa: E402
+_briefs = [_htmlmod.unescape(b)
+           for b in re.findall(r'<span class="todo-brief">(.*?)</span>', _todo)]
+check(bool(_briefs) and max(len(b) for b in _briefs) <= 51,
+      "收合時的描述不超過 50 字（實測最長 %d）" % (max(len(b) for b in _briefs) if _briefs else -1))
+# 展開區的 id 要對得上，否則點了什麼都不會發生
+_ctrl = re.findall(r'class="todo-l2" aria-expanded="false" aria-controls="([\w-]+)"', _todo)
+_more = set(re.findall(r'<div class="todo-more" id="([\w-]+)"', _todo))
+check(bool(_ctrl) and all(c in _more for c in _ctrl),
+      "每個展開鈕都指得到自己的展開區")
 check(len(_rows) >= 10, "待辦項數合理（%d 項）" % len(_rows))
 _copy = _todo.count('class="todo-copy"')
 check(_copy == len(_rows), "每一項都有複製鈕：%d 顆 vs %d 項" % (_copy, len(_rows)))
