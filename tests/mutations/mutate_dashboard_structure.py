@@ -28,9 +28,10 @@ MUTATIONS = [
         # 2026-08-04：原錨點是 `id="tab-roles" aria-controls="panel-roles"`，
         # 但 tab-roles 中間插了 `data-layered` 之後就對不上了。改綁 aria-controls
         # 單獨一段 —— 它是配對的關鍵屬性，中間再插什麼屬性都不影響。
+        # 2026-08-06 IA 重構：panel-roles 併進 panel-orch，錨點跟著改。
         "頁籤指向不存在的 panel（＝按了沒反應，最該抓到的錯）",
-        'aria-controls="panel-roles"',
-        'aria-controls="panel-rolez"',
+        'aria-controls="panel-orch"',
+        'aria-controls="panel-orcz"',
     ),
     (
         # 2026-07-31：角色頁改拓樸圖＋彈窗，舊表格整段移除，原錨點 <th>閘門</th> 隨之失效。
@@ -46,9 +47,12 @@ MUTATIONS = [
         '<div class="rt-modal" id="rt-modal-REMOVED"',
     ),
     (
-        "Eval 段被搬到 panel-tools 裡（＝內容在檔案裡但不在該頁）",
-        '  <!-- ===================== 角色 ===================== -->',
-        '  <!-- Skill Eval（EDD 四層） 誤植於此 -->\n  <!-- ===================== 角色 ===================== -->',
+        # 2026-08-06：原錨點是那排 `<!-- ===== 角色 ===== -->` 分隔註解，IA 重構後
+        # 整批消失。改綁「把 Eval 的 <h2> 塞進 Tools 開頭」—— 內容還在檔案裡、
+        # 但不在該頁，正是這條要抓的錯（也是唯一驗得到「段落歸屬」的形狀）。
+        "Eval 段被搬到 Tools 裡（＝內容在檔案裡但不在該頁）",
+        '<div class="panel has-layers" id="panel-tools"',
+        '<div class="panel has-layers" id="panel-tools"><h2>Skill Eval（EDD 四層）</h2>',
     ),
 ]
 

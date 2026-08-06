@@ -809,11 +809,11 @@ def sync_tab_badge(html: str, n_roles: int) -> str:
     否則手寫數字會從一個沒人注意的地方重新長回來（這正是那批產生器當初要根治的病，
     第四次發作就是 Skill 徽章沒跟上）。
     """
-    html = _sync_badge(html, "tab-roles", "角色", n_roles)
+    html = _sync_badge(html, "st-orch-0", "角色編制", n_roles)
     n_skills = len(list(SKILLS_DIR.glob("*/SKILL.md"))) if SKILLS_DIR.exists() else 0
     if n_skills == 0:
         raise SystemExit(f"數不到任何 skill（{SKILLS_DIR}）—— 零目標拒跑，不把徽章寫成 0。")
-    return _sync_badge(html, "tab-skills", "Skill 與 Eval", n_skills)
+    return _sync_badge(html, "st-orch-1", "Skill 清冊", n_skills)
 
 
 def inject(html: str, block: str) -> str:

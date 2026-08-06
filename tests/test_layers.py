@@ -206,15 +206,27 @@ def _case_global_brief(fails):
     專案層有東西在顯示時，全域層只是對照 —— 讓它佔掉整個第一屏是喧賓奪主。
     但選「無」時它就是這一頁的全部，必須講完整。三件事都得成立：
 
-      1. 五個受影響分頁**每一頁**都要有一行版（少一頁 → 那一頁維持大區塊，看起來像沒改到）
+      1. 受影響分頁**每一頁**都要有一行版（少一頁 → 那一頁維持大區塊，看起來像沒改到）
+         ⚠ 頁數**不寫死**：2026-08-06 IA 重構把 skills 與 roles 併成 orch，
+         寫死的「5 頁」當場變假紅（內容其實是對的）。要守的性質是
+         **COPY map 有幾個 panel，就要有幾個 brief**，那個等式跟頁籤怎麼分無關。
       2. CSS 兩個方向都要寫（只寫顯示 brief、沒寫隱藏 full → 變成兩份都出來）
       3. 一行版要真的掛進 DOM（只定義字串不 append 等於沒做）
     """
     dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
     js = open(dash, encoding="utf-8").read()
+    import re as _re
     n = js.count("        brief: '")
-    if n != 5:
-        fails.append(f"一行版只有 {n} 頁有（受影響的是 5 頁）—— 少的那頁會維持大區塊")
+    n_copy = len(_re.findall(r"'(panel-[a-z]+)': \{", js))
+    if n_copy == 0:
+        fails.append("COPY map 一個 panel 都沒有 —— 這條等於沒測到")
+    elif n != n_copy:
+        fails.append(f"一行版 {n} 份、COPY map {n_copy} 個 panel —— 少的那頁會維持大區塊")
+    # CSS 掛鉤靠 .panel.has-layers，COPY map 裡的每個 panel 都得帶這個 class，
+    # 少了不會報錯：那一頁的長短版切換直接失效（2026-08-06 重構時真的掉過）
+    for _pid in _re.findall(r"'(panel-[a-z]+)': \{", js):
+        if f'class="panel has-layers" id="{_pid}"' not in js:
+            fails.append(f"{_pid} 少了 has-layers class —— 長短版切換對那一頁失效")
     for sel in ('html[data-proj="current"] .panel.has-layers .lay-brief',
                 'html[data-proj="other"] .panel.has-layers .lay-brief',
                 'html[data-proj="current"] .panel.has-layers .lay-full',

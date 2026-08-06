@@ -854,12 +854,36 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
     </section>"""
 
 
-def _sync_badge(html: str, n: int) -> str:
-    pat = re.compile(r'(id="tab-cost"[^>]*>成本與 mix<span class="count">)\d+(</span>)')
-    out, cnt = pat.subn(rf"\g<1>{n}\g<2>", html, count=1)
-    if cnt != 1:
-        raise SystemExit("找不到 tab-cost 的徽章 —— nav 結構變了。不靜默略過。")
-    return out
+def _wrap_subtabs(block: str, days: int, key: str = "obs") -> str:
+    """把產生出來的各 section 包成子分頁。
+
+    2026-08-06 IA 重構後這一支**擁有整個 Observability 面板**（marker 區間就是
+    那一頁的全部內容），所以子分頁結構也該由它產生。手寫在 HTML 裡的話，
+    這裡每多／少一節（階段歸因在窗口零紀錄時會變短）子分頁列就對不上，
+    而且對不上不報錯——只會出現「按鈕點了沒東西」或「有一節點不到」。
+    徽章（天數）順手掛在第一顆上，不必再去 HTML 裡找位置改。
+    """
+    parts = [p for p in re.split(r"\n(?=    <section>)", block.strip("\n")) if p.strip()]
+    if len(parts) < 2:
+        return block
+    labels = []
+    for p in parts:
+        m = re.search(r"<h2>([^<]+)</h2>", p)
+        labels.append(m.group(1) if m else "（未命名）")
+    out = ['    <div class="subtabs" role="tablist" aria-label="Observability 子分頁">']
+    for j, lab in enumerate(labels):
+        sel = "true" if j == 0 else "false"
+        cnt = f'<span class="count">{days}</span>' if j == 0 else ""
+        out.append(f'      <button type="button" class="subtab" role="tab" id="st-{key}-{j}" '
+                   f'aria-controls="sp-{key}-{j}" aria-selected="{sel}" '
+                   f'tabindex="{"0" if j == 0 else "-1"}">{lab}{cnt}</button>')
+    out.append("    </div>")
+    for j, p in enumerate(parts):
+        out.append(f'    <div class="subpanel" id="sp-{key}-{j}" role="tabpanel" '
+                   f'aria-labelledby="st-{key}-{j}"{"" if j == 0 else " hidden"}>')
+        out.append(p)
+        out.append("    </div>")
+    return "\n".join(out)
 
 
 def inject(html: str, block: str) -> str:
@@ -902,8 +926,8 @@ def main() -> None:
 
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = _sync_badge(inject(html, build_html(by_day, ev, cost, skills, agents, stage)),
-                      len(by_day))
+    block = _wrap_subtabs(build_html(by_day, ev, cost, skills, agents, stage), len(by_day))
+    out = inject(html, block)
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print(f"已注入成本分頁：{len(by_day)} 天 · skill {len(skills)} 支 · 角色 {len(agents)} 個"

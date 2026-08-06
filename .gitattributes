@@ -10,3 +10,8 @@
 *.md    text eol=lf
 *.json  text eol=lf
 *.txt   text eol=lf
+# 2026-08-06 補：`.html` 原本漏了，於是看板落回 per-machine 的 core.autocrlf=true，
+# **每次 git checkout 都被翻成 CRLF**，而 test_dashboard_structure 明文要求純 LF。
+# 「不依賴 core.autocrlf」這條策略上面寫得很清楚，只是清單漏了一種副檔名 ——
+# 漏的當下沒有徵兆：檔案照樣打得開，只有還原過再跑測試才會撞到。
+*.html  text eol=lf

@@ -45,22 +45,57 @@ check(len(keys) == len(set(keys)), "data-key 無重複")
 orphan = panel_ids - {c for _, c, _ in tabs}
 check(not orphan, "無孤兒 panel（點不到的面板）：%s" % (sorted(orphan) or "無"))
 
-# ---- 2. eval 頁籤已移除、內容仍在且落在 skills 內 ----
+# ---- 1b. 子分頁（2026-08-06 IA 重構）----
+# 主頁籤驗完還不夠：子分頁是**第二套**同形機制，壞掉的方式一模一樣
+# （點得到但打不開、或一開頁兩節同時顯示）。同一組屬性各驗一次。
+print("\n子分頁 ↔ 子面板配對")
+_subbars = re.findall(r'<div class="subtabs".*?</div>', html, re.S)
+_subpanels = set(re.findall(r'<div class="subpanel" id="(sp-[\w-]+)"', html))
+_sublab = dict(re.findall(r'<div class="subpanel" id="(sp-[\w-]+)"[^>]*aria-labelledby="(st-[\w-]+)"', html))
+check(bool(_subbars), "至少有一組子分頁（沒有的話這一整套機制等於沒上）")
+_all_subs = []
+for _bar in _subbars:
+    _subs = re.findall(r'id="(st-[\w-]+)"[^>]*aria-controls="(sp-[\w-]+)"[^>]*aria-selected="(\w+)"', _bar)
+    check(bool(_subs), "子分頁列裡有按鈕")
+    _all_subs += _subs
+    _on = [s for s in _subs if s[2] == "true"]
+    check(len(_on) == 1, "每組子分頁恰好一個選中（實得 %d）" % len(_on))
+    # 選中的那格必須是唯一沒有 hidden 的 —— 否則會同時顯示兩節，或一開頁全空
+    for _sid, _ctrl, _sel in _subs:
+        _hidden = ('id="%s" role="tabpanel" aria-labelledby="%s" hidden' % (_ctrl, _sid)) in html
+        check(_hidden == (_sel != "true"),
+              "%s 的顯示狀態與 aria-selected 一致（selected=%s hidden=%s）" % (_ctrl, _sel, _hidden))
+for _sid, _ctrl, _ in _all_subs:
+    check(_ctrl in _subpanels, "%s 的 aria-controls=%s 有對應子面板" % (_sid, _ctrl))
+    check(_sublab.get(_ctrl) == _sid, "%s 的 aria-labelledby 回指 %s" % (_ctrl, _sid))
+_orphan_sp = _subpanels - {c for _, c, _ in _all_subs}
+check(not _orphan_sp, "無孤兒子面板（點不到的節）：%s" % (sorted(_orphan_sp) or "無"))
+check("harness-sub-" in html, "子分頁有記住選到哪一節（切回來不跳回第一節）")
+
+
+def panel_slice(pid):
+    """取某個 panel 的 HTML 區間 —— 重構後 panel 順序會變，不再靠寫死的前後 id。"""
+    i = html.index('id="%s"' % pid)
+    nxt = [html.index('id="%s"' % p) for p in panel_ids if html.index('id="%s"' % p) > i]
+    return html[i:min(nxt)] if nxt else html[i:]
+
+
+# ---- 2. eval 已併入「品質與人機協作」----
 print("\nEval 合併")
 check("tab-eval" not in html, "tab-eval 已移除")
 check('id="panel-eval"' not in html, "panel-eval 已移除")
-check(html.count("Skill Eval（EDD 四層）") == 1, "Eval 標題恰好一份（沒重複貼）")
-i_skills = html.index('id="panel-skills"')
-i_tools = html.index('id="panel-tools"')
-i_eval = html.index("Skill Eval（EDD 四層）")
-check(i_skills < i_eval < i_tools, "Eval 段落位於 panel-skills 內")
+# 這條守的是「內容被重複貼了兩份」。2026-08-06 起子分頁按鈕會**照抄章節標題**當標籤，
+# 所以字串本身必然出現兩次（按鈕 + <h2>）—— 改數 `<h2>` 才是原本要守的性質。
+check(html.count("<h2>Skill Eval（EDD 四層）</h2>") == 1, "Eval 章節恰好一份（沒重複貼）")
+check("panel-quality" in panel_ids, "panel-quality 存在")
+check("Skill Eval（EDD 四層）" in panel_slice("panel-quality"), "Eval 段落位於 panel-quality 內")
 for frag in ("check_structure.py", "triggers/*.jsonl 50 題", "三個假綠燈", "run_all.py"):
     check(frag in html, "Eval 內容保留：%s" % frag)
 
-# ---- 3. 角色頁籤 ----
-print("\n角色頁籤")
-check("panel-roles" in panel_ids, "panel-roles 存在")
-roles = html[html.index('id="panel-roles"'):i_tools]
+# ---- 3. 角色（現在在 Orchestration 底下）----
+print("\n角色（Orchestration）")
+check("panel-orch" in panel_ids, "panel-orch 存在")
+roles = panel_slice("panel-orch")
 # 2026-07-31：角色頁從表格改成拓樸圖＋彈窗，舊表格整段移除。
 # 斷言跟著改綁 **#rt-data**（產生器注入的 JSON），那才是彈窗真正讀的東西 ——
 # 綁節點的顯示文字會重演第一版的坑（顯示層一改，斷言就「抓不到」，
@@ -106,9 +141,11 @@ _nodisp_b = sorted(r["agentType"] for r in _payload
                    and r["name"] == r["agentType"])
 check(not _nodisp_b, "內建角色也有中文顯示名（缺：%s）" % (_nodisp_b or "無"))
 # nav 徽章也要跟著 —— 表格對了但徽章還寫 2，是同一個病的第三次發作
-_badge = re.search(r'id="tab-roles"[^>]*>角色<span class="count">(\d+)</span>', html)
+# 2026-08-06 IA 重構：角色與 Skill 併進 Orchestration，徽章從主頁籤移到**子分頁**
+# （主頁籤的徽章現在是「這一類有幾節」，是結構數字不是資料數字）。
+_badge = re.search(r'id="st-orch-0"[^>]*>角色編制<span class="count">(\d+)</span>', html)
 check(_badge is not None and int(_badge.group(1)) == len(rows),
-      "nav「角色」徽章與自建角色數一致：徽章 %s vs 拓樸 %d"
+      "「角色編制」子分頁徽章與自建角色數一致：徽章 %s vs 拓樸 %d"
       % (_badge.group(1) if _badge else "找不到", len(rows)))
 
 # Skill 徽章對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
@@ -116,10 +153,10 @@ check(_badge is not None and int(_badge.group(1)) == len(rows),
 # 只綁徽章不綁表格列數：清冊的分組是人工的，未來可能刻意不列某支。
 _skills_dir = Path(r"D:\IT-department\.claude\skills")
 _skill_files = len(list(_skills_dir.glob("*/SKILL.md"))) if _skills_dir.exists() else 0
-_sbadge = re.search(r'id="tab-skills"[^>]*>Skill 與 Eval<span class="count">(\d+)</span>', html)
+_sbadge = re.search(r'id="st-orch-1"[^>]*>Skill 清冊<span class="count">(\d+)</span>', html)
 check(_skill_files > 0, "找得到 skills 目錄（找不到無從比對）")
 check(_sbadge is not None and int(_sbadge.group(1)) == _skill_files,
-      "nav「Skill」徽章與 skills 目錄一致：徽章 %s vs 實際 %d 支"
+      "「Skill 清冊」子分頁徽章與 skills 目錄一致：徽章 %s vs 實際 %d 支"
       % (_sbadge.group(1) if _sbadge else "找不到", _skill_files))
 check("Explore" in roles and "omitClaudeMd" in html,
       "內建角色差異有交代（omitClaudeMd）"
@@ -141,12 +178,18 @@ check(html.count('class="tab"') == len(tabs), "沒有多餘的 .tab 元素")
 # ---- 5. 行尾與標籤平衡 ----
 print("\n檔案完整性")
 check("\r\n" not in html, "仍為純 LF")
+# 標籤平衡要**先剝掉內嵌的資料 JSON**（#rt-data／#cost-data／#lay-data）。
+# 那些是產生器塞的資料，內容可能剛好含有 `<table` 之類的字串
+# —— 2026-08-06 就發生了：角色的工具目標樣本裡帶到 `<table`，
+# 於是「開 14 收 12」被判成標籤不平衡，而檔案其實好好的。
+# 這跟本檔上面對 `**` 的處理是同一條理由，當時只補了那一處、沒補這裡。
+_markup = re.sub(r'<script type="application/json"[^>]*>.*?</script>', '', html, flags=re.S)
 # 用 `<section`（不含收尾角括號）計數：2026-08-05 部門區塊是 `<section class="rt-dept">`，
 # 只數 `<section>` 會漏掉所有帶屬性的開標籤，於是「開 17 收 23」被判成不平衡 ——
 # 那是判準看不見帶屬性的標籤，不是檔案真的壞了。`</section>` 不會被 `<section` 匹配到。
-check(html.count("<section") == html.count("</section>"), "section 標籤平衡（含帶屬性的開標籤）")
-check(html.count("<table") == html.count("</table>"), "table 標籤平衡")
-check(html.count("<tbody>") == html.count("</tbody>"), "tbody 標籤平衡")
+check(_markup.count("<section") == _markup.count("</section>"), "section 標籤平衡（含帶屬性的開標籤）")
+check(_markup.count("<table") == _markup.count("</table>"), "table 標籤平衡")
+check(_markup.count("<tbody>") == _markup.count("</tbody>"), "tbody 標籤平衡")
 
 print("\n" + "=" * 56)
 if fails:

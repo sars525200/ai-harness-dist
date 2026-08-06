@@ -258,7 +258,7 @@ def build_html(s: dict) -> str:
              "全域零 hook ⇒ 換一個專案，整套閘門等於不存在"),
         _row("skills", g["skills"], p["skills"], ""),
         _row("agents（角色）", g["agents"], p["agents"],
-             "角色檔放 user 層在 VSCode 永遠載不到，所以本來就只能放專案層"),
+             "角色全在全域層（junction 到 harness repo）——7/30「user 層載不到」8/5 已實測推翻"),
         _row("rules（path-scoped）", g["rules"], p["rules"], ""),
         _row("commands", g["commands"], p["commands"], ""),
     ])
