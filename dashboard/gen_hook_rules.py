@@ -59,7 +59,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "BUDGET-1", "PR-1", "ENC-1"]
+ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "BUDGET-1", "PR-1", "ENC-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -87,6 +87,15 @@ DESC = {
                "但真正會犯的形態是陳述句（「兩件事留給你決定：…」句號結尾）——擴到尾段待決措辭後，"
                "真實語料 161 則收尾命中率 39.8%→8.1%（排除已決敘述與 /clear 類建議）"
                "②訊息通道原本是死的，見下方 ⑬",
+    },
+    "DECL-1": {
+        "badge": "8/07 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "why": "宣告了階段卻沒帶「修改檔案」欄（8/06 稽核：93 段宣告有 33 段犯這條）",
+        "tip": "全域 §2 要求換階段時至少帶「階段 ＋ 修改檔案」兩欄——只帶階段欄會讓對帳把後續改動"
+               "全歸給上一次完整宣告，數字必然失真。判準與遵循度表同源但刻意留兩份"
+               "（hooks 不 import dashboard），靠 test_decl1 驗兩份逐字相同。"
+               "最重要的守門是**談論這條規則不得觸發這條規則**：稽核報告與選擇題選項裡"
+               "滿是「階段／修改檔案」字樣，會亂叫的閘門三次之後就被無視。",
     },
     "BUDGET-1": {
         "badge": "7/31 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
@@ -132,8 +141,13 @@ def collect() -> dict:
     applies: Counter = Counter(
         e["rule_id"] for e in events if e.get("kind") == "applies")
     decisions = [e for e in events if e.get("kind") == "decision"]
+    # **已註冊但還沒觸發過的規則也要列**（2026-08-07）：只列「有事件的」會讓
+    # 新規則在第一次觸發前完全看不到 —— 於是設定檔有 9 條、看板寫 8 條，
+    # 而「少一條」比「數字錯」更難發現。零次觸發本身就是要看的資訊
+    # （它可能代表判準沒接上，也可能代表那件事最近沒發生）。
+    registered = set(shadow_state())
     out: dict = {}
-    for rid in set(list(applies) + [d.get("rule_id") for d in decisions]):
+    for rid in set(list(applies) + [d.get("rule_id") for d in decisions]) | registered:
         rows = [d for d in decisions if d.get("rule_id") == rid]
         # bypass 不算 would-block：那是被明確放行的，混進來會讓「規則擋了幾次」變成謊話
         real = [r for r in rows if not r.get("bypassed")]

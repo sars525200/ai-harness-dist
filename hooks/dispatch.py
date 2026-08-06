@@ -114,6 +114,15 @@ REGISTRY = [
         "tools": None,
     },
     {
+        "id": "DECL-1",
+        "module": "decl1_stage_files",
+        # 與 AWC-1 同樣只掛 Stop、不掛 SubagentStop：自我宣告是**主 session 的紀律**，
+        # subagent 的回報格式是「改動對照」不是宣告行，掛上去只會對每個角色回報
+        # 報一次必然的假陽性。
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         "id": "BUDGET-1",
         "module": "budget1_daily_usage",
         # 與 AWC-1 同樣只掛 Stop：subagent 的用量已經算在同一個專案目錄裡，

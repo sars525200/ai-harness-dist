@@ -310,6 +310,7 @@ def main() -> int:
         import test_hook_rules
         import test_mutation_anchors
         import test_dashboard_server
+        import test_decl1
         import test_progress_chart
         import test_todos
         import test_warn_channel
@@ -327,6 +328,7 @@ def main() -> int:
             (test_workflow_compliance.run, "工作流程遵循度產生器"),
             (test_todos.run, "待辦產生器"),
             (test_dashboard_server.run, "本機看板服務"),
+            (test_decl1.run, "DECL-1 宣告欄位"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):
             ex_passed, ex_failed = run_fn()
