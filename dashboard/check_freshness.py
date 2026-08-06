@@ -1,5 +1,5 @@
 """看板新鮮度檢查：比對 dashboard/snapshot.json（上次發布看板時記下的數字）與現在
-的即時數字，判斷 D 槽 Harness 進度看板（claude.ai Artifact）是不是該重新編輯發布。
+的即時數字，判斷「Harness 全景」看板（claude.ai Artifact）是不是該重新編輯發布。
 
     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py
 
