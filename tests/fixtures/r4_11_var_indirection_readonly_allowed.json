@@ -1,0 +1,18 @@
+{
+  "name": "R4 路徑存變數再 connect 但只有 SELECT → ALLOW",
+  "rule": "r4_server_dbpath",
+  "why": "CLAUDE.md §9 明載的查資料工作流「寫本地 .py → scp <VM-HOST>:/tmp/ → ssh <VM-HOST> python3」走的正是這條路，而且路徑一樣會先存進變數。擋掉它比漏擋更糟——會逼人整條繞過規則。放寬形狀 B 的判準時，這條是反向守門。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\_gen_allow.py",
+      "content": "import sqlite3\n\ndb_path = r'd:\\IT-department\\SOP_PROD\\05_UI_Demo\\db\\it_asset_platform.sqlite'\nconn = sqlite3.connect(db_path)\n\nfor row in conn.execute('SELECT id, status FROM assets LIMIT 5'):\n    print(row)\n\nconn.close()\n"
+    },
+    "session_id": "fixture-r4-11",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

@@ -92,7 +92,32 @@ _MD_SUFFIX = ".md"
 _EXCLUDED_DIR_PARTS = ("/tests/", "\\tests\\", "/fixtures/", "\\fixtures\\")
 
 # B1 的顯式狀態標記。全形/半形冒號都收，前面允許 blockquote 記號與空白。
-_STATUS_PENDING = re.compile(r"^\s*>?\s*狀態\s*[：:]\s*待審核", re.MULTILINE)
+#
+# 前導空白用 `[ \t]{0,3}` 而不是 `\s*`，兩個理由（2026-08-07 轉 enforce 當天咬到）：
+#   1. `\s` 吃換行 —— MULTILINE 下 `^\s*` 可以從空行跨到下一行去比對，判定範圍
+#      比看起來大。
+#   2. markdown 規定**縮排 4 空格以上就是程式碼區塊**，那裡面的東西是「示範」
+#      不是「宣告」。收成 3 個以內，縮排式範例自動不算數。
+_STATUS_PENDING = re.compile(r"^[ \t]{0,3}>?[ \t]*狀態[ \t]*[：:][ \t]*待審核", re.MULTILINE)
+
+# 圍欄式程式碼區塊（``` 或 ~~~）。偵測前一律剝掉 —— **教這個機制的文件會示範
+# 這些語法**，示範不該被當成宣告。2026-08-07 轉 enforce 的當天就真的發生了：
+# `/design-spec` 步驟 5 在 fence 裡寫了一行 `> 狀態：待審核` 當範例，整份 SKILL.md
+# 立刻被判成「標了待審核卻沒審過」。同理，文件裡示範 SKIP／PASSED marker 的寫法
+# 也會被當成真的蓋了章 —— 那個方向更危險，是誤放行。
+#
+# 只用於**偵測**，不用於 hash：hash 的範圍必須是使用者看得到的原文，
+# 否則蓋章的人算出來的值跟規則算的對不上，marker 從寫下那刻就是失效的。
+# 未閉合的 fence 匹配不到結尾 → 整段不剝（fail-open，寧可少剝不要誤剝）。
+_CODE_FENCE = re.compile(
+    r"^[ \t]*(`{3,}|~{3,})[^\n]*$.*?^[ \t]*\1[^\n]*$",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def _detectable(text: str) -> str:
+    """把 markdown 的「示範區」拿掉，剩下的才是這份文件真正在宣告的東西。"""
+    return _CODE_FENCE.sub("", text)
 
 _PASSED = re.compile(
     r"<!--\s*ADVERSARIAL_REVIEW_PASSED\s+sha256=([0-9a-fA-F]{64})[^>]*-->"
@@ -138,13 +163,16 @@ def check(ctx):
         if text is None:
             continue  # 讀不到就不猜（檔案可能已被刪/改名）
 
-        if not _STATUS_PENDING.search(text):
+        # 偵測一律看剝掉程式碼區塊之後的版本；hash 仍用原文（見 _CODE_FENCE 上方註解）。
+        probe = _detectable(text)
+
+        if not _STATUS_PENDING.search(probe):
             continue  # 草稿或沒標記 → 機制保持被動（B1）
 
         name = os.path.basename(path)
         actual = content_hash(text)
 
-        skip = _SKIP.search(text)
+        skip = _SKIP.search(probe)
         if skip:
             if skip.group(1).lower() == actual:
                 skipped.append(f"{name}（理由：{skip.group(2).strip()}）")
@@ -156,7 +184,7 @@ def check(ctx):
                 + _RECOMPUTE_HINT.format(path=path)
             )
 
-        legacy = _SKIP_LEGACY.search(text)
+        legacy = _SKIP_LEGACY.search(probe)
         if legacy:
             return block(
                 f"{name} 用的是舊版 ADVERSARIAL_REVIEW_SKIP 格式（沒有綁 hash）。"
@@ -165,7 +193,7 @@ def check(ctx):
                 + _RECOMPUTE_HINT.format(path=path)
             )
 
-        passed = _PASSED.search(text)
+        passed = _PASSED.search(probe)
         if not passed:
             return block(
                 f"{name} 標記為「待審核」，但檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker。"

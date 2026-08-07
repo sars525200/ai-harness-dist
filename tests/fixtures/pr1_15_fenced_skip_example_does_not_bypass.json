@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 真的標了待審核，檔內的 SKIP 示範不得當成蓋過章 → BLOCK",
+  "why": "剝掉程式碼區塊這件事有兩個方向，這條守誤放行那一側：一份**真的**標了待審核的計畫書，若它同時在 ``` 圍欄裡示範 SKIP／PASSED marker 的寫法，示範絕不能被當成真的蓋了章——那會讓任何一份順手引用了 marker 語法的計畫書自動通關，而且完全靜默。誤擋看得見，誤放行看不見。",
+  "workspace": {
+    "files": {
+      "REAL_PLAN.md": "# 真的計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這份是真的要送審的。\n\n## §2 附錄：逃生口怎麼寫\n\n不值得審一輪時可以用：\n\n```\n<!-- ADVERSARIAL_REVIEW_SKIP sha256=64c359db6e25f9c1d0a9376236dd2b6e6cf838381bf5345a6265703d7a233d53: 只是修錯字 -->\n```\n\n或審完之後蓋：\n\n```\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=59b4e92820aecf6017f259d5d39dc71884f0b58f228c353b59f08484d51f489e rounds=3 at=2026-07-29T18:00:00+08:00 -->\n```\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "把計畫書寫完"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/REAL_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-15",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "ADVERSARIAL_REVIEW_PASSED"
+  },
+  "rule": "pr1_plan_review_marker"
+}

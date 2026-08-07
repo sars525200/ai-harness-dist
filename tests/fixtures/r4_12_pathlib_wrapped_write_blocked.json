@@ -1,0 +1,19 @@
+{
+  "name": "R4 Path() 包裝＋connect(str(DB_PATH)) 的真實腳本形狀 → BLOCK",
+  "rule": "r4_server_dbpath",
+  "why": "逐字取自 repo 裡真的存在的兩支腳本（scripts/backfill_change_log_v703.py、scripts/dedup_asset_edit_history_v710.py）——它們正是 §9 說的「腳本直改正式資料」那一類，而舊判準對它們完全無感。變數追蹤要能穿透 Path() 與 str() 兩層包裝。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "D:\\IT-department\\SOP_PROD\\scripts\\backfill_something.py",
+      "content": "from pathlib import Path\nimport sqlite3\n\nDB_PATH = Path(r\"d:\\IT-department\\SOP_PROD\\05_UI_Demo\\db\\it_asset_platform.sqlite\")\n\n\ndef main():\n    conn = sqlite3.connect(str(DB_PATH), timeout=10)\n    conn.execute(\"INSERT INTO change_log (kind, detail) VALUES ('backfill', 'x')\")\n    conn.commit()\n    conn.close()\n\n\nif __name__ == '__main__':\n    main()\n"
+    },
+    "session_id": "fixture-r4-12",
+    "cwd": "D:\\IT-department"
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "正式路徑"
+  }
+}

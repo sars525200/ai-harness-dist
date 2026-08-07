@@ -18,7 +18,7 @@
 | 2 | **Tools**（工具） | 🟡 | CLI 齊全；allow 187→**115**（2d 清死條目＋冗餘）、deny **12** 條（Bash／PowerShell 對稱）；2 個 MCP 未授權 |
 | 3 | **Sandbox**（沙盒） | 🔴 **未起步** | 無隔離，直接讀寫本機與 VM |
 | 4 | **Orchestration**（編排） | 🟡 | **10** skills＋5 任務模式＋模型路由；**2 個自建角色已上線實測**（Phase 2） |
-| 5 | **Hook**（掛鉤） | 🟢 **3 條 enforce ＋ 3 條 shadow** | DB-1 真閘門（BLOCK）；**R1／R3 已解 shadow**（WARN，走 `additionalContext`）；R4／AWC-1／PR-1 仍 shadow |
+| 5 | **Hook**（掛鉤） | 🟢 **9 條全數 enforce（0 shadow）** | DB-1／R4 真閘門（BLOCK）；R1／R3／AWC-1／ENC-1／BUDGET-1／DECL-1 走 WARN（`additionalContext`）；**8/07 R4 與 PR-1 最後兩條解 shadow** |
 | 6 | **Observability**（可觀測性） | 🟡 | 有 event log 與 decision log；無 traces／evals／成本儀表 |
 
 ---
@@ -124,24 +124,28 @@
 
 | Event | 設定位置 | 內容 | 模式 |
 |---|---|---|---|
-| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·R4 = shadow |
-| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | AWC-1／PR-1 = shadow |
+| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·**R4 = enforce（BLOCK，8/07）** |
+| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | AWC-1／DECL-1 = enforce（WARN）·**PR-1 = enforce（BLOCK，8/07）** |
 | `SubagentStop`（無 matcher） | `.claude/settings.local.json` | 同一支 `dispatch.py` | 2c 新掛，PR-1 改讀 `agent_transcript_path`。**新增一個 event key 必須重啟 session**（啟動時快照）；既有 key 的 matcher／command 才是熱生效 |
 | `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 生效（本機自動 commit，與上面那個 Stop hook 各自獨立、都會跑）·**7/30 補進 `styles.css`**（見章末） |
 | `permissions.deny` × **12** | `.claude/settings.json` | commit `--no-verify`／`-n`、push `--no-verify`／`--force`／`-f`／`--force-with-lease`，**Bash／PowerShell 各一份** | **真擋·熱生效** |
 
-### 6 條規則現況（模式在 `hooks/dispatch_config.json`，per-rule）
+### 規則現況（模式在 `hooks/dispatch_config.json`，per-rule）
+
+> ⚠ **實際 9 條，下表只列 6 條** —— `ENC-1`／`BUDGET-1`／`DECL-1` 是這張表寫成之後才加的，
+> 尚未補進來。判定它們狀態的單一真相是 `dispatch_config.json` ＋ `dispatch.py` 的 REGISTRY，
+> 不是這張表。
 
 | ID | 事件/工具 | 判定型別 | 模式 | 判準 |
 |---|---|---|---|---|
 | DB-1 | PreToolUse push vm | BLOCK | 🟢 **enforce** | `?v=` 未升／語法錯／dual-edit 缺一邊 |
 | R1 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | `DEFAULT_\w+=` 值被改而非新增（已犯 3 次） |
 | R3 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） |
-| R4 | PreToolUse **Write/Edit/MultiEdit** | BLOCK＋WARN | ⚪ shadow | 腳本 `connect()` 直連 PROD DB 並寫入（7/29 改綁，原本綁 `import server` 而本 repo 從不寫那形狀＝ dead on arrival） |
-| AWC-1 | **Stop** | WARN | ⚪ shadow | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion`。**解 shadow 前缺 Stop 事件的 WARN 通道驗證**（見章末） |
-| PR-1 | **Stop · SubagentStop** | BLOCK | ⚪ shadow | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker |
+| R4 | PreToolUse **Write/Edit/MultiEdit** | BLOCK＋WARN | 🟢 **enforce**（8/07） | 腳本會 `connect()` 到 PROD DB 並寫入。**兩次 dead on arrival**：7/29 改綁前是守 `import server`（本 repo 不寫那形狀）；8/07 e2e 量到「路徑字面值寫在 connect() 括號裡」全 codebase **0/177 命中**，改成**變數追蹤**（賦予 PROD `.sqlite` 路徑的變數有沒有真的進 connect）後 4 支真陽性／0 誤判 |
+| AWC-1 | **Stop** | WARN | 🟢 **enforce** | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion` |
+| PR-1 | **Stop · SubagentStop** | BLOCK | 🟢 **enforce**（8/07） | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker。**何時該標的判準**＝M 級 ＋ Design 收尾，載體是 `/design-spec` 步驟 5（`STOP_HOOK_MARKER_PLAN.md` §6） |
 
-fixture／回歸網總計 **145 + 9**（`tests\run_hook_tests.py` 145、`tests\test_warn_channel.py` 9）。
+fixture／回歸網總計 **492**（`py -3 tests\run_hook_tests.py`，8/07 實跑）。
 
 ### 已建置的骨架（`D:\.ai-harness\hooks\`）
 
@@ -173,11 +177,13 @@ fixture／回歸網總計 **145 + 9**（`tests\run_hook_tests.py` 145、`tests\t
 
 ### 尚待（`HARNESS_PLAN.md` Phase 1 未完項）
 
-✅ ~~DB-1 解除 shadow~~（7/29）　✅ ~~R1／R3 解除 shadow~~（7/30，前置是先修 WARN 通道）　⬜ **R4／AWC-1／PR-1 仍 shadow**：AWC-1 卡在「Stop 事件的 WARN 通道未驗」；R4 至今 0 次 applies，但這次能斷定是**情境未發生**而非沒接線（心跳顯示 Write／Edit 已進 dispatch）；PR-1 見下節　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　✅ ~~**WARN 路徑（exit 0 + stderr）實測**~~ → **7/30 完成，結論：stderr 蒸發，必須改走 `hookSpecificOutput.additionalContext`**（見 §5 章末那張表）
+✅ ~~DB-1 解除 shadow~~（7/29）　✅ ~~R1／R3 解除 shadow~~（7/30，前置是先修 WARN 通道）　✅ ~~R4／AWC-1／PR-1 解除 shadow~~（**8/07 全部解完，0 條 shadow**。R4 與 PR-1 都是被同一個死結卡住：D18 的「時間窗＋最低觸發樣本數」雙門檻對**低頻規則**永遠不會滿足——R4 一年觸發幾次、PR-1 要等有人標「待審核」。改用**人造 e2e ＋ 判準定案**取代等不到的自然樣本）　⬜ I1–I2 即時閘門（優先度已下修，見 `RULE_COVERAGE.md`）　⬜ R2（平台資源 key+dump 同步，需先盤點 key 清單）／DB-2～DB-5 其餘邊界規則　⬜ A2（`.ps1` BOM autofix）　⬜ S1（Stop 降級摘要）　✅ ~~**WARN 路徑（exit 0 + stderr）實測**~~ → **7/30 完成，結論：stderr 蒸發，必須改走 `hookSpecificOutput.additionalContext`**（見 §5 章末那張表）
 
-### Stop hook + marker 自動觸發審查機制 → 已落地為 PR-1（shadow）
+### Stop hook + marker 自動觸發審查機制 → 已落地為 PR-1（**8/07 enforce**）
 
-計畫書 §3.2 兩項決定都已定案（**A1** 先隔離測試／**B1** 檔內顯式 `> 狀態：待審核` 標記），規則已實作、8 fixture 全過、端到端 dry-run 通過（真實 session 被 exit 2 擋回、模型讀懂訊息）。**已在跑，shadow 模式**。
+計畫書 §3.2 兩項決定都已定案（**A1** 先隔離測試／**B1** 檔內顯式 `> 狀態：待審核` 標記），規則已實作、8 fixture 全過、端到端 dry-run 通過（真實 session 被 exit 2 擋回、模型讀懂訊息）。
+
+**8/07 補上最後一塊並轉 enforce**：B1 的「機制被動、由人決定何時送審」有個直接後果——**不主動標記就等於機制不會發動**（實測：7/28 上線到 8/07，生產 `kind=decision` 0 次）。判準定為「**M 級計畫書 ＋ Design 收尾那一刻**」，載體是 `/design-spec` 步驟 5，讓標記跟著流程走而不是靠記得。舊計畫書不回頭補標（一次推幾十份進審查佇列，只會讓 SKIP 變成例行公事）。完整理由見 `STOP_HOOK_MARKER_PLAN.md` §6。
 
 **兩件下次動它之前要知道的事**：
 

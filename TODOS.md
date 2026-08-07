@@ -21,9 +21,8 @@
 
 | 項目 | 現況／為何還沒做 | 下一步（逐字指令或動作） | 誰 |
 |---|---|---|---|
-| **WARN 路徑（exit 0 ＋ stderr）是否被模型看到，仍未驗** | 不能從 exit 2 的結果外推；Stop 事件下 exit 0 不擋、模型不再產出，**結構上無從觀察**。R1／R3 都是 WARN-only 規則，轉 enforce 前必補 | 改用 `PreToolUse` 事件建 probe：把 `tests\stop_warn_probe\` 複製一份改 hook key，看下一輪 context 有沒有出現 probe token | 本 session |
-| **其餘 5 條規則仍 shadow** | DB-1 已於 7/29 轉 enforce（整套第一條真閘門）。R1／R3 卡在上面那條 WARN 路徑未驗；R4 改綁後至今 0 次觸發（情境未發生，無資料可判）；AWC-1／PR-1 待定 | 先解 WARN 路徑那條，再逐條改 `hooks\dispatch_config.json` 的 `mode`，每改一條跑 `py -3 tests\run_hook_tests.py` | 本 session |
-| **PR-1 轉 enforce 前要先決定「什麼時候該標『待審核』」** | 現存幾十份 `*_PLAN.md` 全都沒有狀態標記，一律放行。這是 B1 的刻意設計（機制被動、由人決定何時送審），但也意味著**不主動標記就等於機制不會發動** | 定一條「什麼情況下計畫書要標待審核」的判準寫進 `STOP_HOOK_MARKER_PLAN.md`，再決定要不要轉 enforce | 本 session |
+| **R1／R3 的偵測形狀沒被真實樣本驗過** | 兩條上線至今 `kind=decision` **0 次**。查證是真陰性（期間確實沒改過 `DEFAULT_*`、沒動過 `ops/`），但 R4 已經**兩次 dead on arrival**——規則守的形狀跟 codebase 的真實寫法對不上，而 fixture 是照著 regex 寫的所以永遠綠。同型風險未排除 | 拿歷史事故當樣本：`git log -S"DEFAULT_" --all --oneline -- SOP_PROD/05_UI_Demo/app.js` 找出犯過的那 3 次 commit，取當次 diff 的檔案內容餵給 `hooks\rules\r1_default_migration.py` 的 `applies()`／`check()`，看命不命中；R3 同法用 `ops/` 的 commit。命不中就照 R4 的做法放寬判準＋補 fixture＋寫變異 | 下次施工 |
+| **PR-1 在生產設定下的 enforce 行為未驗** | 7/28 的端到端是用 `tests\pr1_e2e\` 的**薄 wrapper 強制 enforce** 跑的，不是生產 `dispatch_config.json`。8/07 轉 enforce 後，「標了待審核 → Stop 被擋 → 蓋 marker 放行 → 改一個字 hash 失效再擋」整條鏈在生產設定下還沒跑過。`/design-spec` 步驟 5 會不會真的產出標記，也還沒走過一次 M 級流程 | 不必等自然發生：把 `tests\pr1_e2e\SAMPLE_PLAN.md` 複製到一個**非 `tests\`** 的暫時 cwd（規則排除 `tests\`），在那裡跑一輪 headless `claude -p`，逐項確認上述三段 | 下次施工 |
 | **Skill Eval L4：8 支 skill 尚未實跑驗收** | L1/L2 全自動已綠，但那不含「跑起來對不對」 | 逐支照 `/verify-skill` 的三層做一次真實 dry-run；spawn-agent 型的每個分支都要跑到 | 逐支補 |
 | **Meta-Skill（EDD 圖上的 04 自我迭代）刻意未做** | 地基沒鋪完就談迭代，迭代的是沙 | 等四層穩定後重新評估；評估時先答「現在哪一層的規則還在變」 | 四層穩定後再評估 |
 | **R2（平台資源 key ＋ dump 同步守門）未動工** | 需先盤點 key 清單才能定判準；I1–I2 優先度已下修 | 先 `grep -n "ALLOWED_KEYS" -A 40` 盤出 key 清單，貼進 `HARNESS_PLAN.md` 再定守門判準 | 下次施工 |

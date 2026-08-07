@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "session_id": "selfcheck-b2",
+  "cwd": "D:\\.ai-harness\\tests\\r4_e2e",
+  "tool_input": {
+    "file_path": "D:\\.ai-harness\\tests\\r4_e2e\\_probe_b2.py",
+    "content": "import sqlite3\nconn = sqlite3.connect(r\"d:\\IT-department\\SOP_PROD\\05_UI_Demo\\db\\it_asset_platform.sqlite\")\nfor row in conn.execute(\"SELECT id, status FROM assets LIMIT 5\"):\n    print(row)\n"
+  }
+}

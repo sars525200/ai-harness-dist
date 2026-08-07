@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Write",
+  "session_id": "selfcheck-a1",
+  "cwd": "D:\\.ai-harness\\tests\\r4_e2e",
+  "tool_input": {
+    "file_path": "D:\\.ai-harness\\tests\\r4_e2e\\_probe_a1.py",
+    "content": "import server\n\nprint(server.database_list())\n"
+  }
+}

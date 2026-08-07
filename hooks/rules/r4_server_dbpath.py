@@ -35,9 +35,35 @@ database_list==副本，否則誤寫正式庫」——已犯一次，後果是�
 實測期間 `.py` 的 **Edit 有 118 次、Write 只有 53 次** —— 只看 content 等於
 靜默放掉七成的改檔路徑（applies 回 False，report 上看不出有這回事）。
 
-**已知漏判（fail-open 方向，刻意不猜）**：路徑存在變數裡再傳給 connect
-（`p = "...SOP_PROD..."; connect(p)`）抓不到。要抓得靠資料流分析，
-誤判成本高於漏判成本。
+────────────────────────────────────────────────────────────────────────
+2026-08-07（e2e）第二次 dead on arrival —— 「已知漏判」其實是唯一的形狀：
+
+原檔頭把「路徑存在變數裡再傳給 connect（`p = "...SOP_PROD..."; connect(p)`）」
+列為刻意不猜的漏判。人造 e2e 讓真實模型自由寫一支直連 PROD 的腳本，它寫的
+就是這個形狀 —— 沒有任何提示，那是 Python 的常規風格。回頭量整個 codebase：
+
+    177 支 .py／59 支含 connect()　→　**舊判準命中 0 支**
+
+`backfill_change_log_v703.py`、`dedup_asset_edit_history_v710.py`、
+`ops/create_admin.py` 這三支「腳本直改正式資料」（正是 §9 要守的那類）全部
+漏掉，因為沒有人把路徑字面值寫在 connect() 括號裡。規則守的形狀跟真實
+codebase 寫出來的形狀不一樣 —— 跟 1b 修掉的病同型，只是換了個死法。
+
+**改成輕量變數追蹤**：找出被賦予「PROD 路徑字面值」的變數名，再看那個變數
+有沒有真的出現在 `connect()` 括號裡。不做完整資料流分析，單檔內的直接賦值
+就夠 —— 量測結果 4 支命中全是真陽性、0 誤判。
+
+為什麼不能只用「同檔有 PROD 路徑 ＋ connect ＋ 寫入」這種寬判準：fixture 09
+（先 `shutil.copy` 到暫存再改副本，`/dry-run-migrate` 的標準做法）三個條件
+全中，但它 connect 的是 `tmp` 不是 `src`。**擋掉正確做法比漏擋更糟**，因為
+它會逼人繞過整條規則。變數追蹤正好把這兩者分開。
+
+為什麼路徑字面值要求以 `.sqlite` 收尾：只認 `SOP_PROD`／`/srv/it-asset`
+太寬 —— `server.py` 裡的 `/srv/it-asset-backup/backup_db.sh`、`daily_report.py`
+的 `APP = "/srv/it-asset/SOP_PROD/05_UI_Demo"` 都會中，而改 server.py 是日常。
+
+**仍存在的漏判（fail-open，刻意）**：路徑經過多層拼接（`os.path.join(BASE, name)`、
+`'file:%s' % f` 這種 format）抓不到。要抓得靠真的資料流分析，誤判成本高於漏判成本。
 
 【專案層】server.py 的 DB_PATH 單例是本平台的資料層形狀。
 """
@@ -55,11 +81,44 @@ _SETS_DB_PATH = re.compile(r"\bserver\.DB_PATH\s*=")
 _ASSERTS_DB_SAFETY = re.compile(r"\bassert\b[^\n]*(?:DB_PATH|database)", re.IGNORECASE)
 
 # ── 形狀 B：直接連 PROD DB ───────────────────────────────────────────
-# 只認「路徑字串直接寫在 connect() 括號裡」——變數繞一手就放過（見檔頭「已知漏判」）
+# B-1：路徑字串直接寫在 connect() 括號裡（原判準，保留）
 _CONNECT_PROD = re.compile(
     r"connect\s*\(\s*[^)]*(?:SOP_PROD|/srv/it-asset|\\srv\\it-asset)[^)]*\)",
     re.IGNORECASE,
 )
+
+# B-2：變數繞一手（2026-08-07 e2e 量到這才是唯一的真實形狀，見檔頭）。
+# 路徑字面值要以 .sqlite 收尾——只認 SOP_PROD/srv 會把 backup_db.sh、
+# APP 根目錄這些日常路徑全掃進來。`[^"'\n]*` 把比對限制在同一個字面值內。
+_PROD_DB_PATH = r"""(?:SOP_PROD|/srv/it-asset|\\srv\\it-asset)[^"'\n]*\.sqlite"""
+_PROD_VAR_ASSIGN = re.compile(
+    r"^[ \t]*(\w+)\s*=\s*[^\n]*" + _PROD_DB_PATH,
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _connects_to_prod(text: str) -> str | None:
+    """這段程式碼會不會真的 connect() 到正式 DB？回傳命中的證據片段，沒有回 None。
+
+    兩種形狀擇一成立即可：
+      B-1 路徑字面值直接在 connect() 括號內
+      B-2 某個變數被賦予 PROD 路徑字面值，**且該變數出現在 connect() 括號內**
+
+    B-2 的「且」是關鍵：少了它，`src = PROD路徑; shutil.copy(src, tmp);
+    connect(tmp)` 這種先複製再改副本的正確做法會被誤擋（fixture 09）。
+    """
+    m = _CONNECT_PROD.search(text)
+    if m:
+        return m.group(0).strip()
+
+    for assign in _PROD_VAR_ASSIGN.finditer(text):
+        var = assign.group(1)
+        # 該變數要真的被送進 connect()。`str(DB_PATH)`、`DB_PATH, timeout=10`
+        # 這類包裝都涵蓋得到（`[^)]*` 在遇到第一個 `)` 前就會掃過變數名）。
+        used = re.search(r"connect\s*\([^)]*\b" + re.escape(var) + r"\b", text)
+        if used:
+            return used.group(0).strip()
+    return None
 _WRITE_SQL = re.compile(
     r"\b(?:INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|DROP\s+TABLE"
     r"|ALTER\s+TABLE|REPLACE\s+INTO)\b",
@@ -79,7 +138,7 @@ def applies(ctx) -> bool:
     text = ctx.resulting_content
     if not text:
         return False
-    return bool(_IMPORTS_SERVER.search(text) or _CONNECT_PROD.search(text))
+    return bool(_IMPORTS_SERVER.search(text) or _connects_to_prod(text))
 
 
 def check(ctx):
@@ -89,14 +148,16 @@ def check(ctx):
     text = ctx.resulting_content
 
     # 形狀 B 先判：它比形狀 A 更直接、後果更立即
-    if _CONNECT_PROD.search(text):
+    evidence = _connects_to_prod(text)
+    if evidence:
         writes = _WRITE_SQL.search(text) or _WRITE_API.search(text)
         if writes:
             return block(
-                f"{ctx.file_path} 直接 connect() 到正式路徑（SOP_PROD／/srv/it-asset）"
-                f"並含寫入操作（{writes.group(0).strip()}）。CLAUDE.md §9：改正式資料一律"
-                "對 VM 做、且測 server.py 必先 monkeypatch DB_PATH 指向副本並 assert 驗證，"
-                "否則誤寫正式庫（已犯過一次）。唯讀查詢不受此限。"
+                f"{ctx.file_path} 會 connect() 到正式路徑的 DB（`{evidence}`）並含寫入操作"
+                f"（{writes.group(0).strip()}）。CLAUDE.md §9：改正式資料一律對 VM 做、"
+                "且測 server.py 必先 monkeypatch DB_PATH 指向副本並 assert 驗證，"
+                "否則誤寫正式庫（已犯過一次）。唯讀查詢不受此限；要改資料請先複製一份"
+                "到暫存檔再對副本操作（/dry-run-migrate 的標準做法）。"
             )
         # 只讀不寫 → §9 允許的「寫本地 .py → scp → ssh python3」查資料工作流
         return allow()
