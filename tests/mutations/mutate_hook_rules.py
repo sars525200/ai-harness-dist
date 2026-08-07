@@ -53,6 +53,14 @@ MUTATIONS = [
         "                  else '0')",
     ),
     (
+        # 8/07 加：舊版對兩種 would-block=0 用同一句「情境未發生」，那是在宣稱
+        # event log 證明不了的原因——`applies` 只在條件成立時才寫，「沒接線」與
+        # 「條件從沒成立」留下的痕跡一模一樣。把分支合併回去＝退回那個說謊的版本。
+        "兩種 would-block=0 併回同一句（把「規則跑了但都放行」說成「沒有觀測到」）",
+        "        elif a:",
+        "        elif False:",
+    ),
+    (
         "event log 空的時候不拒跑（所有計數靜默寫成 0）",
         "    if not events:\n        raise SystemExit",
         "    if False:\n        raise SystemExit",

@@ -203,8 +203,13 @@ def build_html(stats: dict, shadows: dict) -> str:
         d = DESC.get(rid, {"badge": "", "on": "—", "why": "—"})
         a, b = s["applies"], s["block"]
 
-        # applies=0 是**故障訊號不是安全訊號**（D7）：規則沒被命中過，代表 matcher
-        # 可能根本沒接對。所以零值要標出來，不是留白讓人以為「還沒發生」。
+        # applies=0 要標出來，不是留白讓人以為「還沒發生」。
+        # ⚠ 但它**不等於**「matcher 沒接對」（2026-08-07 訂正）：dispatch 只在
+        # `applies()` 回 True 時才寫 kind="applies"，所以「沒接線」與「條件從沒成立」
+        # 在 event log 裡留下的痕跡完全一樣（都是什麼都沒有）。DISP-1 上線當天
+        # applies=0，實測餵 payload 給生產 dispatch 後 applies／decision 都正常寫入
+        # —— 0 是因為那個 session 真的派過工。**這一格只能報告「沒有觀測到」，
+        # 不能替它宣稱原因。**
         a_cell = (f'{_bar(a, peak_a, BAR_MAX_APPLIES)}{a:,}' if a
                   else '<span class="rt-zero">0</span>')
         if b:
@@ -219,9 +224,24 @@ def build_html(stats: dict, shadows: dict) -> str:
                 chip = ('<span class="chip shadow" style="margin-left:6px">'
                         '全部 shadow</span>')
             b_cell = f'{_bar(b, peak_b, BAR_MAX_BLOCK, "block")}{b:,}{chip}'
-        else:
+        elif a:
+            # applies 有值、block 是 0：規則**確實跑到了**，只是每次判定都放行。
+            # 這是真資訊（條件未成立），跟下面那種「連 applies 都沒有」是兩件事。
             b_cell = ('<span class="rt-zero">0</span>'
-                      '<span class="chip shadow" style="margin-left:6px">情境未發生</span>')
+                      f'<span class="chip pass" style="margin-left:6px">'
+                      f'判定 {a:,} 次·皆放行</span>')
+        else:
+            # applies 也是 0 —— **這一格分不出「沒接線」與「條件從沒成立」**。
+            # 舊版無條件寫「情境未發生」，那是在宣稱一個 event log 證明不了的原因，
+            # 而且跟上面 a_cell 的註解（當時寫「applies=0 是故障訊號」）互相矛盾：
+            # 同一個 0，一個說是故障、一個說是沒發生。2026-08-07 稽核抓到。
+            # 要分辨是哪一種，唯一的辦法是餵一個「應該觸發」的 payload 給生產
+            # dispatch 實測（DISP-1 就是這樣驗掉的）。
+            b_cell = ('<span class="rt-zero">0</span>'
+                      '<span class="chip shadow" style="margin-left:6px" '
+                      'title="applies 也是 0：可能是條件從沒成立，也可能是沒接線——'
+                      'event log 分不出來，要餵 payload 給生產 dispatch 實測">'
+                      '尚無觀測</span>')
 
         badge = (f'<span class="new-badge">{_esc(d["badge"])}</span>'
                  if d.get("badge") else "")

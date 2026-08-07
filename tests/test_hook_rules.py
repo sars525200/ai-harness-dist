@@ -155,7 +155,19 @@ def _case_enforce_shadow_split(fails: list) -> None:
 
 
 def _case_zero_applies_visible(fails: list) -> None:
-    """D7：applies=0 是**故障訊號**（matcher 沒接對），不是「還沒發生」。"""
+    """零值要看得見，而且**兩種 would-block=0 必須分得出來**。
+
+    2026-08-07 訂正：舊斷言是「would-block=0 時 html 要有『情境未發生』」——
+    那句話宣稱的是**原因**，而 event log 給不出原因：`dispatch` 只在 `applies()`
+    回 True 時才寫 `kind="applies"`，所以「matcher 沒接對」與「條件從沒成立」
+    留下的痕跡完全一樣（都是什麼都沒有）。DISP-1 上線當天 applies=0，實測餵
+    payload 給生產 dispatch 後 applies／decision 都正常寫入 —— 0 純粹是那個
+    session 真的派過工。**測試不該要求程式宣稱它證明不了的事。**
+
+    現在守的是兩件事：零值仍要看得見（rt-zero），且 applies>0 而 block=0
+    （規則跑了、每次都放行＝真資訊）與 applies=0（連判定都沒觀測到）
+    兩種情況的措辭必須不同。
+    """
     with tempfile.TemporaryDirectory() as tmp:
         _write_events(tmp, "s1", [{"kind": "applies", "rule_id": "DB-1"}])
         m, stats = _stats_with(tmp)
@@ -175,10 +187,23 @@ def _case_zero_applies_visible(fails: list) -> None:
             fails.append("測試資料沒造出 applies=0 的規則 —— 這個 case 等於沒測到")
         for rid in zero_a:
             if 'class="rt-zero"' not in by_rule[rid]["applies"]:
-                fails.append(f"{rid} 的 applies=0 沒標 rt-zero —— 零命中是故障訊號，"
-                             "留白會被讀成「還沒發生」")
-        if "情境未發生" not in html:
-            fails.append("would-block 為 0 時沒有講出原因")
+                fails.append(f"{rid} 的 applies=0 沒標 rt-zero —— 留白會被讀成「還沒發生」")
+
+        # 兩種 would-block=0 要分得出來
+        s = {"applies": 0, "block": 0, "enforce": 0, "shadow": 0, "decision": ""}
+        ran = m.build_html({"DB-1": dict(s, applies=57)}, {})       # 跑了 57 次、每次都放行
+        never = m.build_html({"DB-1": dict(s)}, {})                  # 連判定都沒觀測到
+        if "皆放行" not in ran:
+            fails.append("applies>0 而 block=0 沒標「判定 N 次·皆放行」——"
+                         "那是真資訊（規則有跑、條件不成立），不該跟『沒觀測到』同一種說法")
+        if "尚無觀測" not in never:
+            fails.append("applies=0 且 block=0 沒標「尚無觀測」")
+        if "情境未發生" in ran or "情境未發生" in never:
+            fails.append("又在宣稱 event log 證明不了的原因（applies=0 分不出沒接線／條件未成立）")
+        import re as _re
+        _strip = lambda h: _re.sub(r"<[^>]+>", "", h)  # noqa: E731
+        if _strip(ran) == _strip(never):
+            fails.append("兩種 would-block=0 的措辭一模一樣 —— 分不出來等於沒講")
 
 
 def _case_refuse_empty(fails: list) -> None:

@@ -198,9 +198,19 @@ def _p_skills():
 
 
 def _p_model_routing():
-    md = _read(CLAUDE_MD)
-    has = "§7" in md and ("Opus" in md and "Sonnet" in md)
-    return has, "§7 模型分級（目標 Opus:Sonnet ≈ 4:6）" if has else "無模型路由"
+    # 2026-08-07 修：原本是 `"§7" in _read(CLAUDE_MD)`——兩個病疊在一起，
+    # 跟 `_p_mode_routing` 上方註解記的是同一個形狀：
+    #   ① 只讀專案檔，而模型分級的本體 8/05 就搬到全域了
+    #   ② 綁**章節號**（always-loaded 檔案的字面值）。同日全域 §4 加了派工那節、
+    #      模型選擇順移成 §4.2，全域已經一個 §7 都沒有；這一格還顯示 ✔ 純粹是
+    #      專案檔碰巧也有個 §7 撐著——**證據字串已經錯了，畫面卻看不出來**。
+    # 改綁**判準措辭**（機制會留下、章節號會搬家）＋掃規則三層。
+    has = any(
+        "Opus" in h and "Sonnet" in h and ("預設 Sonnet" in h or "升 Opus" in h)
+        for h in _rule_haystacks()
+    )
+    label = "模型分級：預設 Sonnet／碰硬規則區升 Opus（目標 Opus:Sonnet ≈ 4:6）"
+    return has, label if has else "無模型路由"
 
 
 def _p_agents():
