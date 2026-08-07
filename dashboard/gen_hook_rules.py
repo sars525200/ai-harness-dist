@@ -59,7 +59,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "BUDGET-1", "PR-1", "ENC-1"]
+ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "BUDGET-1", "PR-1", "ENC-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -96,6 +96,17 @@ DESC = {
                "（hooks 不 import dashboard），靠 test_decl1 驗兩份逐字相同。"
                "最重要的守門是**談論這條規則不得觸發這條規則**：稽核報告與選擇題選項裡"
                "滿是「階段／修改檔案」字樣，會亂叫的閘門三次之後就被無視。",
+    },
+    "DISP-1": {
+        "badge": "8/07 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "why": "整個 session 用了 80+ 次工具卻 0 次派工（一個 session 只講一次）",
+        "tip": "存在的理由就是軟規則失效了：feedback-dispatch-and-model-routing 8/06 已寫「派工全面放寬」，"
+               "8/07 的 session 依然 0 派工、整輪自己序列做完。實測 API 推理時間是工具執行時間的 "
+               "<b>11.6 倍</b>，而不派工會讓原始輸出堆在主 session 的 context 裡每輪重送（每 token 差 2.9 倍）。"
+               "判準刻意綁 session 不綁單輪——181 輪的量測顯示真的派了工的輪，唯讀次數中位數只有 2、"
+               "p25 為 0，派工發生在大量翻檔<b>之前</b>，所以「查很多次卻沒派」不能區分該派與不該派。"
+               "門檻 80 取自 41 個真實 session 的雙峰之間（20/30/50 觸發數完全相同）。"
+               "這條會因為問題被解決而自己安靜下來。",
     },
     "BUDGET-1": {
         "badge": "7/31 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",

@@ -26,6 +26,9 @@
   },
   "DECL-1": {
    "shadow": false
+  },
+  "DISP-1": {
+   "shadow": false
   }
  }
 }

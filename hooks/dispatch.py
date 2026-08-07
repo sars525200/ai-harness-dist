@@ -131,6 +131,15 @@ REGISTRY = [
         "tools": None,
     },
     {
+        "id": "DISP-1",
+        "module": "disp1_dispatch_discipline",
+        # 同樣只掛 Stop。這條的理由比前面幾條更硬：規則本身就是「該把工作派出去」，
+        # 對 subagent 講等於要求它再派下一層。規則內另外用 `agent_id` 再擋一次
+        # （防的是哪天有人把它掛上 SubagentStop）。
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         "id": "PR-1",
         "module": "pr1_plan_review_marker",
         # 2026-07-29（2c）：加 SubagentStop。角色化之後「開個 subagent 去寫
