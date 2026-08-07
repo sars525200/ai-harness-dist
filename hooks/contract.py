@@ -106,6 +106,49 @@ def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
     return out
 
 
+def iter_turn_assistant_texts(transcript_path: str) -> "list[str] | None":
+    """回傳「這一輪」所有 assistant 訊息的純文字 block（依序）。
+
+    **跟 `HookContext.last_assistant_message` 的差別**（2026-08-08 新增的動機）：
+    那個欄位只有這一輪**最後一則** assistant 訊息。而自我宣告寫在一輪的**開頭**
+    （任務一開始就宣告），於是「只看最後一則」的規則在絕大多數輪次上 applies
+    直接為 False —— DECL-1 上線後 event log 裡是 **0 筆**：規則接了線、每輪都跑、
+    永遠問錯範圍，而且看起來完全正常（「規則寫完≠規則上線」的又一種形態）。
+    想看整輪就只能自己走 transcript，payload 裡沒有第二個欄位給得出這件事。
+
+    **回 None 代表「判斷不出來」，不是「這輪沒有 assistant 文字」** ——
+    與 `iter_turn_tool_uses` 同語意、同一套輪次邊界判定（往回找第一個真人訊息），
+    呼叫端必須據此 fail-open。刻意不另寫一份掃描：兩份 copy 遲早會對
+    「哪裡算一輪」有不同答案。
+
+    只收 `type="text"` 的 block：`thinking` 不是講給使用者聽的話，
+    `tool_use` 的參數也不是宣告 —— 收進來只會製造誤報。
+    """
+    if not transcript_path:
+        return None
+    lines = _tail_lines(transcript_path)
+    if lines is None:
+        return None
+    turn_start = _find_turn_start(lines)
+    if turn_start is None:
+        return None  # 找不到輪次起點 → 判斷不出來，不猜
+
+    out: list[str] = []
+    for line in lines[turn_start:]:
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if obj.get("type") != "assistant":
+            continue
+        for block in obj.get("message", {}).get("content", []) or []:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text") or ""
+                if text:
+                    out.append(text)
+    return out
+
+
 def turn_user_text(transcript_path: str) -> "str | None":
     """回傳「這一輪」那則真人訊息的純文字；判斷不出來回 None（同樣要 fail-open）。
 

@@ -68,6 +68,11 @@ MARK_END = "<!-- WORKFLOW_COMPLIANCE_END -->"
 # 宣告「階段」欄的規則生效日（**當地日期**）。與 gen_cost_panel.STAGE_RULE_SINCE 同源。
 SINCE = "2026-08-06"
 
+# 宣告「規模」欄（L／S／M）的生效日 —— 全域 CLAUDE.md §2 於 2026-08-07 新增第六欄。
+# **分母必須跟規則同齡**：沿用 SINCE 的話，8/06–8/07 那 178 段宣告會全部顯示
+# 「漏標規模」，違規率從第一天起就是 100%，量測直接壞掉（模組 docstring 記過同型病）。
+SCALE_SINCE = "2026-08-07"
+
 STAGES = ("Research", "Design", "Execute", "Review", "Fix")
 WRITE_TOOLS = {"Edit", "Write", "NotebookEdit", "MultiEdit"}
 MAX_ROWS = 25      # 對帳表只顯示最近這麼多段（**分母不截，只截顯示**）
@@ -87,8 +92,23 @@ FIELD = {
     "mode": re.compile(r"模式\s*[:：]?\s*\**\s*([A-Z_]+)"),
     "cls": re.compile(r"任務分類\s*[:：]?\s*\**\s*(\[[^\]]+\]|[^／/·|]+)"),
     "stage": re.compile(r"階段\s*[:：]?\s*\**\s*(Research|Design|Execute|Review|Fix)\b"),
-    "files": re.compile(r"修改檔案\s*[:：]?\s*\**\s*([^／/]+?)(?=\s*[／/]\s*修改摘要|$)"),
-    "summary": re.compile(r"修改摘要\s*[:：]?\s*\**\s*(.+?)\**\s*$"),
+    # 結束錨點是 `(?:修改)?摘要` 而不是寫死「修改摘要」（2026-08-07 放寬）：
+    # 規範的欄名是「修改摘要」，但實際宣告大量寫成「／摘要：」——**語意完全相同**。
+    # 卡死字面值的後果是那些宣告全部被判成「缺修改檔案欄」，而那是量測製造出來的
+    # 假違規，不是紀律問題。實測：8/07 之前的宣告幾乎全部踩到這一格。
+    # ⚠ 這兩條與 `hooks/rules/decl1_stage_files.py` 的 FILES ／ summary **必須逐字相同**
+    #    （`tests/test_decl1.py` 有斷言在守）。改一邊就要改另一邊。
+    # 捕捉群組只排除**全形**「／」，不排除半形 `/`（2026-08-08 修）：
+    # 半形斜線在宣告裡幾乎都是路徑的一部分（`修改檔案 dashboard/gen_todos.py`），
+    # 把它當欄位分隔符會在第一個路徑分隔處切斷 → 整段判成「缺修改檔案欄」。
+    # lookahead 仍收兩種分隔符，所以真的用半形 `/` 分欄也照樣停得下來。
+    "files": re.compile(r"修改檔案\s*[:：]?\s*\**\s*([^／]+?)(?=\s*[／/]\s*(?:修改)?摘要|$)"),
+    "summary": re.compile(r"(?:修改)?摘要\s*[:：]?\s*\**\s*(.+?)\**\s*$"),
+    # 規模欄（L／S／M）—— 全域 CLAUDE.md §2 於 2026-08-07 新增的第六欄。
+    # ① 要吃得下「待定」：規範明說判斷不出來就寫「待定」，不收會把守規矩的宣告判成漏標。
+    # ② 結尾用 `(?![A-Za-z])` 不用 `\b`：宣告用全形斜線分隔（`規模 L／修改檔案 …`），
+    #    `\b` 在中文與全形標點邊界的行為不穩，而這裡真正要擋的只是「L 後面接英文字母」。
+    "scale": re.compile(r"規模\s*[:：]?\s*\**\s*([LSM]|待定|未定)(?![A-Za-z])"),
 }
 # 交接契約的必填「空缺欄」——角色回報裡要找得到其中之一。
 # `(label, pattern)` 成對存放：**label 給畫面、pattern 給比對**。放同一個 tuple 是
@@ -232,16 +252,74 @@ def _handoff_cutoff() -> str:
     會讓遵循率永遠偏低。而寫死一個日期字面值會漂移（`dashboard-generators.md`：
     **probe 綁機制，不綁字面值**，同一個病 7/30 一天咬三次），所以綁角色檔本身。
 
-    已知弱點：`git checkout` 會重置 mtime，那時這條線會往後跳、樣本被多排除。
-    這是量測不是閘門，寧可少報也不要虛報——但畫面上要講出判準是什麼。
+    ── 2026-08-07 改用 git，mtime 只當退路 ────────────────────────────────
+    綁 mtime 的設計有個當場暴露的缺陷（8/06 收工時咬到）：**改一次角色正文就把
+    整條線推到今天，既有樣本歸零**。用意是「規則上線前的不算」，實際效果是
+    「每次編輯角色都重置量測」。`git checkout` 重置 mtime 也是同一個病。
+
+    真正要問的是「**必填空缺欄這條規則什麼時候進 agents/**」——那是 git 答得出
+    的事實，而且**不會因為之後編輯正文而移動**：
+
+        git log --reverse -S"沒找到的" -- agents/   → 取第一筆
+
+    仍然符合「綁機制不綁字面值」：`-S` 找的是規則本身的關鍵字進入版控的那一刻，
+    不是寫死一個日期。git 不可用時退回 mtime（並非靜默——回傳值會帶進畫面說明）。
     """
     import datetime as _dt
     files = list(AGENTS_DIR.glob("*.md"))
     if not files:
         raise SystemExit(f"{AGENTS_DIR} 沒有任何角色檔 —— 交接契約的起算點無從判定。")
+
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(HARNESS), "log", "--reverse", "--format=%ad",
+             "--date=format:%Y-%m-%dT%H:%M:%S.000Z", "--date=iso-strict",
+             "-S", "沒找到的", "--", "agents/"],
+            capture_output=True, text=True, encoding="utf-8", timeout=10)
+        first = (out.stdout or "").strip().splitlines()
+        if out.returncode == 0 and first:
+            # `--date=iso-strict` 會贏過前一個 --date，回 `2026-07-29T19:32:11+08:00`。
+            # 轉成與 transcript 同格式的 UTC ISO 才能直接字串比大小。
+            dt = _dt.datetime.fromisoformat(first[0].strip())
+            return dt.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    except Exception:
+        pass  # git 不在／不是 repo／逾時 → 退回 mtime
+
     newest = max(p.stat().st_mtime for p in files)
     return _dt.datetime.fromtimestamp(newest, _dt.timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%S.000Z")
+
+
+# 背景任務完成通知：`type=user` 且 `message.content` 是**純字串**。
+# `<tool-use-id>` 就是派工那個 Agent tool_use block 的 id ⇒ 零額外工作可配對。
+_TN_TOOL_ID = re.compile(r"<tool-use-id>\s*([^<\s]+)\s*</tool-use-id>")
+_TN_RESULT = re.compile(r"<result>(.*?)(?:</result>|\Z)", re.S)
+
+# 啟動 stub 的指紋。實測 1,067–1,069 字，開頭固定這句。
+_LAUNCH_STUB = re.compile(r"Async agent launched successfully")
+
+
+def _parse_task_notification(text: str) -> "tuple[str, str]":
+    """從 task-notification 純文字裡取出 (tool_use_id, 回報全文)。
+
+    取不到就回 ("", "")：同一個通知會出現在三種 record type
+    （已投遞 `user`／排隊中 `attachment`／佇列事件 `queue-operation`），
+    而且 `Bash(run_in_background)` 也會發通知但 `<result>` 是空的
+    —— 兩種都靠回空字串被上游濾掉。
+    """
+    if "<tool-use-id>" not in text:
+        return "", ""
+    mid = _TN_TOOL_ID.search(text)
+    mres = _TN_RESULT.search(text)
+    if not mid or not mres:
+        return "", ""
+    return mid.group(1).strip(), mres.group(1).strip()
+
+
+def _is_launch_stub(body: str) -> bool:
+    """這段 tool_result 是不是「派工已啟動」的 metadata 而非角色回報。"""
+    return bool(_LAUNCH_STUB.search(body[:200]))
 
 
 def _is_tmp(path: str) -> bool:
@@ -291,7 +369,11 @@ def collect() -> dict:
     pre_cutoff: set = set()      # 在 cutoff 之前就開始的 session：序列開頭必然不完整
     seen_msg: set = set()
     agent_calls: dict = {}       # tool_use_id -> {type, ts, stage, sess}
-    handoff: list = []           # 有配對 tool_result 的角色回報判定
+    handoff: list = []           # 配對得到**真回報**的角色交付判定
+    # task-notification 走 dict 而不是 list：同一個通知會在三個 record type 各出現
+    # 一次（已投遞／排隊中／佇列事件），按 tool_use_id 收斂才不會把一份回報算成三份。
+    # 取 `<result>` 最長的那一版 —— 排隊中的那份通常還沒帶完整內容。
+    notif_reports: dict = {}
     per_proj: dict = {p["name"]: {"n": 0, "wired": p["wired"],
                                   "current": p["isCurrent"]} for p in projs}
 
@@ -316,9 +398,38 @@ def collect() -> dict:
             rtype = rec.get("type")
             msg = rec.get("message") or {}
 
-            # ── 角色回報（tool_result 在 user 類型的紀錄裡）
+            # ── 角色回報 ────────────────────────────────────────────────
+            # ⚠ **`tool_result` 裡沒有回報全文**（2026-08-07 實測推翻原設計）。
+            # 這個版本的 Agent 工具**一律非同步啟動**（實測 8/8 筆 `run_in_background`
+            # 都是 False，卻全部拿到啟動 stub），`tool_result` 收到的是
+            # 「Async agent launched successfully…agentId: …」這種 1,067–1,069 字的
+            # metadata。拿它去比對「有沒有填空缺欄」，答案恆為「沒填」——
+            # 改之前畫面上的 `0/7` 是 **100% 的假違規**，不是紀律問題。
+            #
+            # 真正的回報走 task-notification：`type=user`、`message.content` 是
+            # **純字串**（不是 block 陣列），內含 `<tool-use-id>` 與 `<result>`。
+            # 舊碼 `for blk in msg.get("content") or []` 對字串會逐字元迭代、再被
+            # `isinstance(blk, dict)` 全數丟掉 —— **不會報錯，只是永遠拿不到**。
             if rtype == "user":
-                for blk in msg.get("content") or []:
+                content = msg.get("content")
+
+                if isinstance(content, str):
+                    tid, body = _parse_task_notification(content)
+                    # 只收配得到 Agent 派工的：task-notification 也會為
+                    # `Bash(run_in_background)` 發，形狀是「Background command …
+                    # completed」且 <result> 為空。不濾掉會讓背景指令混進分母
+                    # （實測 121 筆通知裡有 69 筆是背景 Bash）。
+                    call = agent_calls.get(tid) if tid else None
+                    if call and body and call["ts"] >= handoff_cutoff:
+                        prev = notif_reports.get(tid)
+                        if not prev or len(body) > prev["chars"]:
+                            notif_reports[tid] = {
+                                **call, "gaps": gap_hits(body),
+                                "chars": len(body), "src": "task-notification",
+                                "tool_use_id": tid}
+                    continue
+
+                for blk in content or []:
                     if not isinstance(blk, dict) or blk.get("type") != "tool_result":
                         continue
                     call = agent_calls.get(blk.get("tool_use_id"))
@@ -329,8 +440,13 @@ def collect() -> dict:
                         body = " ".join(b.get("text", "") for b in body
                                         if isinstance(b, dict))
                     body = str(body or "")
+                    # 啟動 stub 不是回報 —— 收進來就是那個 0/7 假違規的來源。
+                    if _is_launch_stub(body):
+                        continue
                     hit = gap_hits(body)
-                    handoff.append({**call, "gaps": hit, "chars": len(body)})
+                    handoff.append({**call, "gaps": hit, "chars": len(body),
+                                    "src": "tool_result",
+                                    "tool_use_id": blk.get("tool_use_id")})
                 continue
 
             if rtype != "assistant":
@@ -361,7 +477,7 @@ def collect() -> dict:
                         # 於是「宣告不合格」被畫成「從沒走過」——兩件完全不同的事。
                         # 收進來judge() 會判它「缺修改檔案欄」，那才是實際情形。
                         # 長度上限是防誤抓：宣告是短行，談論規則的句子通常很長。
-                        if "修改檔案" not in raw and "修改摘要" not in raw and len(raw) > 120:
+                        if "修改檔案" not in raw and "摘要" not in raw and len(raw) > 120:
                             continue
                         if mid and mid in seen_msg:
                             break        # 同一則訊息已認過宣告，不重複計一段
@@ -371,6 +487,7 @@ def collect() -> dict:
                                "raw": raw,
                                "mode": got["mode"], "cls": got["cls"],
                                "stage": got["stage"], "files_raw": got["files"],
+                               "scale": got["scale"],
                                "written": set(), "tmp_written": set(),
                                "agents": []}
                         segments.append(cur)
@@ -403,6 +520,15 @@ def collect() -> dict:
             f"{SINCE} 起沒有解析到任何自我宣告 —— 零目標拒跑。"
             f"要嘛規則沒被遵守（那該由畫面說，不是由空表說），"
             f"要嘛宣告格式改了而這支的正則沒跟上：先跑 --check 看原文。")
+
+    # task-notification 的回報併進來。同一次派工若兩條路都拿得到，
+    # **以 tool_result 那份為準**（它是同步回填的原文，不經過通知格式包裝），
+    # 但實務上 tool_result 幾乎都是啟動 stub 而已被濾掉，所以這裡多半是純補進來的。
+    seen_ids = {h.get("tool_use_id") for h in handoff if h.get("tool_use_id")}
+    for tid, rec in notif_reports.items():
+        if tid not in seen_ids:
+            handoff.append(rec)
+
     return {"segments": segments, "tracks": tracks, "handoff": handoff,
             "agent_calls": agent_calls, "cutoff": cutoff,
             "handoff_cutoff": handoff_cutoff, "pre_cutoff": pre_cutoff,
@@ -429,6 +555,26 @@ def judge(seg: dict) -> list:
             flags.append((f"未宣告就改 {len(missing)} 檔", "warn"))
     if len(actual) >= 3:
         flags.append((f"實際 {len(actual)} 檔（≥3＝S 級門檻）", "accent"))
+
+    # ── 規模欄對帳（2026-08-07 起）──────────────────────────────────────
+    # 全域 §3：「判成 L 而實際改了 ≥3 檔時，那行宣告自己就是證據」。在規模欄
+    # 存在之前，這句話**只量得到「實際幾檔」那一半**，另一半根本不存在。
+    #
+    # 一律用 `seg.get()` 不用 `seg[]`：既有測試（test_workflow_compliance）與
+    # 快照 fixture 餵進來的 segment 只有 files_raw／written／tmp_written 三個 key，
+    # 用 `[]` 會全部 KeyError 變紅 —— 那是「加新欄位把舊 case 弄紅」，不是真發現。
+    ts = seg.get("ts") or ""
+    if ts and ts[:10] >= SCALE_SINCE:      # 分母跟規則同齡，8/07 之前不判
+        scale = seg.get("scale")
+        if not scale:
+            flags.append(("缺規模欄", "block"))
+        elif scale == "L":
+            # L 的定義是「M 與 S 的判準都不命中」，所以下面兩條都是**規則本身**
+            # 列的 S 級判準，不是另外發明的：≥3 檔、要派 subagent。
+            if len(actual) >= 3:
+                flags.append((f"宣告 L 但實際 {len(actual)} 檔（≥3＝S）", "warn"))
+            if seg.get("agents"):
+                flags.append((f"宣告 L 但派了 {len(seg['agents'])} 次 subagent（＝S）", "warn"))
     return flags
 
 
@@ -683,12 +829,26 @@ def build_html(data: dict) -> str:
                       f'                <td>{chip}</td>\n'
                       f'              </tr>\n')
         n_ok = sum(1 for h in hand if h["gaps"])
-        body4 = (f'      <div class="twrap">\n        <table>\n'
+        n_call = len(data["agent_calls"])
+        # 派工次數 vs 抓得到回報的份數，兩個數字擺在一起 —— 落差本身就是訊號
+        # （2026-08-07 之前這裡是 17 vs 8，因為回報全被當成啟動 stub 濾掉了）。
+        # `.rt-sum` 的 CSS 是全域的（harness-dashboard.html），但這是**第一個
+        # 由伺服端產生器發這個 markup 的地方**，形狀照 JS 那版手抄。
+        # ⚠ `.rt-sum .k` 帶 text-transform:uppercase → 標籤只放中文，
+        #    放英文角色名或檔名會被畫成全大寫、讀起來像另一個東西。
+        cards = "".join(
+            f'<div><div class="k">{k}</div><div class="v">{v}</div></div>'
+            for k, v in (("Agent 派工", f"{n_call} 次"),
+                         ("抓得到回報", f"{len(hand)} 份"),
+                         ("有填空缺欄", f"{n_ok} 份"),
+                         ("涵蓋專案", f"{len({h.get('proj') for h in hand})} 個")))
+        body4 = (f'      <div class="rt-sum">{cards}</div>\n'
+                 f'      <div class="twrap">\n        <table>\n'
                  f'          <thead><tr><th>角色</th><th>時間</th><th>當時階段</th>'
                  f'<th class="num">回報字數</th><th>判定</th></tr></thead>\n'
                  f'          <tbody>\n{hrows}          </tbody>\n'
                  f'        </table>\n      </div>')
-        sub4 = f"{n_ok}/{len(hand)} 份回報有填空缺欄"
+        sub4 = f"{n_ok}/{len(hand)} 份回報有填空缺欄（派工 {n_call} 次）"
     else:
         body4 = (
             '      <div class="criteria">\n'
@@ -696,8 +856,10 @@ def build_html(data: dict) -> str:
             f'        <p>角色正文加上「必填空缺欄」'
             '（<code>沒找到的</code>／<code>沒做的</code>／<code>我查不到的</code>）的時間是 '
             f'<b>{_esc(data["handoff_cutoff"][:16].replace("T", " "))} UTC</b>，'
-            '分母只能從那一刻起算——起算點<b>綁角色檔的實際改動時間</b>，'
-            '不是寫死的日期字面值（寫死會漂移）。在那之前派過的角色沒有機會遵守這條規則。</p>\n'
+            '分母只能從那一刻起算——起算點問的是 <b>git：那條規則第一次進 '
+            '<code>agents/</code> 的 commit 時間</b>，不是角色檔的 mtime'
+            '（綁 mtime 的話，改一次角色正文就把整條線推到今天、既有樣本歸零）。'
+            '在那之前派過的角色沒有機會遵守這條規則。</p>\n'
             '        <p><b>刻意不畫空表</b>：0/0 顯示成「0% 遵循」會讓「還沒發生」'
             '看起來像「全部違規」，那比沒有這張表更糟。派過角色之後這一節會自己長出來。</p>\n'
             '      </div>')

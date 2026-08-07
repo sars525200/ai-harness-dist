@@ -29,9 +29,30 @@ _GEN = os.path.join(_ROOT, "dashboard", "gen_workflow_compliance.py")
 
 
 class _Ctx:
-    def __init__(self, msg):
+    def __init__(self, msg, transcript_path=""):
         self.last_assistant_message = msg
-        self.transcript_path = ""
+        self.transcript_path = transcript_path
+
+
+def _write_turn(tmpdir, assistant_texts):
+    """造一份最小 transcript：一則 user 開頭 ＋ 依序數則 assistant。
+
+    形狀照 `contract._find_turn_start()` 認的那種（`type=="user"`、content 是
+    純字串），不自己發明 —— 這裡要測的是「規則掃不掃得到整輪」，
+    不是「我能不能猜對 transcript 格式」。
+    """
+    import json as _json
+    path = os.path.join(tmpdir, "t.jsonl")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(_json.dumps({"type": "user",
+                              "message": {"content": "請做這件事"}},
+                             ensure_ascii=False) + "\n")
+        for t in assistant_texts:
+            fh.write(_json.dumps(
+                {"type": "assistant",
+                 "message": {"content": [{"type": "text", "text": t}]}},
+                ensure_ascii=False) + "\n")
+    return path
 
 
 def _load():
@@ -105,6 +126,77 @@ def run() -> "tuple[int, list]":
           verdict("寫成 `**階段 Execute**` 就會被咬。") == "allow")
     check("真宣告裡的反引號檔名不受影響（剝碼後欄名還在）",
           verdict("**階段 Execute ／ 修改檔案 `app.js`、`index.html`**") == "allow")
+
+    # ---- 3.5 2026-08-08 三項行為改變，每一項都要有自己的守門 ----
+    #
+    # 背景：`applies()` 原本讀 `last_assistant_message`（只有那一輪的**最後一則**），
+    # 而自我宣告永遠寫在**第一則** → 實測整個 session 的 event log 裡 DECL-1 是 0 筆。
+    # 改成掃整輪之後，連帶要處理兩個新暴露的問題（圍欄示範、路徑被當分隔符）。
+
+    def _decl_count(text):
+        return len(m._decl_lines(text))
+
+    check("圍欄裡的宣告示範不算宣告（掃整輪之後才暴露的風險）",
+          _decl_count("說明如下：\n\n```\n**階段 Execute ／ 修改檔案 a.py**\n```\n") == 0,
+          "教這條規則的文件必然要示範宣告長什麼樣，示範被當成宣告就會對"
+          "「談論自己」的訊息亂叫——PR-1 同一週踩過一模一樣的坑")
+    check("圍欄外的真宣告照樣認得",
+          _decl_count("**階段 Execute ／ 修改檔案 a.py**") == 1)
+    check("未閉合圍欄不剝（fail-open，寧可少剝不要誤剝）",
+          _decl_count("```\n**階段 Execute ／ 修改檔案 a.py**\n") == 1)
+
+    check("修改檔案欄寫正斜線路徑不算缺欄",
+          verdict("**階段 Execute ／ 修改檔案 dashboard/gen_todos.py ／ 摘要 測**")
+          == "allow",
+          "捕捉群組若排除半形 `/`，路徑會在第一個分隔處被切斷 → 整段判成缺欄，"
+          "而宣告裡寫路徑是常態")
+    check("半形 `/` 當欄位分隔符仍停得下來",
+          verdict("模式 DEV / 階段 Execute / 修改檔案 a.py / 摘要 測") == "allow")
+    check("欄名寫「摘要」與「修改摘要」都認得",
+          verdict("**階段 Execute ／ 修改檔案 a.py ／ 摘要 測**") == "allow"
+          and verdict("**階段 Execute ／ 修改檔案 a.py ／ 修改摘要 測**") == "allow",
+          "規範的欄名是「修改摘要」但實際大量寫成「摘要」，語意相同；"
+          "卡死字面值製造的是假違規，不是紀律問題")
+
+    check("六欄格式（含 2026-08-07 新增的規模欄）不打壞既有欄位判定",
+          verdict("**模式 DEV ／ 任務分類 [devops] ／ 階段 Execute ／ 規模 S "
+                  "／ 修改檔案 a.py ／ 摘要 測**") == "allow")
+
+    # ⚠ 上面每一條都是透過 `last_assistant_message` 餵的，所以它們**驗不到
+    #   「掃整輪」這件事本身** —— 把 `_all_decl_lines` 改回只讀最後一則，
+    #   上面全部照樣綠。這一組才是那個改動的守門：宣告放在第一則，
+    #   最後一則故意不含宣告（那正是真實形狀：宣告在開頭、收尾是結論）。
+    import tempfile  # noqa: PLC0415
+    with tempfile.TemporaryDirectory() as _tmp:
+        tp = _write_turn(_tmp, [
+            "**模式 DEV ／ 階段 Execute ／ 修改檔案 a.py ／ 摘要 測**",
+            "接著我改了幾個檔案。",
+            "改完了，測試全綠。",
+        ])
+        ctx_mid = _Ctx("改完了，測試全綠。", tp)
+        check("宣告在整輪的第一則、最後一則沒有 → 照樣認得（這條改動的核心）",
+              m.applies(ctx_mid) is True,
+              "只讀 last_assistant_message 的話這裡回 False —— 那就是 8/08 之前"
+              "整個 session 的 event log 裡 DECL-1 掛零的原因")
+
+        # ⚠ 違規樣本裡**不能出現「修改檔案」四個字**（含在敘述句裡也不行）——
+        #   第一版寫成「摘要 忘了寫修改檔案」，正則照樣命中那四個字而判成有欄位，
+        #   於是這條 case 綠得莫名其妙。測試資料自己會寫壞，而寫壞的症狀跟
+        #   「程式沒問題」一模一樣。
+        tp_bad = _write_turn(_tmp, [
+            "**模式 DEV ／ 階段 Execute ／ 摘要 這一段漏了那個欄位**",
+            "改完了。",
+        ])
+        r = m.check(_Ctx("改完了。", tp_bad))
+        check("整輪掃描抓得到中段的違規宣告（缺修改檔案欄）",
+              "warn" in repr(r).lower())
+
+        tp_none = _write_turn(_tmp, ["先看一下現況。", "看完了，沒有要改的。"])
+        check("整輪都沒有宣告 → 不適用（沒宣告不等於違規）",
+              m.applies(_Ctx("看完了，沒有要改的。", tp_none)) is False)
+
+    check("transcript 讀不到時退回最後一則（fail-open，不比修之前差）",
+          m.applies(_Ctx("**階段 Execute ／ 修改檔案 a.py**", "C:\\不存在.jsonl")) is True)
 
     # ---- 4. 兩份判準要逐字相同（hooks 不 import dashboard，所以只能靠測試綁）----
     src_gen = open(_GEN, encoding="utf-8").read()

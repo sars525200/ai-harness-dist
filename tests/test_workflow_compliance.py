@@ -126,6 +126,50 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     ok(all(tone == "accent" for _, tone in flags_s),
        "S 級門檻只是提醒不是違規（tone 不得是 block/warn）")
 
+    # ── 規模欄（2026-08-07 起，全域 §2 的第六欄）────────────────────────
+    # 既有 case（上面那幾條）刻意不帶 `scale` 也不帶 `ts` —— judge() 必須用
+    # `.get()` 讀，否則加一個新欄位就會讓所有舊 case KeyError 變紅，
+    # 而那種紅是「測試被新欄位撞倒」不是「發現了什麼」。上面全綠就是這條的守門。
+    _after = {"ts": "2026-08-07T10:00:00.000Z", "tmp_written": set()}
+    ok(any(t == "缺規模欄" for t, _ in m.judge(
+        {**_after, "files_raw": "a.py", "written": {"a.py"}})),
+       "規則生效後漏標規模欄要抓到")
+    ok(not any("規模" in t for t, _ in m.judge(
+        {"ts": "2026-08-06T10:00:00.000Z", "tmp_written": set(),
+         "files_raw": "a.py", "written": {"a.py"}})),
+       "規則生效**之前**的宣告不判規模（分母要跟規則同齡，否則違規率從第一天就是 100%）")
+    ok(any("宣告 L 但實際" in t for t, _ in m.judge(
+        {**_after, "scale": "L", "files_raw": "a.py、b.py、c.py",
+         "written": {"a.py", "b.py", "c.py"}})),
+       "宣告 L 卻改了 ≥3 檔要抓到（§3：那行宣告自己就是證據）")
+    ok(any("派了" in t for t, _ in m.judge(
+        {**_after, "scale": "L", "files_raw": "a.py", "written": {"a.py"},
+         "agents": ["locator"]})),
+       "宣告 L 卻派了 subagent 要抓到（派 subagent 是 S 級判準之一）")
+    ok(m.judge({**_after, "scale": "S", "files_raw": "a.py、b.py、c.py",
+                "written": {"a.py", "b.py", "c.py"}}) ==
+       [("實際 3 檔（≥3＝S 級門檻）", "accent")],
+       "宣告 S 而實際 3 檔＝對得上，只留提醒不算違規")
+    ok(m.judge({**_after, "scale": "待定", "files_raw": "a.py",
+                "written": {"a.py"}}) == [],
+       "規模寫「待定」不算漏標（規範明說判斷不出來就寫待定）")
+
+    # ── task-notification 解析（背景派工的回報實際在這裡）──────────────
+    tid, body = m._parse_task_notification(
+        "<task-notification><tool-use-id>toolu_ABC</tool-use-id>"
+        "<status>completed</status><result>盤點完成。沒找到的：無。</result>")
+    ok(tid == "toolu_ABC" and "沒找到的" in body,
+       "從 task-notification 取得 tool_use_id 與回報全文")
+    ok(m._parse_task_notification(
+        "<task-notification><tool-use-id>toolu_X</tool-use-id>"
+        "<summary>Background command finished</summary>") == ("", ""),
+       "沒有 <result> 的通知（背景 Bash）要回空 —— 否則背景指令會混進交接契約的分母")
+    ok(m._is_launch_stub(
+        "Async agent launched successfully. (This tool result is internal metadata…)"),
+       "啟動 stub 認得出來")
+    ok(not m._is_launch_stub("盤點完成。以下是結果。沒找到的：無。"),
+       "真回報不得被當成啟動 stub")
+
     ok(any("沒有 Review" in t
            for t, _ in m.track_flags(["Research", "Design", "Execute"])),
        "Execute 之後沒有 Review 要抓到")
