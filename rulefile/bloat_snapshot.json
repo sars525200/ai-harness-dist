@@ -123,8 +123,8 @@
       }
     },
     "IT-department\u0001CLAUDE.md": {
-      "bytes": 22068,
-      "entry_count": 66,
+      "bytes": 22522,
+      "entry_count": 67,
       "over_limit_count": 3,
       "entries": {
         "IT-department\u0001CLAUDE.md\u0001完成倉位政策：配發有座位→座位+清slot；回收": 39,
@@ -160,8 +160,9 @@
         "IT-department\u0001CLAUDE.md\u0001疊層modalESC只關最上層（capture+": 114,
         "IT-department\u0001CLAUDE.md\u0001動態渲染：`getLucideSvg`/`req": 135,
         "IT-department\u0001CLAUDE.md\u0001PROD重啟只「停舊→起新→驗證」；必用.ven": 60,
-        "IT-department\u0001CLAUDE.md\u0001**權限詢問一直跳＝三層依序查**：①`perm": 230,
+        "IT-department\u0001CLAUDE.md\u0001**權限詢問一直跳＝三層依序查**：①`perm": 159,
         "IT-department\u0001CLAUDE.md\u0001commit訊息含引號/反引號走`-F<檔>`（": 75,
+        "IT-department\u0001CLAUDE.md\u0001**外部程序會定期`gitadd-A`→inde": 82,
         "IT-department\u0001CLAUDE.md\u0001清理刪檔import-graph必涵蓋gitig": 78,
         "IT-department\u0001CLAUDE.md\u0001認證守門只擋/api/*→檔案路由會繞過；app": 90,
         "IT-department\u0001CLAUDE.md\u0001任務工單統一表`repair_tickets`；": 91,
@@ -169,7 +170,7 @@
         "IT-department\u0001CLAUDE.md\u0001動harness看板先開`dashboard-g": 114,
         "IT-department\u0001CLAUDE.md\u0001診斷資產狀態查`assets`表/dump`it": 86,
         "IT-department\u0001CLAUDE.md\u0001IP設備連線監測：探測結果存獨立側表禁寫回`it": 107,
-        "IT-department\u0001CLAUDE.md\u0001設定UI必有讀取消費者才算功能；移除面板必查re": 66,
+        "IT-department\u0001CLAUDE.md\u0001設定UI必有讀取消費者才算功能；移除面板必查re": 106,
         "IT-department\u0001CLAUDE.md\u0001逐件物料配發資訊必經issueaction一起寫": 110,
         "IT-department\u0001CLAUDE.md\u0001高頻端點禁每次重跑ensure_schema→搶": 120,
         "IT-department\u0001CLAUDE.md\u0001render/輪詢asyncfetch必加in-": 93,
@@ -196,9 +197,9 @@
       }
     },
     "IT-department\u0001MEMORY.md": {
-      "bytes": 24941,
+      "bytes": 24905,
       "entry_count": 87,
-      "over_limit_count": 1,
+      "over_limit_count": 0,
       "entries": {
         "IT-department\u0001MEMORY.md\u0001[feedback-closure-scope-": 70,
         "IT-department\u0001MEMORY.md\u0001[feedback-render-cycle-e": 59,
@@ -226,7 +227,7 @@
         "IT-department\u0001MEMORY.md\u0001[feedback-workflow-check": 20,
         "IT-department\u0001MEMORY.md\u0001[feedback-drawer-footer-": 14,
         "IT-department\u0001MEMORY.md\u0001[feedback-sql-get-insert": 27,
-        "IT-department\u0001MEMORY.md\u0001[feedback-sqlite-busy-ti": 129,
+        "IT-department\u0001MEMORY.md\u0001[feedback-sqlite-busy-ti": 109,
         "IT-department\u0001MEMORY.md\u0001[feedback-retry-queue-de": 29,
         "IT-department\u0001MEMORY.md\u0001[feedback-asset-name-fal": 15,
         "IT-department\u0001MEMORY.md\u0001[feedback-server-restart": 24,
