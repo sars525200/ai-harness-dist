@@ -152,6 +152,19 @@ def run() -> "tuple[int, list]":
           "而宣告裡寫路徑是常態")
     check("半形 `/` 當欄位分隔符仍停得下來",
           verdict("模式 DEV / 階段 Execute / 修改檔案 a.py / 摘要 測") == "allow")
+    # 2026-08-12：全形「／」既是欄位分隔符，也**大量出現在欄位值裡面**。
+    # 舊版把捕捉群組寫成 `[^／]+?`（值不准含全形／），實測
+    # `修改檔案 發版產物（version.json／Detect.ps1／_releases）` 整條匹配失敗 →
+    # 一個確實填了這一欄的宣告被判成缺欄，畫面與 DECL-1 閘門同時誤判。
+    # 收尾條件改綁**已知欄位名**（封閉集合）而不是「值裡不准有分隔符」。
+    check("修改檔案欄的值裡含全形／不算缺欄（結尾沒有摘要欄）",
+          verdict("**模式 DEPLOY／階段 Execute／修改檔案 發版產物"
+                  "（version.json／Detect.ps1／_releases）**") == "allow",
+          "值內的全形／不是欄位分隔符；把它當分隔符會讓宣告在第一個／就截斷")
+    check("值裡含全形／、後面還接著摘要欄也認得",
+          verdict("**階段 Execute／修改檔案 a.py／b.py（x／y）／摘要 測**") == "allow")
+    check("欄位名收尾仍然停得住（規模欄接在修改檔案後面時不吞掉它）",
+          verdict("模式 DEV／階段 Execute／修改檔案 a.py／規模 S") == "allow")
     check("欄名寫「摘要」與「修改摘要」都認得",
           verdict("**階段 Execute ／ 修改檔案 a.py ／ 摘要 測**") == "allow"
           and verdict("**階段 Execute ／ 修改檔案 a.py ／ 修改摘要 測**") == "allow",
@@ -199,11 +212,24 @@ def run() -> "tuple[int, list]":
           m.applies(_Ctx("**階段 Execute ／ 修改檔案 a.py**", "C:\\不存在.jsonl")) is True)
 
     # ---- 4. 兩份判準要逐字相同（hooks 不 import dashboard，所以只能靠測試綁）----
-    src_gen = open(_GEN, encoding="utf-8").read()
-    for name, pat in (("DECL_LINE", m.DECL_LINE), ("stage", m.STAGE), ("files", m.FILES)):
+    #
+    # 2026-08-12 從「原始碼字面搜尋」改成「比對編譯後的 pattern」。
+    # 舊版是 `pat.pattern in open(_GEN).read()` —— 它把**排版方式**也綁進了判準：
+    # 同一條正則在 dashboard 那側折成兩行字串串接（為了容納新增的欄位名清單），
+    # 語意一字不差，字面搜尋卻找不到 → **假紅**。而假紅的代價不只是煩：
+    # 它會誘導人「把正則寫回一行」去遷就測試，也就是讓排版凌駕語意。
+    # 要驗的是「兩份判準相同」，那就比編譯結果；`re.compile` 已經是唯一真相。
+    # （測試層 import dashboard 沒有分層問題——不准 import 的是 `hooks/`。）
+    import importlib.util  # noqa: PLC0415
+    _spec = importlib.util.spec_from_file_location("_gen_for_decl1", _GEN)
+    _gen = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_gen)
+    for name, pat, other in (("DECL_LINE", m.DECL_LINE, _gen.DECL_LINE),
+                             ("stage", m.STAGE, _gen.FIELD["stage"]),
+                             ("files", m.FILES, _gen.FIELD["files"])):
         check(f"{name} 的正則與遵循度表逐字相同",
-              pat.pattern in src_gen,
-              f"規則用的是 {pat.pattern!r}，但 gen_workflow_compliance 裡找不到同一份")
+              pat.pattern == other.pattern,
+              f"規則用的是 {pat.pattern!r}，遵循度表用的是 {other.pattern!r}")
 
     # ---- 5. 已註冊且不是 shadow（user 2026-08-07 選「直接 WARN」）----
     import json  # noqa: PLC0415

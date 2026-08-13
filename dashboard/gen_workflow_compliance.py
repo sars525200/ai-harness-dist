@@ -98,11 +98,18 @@ FIELD = {
     # 假違規，不是紀律問題。實測：8/07 之前的宣告幾乎全部踩到這一格。
     # ⚠ 這兩條與 `hooks/rules/decl1_stage_files.py` 的 FILES ／ summary **必須逐字相同**
     #    （`tests/test_decl1.py` 有斷言在守）。改一邊就要改另一邊。
-    # 捕捉群組只排除**全形**「／」，不排除半形 `/`（2026-08-08 修）：
-    # 半形斜線在宣告裡幾乎都是路徑的一部分（`修改檔案 dashboard/gen_todos.py`），
-    # 把它當欄位分隔符會在第一個路徑分隔處切斷 → 整段判成「缺修改檔案欄」。
-    # lookahead 仍收兩種分隔符，所以真的用半形 `/` 分欄也照樣停得下來。
-    "files": re.compile(r"修改檔案\s*[:：]?\s*\**\s*([^／]+?)(?=\s*[／/]\s*(?:修改)?摘要|$)"),
+    #
+    # 2026-08-12 改：捕捉群組從 `[^／]+?` 放寬成 `.+?`，改用**已知欄位名**收尾。
+    # 舊版把全形「／」當成純粹的欄位分隔符，但它在**欄位值裡面**也很常見 ——
+    # 實測 `修改檔案 發版產物（version.json／Detect.ps1／_releases）` 整條匹配失敗
+    # （值內第一個全形／就卡住，而 lookahead 要的「／摘要」或行尾都到不了），
+    # 於是一個**確實填了這一欄**的宣告被判成「缺修改檔案欄」。方向特別壞：
+    # 它同時污染畫面與 DECL-1 閘門，讓規則對守規矩的宣告發警告。
+    # 收尾條件改成「後面接的是另一個已知欄位名」——欄位名是封閉集合，
+    # 值不是；**綁封閉的那一側**才不會被值的內容干擾。
+    "files": re.compile(
+        r"修改檔案\s*[:：]?\s*\**\s*(.+?)"
+        r"(?=\s*[／/]\s*(?:(?:修改)?摘要|模式|階段|規模|任務分類|分類)|$)"),
     "summary": re.compile(r"(?:修改)?摘要\s*[:：]?\s*\**\s*(.+?)\**\s*$"),
     # 規模欄（L／S／M）—— 全域 CLAUDE.md §2 於 2026-08-07 新增的第六欄。
     # ① 要吃得下「待定」：規範明說判斷不出來就寫「待定」，不收會把守規矩的宣告判成漏標。
@@ -341,6 +348,22 @@ def gap_hits(body: str) -> list:
     return [label for label, pat in GAP_HEADS if pat.search(text)]
 
 
+# 檔名清單的分隔符。**半形 `/` 刻意不在裡面**——它是路徑分隔符
+# （`修改檔案 dashboard/gen_todos.py`），當成分隔符會把路徑切碎。
+# 全形「／」則相反：它不可能出現在 Windows／POSIX 路徑裡，在欄位值內出現時
+# 一律是分隔符（`version.json／Detect.ps1／_releases`）。
+#
+# 2026-08-12 補齊 `・·；;＋＆&` 與**全形／半形括號**。實測漏這幾個的後果：
+#     宣告 `server.py・app.js・index.html・styles.css（DEV/PROD 各一份·共 8 檔）`
+#     拆出來 → {'8', '各一份·共', 'PROD', '檔'}      ← 四個檔名一個都沒進去
+# 整串沒有被認得的分隔符 → 變成單一 token → `Path(...).name` 又把
+# `…styles.css（DEV/PROD` 只留下最後一段 `PROD`。一個**完全照規範寫**的宣告
+# 因此被判「未宣告就改」。括號要當分隔符而不是整段剝掉：實際宣告有兩種形狀，
+# 括號裡是說明（`（DEV/PROD 各一份）`）也有括號裡才是檔名
+# （`發版產物（version.json／…）`），當分隔符兩種都接得住。
+_FILE_SEP = re.compile(r"[、,，；;・·＋＆&／（）()\[\]【】\s]+")
+
+
 def _decl_file_set(raw: "str | None") -> "set | None":
     """把宣告的「修改檔案」欄拆成檔名集合。回 None 代表沒有這一欄或不是檔案清單。"""
     if raw is None:
@@ -348,14 +371,42 @@ def _decl_file_set(raw: "str | None") -> "set | None":
     txt = raw.strip().strip("*").strip()
     if not txt or txt.lower() in DECL_NONE or txt.startswith(DECL_NONE_PREFIX):
         return set()
-    parts = re.split(r"[、,，\s]+", txt.replace("`", ""))
+    parts = _FILE_SEP.split(txt.replace("`", ""))
     out = set()
     for p in parts:
-        p = p.strip("（）()[]。")
-        if not p or p in {"與", "＋", "+", "及"}:
+        p = p.strip("。、")
+        if not p or p in {"與", "＋", "+", "及", "等"}:
             continue
         out.add(Path(p.replace("\\", "/")).name)
     return out
+
+
+# 宣告欄裡「像檔名」的判準＝帶副檔名。**只用來分辨違規的種類，不影響對帳**：
+# 對帳一律照 `_decl_file_set` 的集合差集算。
+_FILELIKE = re.compile(r"\.[A-Za-z0-9]{1,5}$")
+
+
+def _decl_kind(raw: "str | None") -> str:
+    """宣告的「修改檔案」欄屬於哪一種：`missing`／`none`／`pending`／`desc`／`list`。
+
+    **「無」與「待定」分開**（2026-08-12）：舊版把兩者併成一句
+    「宣告無／待定但實際改了 N 檔」，但那是**兩種不同的行為，修法也不同**——
+    「無」＝我說了不改檔卻改了（宣告當下就錯）；「待定」＝規範明文允許的寫法
+    （§2「還沒決定就寫待定」），錯在**動工前沒有回來重宣告**（§2「換階段重宣告」）。
+    混成一句的後果是看不出該修哪一個，而 32 段裡絕大多數是後者。
+
+    `desc`＝填了東西但沒有任何像檔名的 token（`發版產物`／`見各步`／`版本號檔＋打包產物`）。
+    它跟「漏列檔案」也是兩件事：前者是**宣告寫得無法對帳**，後者是宣告寫對了但做多了。
+    """
+    if raw is None:
+        return "missing"
+    txt = raw.strip().strip("*").strip()
+    if not txt or txt.lower() in DECL_NONE:
+        return "none"
+    if txt.startswith(DECL_NONE_PREFIX):
+        return "none" if txt.startswith("無") else "pending"
+    toks = _decl_file_set(raw) or set()
+    return "list" if any(_FILELIKE.search(t) for t in toks) else "desc"
 
 
 def collect() -> dict:
@@ -495,8 +546,11 @@ def collect() -> dict:
                         # 軌跡的 key 帶專案：不同專案的 session hash 前 8 字有機會撞，
                         # 撞了會把兩個工作區的階段序列接成一條假軌跡
                         tr = tracks.setdefault((proj["name"], sess),
-                                               {"proj": proj["name"], "seq": []})
+                                               {"proj": proj["name"], "seq": [],
+                                                "scales": []})
                         tr["seq"].append(got["stage"])
+                        # 與 seq 等長 —— `track_flags` 靠 index 對位取規模欄。
+                        tr.setdefault("scales", []).append(got["scale"])
                         break        # 一則訊息只認第一個宣告
                 elif blk.get("type") == "tool_use":
                     name = blk.get("name") or ""
@@ -537,15 +591,50 @@ def collect() -> dict:
 
 # ── 判定層：把原始資料變成「符不符合」──────────────────────────────────────
 
-def judge(seg: dict) -> list:
-    """回這一段的旗標清單。空清單＝對帳相符。"""
+def scale_cutoff(segments: list) -> str:
+    """規模欄對帳的起算點＝**第一筆真的帶規模欄的宣告**，不是寫死的日期。
+
+    `SCALE_SINCE` 只到「日」，而規則是 2026-08-07 **當天下午** 才寫進全域 CLAUDE.md
+    （實測第一筆帶規模欄的宣告 `08-07T09:38Z`）。用日期比對的後果是那天凌晨到
+    下午的 **25 段全部被判「缺規模欄」，而它們一段也沒有機會遵守** —— 這正是
+    模組 docstring 第一條「分母跟規則同齡」，只是粒度不夠。同一個病 `_handoff_cutoff`
+    解過一次（綁 git commit 時間），這裡因為全域 CLAUDE.md 不在版控裡而改綁
+    transcript 自己的第一筆證據。
+
+    ⚠ **一次都沒寫過時退回 `SCALE_SINCE` 日界，不是全部豁免**：綁「第一筆」有個
+    自我豁免的陷阱 —— 模型從來不寫規模欄，cutoff 就永遠不成立、整張表 100% 綠。
+    那是假綠燈（`/verify-rules`：新寫的驗證預設它自己有問題）。沒有任何樣本時
+    規則日之後的每一段都該紅，因為那才是實情。
+
+    取 `max(規則日, 第一筆)`：第一筆若早於規則日（有人提前寫），仍從規則日起算。
+    """
+    base = _utc_cutoff(SCALE_SINCE)
+    stamps = [s["ts"] for s in segments if s.get("scale") and s.get("ts")]
+    return max(base, min(stamps)) if stamps else base
+
+
+def judge(seg: dict, scut: "str | None" = None) -> list:
+    """回這一段的旗標清單。空清單＝對帳相符。
+
+    `scut`＝規模欄的起算時刻（見 `scale_cutoff`）。**預設 None 退回日界比對**，
+    這樣既有測試與快照 fixture 不必改就仍然跑得動（加新參數把舊 case 弄紅
+    不是真發現）。正式產出一律由 `main`／`build_html` 算好傳進來。
+    """
     flags = []
     decl = _decl_file_set(seg["files_raw"])
+    kind = _decl_kind(seg["files_raw"])
     actual = seg["written"]
-    if decl is None:
+    if kind == "missing":
         flags.append(("缺修改檔案欄", "block"))
     elif not decl and actual:
-        flags.append((f"宣告無／待定但實際改了 {len(actual)} 檔", "block"))
+        # 「無」與「待定」拆開 —— 兩種行為、兩種修法（見 `_decl_kind` 的 docstring）。
+        flags.append(((f"宣告不改檔但實際改了 {len(actual)} 檔" if kind == "none"
+                       else f"待定後沒重宣告就改了 {len(actual)} 檔"), "block"))
+    elif kind == "desc" and actual:
+        # 宣告填了東西卻沒有任何檔名（`發版產物`／`見各步`／`版本號檔＋打包產物`）。
+        # 舊版把它算成「未宣告就改 N 檔」，但那個數字沒有意義：比對的一側根本
+        # 不是檔案清單。要修的是**宣告寫法**，不是「做多了」。
+        flags.append(("宣告非檔名清單，無法對帳", "warn"))
     elif decl:
         missing = actual - decl
         if missing:
@@ -564,7 +653,10 @@ def judge(seg: dict) -> list:
     # 快照 fixture 餵進來的 segment 只有 files_raw／written／tmp_written 三個 key，
     # 用 `[]` 會全部 KeyError 變紅 —— 那是「加新欄位把舊 case 弄紅」，不是真發現。
     ts = seg.get("ts") or ""
-    if ts and ts[:10] >= SCALE_SINCE:      # 分母跟規則同齡，8/07 之前不判
+    # 分母跟規則同齡。`scut` 是**時刻**（規則當天下午才上線，見 `scale_cutoff`）；
+    # 沒給就退回舊的日界比對，讓既有測試／fixture 照舊跑得動。
+    started = (ts >= scut) if scut else (ts[:10] >= SCALE_SINCE)
+    if ts and started:
         scale = seg.get("scale")
         if not scale:
             flags.append(("缺規模欄", "block"))
@@ -578,12 +670,18 @@ def judge(seg: dict) -> list:
     return flags
 
 
-def track_flags(seq: list, truncated: bool = False) -> list:
+def track_flags(seq: list, truncated: bool = False,
+                scales: "list | None" = None) -> list:
     """階段軌跡的旗標。判準只認「規則明講的順序」，不自己發明。
 
     `truncated`＝這個 session 在分母起算日之前就開始了。**那時「前面沒有 Research」
     是切出來的假象不是違規** —— 序列開頭本來就被 cutoff 切掉了。分母同齡是對的
     （見模組 docstring），但要為它的副作用留一個出口，否則舊 session 會被永久誤判。
+
+    `scales`＝與 `seq` 等長的規模欄清單（沒有就傳 None）。**L 級可以省 Design
+    是規則明文寫的**（全域 §3），所以第一次 Execute 宣告 L 時不標「沒有 Design」——
+    在規模欄存在之前這條標了也無從分辨，現在分辨得出來就不該再誤標。畫面上原本
+    靠一句「這是訊號不是判罪」補救，但**能判準的東西不該留給讀者自己過濾**。
     """
     out = []
     if truncated:
@@ -593,7 +691,8 @@ def track_flags(seq: list, truncated: bool = False) -> list:
         if not truncated:
             if "Research" not in seq[:i]:
                 out.append(("Execute 之前沒有 Research", "warn"))
-            if "Design" not in seq[:i]:
+            first_scale = scales[i] if scales and i < len(scales) else None
+            if "Design" not in seq[:i] and first_scale != "L":
                 out.append(("Execute 之前沒有 Design", "warn"))
         # 尾巴沒有被切，所以這一條在截斷的 session 上仍然成立
         last = max(idx for idx, s in enumerate(seq) if s == "Execute")
@@ -630,17 +729,19 @@ def build_html(data: dict) -> str:
     cov = coverage(segs)
     n = cov["n"]
     pcls = proj_classes(list(data["per_proj"]))
+    scut = scale_cutoff(segs)
 
     # ── 1 宣告對帳表
     #
     # **按時間降序、只顯示最近 MAX_ROWS 段**。兩個理由：段數會一直長（一週就幾百段），
     # 而未經排序時畫面會按 session 檔案順序跳來跳去（08-06 的排在 08-05 前面），
     # 讀者看不出時間軸。**違規率仍用全部段數算**——只截顯示，不截分母。
-    n_bad = sum(1 for s in segs if any(t in ("block", "warn") for _, t in judge(s)))
+    n_bad = sum(1 for s in segs
+                if any(t in ("block", "warn") for _, t in judge(s, scut)))
     shown = sorted(segs, key=lambda x: x["ts"], reverse=True)[:MAX_ROWS]
     rows = ""
     for s in shown:
-        flags = judge(s)
+        flags = judge(s, scut)
         # 每一列自帶判定分類，篩選才不必在 client 重算一遍判準
         # （重算＝第二份真相，兩邊漂開時畫面會自己跟自己不一致）
         verdict = "bad" if any(t in ("block", "warn") for _, t in flags) else "ok"
@@ -685,10 +786,17 @@ def build_html(data: dict) -> str:
         '        <ul>\n'
         '          <li><span class="chip block">缺修改檔案欄</span><span>宣告沒有這一欄。'
         '規則要求換階段重宣告時至少帶「階段 ＋ 修改檔案」——<b>沒有這一欄，這一段就無法對帳</b>。</span></li>\n'
-        '          <li><span class="chip block">宣告無／待定但實際改了</span><span>'
-        '宣告說不改檔或還沒決定，實際卻寫了檔。</span></li>\n'
+        '          <li><span class="chip block">宣告不改檔但實際改了</span><span>'
+        '宣告寫「無」卻寫了檔——<b>宣告當下就錯了</b>。</span></li>\n'
+        '          <li><span class="chip block">待定後沒重宣告就改了</span><span>'
+        '寫「待定」是規範允許的（§2「還沒決定就寫待定」），錯在<b>動工前沒有回來重宣告</b>。'
+        '與上一條拆開是因為<b>兩者的修法完全不同</b>，混成一句看不出該修哪個。</span></li>\n'
+        '          <li><span class="chip warn">宣告非檔名清單，無法對帳</span><span>'
+        '這一欄填了東西，但沒有任何像檔名的字（<code>發版產物</code>／<code>見各步</code>／'
+        '<code>版本號檔＋打包產物</code>）。<b>要修的是宣告寫法，不是「做多了」</b>——'
+        '比對的一側根本不是檔案清單，算出來的差集沒有意義。</span></li>\n'
         '          <li><span class="chip warn">未宣告就改</span><span>'
-        '實際動到的檔不在宣告清單裡。這是規模分級最容易失守的地方。</span></li>\n'
+        '宣告的確是檔名清單，但實際動到的檔不在裡面。這是規模分級最容易失守的地方。</span></li>\n'
         '          <li><span class="chip accent">實際 ≥3 檔</span><span>'
         '碰到 S 級門檻（全域 §3）。<b>它本身不是違規</b>，是提醒這一段該走完五階段。</span></li>\n'
         '          <li><span class="chip pass">● 相符</span><span>宣告與實際對得上。</span></li>\n'
@@ -702,7 +810,7 @@ def build_html(data: dict) -> str:
     # 篩選鈕的計數用**表列的那幾段**算，不是全部段數 —— 否則按下「有問題 13」
     # 卻只跳出 8 列，數字與畫面不一致（表格截到最近 MAX_ROWS 段）。
     shown_bad = sum(1 for s in shown
-                    if any(t in ("block", "warn") for _, t in judge(s)))
+                    if any(t in ("block", "warn") for _, t in judge(s, scut)))
     shown_ok = len(shown) - shown_bad
     filt = (f'        <div class="cv-switch wfc-filter" role="group" '
             f'aria-label="對帳判定篩選">\n'
@@ -739,7 +847,7 @@ def build_html(data: dict) -> str:
     for key, tr in sorted(data["tracks"].items(),
                           key=lambda kv: -len(kv[1]["seq"])):
         seq = tr["seq"]
-        tf = track_flags(seq, key in data["pre_cutoff"])
+        tf = track_flags(seq, key in data["pre_cutoff"], tr.get("scales"))
         chain = " → ".join(f'<span class="path">{_esc(s)}</span>' for s in seq)
         trows += (f'              <tr>\n'
                   f'                <td class="path">{_esc(key[1])}'
@@ -891,6 +999,7 @@ def main() -> None:
     data = collect()
     segs = data["segments"]
     cov = coverage(segs)
+    scut = scale_cutoff(segs)
 
     if "--check" in sys.argv:
         print(f"分母：{SINCE} 起 · {len(segs)} 段宣告 · "
@@ -899,10 +1008,12 @@ def main() -> None:
         for pname, info in sorted(data["per_proj"].items(), key=lambda kv: -kv[1]["n"]):
             print(f"  {'●' if info['wired'] else '○'} {pname:<18} {info['n']:>3} 段"
                   f"{'  ← 本專案' if info['current'] else ''}")
-        print("\n【宣告對帳】")
+        print(f"\n【宣告對帳】規模欄自 {scut[:16]} UTC 起算"
+              f"（＝第一筆真的帶規模欄的宣告；規則寫死的日期只到「日」，"
+              f"而它是那天下午才上線的）")
         bad = 0
         for s in segs:
-            flags = judge(s)
+            flags = judge(s, scut)
             if any(t in ("block", "warn") for _, t in flags):
                 bad += 1
             mark = "、".join(t for t, _ in flags) or "相符"
@@ -913,7 +1024,8 @@ def main() -> None:
         print("\n【階段軌跡】")
         for key, tr in sorted(data["tracks"].items(), key=lambda kv: -len(kv[1]["seq"])):
             tf = ("、".join(t for t, _ in
-                            track_flags(tr["seq"], key in data["pre_cutoff"]))
+                            track_flags(tr["seq"], key in data["pre_cutoff"],
+                                        tr.get("scales")))
                   or "無旗標")
             print(f"  [{tr['proj']}] {key[1]}: {' → '.join(tr['seq'])}   [{tf}]")
         print("\n【覆蓋率】")
@@ -932,7 +1044,8 @@ def main() -> None:
     out = inject(html, build_html(data))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
-    bad = sum(1 for s in segs if any(t in ("block", "warn") for _, t in judge(s)))
+    bad = sum(1 for s in segs
+              if any(t in ("block", "warn") for _, t in judge(s, scut)))
     print(f"已注入工作流程遵循度：{len(segs)} 段宣告 · 對得上 {len(segs) - bad}/{len(segs)}"
           f" · {len(data['tracks'])} 個 session 軌跡 · 交接樣本 {len(data['handoff'])} 份")
 

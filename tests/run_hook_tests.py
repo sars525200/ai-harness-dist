@@ -316,7 +316,9 @@ def main() -> int:
         import test_todos
         import test_warn_channel
         import test_workflow_compliance
+        import test_check_bloat
         for run_fn, label in (
+            (test_check_bloat.run, "常駐層健檢（check_bloat）"),
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
