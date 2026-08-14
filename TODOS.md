@@ -60,6 +60,5 @@
 
 | 項目 | 現況／為何還沒做 | 下一步（逐字指令或動作） | 誰 |
 |---|---|---|---|
-| 🔧 **`check_bloat` 缺 `parse_blocks()`，連鎖讓 3 支檢查紅** | 8/15 隔離 `run_hook_tests.py` 的 extra 迴圈後才看得見：`check_prose_blocks` 因此 `SystemExit(2)`、`/context-health` 20/21、`check_bloat` 自己 47/53。**在此之前這 3 支是完全隱形的**（一支 SystemExit 把後面 21 項一起殺掉，畫面上只像「一支失敗」） | 補 `parse_blocks()`（量測單位的單一真相），再跑 `py -3 -X utf8 D:\.ai-harness\tests\run_hook_tests.py` 確認三支轉綠 | context-health 那條線 |
 | 🔧 **escape 被中間層吃掉，需要 lint 而不是靠記得** | 同一天內同一個母題踩三次：抽區塊撞解構參數的 `{`／CRLF 下 `replace` 靜默沒命中／heredoc 非 raw 字串把 `\t` 吃成 tab（寫進記憶檔的路徑變成 `.ai-harness<TAB>ools`）。前兩個已做成 `tools\js_source_probe.js`，**第三個還沒有守門** | 想一個能擋「用會解讀跳脫的那一層去寫含跳脫字元的文字」的檢查；或至少在寫檔類 hook 加一條偵測（檔案內容出現裸 TAB 在路徑中段＝可疑） | 待判斷 |
 | 👤 **`gen_roles_topology` 的 `boundaryReport` 只驗「角色檔有沒有寫這段話」** | 它檢查的是 `"【需要但沒有】" in body`＝**機制有沒有配上**，不是「有沒有人真的提了需求、後來怎麼了」。所以看板永遠顯示 6/6 綠，即使一年沒有任何需求被登記也一樣 | 判斷要不要加第二個指標（例如本表的筆數與最舊一筆的年齡）。**先讓這張表跑一陣子有真實資料再說**，現在加等於量一個恆為 0 的數字 | 待判斷·別急 |
