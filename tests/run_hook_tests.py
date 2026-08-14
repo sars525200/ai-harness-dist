@@ -320,11 +320,13 @@ def main() -> int:
         import test_check_prose_blocks
         import test_harness_config
         import test_context_health_skill
+        import test_js_source_probe
         for run_fn, label in (
             (test_check_bloat.run, "常駐層健檢（check_bloat）"),
             (test_check_prose_blocks.run, "散文塊偵測（check_prose_blocks）"),
             (test_harness_config.run, "harness 設定去專案化（P-12）"),
             (test_context_health_skill.run, "/context-health 可用性（V-14）"),
+            (test_js_source_probe.run, "JS 原始碼探針（抽函式／變異）"),
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
@@ -341,7 +343,18 @@ def main() -> int:
             (test_disp1.run, "DISP-1 派工紀律"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):
-            ex_passed, ex_failed = run_fn()
+            # 2026-08-15：**每一項各自隔離**。原本是裸呼叫 —— 其中一支 `SystemExit` 就會把
+            #   整個迴圈殺掉，而畫面上只會少印幾行、看起來像「一支測試失敗」。
+            #   實測：`check_prose_blocks` 因 `check_bloat` 缺 `parse_blocks()` 而 exit 2，
+            #   於是清單 22 項**只跑到第 1 項**，後面 21 項從沒執行過、也沒有任何痕跡。
+            #   這與本檔開頭「零 fixture 一律視為失敗」是同一條紀律：
+            #   **沒跑到不可以長得像沒問題。**
+            try:
+                ex_passed, ex_failed = run_fn()
+            except BaseException as exc:  # noqa: BLE001 —— SystemExit 也要接住
+                ex_passed, ex_failed = 0, [
+                    f"{type(exc).__name__}: {exc}（這支自己中止了；已隔離，後續檢查照跑）"
+                ]
             unit_passed += ex_passed
             for detail in ex_failed:
                 failed.append((label, detail))
