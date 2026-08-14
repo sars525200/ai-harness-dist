@@ -39,12 +39,82 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 DASHBOARD_DIR = Path(__file__).resolve().parent
+HARNESS_ROOT = DASHBOARD_DIR.parent
+CONFIG_PATH = HARNESS_ROOT / "harness.config.json"
+CONFIG_SCHEMA = 1
 HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 GLOBAL_DIR = Path.home() / ".claude"
-PROJECT_DIR = Path(r"D:\IT-department\.claude")
 
 MARK_START = "<!-- LAYERS_GLOBAL_START"
 MARK_END = "<!-- LAYERS_GLOBAL_END -->"
+
+_CONFIG_TEMPLATE = {
+    "schema": CONFIG_SCHEMA,
+    "currentProject": "D:\\你的專案",
+    "scanRoots": ["D:\\"],
+    "extraProjects": [],
+}
+
+
+def _load_config() -> dict:
+    r"""harness 層設定：**只回答「有哪些專案」**（CONTEXT_HEALTH_PLAN C-11 的兩層設定）。
+
+    【核心層】這是 `UNIVERSAL_HARNESS_PLAN` U-1（不寫死專案路徑）的載體。
+
+    ⚠ **這份設定不能放在專案根**：`discover_projects()` 要先讀它才知道有哪些專案
+    ——清單放在還沒被發現的專案裡是雞生蛋。D-2 的 (a) 因此必須拆成兩層：
+    這一份管「有哪些專案」，專案自己的設定在該專案的 `.claude\PROJECT_CONTEXT.md`。
+
+    ⚠ **U-2：缺設定一律拒跑並印出範本，不得 fallback 到任何預設專案。**
+    fallback 的後果不是「跑不動」而是**「看起來能跑」**——別人的機器上掃到的是
+    我的專案、報告卻掛在他名下，而那個錯誤沒有任何紅燈。
+    """
+    if not CONFIG_PATH.exists():
+        # bootstrap：新機器第一次跑時，六支看板產生器會同時 SystemExit —— 光是印一段
+        # JSON 叫人自己貼並不夠（U-4：安裝流程要能被別人跑完）。`--init` 直接產範本。
+        if "--init" in sys.argv:
+            CONFIG_PATH.write_text(
+                json.dumps(_CONFIG_TEMPLATE, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8")
+            raise SystemExit(
+                f"已產生範本 {CONFIG_PATH}\n"
+                f"請把 currentProject／scanRoots 改成這台機器上的實際路徑，再跑一次。\n"
+                f"（範本裡的路徑是假的，直接跑會在存在性檢查被擋下——那是刻意的）")
+        raise SystemExit(
+            f"找不到 harness 設定 {CONFIG_PATH} —— 拒跑，不猜要掃哪裡（U-2）。\n"
+            f"新機器請跑：py -3 {Path(__file__).name} --init\n"
+            f"或自己建一份：\n"
+            + json.dumps(_CONFIG_TEMPLATE, ensure_ascii=False, indent=2)
+        )
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        raise SystemExit(f"{CONFIG_PATH} 不是合法 JSON（{exc}）—— 拒跑。")
+    if cfg.get("schema") != CONFIG_SCHEMA:
+        raise SystemExit(
+            f"{CONFIG_PATH} 的 schema 是 {cfg.get('schema')!r}，本版需要 {CONFIG_SCHEMA} —— 拒跑。")
+    missing = [k for k in ("currentProject", "scanRoots", "extraProjects") if k not in cfg]
+    if missing:
+        raise SystemExit(f"{CONFIG_PATH} 缺欄位 {missing} —— 拒跑（U-2：缺設定不要猜）。")
+    # ⚠ **`currentProject` 必須真的存在**（2026-08-13 覆核 F-8）：
+    # `discover_projects()` 對它是 `found.insert(0, here)` **無條件插入**
+    # （`extraProjects` 反而有 `exists()` 過濾）。而 `survey()` 那道存在性守門
+    # **只擋 `main()` 這條路**，`check_bloat` / `check_prose_blocks` 走的是
+    # `survey_projects()`，繞過它。結果：換部門的人跑健檢，報告第一列是一個
+    # 不存在的專案、CLAUDE.md／MEMORY.md 都印「無」——**正是 U-2 要防的
+    # 「設定漏了卻偽裝成一切正常」**，而且沒有任何紅燈。
+    cur = Path(cfg["currentProject"])
+    if not cur.is_dir():
+        raise SystemExit(
+            f"{CONFIG_PATH} 的 currentProject 指向 {cur}，該目錄不存在 —— 拒跑（U-2）。\n"
+            f"改成這台機器上的專案根目錄；不確定就跑 `{Path(__file__).name} --init` 產一份範本。")
+    return cfg
+
+
+_CFG = _load_config()
+# ⚠ 這三個名稱**不可改**：`gen_todos.py` 用 `layers.PROJECT_DIR`、
+# `tests\test_layers.py` 用 `m.EXTRA_PROJECTS` 做 monkeypatch。改的是來源不是介面。
+PROJECT_DIR = Path(_CFG["currentProject"]) / ".claude"
 
 
 def _esc(t: str) -> str:
@@ -66,11 +136,13 @@ def _count(root: Path, pattern: str) -> int:
         return 0
 
 
-# 專案層下拉要列的候選。自動偵測 D:\ 下帶 `.claude\` 的目錄，再併入這裡點名的 ——
+# 專案層下拉要列的候選。自動偵測 `scanRoots` 下帶 `.claude\` 的目錄，再併入點名的 ——
 # 點名的即使**沒有** `.claude\` 也要列出來：「這個專案完全沒接 harness」本身就是答案，
 # 而自動偵測看不到它（沒有 .claude 就掃不到）。
-EXTRA_PROJECTS = [Path(r"D:\AI-Projects")]
-SCAN_ROOT = Path("D:\\")
+# 值一律來自 `harness.config.json`（U-1）；**名稱保留**是因為 tests 對 EXTRA_PROJECTS
+# 做 monkeypatch（`test_layers.py:165,176`）——換掉來源不等於可以換掉介面。
+EXTRA_PROJECTS = [Path(p) for p in _CFG["extraProjects"]]
+SCAN_ROOTS = [Path(p) for p in _CFG["scanRoots"]]
 
 
 def _proj_color_classes() -> dict:
@@ -89,12 +161,14 @@ def _proj_color_classes() -> dict:
 def discover_projects() -> list:
     """回候選專案路徑清單（含沒有 .claude 的點名項）。"""
     found = []
-    try:
-        for child in sorted(SCAN_ROOT.iterdir()):
-            if child.is_dir() and (child / ".claude").is_dir():
-                found.append(child)
-    except Exception:
-        pass
+    for root in SCAN_ROOTS:
+        try:
+            for child in sorted(root.iterdir()):
+                if child.is_dir() and (child / ".claude").is_dir() and child not in found:
+                    found.append(child)
+        except Exception:
+            # 單一根目錄掃不動（磁碟不存在／權限）不該讓其餘根目錄一起消失
+            continue
     for extra in EXTRA_PROJECTS:
         if extra.exists() and extra not in found:
             found.append(extra)
@@ -322,8 +396,11 @@ def sync_layer_counts(html: str, s: dict) -> str:
         "globalRules": g["rules"], "globalHooks": len(g["hooks"]),
         "globalAllow": g["allow"], "globalDeny": g["deny"],
         "projectAllow": s["project"]["allow"], "projectDeny": s["project"]["deny"],
-        # 規則總數讀 dispatch_config（單一真相），不寫死 —— 加一條規則徽章要自己跟上
-        "ruleCount": len((_json(Path(r"D:\.ai-harness\hooks\dispatch_config.json"))
+        # 規則總數讀 dispatch_config（單一真相），不寫死 —— 加一條規則徽章要自己跟上。
+        # ⚠ 路徑本身以前也是寫死的（2026-08-13 被 V-15 抓到）：那行註解說「不寫死」
+        # 指的是規則數，但它自己的路徑釘在 `D:\.ai-harness\` —— harness 換個碟就讀不到，
+        # 而 `_json()` 讀不到回 None → ruleCount 靜默變 0，看板顯示「0 條規則」。
+        "ruleCount": len((_json(HARNESS_ROOT / "hooks" / "dispatch_config.json")
                           or {}).get("rules") or {}),
         # 下拉選單用：每個候選專案的實掃結果。沒有 .claude 的也列（exists=false）——
         # 「這個專案完全沒接 harness」正是要看的答案。

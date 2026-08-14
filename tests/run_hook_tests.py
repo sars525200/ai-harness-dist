@@ -317,8 +317,14 @@ def main() -> int:
         import test_warn_channel
         import test_workflow_compliance
         import test_check_bloat
+        import test_check_prose_blocks
+        import test_harness_config
+        import test_context_health_skill
         for run_fn, label in (
             (test_check_bloat.run, "常駐層健檢（check_bloat）"),
+            (test_check_prose_blocks.run, "散文塊偵測（check_prose_blocks）"),
+            (test_harness_config.run, "harness 設定去專案化（P-12）"),
+            (test_context_health_skill.run, "/context-health 可用性（V-14）"),
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
