@@ -88,8 +88,10 @@ MUTATIONS = [
     ),
     (
         "索引列長度改回算整行（檔名佔 63%，長檔名的條目永遠假超標）",
-        '        vis_body = _visible(body_txt) or vis',
-        '        vis_body = vis',
+        # 錨點 2026-08-14 v12 更新：`vis_body` 那個中間變數隨「條目改成 lead＋懸掛續行」
+        # 的重構 inline 進了 `entries.append`，舊錨點從此對不到 —— 而那個變異等於沒在測。
+        '            "chars": len(_visible(body_txt) or vis),',
+        '            "chars": len(vis),',
     ),
     (
         "去重退回「同一天只留最新」（壓縮前的基準會被當天第二筆吃掉）",

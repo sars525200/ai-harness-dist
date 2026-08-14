@@ -53,16 +53,17 @@ HARNESS = HERE.parent
 CHECK_BLOAT_PY = HERE / "check_bloat.py"
 
 LIMIT = 120             # 與 check_bloat.LIMIT／MEMORY.md 檔頭／CLAUDE.md §4 同一個數字
-_INDEX_ROW = re.compile(r"^-\s+\[")
-_TABLE_ROW = re.compile(r"^\|")
-_HEADING = re.compile(r"^#{1,6}\s")
-# ⚠ **只跳過 `- ` 開頭**（覆核 F-12）：這裡要跳過的是「`check_bloat` 已經在管的形狀」，
-# 而它的 `parse_entries()` 只認 `line.startswith("- ")`。首版寫成 `^[-*+]\s`，
-# 於是 `* ` 與 `+ ` 開頭的長規則**兩支工具都看不見**（實測 216 字的規則：
-# `- ` → check_bloat 抓到；`* `／`+ ` → 兩支都是 0），
-# 而 SKILL.md 還寫著「兩支盲區互補」。**互補的前提是邊界對齊，不是各自有各自的漏。**
-_LIST_ROW = re.compile(r"^-\s")
-_FENCE = re.compile(r"^\s*```")
+# ⚠ **這裡不再自己判斷「哪一行歸誰管」**——每一行的類別一律問
+# `check_bloat.classify_lines()`（v12·R5-F1／F2）。演化史值得留著，因為它是
+# 「同一個錯換三種寫法」的紀錄：
+#   v7 首版：自己寫 `^[-*+]\s` 跳過條目 → `* `／`+ ` 開頭的長規則**兩支都看不見**（F-12）
+#   v8：改成只跳 `- `，去對齊 check_bloat 當時的 `startswith("- ")`
+#       → 對齊了，但用的是**抄一份一樣的常數**，於是 `1. ` 又漏掉
+#   v10：改成呼叫 `is_entry_line()` → 行的層級真的對齊了，
+#       但**量測單位沒有**：條目的懸掛續行仍被當散文累積，一條折行的長規則
+#       被切成兩半，兩支都在門檻下（R5-F2·實測全域 CLAUDE.md 4 條超標報成 0）
+#   v12：整份行分類共用 `classify_lines()`，`entry` 與它的 `continuation` 一起歸條目層
+_SECTION_HEAD_LINE = re.compile(r"^(#{2,6})\s")   # 與 check_bloat._SECTION_HEAD 同規則
 _RULES_ANCHOR = re.compile(r"<!--\s*rules-section\s*(?::\s*all\s*)?-->")
 _ANCHOR_ALL = re.compile(r"<!--\s*rules-section\s*:\s*all\s*-->")
 
@@ -71,90 +72,35 @@ CHARS_PER_TOKEN = 1.5   # 中文為主的 markdown 粗估。**是估算不是量
 CALLS_PER_DAY = 100     # 換算 $/月 用的假設則數，同樣要標明
 CACHE_READ_MULT = 0.1   # cache 命中時的 input 折扣
 
-_SKILL_REF = re.compile(r"[/`](/?)([a-z][a-z0-9-]{2,})\b")
-
 
 def _visible(text: str) -> str:
     return re.sub(r"\s", "", text)
 
 
-def injected_names(project_path: Path) -> tuple:
-    """回 (skills, agents) —— **目錄型**的 skill／角色名單。
-
-    ⚠ **這不等於系統實際注入的完整清單**（覆核 F-14 訂正）：
-    首版的 docstring 寫「注入的清單就是從這些目錄掃出來的，**不必也不能去猜**」
-    ——**那是錯的**。實測本機掃到 **17 項**，而一個 session 收到的注入清單有 **31 項**；
-    多出來的 14 項是 **plugin 與內建 skill**（`dataviz`／`code-review`／`loop`／
-    `artifact-*`／`update-config`…），**不在** `.claude/skills`、`~/.claude/skills`、
-    `harness/skills` 任何一個目錄裡。
-
-    **後果**：一段手抄了 plugin skill 描述的區塊，`count=0`、`is_echo=False`，
-    P-9 完全漏報。這是**已知且刻意接受的範圍限制**——離線腳本確實拿不到
-    plugin 註冊表，但**報告必須講出這個界線**，否則「沒命中」會被讀成「沒問題」。
-
-    ⚠ 這是 P-9 的重點：檔案裡再抄一份 skill／角色清單＝**同一份資訊每則對話付兩次**，
-    而且會漂（skill 改了描述、角色改名，手抄那份不會跟著動，
-    **症狀是模型讀到過期的職掌描述而沒有任何人收到通知**）。
-    """
-    skills, agents = set(), set()
-    for base in (project_path / ".claude" / "skills",
-                 Path.home() / ".claude" / "skills",
-                 HARNESS / "skills"):
-        try:
-            if base.is_dir():
-                skills |= {d.name for d in base.iterdir() if d.is_dir()}
-        except Exception:
-            continue
-    for base in (Path.home() / ".claude" / "agents", HARNESS / "agents"):
-        try:
-            if base.is_dir():
-                agents |= {f.stem for f in base.glob("*.md")}
-        except Exception:
-            continue
-    return skills, agents
-
-
-ECHO_MIN_REFS = 3        # 絕對下限：低於這個數，比例再高也只是巧合
-ECHO_COVERAGE = 0.4      # 涵蓋率門檻：列到名單的四成以上＝在「完整列舉」
-ECHO_ABS_STRONG = 5      # 大名單的絕對捷徑：列到這麼多個，不看比例也算
-
-
-def echo_of_injected(text: str, skills: set, agents: set,
-                     min_refs: int = ECHO_MIN_REFS) -> dict:
-    """這段文字是不是在手抄「系統已自動注入的清單」？
-
-    判準（**比例為主、絕對數為輔**）：
-        `is_echo = hits >= ECHO_MIN_REFS and (涵蓋率 >= ECHO_COVERAGE or hits >= ECHO_ABS_STRONG)`
-
-    只數 `/xxx` 形狀會誤報任何含斜線的文字——所以一定要對得上真實名單才算。
-
-    ## 為什麼從絕對數 5 改成比例（覆核 F-9）
-
-    首版是「≥5 個名字」，理由是當日資料：真陽性列了 15 與 7 個、誤報的指路句列了 3 與 4 個。
-    **那個常數對這一台機器是對的，對「分發給其他部門」是致命的**——
-    一個只有 4 支 skill 的新部門，即使把全部 4 支**完整手抄一遍**，`count` 最多 4 < 5，
-    P-9 **永遠不會命中**。而「換一個部門還成立嗎」正是這整套 harness 的判準。
-
-    比例判準讓兩端都對：
-      - 4 支 skill 全抄 → 4/4 = 100% ⇒ 命中（絕對數版本漏掉）
-      - §8 索引句列 3 個／17 支 → 18% ⇒ 不命中（指路不是抄寫）
-      - 舊版 MEMORY.md 列 15 個／17 支 → 88% ⇒ 命中
-    `ECHO_MIN_REFS=3` 的絕對下限擋住「小名單容易衝高比例」（2 支裡提 1 支＝50%）。
-
-    ⚠ 這仍是**候選判準不是判定**，最終由人看（C-1）。
-    """
-    found = {m.group(2) for m in _SKILL_REF.finditer(text)}
-    hit_s = sorted(found & skills)
-    hit_a = sorted(found & agents)
-    hits = hit_s + hit_a
-    universe = len(skills) + len(agents)
-    coverage = (len(hits) / universe) if universe else 0.0
-    is_echo = (len(hits) >= min_refs
-               and (coverage >= ECHO_COVERAGE or len(hits) >= ECHO_ABS_STRONG))
-    return {"hits": hits, "count": len(hits),
-            "is_echo": is_echo,
-            "coverage": round(coverage, 3), "universe": universe,
-            "skills": hit_s, "agents": hit_a}
+# ── P-9（手抄注入清單偵測）已於 2026-08-14 v12 **整支移除** ──────────────────
+#
+# 三版判準全部失效，而且**每一版的失效都是被實測推翻的，不是被推理推翻的**：
+#   v6 絕對數 `hits>=5`   → 只有 4 支 skill 的部門全抄也永遠不命中（F-9）
+#   v8 比例判準           → universe≥11 比例分支是死碼；universe≤10 指路句與全抄
+#                           數學上無法區分 ⇒ 叫新部門刪自己的導航句（R4-E）
+#   v9 名字→描述配對數    → `gap` 量的是「到下一個名字的距離」＝**排版的函數**：
+#                           把 §8 現有四段**只刪掉中間空行**合成一段，判定就翻成
+#                           「手抄」；名字全部前置則從「手抄」翻成乾淨（R5-F3）
+#
+# 之後量過的兩個替代訊號，也都被真實資料排除：
+#   ①**檔案層級的名字數**：IT-dept CLAUDE.md 的合法索引句整份檔命中 **10 個**名字，
+#     而「4 支 skill 的部門全部手抄一遍」只有 **4 個** ⇒ 門檻要同時 `K>5` 且 `K<=4`，無解。
+#   ②**與 skill `description` 的字面重疊**：在真實資料上**訊號是反的**——
+#     現行 §8 索引句重疊總量 **184**（最長單支 40），而 2026-08-13 那份真手抄只有 **110**
+#     （最長 18）。原因是那份手抄抄的是**當時**的描述，skill description 後來改過了：
+#     **它已經漂了**。而「會漂」正是 P-9 存在的理由 ⇒ **訊號與偵測目標互斥**，
+#     抄得越久、越該被抓，字面重疊反而越低。
+#
+# 拿掉而不是留一個壞判準，是因為**壞判準比沒有判準更貴**：它會叫人去刪
+# §8／MEMORY.md 裡唯一還指得到路的那幾行導航句（SKILL.md 硬規則 1／3 講的正是這件事）。
+# 「同一份資訊付兩次錢」這個問題本身仍然成立，只是**它不是一個能用結構偵測的問題**
+# ——判定它需要人讀兩邊，與 P-8（跨檔重複偵測）當初被推翻的理由同型。
+# 完整資料與三輪判準演化見 `CONTEXT_HEALTH_PLAN.md` §7 v12。
 
 
 def _price_in() -> dict:
@@ -207,23 +153,36 @@ def cost_estimate(chars: int, model: str = "opus") -> dict:
                     f"·cache 命中 ×{CACHE_READ_MULT}·每天 {CALLS_PER_DAY} 則"}
 
 
+_CB_CACHE = None
+
+
 def _load_check_bloat():
-    """重用 `check_bloat.discover_targets()` —— 掃哪些檔的單一真相在那裡。"""
+    """重用 `check_bloat` —— 掃哪些檔、什麼算條目，單一真相都在那裡。"""
+    global _CB_CACHE
+    if _CB_CACHE is not None:
+        return _CB_CACHE
     if not CHECK_BLOAT_PY.exists():
         print(f"⚠ 找不到 {CHECK_BLOAT_PY} —— 掃描對象無從取得，拒跑（不猜）。")
         sys.exit(2)
     spec = importlib.util.spec_from_file_location("_cb_for_struct", CHECK_BLOAT_PY)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    _CB_CACHE = mod
     return mod
 
 
 def _rules_scope(lines: list) -> tuple:
     """回規則型檔要看的行範圍 `(start, end)`（0-indexed, end 不含）。
 
-    有 `: all` 錨＝整份都算規則節；有一般錨＝從錨的那一節到下一個同級標題；
+    有 `: all` 錨＝整份都算規則節；有一般錨＝**從錨所屬那一節的標題**到下一個同級標題；
     **沒有錨＝回 (None, None)**，呼叫端要明講「本檔沒宣告規則節，只做檔頭檢查」，
     不得靜默當成整份掃（那會把 §1–§7 的章節說明全報成異常）。
+
+    ⚠ **起點是「節標題」不是「錨那一行」**（v12·R5-F7）：`check_bloat.entry_scope()`
+    從節標題開始，這裡舊版從錨開始 —— 於是**同一節內、錨之前的散文兩支都看不到**，
+    把一段文字從錨下面移到錨上面它就從報告消失。
+    節標題的判定也改用 `#{2,6}`（與 `check_bloat._SECTION_HEAD` 同規則），
+    否則 `#` 一級標題下的錨兩邊會算出不同範圍。
     """
     text = "\n".join(lines)
     if _ANCHOR_ALL.search(text):
@@ -231,25 +190,24 @@ def _rules_scope(lines: list) -> tuple:
     idx = next((i for i, ln in enumerate(lines) if _RULES_ANCHOR.search(ln)), None)
     if idx is None:
         return None, None
-    # 往回找該錨所屬的標題層級
-    level = 2
+    # 往回找該錨所屬的節標題（起點）與它的層級
+    start, level = idx, 2
     for j in range(idx, -1, -1):
-        m = _HEADING.match(lines[j])
-        if m:
+        if _SECTION_HEAD_LINE.match(lines[j]):
+            start = j
             level = len(lines[j]) - len(lines[j].lstrip("#"))
             break
     for k in range(idx + 1, len(lines)):
-        m = _HEADING.match(lines[k])
-        if m and (len(lines[k]) - len(lines[k].lstrip("#"))) <= level:
-            return idx, k
-    return idx, len(lines)
+        if (_SECTION_HEAD_LINE.match(lines[k])
+                and (len(lines[k]) - len(lines[k].lstrip("#"))) <= level):
+            return start, k
+    return start, len(lines)
 
 
-def scan(path: Path, kind: str, project_path: "Path | None" = None) -> dict:
+def scan(path: Path, kind: str) -> dict:
     """回 {blocks: [...], prose_chars: int, note: str}。
 
-    `kind`：`index`＝整份都該是索引／`rules`＝只看 rules-section 錨內。
-    `project_path` 給了才做 P-9 的「手抄系統注入清單」判定（要掃該專案的 skills 目錄）。
+    `kind`：`index`＝整份都該是索引／`rules`＝只看 rules-section 錨所屬那一節。
     """
     try:
         text = path.read_text(encoding="utf-8-sig", errors="replace")
@@ -267,9 +225,7 @@ def scan(path: Path, kind: str, project_path: "Path | None" = None) -> dict:
     else:
         start, end = 0, len(lines)
 
-    skills, agents = injected_names(project_path) if project_path else (set(), set())
     blocks = []
-    in_fence = False
     buf: list = []          # 累積中的散文段：[(行號, 原文)]
 
     def _flush() -> None:
@@ -321,39 +277,24 @@ def scan(path: Path, kind: str, project_path: "Path | None" = None) -> dict:
                 "head": head_text[:70],
                 "lead": head_text[:2] if head_text[:1] in (">", "*") else head_text[:1],
             }
-            if skills or agents:
-                echo = echo_of_injected(text, skills, agents)
-                if echo["is_echo"]:
-                    entry["echo"] = echo      # P-9：這一段在手抄系統已注入的清單
             blocks.append(entry)
         buf.clear()
 
-    for i in range(start, end):
-        raw = lines[i]
-        if _FENCE.match(raw):
-            in_fence = not in_fence
+    # 🔒 **每一行歸誰管，一律問 `check_bloat.classify_lines()`**（v12·R5-F1／F2）。
+    # 這裡只累積 `prose`：`entry` 與它的 `continuation` 都屬於條目層。
+    # 舊版只跳過 lead 行、**卻把懸掛續行當散文累積**，於是一條折行的長規則
+    # 被切成兩半（條目層看前半、散文層看後半），兩邊都在門檻下 —— 而報告的 head
+    # 還會指著規則的中段。量測單位不統一，邊界對齊做在行上也補不起來。
+    for rel, line_kind, s in _load_check_bloat().classify_lines(lines[start:end]):
+        if line_kind == "prose":
+            buf.append((start + rel + 1, s))
+        else:
             _flush()
-            continue
-        if in_fence:
-            continue
-        s = raw.strip()
-        # 空行／標題／表格／列表都是段落邊界 —— 結算，不累積
-        if not s or _HEADING.match(s) or _TABLE_ROW.match(s):
-            _flush()
-            continue
-        if kind == "index" and _INDEX_ROW.match(s):
-            _flush()
-            continue
-        if kind == "rules" and (_LIST_ROW.match(s) or _INDEX_ROW.match(s)):
-            _flush()
-            continue
-        buf.append((i + 1, s))
     _flush()
 
     prose = sum(b["chars"] for b in blocks)
     return {"blocks": blocks,
             "prose_chars": prose,
-            "echo_blocks": [b for b in blocks if b.get("echo")],
             "cost": cost_estimate(prose) if prose else None,
             "note": note}
 
@@ -367,13 +308,13 @@ def main() -> int:
     args = ap.parse_args()
 
     # ⚠ **`--project` 一律是「專案名」**（覆核 F-10 訂正）：首版的 `--file` 分支拿它當
-    # **目錄路徑**用（`Path(args.project).is_dir()`），而主流程與 docstring 都當專案名。
-    # 照文件打 `--file X --kind index --project IT-department` → `is_dir()` False
-    # → `project_path=None` → **P-9 靜默不做，而且輸出不會說它沒做**。
-    # fixture 驗證（V-12 的用法）走的正好是這條路。
+    # **目錄路徑**用，而主流程與 docstring 都當專案名。給錯名字一律拒跑，不靜默略過。
     cb = _load_check_bloat()
-    gl = cb._load_layers()
-    proj_paths = {p["name"]: Path(p["path"]) for p in gl.survey_projects()}
+    known = {p["name"] for p in cb._load_layers().survey_projects()} | {cb.GLOBAL_PROJECT}
+    if args.project and args.project not in known:
+        print(f"⚠ --project {args.project!r} 不是已知專案名"
+              f"（可用：{sorted(known)}）—— 拒跑，不猜。")
+        return 2
 
     rows = []
     if args.file:
@@ -381,15 +322,8 @@ def main() -> int:
             print("⚠ --file 必須同時給 --kind（index／rules）—— 不猜檔案類型。")
             return 2
         p = Path(args.file)
-        pp = None
-        if args.project:
-            pp = proj_paths.get(args.project)
-            if pp is None:
-                print(f"⚠ --project {args.project!r} 不是已知專案名"
-                      f"（可用：{sorted(proj_paths)}）—— 拒跑，不靜默關掉 P-9。")
-                return 2
         rows.append({"project": args.project or "(--file)", "label": p.name,
-                     "kind": args.kind, "path": str(p), **scan(p, args.kind, pp)})
+                     "kind": args.kind, "path": str(p), **scan(p, args.kind)})
     else:
         targets = [t for t in cb.discover_targets()
                    if not t.get("missing") and t.get("weight") == "always"]
@@ -401,8 +335,7 @@ def main() -> int:
                 continue
             kind = "index" if t.get("kind") == "index" else "rules"
             rows.append({"project": t["project"], "label": t["label"], "kind": kind,
-                         "path": str(t["path"]),
-                         **scan(Path(t["path"]), kind, proj_paths.get(t["project"]))})
+                         "path": str(t["path"]), **scan(Path(t["path"]), kind)})
 
     if args.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
@@ -426,23 +359,13 @@ def main() -> int:
         print(f"  {len(blocks)} 個散文塊、共 {r['prose_chars']} 字"
               f"（該檔自己訂的上限是 {LIMIT} 字/條）")
         for b in sorted(blocks, key=lambda x: -x["chars"])[:12]:
-            tag = ""
-            if b.get("echo"):
-                e = b["echo"]
-                tag = f"  ⟪手抄注入清單·{e['count']} 個名字對得上⟫"
             # `lines`／`max_line` 是**判斷「這是一段還是多條」的唯一依據**——
             # 工具不替人下這個判斷，但必須把它需要的數字放在同一行（R4-A）。
             shape = (f"[{b['kind']}·最長行 {b['max_line']}]"
                      if b.get("lines", 1) > 1 else "")
-            print(f"    L{b['line']:<5} {b['chars']:>5} 字 {shape}  {b['head']}{tag}")
+            print(f"    L{b['line']:<5} {b['chars']:>5} 字 {shape}  {b['head']}")
         if len(blocks) > 12:
             print(f"    …另有 {len(blocks) - 12} 塊")
-        for b in r.get("echo_blocks", []):
-            e = b["echo"]
-            names = "／".join((e["skills"] + e["agents"])[:8])
-            print(f"    ⟪P-9⟫ L{b['line']}：這段列了 {e['count']}／{e['universe']} 個"
-                  f"（涵蓋 {e['coverage']:.0%}）**系統每輪已自動注入**的名字"
-                  f"（{names}）→ 抄一份在這裡等於同一份資訊付兩次錢，且會漂")
 
     print("\n" + "=" * 82)
     print(f"合計散文字數：{total}")
@@ -454,10 +377,10 @@ def main() -> int:
               "省錢也不是主要理由：規則太多會找不到、讀不完。")
     print("※ 工具只報「形狀」不報「對錯」——指路行與檔頭說明也可能合法地超過 120 字。")
     print("※ 要不要處理、搬去哪，是人的判斷（CONTEXT_HEALTH_PLAN C-1）。")
-    print("※ **P-9 的範圍限制**：只比對得到**目錄型** skill／角色"
-          "（`.claude/skills`・`~/.claude/skills`・`harness/skills`・`~/.claude/agents`）。"
-          "plugin 與內建 skill（`dataviz`／`code-review`／`loop` 等）**不在名單裡**，"
-          "手抄它們的段落偵測不到——「沒命中」不等於「沒問題」。")
+    print("※ **這支只看得見「散文」這一半**：條列、表格、條目的續行都歸 `check_bloat` 的"
+          "條目層管（每條各自 ≤120 字）。**把一段長散文改寫成條列，這裡的數字會下降"
+          "而內容一個字都沒搬**——所以瘦身成效要看整份檔的總量（`check_bloat` 的"
+          "`visible` 趨勢），不能只看這裡的散文字數。")
     return 0
 
 

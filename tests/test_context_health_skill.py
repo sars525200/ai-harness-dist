@@ -25,6 +25,16 @@ from pathlib import Path
 HARNESS = Path(__file__).resolve().parent.parent
 SKILL_MD = HARNESS / "skills" / "context-health" / "SKILL.md"
 
+# 每支腳本**自己 docstring 宣告的**正常結束碼。逐支給，不給一個通用放寬值（R5-F6）。
+EXIT_OK = {
+    "check_bloat.py": {0, 1},        # 0=沒有新增膨脹　1=cwd 專案有（內容閘門，不是故障）
+    "check_prose_blocks.py": {0},    # 0=掃完（它只宣告 0 與 2；2=拒跑，該紅）
+}
+# 「跑得起來」與「量得到東西」是兩件事。這些字串一出現，代表腳本活著但偵測是死的。
+DEAD_OUTPUT = {
+    "check_bloat.py": ("找不到 bloat_snapshot",),   # 沒有基準 ⇒ 三種偵測全部失效
+}
+
 _passed = 0
 _failed = 0
 _details: list = []
@@ -42,7 +52,10 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 def _referenced_scripts(text: str) -> list:
-    """從 SKILL.md 的指令區塊抽出它依賴的 .py 路徑（去重、保順序）。"""
+    """從 SKILL.md 的**指令區塊**抽出它依賴的 .py 路徑（去重、保順序）。
+
+    這些是 skill 的**步驟**——要存在，而且要真的跑得起來。
+    """
     out, seen = [], set()
     for m in re.finditer(r"(?:py -3|python)[^\n]*?([A-Za-z]:\\[^\s]+?\.py)", text):
         p = m.group(1)
@@ -50,6 +63,70 @@ def _referenced_scripts(text: str) -> list:
             seen.add(p)
             out.append(p)
     return out
+
+
+def _mentioned_scripts(text: str) -> dict:
+    """正文用反引號提到、但**不在指令列裡**的 `.py` —— 這些是**指路**不是步驟。
+
+    回 `{檔名: 解析到的路徑 or None}`。
+
+    ⚠ **為什麼也要盤**（R4-J/K/L/M 的 K）：`_referenced_scripts` 只抓指令列裡的
+    絕對路徑，實測 SKILL.md 提到 **4 支**腳本而它只涵蓋 **2 支**。漏掉的兩支是
+    `find_duplicates.py`（「工具留著但**不得拿它的輸出當搬移依據**」）與
+    `gen_cost_panel.py`（「真正的量測在那裡」）——**指到不存在的檔就是壞指路**。
+    R4-G 記的正是這個形狀：工具 docstring 的使用範例實跑 `No such file`。
+    **指路壞掉不會報錯，只會讓人去找一個不存在的東西。**
+
+    指路型只驗「找得到」，不 dry-run —— 它們不是這支 skill 的步驟，
+    跑它們會做出 skill 沒有要求的事（`find_duplicates` 尤其，它的輸出已被明令不得採信）。
+
+    ⚠ **有寫路徑就照路徑找，不做 basename 兜底**（R5-F9）：v10 版對每個名字都
+    `rglob(basename)`，於是 `tools/gen_cost_panel.py`（實際在 `dashboard/`）
+    照樣算「找得到」——**只有檔名改掉才抓得到，搬家或路徑寫錯抓不到**，
+    而那正是 R4-K 自己訂的判準（「指到不存在的檔就是壞指路」）要防的事。
+    純檔名沒有路徑資訊，才允許全域搜尋。
+    v10 還有一條 `if base in cmd_names: continue` 的豁免，**讓兩支主腳本的任何
+    錯誤指路直接免驗**，一併拿掉。
+    """
+    found: dict = {}
+    for name in sorted(set(re.findall(r"`([\w./\\-]+\.py)`", text))):
+        rel = name.replace("\\", "/")
+        if "/" in rel:                       # 寫了路徑 ⇒ 就照這個路徑驗，不兜底
+            direct = HARNESS / rel
+            found[name] = direct if direct.exists() else None
+            continue
+        hits = [p for p in HARNESS.rglob(rel) if "__pycache__" not in p.parts]
+        found[name] = hits[0] if hits else None
+    return found
+
+
+def _recover_stale_backups() -> list:
+    """開跑前收拾上一次被中斷留下的 `.v14bak`（R4-L）。
+
+    下面那個變異會把**版控中**的腳本改名。中途被殺（Ctrl+C／timeout）→ 檔案不在原位，
+    而下一次跑只會看到「腳本不存在」——**症狀與真的缺零件一模一樣**，
+    於是人會去找一個根本沒發生的問題。`.gitignore` 已擋 `*.v14bak`，
+    否則它在 `git status` 裡長得像一個該被 commit 的新檔案。
+
+    ⚠ **兩個檔同時在也要喊**（R5-F11）：若 `check_bloat.py` 已被 `git checkout` 救回、
+    而 `.v14bak` 還躺著，v10 版的 `if not target.exists()` 會讓 `recovered` 是空的
+    ⇒ 測試通過、殘留檔永久留下，而且 `.gitignore` 擋住它不會出現在 `git status`。
+    **下次 `check_bloat.py` 真的消失時，那個舊版 `.v14bak` 會被 rename 回去，
+    用一份可能過期的程式碼冒充現行版本，且沒有任何提示。**
+    孤兒不自動刪也不自動覆蓋——**不知道哪一份是對的就不要猜**，報出來讓人決定。
+    """
+    recovered, orphans = [], []
+    for bak in HARNESS.rglob("*.v14bak"):
+        target = bak.with_suffix("")            # `x.py.v14bak` → `x.py`
+        try:
+            if target.exists():
+                orphans.append(bak.name)        # 兩份都在 ⇒ 不猜，交給人
+            else:
+                os.rename(bak, target)
+                recovered.append(target.name)
+        except OSError as exc:                  # noqa: PERF203
+            orphans.append(f"{bak.name}（處理失敗：{exc}）")
+    return recovered, orphans
 
 
 def test_frontmatter() -> None:
@@ -77,7 +154,17 @@ def test_component_inventory() -> None:
     check("SKILL.md 真的引用了腳本（否則這一層什麼都沒驗到）",
           len(scripts) >= 2, f"只找到 {scripts}")
     missing = [s for s in scripts if not Path(s).exists()]
-    check("引用的每支腳本都存在（V-14 零件盤點）", not missing, f"找不到：{missing}")
+    check("指令列引用的每支腳本都存在（V-14 零件盤點）", not missing, f"找不到：{missing}")
+
+    # R4-K：正文**指路**的腳本也要盤——只盤指令列的話，涵蓋率是 4 支中的 2 支，
+    # 而漏掉的那兩支正是「指到不存在的檔」最不會被發現的地方。
+    mentioned = _mentioned_scripts(text)
+    check("正文指路的腳本也盤到了，不只指令列那幾支（R4-K）",
+          len(mentioned) >= 2,
+          f"只盤到 {sorted(mentioned)}；指令列另外涵蓋 {[Path(s).name for s in scripts]}")
+    dead = sorted(n for n, p in mentioned.items() if p is None)
+    check("正文提到的每支腳本都找得到（壞指路＝R4-G 同型）", not dead,
+          f"指到不存在的檔：{dead}")
 
 
 def test_dry_run_each_script() -> None:
@@ -85,6 +172,18 @@ def test_dry_run_each_script() -> None:
 
     ⚠ 只跑**唯讀**的形式：`check_bloat` 不帶 `--write-snapshot`／`--append-history`
     就不寫檔；`check_prose_blocks` 本來就唯讀。測試不得改動 live 狀態。
+
+    ⚠ **不得拿 `exit == 0` 當「跑得起來」的判準**（R4-J）：`check_bloat` 的
+    **exit 1 是內容閘門**，它 docstring 自己寫著「0 = 沒有新增膨脹　1 = cwd 所屬專案有
+    　2 = 快照壞掉／schema 不符／找不到錨」。用 exit 0 當判準的話，
+    **某天常駐層真的長胖，就會被報成「skill 零件跑不起來」**——
+    一個內容訊號被讀成故障訊號，而這兩件事正是這一層最不該搞混的。
+
+    ⚠ **但放寬要逐支給，不能給一個通用值**（R5-F6）：v10 把「exit ∈ (0,1)」
+    套到**每一支**腳本上，於是 `check_prose_blocks`（docstring 只宣告 0 與 2、
+    **從沒宣告過 1**）的 exit 1 也被接受。而「快照檔不見了」這個真故障剛好走
+    `check_bloat` 的 exit 1 → **舊判準會紅、放寬後變綠**，那個狀態下
+    「新增膨脹／條目加長／總量跳增」三種偵測全部失效，每次收工只看到同一句「第一次跑」。
     """
     text = SKILL_MD.read_text(encoding="utf-8")
     for s in _referenced_scripts(text):
@@ -93,10 +192,19 @@ def test_dry_run_each_script() -> None:
         r = subprocess.run([sys.executable, "-X", "utf8", s],
                            capture_output=True, text=True, encoding="utf-8", timeout=180)
         name = Path(s).name
-        check(f"{name} 實際跑得起來（exit 0）", r.returncode == 0,
-              f"exit={r.returncode} stderr={(r.stderr or '')[:200]}")
+        crashed = "Traceback" in (r.stderr or "")
+        ok = EXIT_OK.get(name, {0})
+        check(f"{name} 結束碼在它自己 docstring 宣告的語意內（{sorted(ok)}）·無 crash",
+              r.returncode in ok and not crashed,
+              f"exit={r.returncode} traceback={crashed} stderr={(r.stderr or '')[:200]}")
         check(f"{name} 有實際輸出（不是空跑）", bool((r.stdout or "").strip()),
               "stdout 是空的")
+        for phrase in DEAD_OUTPUT.get(name, ()):
+            # 「跑得起來」不等於「量得到東西」：exit code 與 stdout 非空都正常，
+            # 而底下的偵測其實是死的 —— 這一類只有看輸出內容才抓得到（R5-F6）。
+            check(f"{name} 的輸出不含「偵測已失效」的訊號：{phrase!r}",
+                  phrase not in (r.stdout or ""),
+                  "腳本活著但它的偵測是死的 —— 這種狀態 exit code 看不出來")
 
 
 def test_missing_component_is_detected() -> None:
@@ -120,7 +228,14 @@ def test_missing_component_is_detected() -> None:
         check("而且指得出是哪一支", missing and Path(missing[0]).name == target.name,
               f"指到 {missing}")
     finally:
-        os.rename(backup, target)
+        # 還原一律做，且**還原本身要能被驗證**：只印「已還原」而檔案其實沒回去，
+        # 就是下一次跑的假缺件。還原不了要當場喊，不能靜默留一個改了名的版控檔。
+        if backup.exists() and not target.exists():
+            os.rename(backup, target)
+        check("變異後腳本已還原（版控檔不得留在改名狀態·R4-L）",
+              target.exists() and not backup.exists(),
+              f"{target.name} 存在={target.exists()}／{backup.name} 還在={backup.exists()}"
+              f" —— 手動還原：把 {backup.name} 改回 {target.name}")
 
 
 def test_skill_states_its_boundaries() -> None:
@@ -141,6 +256,15 @@ def test_skill_states_its_boundaries() -> None:
 def run() -> "tuple[int, list]":
     global _passed, _failed, _details
     _passed, _failed, _details = 0, 0, []
+    # ⚠ **最先做**：收拾上次被中斷留下的 `.v14bak`（R4-L）。放在任何測試之前，
+    # 否則殘留會讓「零件盤點」與「dry-run」整批假紅，而真正的原因（上次被殺）
+    # 不會出現在任何一行輸出裡——人只會看到一堆「腳本不存在」。
+    stale, orphans = _recover_stale_backups()
+    check("開跑前沒有上次中斷留下的 .v14bak（有的話已自動還原·R4-L）", not stale,
+          f"已還原 {stale} —— 上次這支測試被中斷過；本次結果才是乾淨的")
+    check("沒有「本尊與備份同時存在」的孤兒 .v14bak（R5-F11）", not orphans,
+          f"孤兒：{orphans} —— 不知道哪一份是現行版本，**請人工確認後刪除**；"
+          f"放著不管的話，下次本尊消失時它會被 rename 回去冒充現行版")
     for fn in (test_frontmatter, test_component_inventory, test_dry_run_each_script,
                test_missing_component_is_detected, test_skill_states_its_boundaries):
         try:

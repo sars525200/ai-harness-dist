@@ -80,7 +80,81 @@ _BLOCK_HEAD = re.compile(r"^\*\*(.+?)\*\*")
 _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _MDFILE = re.compile(r"`?([\w./-]+\.md)`?")
 _MEMFILE = re.compile(r"\b((?:feedback|project|reference)-[\w-]+)")
-_INDEX_ROW = re.compile(r"^-\s+\[")      # MEMORY.md 的索引列形狀：`- [name](file.md) — hook`
+_INDEX_ROW = re.compile(r"^(?:[-*+]|\d+\.)\s+\[")   # 索引列：`- [name](file.md) — hook`
+# 條目的開頭形狀。**`* `／`+ `／`1. ` 是 2026-08-14 Round 4（R4-F）補的**：
+# 舊版只認 `- `，於是那三種開頭的長規則**條目層完全看不見**，而 `check_prose_blocks`
+# 又把它們當散文累積 —— 實測全域 CLAUDE.md §3 交接契約的 1./2./3. 三條各自合法的短條目
+# 被黏成一塊 128 字的「假散文塊」，報告指著它叫人去瘦一段根本不該動的東西。
+_ENTRY_LEAD = re.compile(r"^(?:[-*+]|\d+\.)\s+")
+_FENCE = re.compile(r"^\s*```")
+# ⚠ 與 `_SECTION_HEAD`（只認 `##`+，用來切章節）**刻意不同**：分類每一行時
+# `#` 一級標題也是標題。兩邊各判一次曾讓兩支工具算出不同的掃描範圍（R5-F7）。
+_HEADING_ANY = re.compile(r"^#{1,6}\s")
+
+
+def is_entry_line(line: str) -> bool:
+    """這一行是不是 `parse_entries()` 管得到的條目**開頭**。
+
+    ⚠ 只判斷「lead 行」。要判斷整份檔的每一行歸誰管，用 `classify_lines()`——
+    **懸掛續行不是 lead 行，但它屬於條目**，只看這支會把續行漏給散文層（R5-F2）。
+    """
+    s = line.strip()
+    return bool(_ENTRY_LEAD.match(s) or _is_table_row(s))
+
+
+def _is_table_row(s: str) -> bool:
+    """表格資料列。**要求至少兩根柱子**——只有一根 `|` 的行不是合法表格列。
+
+    R5-F8：舊版 `check_prose_blocks` 用 `^\\|` 無條件把它當表格跳過，而這裡要求
+    `count >= 2` → **一支當表格、一支不當條目，於是兩支都不管**。
+    """
+    return s.startswith("|") and s.count("|") >= 2
+
+
+# 行的類別。**兩支工具共用這一份分類**（R5-F1／F2 的根因就是沒有這一份）：
+# 邊界對齊原本做在「行」的層級，但兩支的**量測單位**一個是「多行條目」、
+# 一個是「連續非條目行」。凡是跨越這兩個單位的內容（條列化的清單、折行的長規則），
+# 兩支都只看到自己那一半，於是都在門檻以下 —— **接縫本身就是盲區**。
+LINE_KINDS = ("blank", "fence", "code", "comment", "heading",
+              "table", "entry", "continuation", "prose")
+
+
+def classify_lines(lines: list) -> list:
+    """把每一行分類，回 `[(相對行號, 類別, 去空白後的文字), ...]`。
+
+    `continuation`＝**懸掛續行**：緊接在條目（或它的續行）之後、本身不是任何
+    其他結構的行。markdown 的條目續行慣例就是這樣，而它在量測上屬於**那一條條目**。
+
+    🔒 **`check_prose_blocks` 必須用這支決定要累積誰**，不得自己再判一次。
+    """
+    out, in_fence, prev_entry = [], False, False
+    for i, raw in enumerate(lines):
+        s = raw.strip()
+        if _FENCE.match(s):
+            in_fence, prev_entry = not in_fence, False
+            out.append((i, "fence", s))
+        elif in_fence:
+            out.append((i, "code", s))
+        elif not s:
+            prev_entry = False
+            out.append((i, "blank", s))
+        elif s.startswith("<!--"):
+            prev_entry = False
+            out.append((i, "comment", s))
+        elif _HEADING_ANY.match(s):
+            prev_entry = False
+            out.append((i, "heading", s))
+        elif _is_table_row(s):
+            prev_entry = False
+            out.append((i, "table", s))
+        elif _ENTRY_LEAD.match(s):
+            prev_entry = True
+            out.append((i, "entry", s))
+        elif prev_entry:
+            out.append((i, "continuation", s))
+        else:
+            out.append((i, "prose", s))
+    return out
 
 
 def _visible(text: str) -> str:
@@ -221,8 +295,12 @@ def entry_scope(md_text: str, kind: str) -> "tuple[str, str] | None":
 def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     """抽出條目。回 [{key, chars, text, block, kind}]。
 
-    三種形狀都要收：`- ` 開頭的 bullet、表格資料列、`- [` 索引列。
+    形狀都要收：`- `／`* `／`+ `／`1. ` 開頭的 bullet、表格資料列、索引列。
     表格的分隔列（|---|）與表頭要排除，否則會被當成兩條假條目每次都出現在 diff 裡。
+
+    ⚠ **fence 內不算條目**（2026-08-14 隨 R4-F 一起補）：擴充條目形狀之後，
+    範例程式碼裡的 `1. `／`- ` 會被收成假條目——而假條目一旦進了快照就會**每次都出現**，
+    正是這支工具開頭那段「重複的警報等於沒有警報」要防的東西。
     """
     scoped = entry_scope(md_text, kind)
     if scoped is None:
@@ -232,57 +310,74 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     entries: list[dict] = []
     block = "（未分組）"
     in_doc_section = False
+    pending: list = []          # 累積中的條目：[lead 內容, 續行, 續行…]
+    pending_raw = ""            # lead 那一行的原文（判索引列形狀用）
 
-    for raw in body.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("<!--"):
-            continue
-        if line.startswith(_DOC_MARKER):
-            in_doc_section = True
-            block = "權威模組文件"
-            continue
-        head = _BLOCK_HEAD.match(line)
-        if head and not line.startswith("- ") and "|" not in line:
-            block = head.group(1).strip()
-            continue
+    def _emit() -> None:
+        """把累積中的條目結算成一條。**含懸掛續行**（R5-F2）。
 
-        if line.startswith("- "):
-            text = line[2:].strip()
-        elif line.startswith("|") and line.count("|") >= 2:
-            if set(line) <= set("|-: "):        # 分隔列
-                continue
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if cells and cells[0] in ("規則", "項目", "#"):   # 表頭
-                continue
-            text = " ｜ ".join(c for c in cells if c)
-        else:
-            continue
-
+        舊版只量 lead 那一行、續行落到 `continue` → 一條 195 字的規則
+        只要折成 98/97 兩行，`check_bloat` 只看到 98、`check_prose_blocks` 只看到 97，
+        **兩支都在門檻下**。實測全域 CLAUDE.md 因此有 4 條超標被報成 0、960 字不在雷達內。
+        這正是 R4-A「按 Enter 不能達標」那條硬規則在條目↔散文接縫處的重演。
+        """
+        nonlocal pending, pending_raw
+        if not pending:
+            return
+        text, raw = " ".join(pending), pending_raw
+        pending, pending_raw = [], ""
         vis = _visible(text)
         if not vis:
-            continue
+            return
         # 索引列（`- [name](name.md) — hook`）**長度只算 hook 句**。
         # ⚠ 2026-08-13 實測發現的判準錯誤：markdown link 把檔名寫了兩次，
         # 光是 `- [feedback-windows-deploy-script-traps](feedback-windows-deploy-script-traps.md)`
         # 這個前綴就 **76 字**，佔 120 字上限的 63% —— 於是「檔名長的條目」不論
         # hook 寫得多精簡都必定超標，而「檔名短的」可以寫得又臭又長還不會被抓。
         # **量錯東西的判準會把人逼去改不該改的地方**（去縮檔名？那會斷連結）。
-        # 內容才是要管的東西，所以扣掉 link 前綴再量。
         body_txt = text
-        if _INDEX_ROW.match(line):
+        if _INDEX_ROW.match(raw):
             for sep in ("—", "──", " - "):
                 k = text.find(sep)
                 if k > 0:
                     body_txt = text[k + len(sep):]
                     break
-        vis_body = _visible(body_txt) or vis
         entries.append({
-            "key": vis[:KEY_CHARS],          # key 仍用整行開頭：那是身分，要穩定
-            "chars": len(vis_body),          # 但長度只算內容
+            "key": vis[:KEY_CHARS],          # key 用第一行開頭：那是身分，要穩定
+            "chars": len(_visible(body_txt) or vis),   # 長度只算內容（含續行）
             "text": text,
             "block": block,
             "kind": "doc" if in_doc_section else "rule",
         })
+
+    for _i, line_kind, line in classify_lines(body.splitlines()):
+        if line_kind == "continuation":
+            pending.append(line)
+            continue
+        _emit()                                  # 其餘任何形狀都結算前一條
+        if line_kind == "entry":
+            lead = _ENTRY_LEAD.match(line)
+            pending, pending_raw = [line[lead.end():].strip()], line
+            continue
+        if line_kind == "table":
+            if set(line) <= set("|-: "):         # 分隔列
+                continue
+            cells = [c.strip() for c in line.strip("|").split("|")]
+            if cells and cells[0] in ("規則", "項目", "#"):   # 表頭
+                continue
+            pending, pending_raw = [" ｜ ".join(c for c in cells if c)], line
+            _emit()
+            continue
+        if line_kind != "prose":
+            continue
+        if line.startswith(_DOC_MARKER):
+            in_doc_section = True
+            block = "權威模組文件"
+            continue
+        head = _BLOCK_HEAD.match(line)
+        if head and "|" not in line:
+            block = head.group(1).strip()
+    _emit()
     return entries
 
 

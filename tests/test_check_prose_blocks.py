@@ -59,6 +59,15 @@ LONG = "這是一段刻意寫得很長的敘述文字用來觸發散文塊判定
 HOOK = "簡短的索引說明句"
 
 
+def _load_cb():
+    """載入 `check_bloat` —— 條目層與行分類的單一真相。"""
+    spec = importlib.util.spec_from_file_location(
+        "_cb_probe", HARNESS / "rulefile" / "check_bloat.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def test_index_prose_detected(m) -> None:
     """索引型檔裡的散文塊要抓到（正向·對應舊版 MEMORY.md 那 6 段）。"""
     p = _tmp(
@@ -364,129 +373,216 @@ def test_unknown_model_refuses_to_guess(m) -> None:
           f"note={c.get('note')}")
 
 
-def test_echo_threshold_lower_bound(m) -> None:
-    """F-9：真實規模名單（17 支）下，列 4 個的指路句不得命中。
+def test_p9_is_gone(m) -> None:
+    """🔑 **P-9 已於 v12 整支移除**——這條擋的是「有人把它加回來」。
 
-    ⚠ 測試資料要用**真實規模**：首版用 8 支名單列 4 個，換成比例判準後
-    4/8 = 50% 反而命中了——那不是 bug，是資料不真實。IT-dept 實際有 17 支。
+    三版判準全部被實測推翻（絕對數→比例→配對數），而事後量過的兩個替代訊號也不成立：
+    **檔案層級名字數**（IT-dept 合法索引句命中 10 個，4 支部門全抄只有 4 個 ⇒ 門檻無解）、
+    **與 `description` 的字面重疊**（真實資料上訊號是反的：索引句 184、真手抄只有 110，
+    因為真手抄抄的是**當時**的描述、**它已經漂了**，而「會漂」正是 P-9 存在的理由）。
+
+    留一個壞判準比沒有判準更貴：它會叫人去刪 §8／MEMORY.md 裡唯一還指得到路的導航句。
+    要重開這個能力，**先回計畫書 §7 v12 讀那三版失敗的資料**，不要重寫一次同樣的東西。
     """
-    skills = {f"s{i}-skill" for i in range(17)}
-    text = "動到序號先讀 `/s0-skill`；驗證看 `/s1-skill`；難 bug 走 `/s2-skill`；另有 `/s3-skill`"
-    r = m.echo_of_injected(text, skills, set())
-    check("4／17 的指路句不算手抄（涵蓋 24%）", not r["is_echo"],
-          f"is_echo={r['is_echo']} count={r['count']} coverage={r.get('coverage')}")
-
-
-def test_echo_small_project_full_copy(m) -> None:
-    """🔑 **F-9 真正要修的那個 case**：只有 4 支 skill 的部門，整份手抄必須命中。
-
-    絕對數版本（`>=5`）下，`count` 最多 4 → **永遠不會命中**。
-    而「換一個部門還成立嗎」是這整套 harness 的判準——
-    一個對本機資料調出來的常數，在別的部門直接失效，那條規則等於不存在。
-    """
-    skills = {"a-skill", "b-skill", "c-skill", "d-skill"}
-    text = ("本地 skills：`/a-skill` 做這個、`/b-skill` 做那個、"
-            "`/c-skill` 又做別的、`/d-skill` 最後一個")
-    r = m.echo_of_injected(text, skills, set())
-    check("4 支的小專案整份手抄要命中（F-9 核心）", r["is_echo"],
-          f"is_echo={r['is_echo']} count={r['count']} coverage={r.get('coverage')}")
-    check("而且它是靠比例命中的，不是靠絕對數", r["count"] < m.ECHO_ABS_STRONG,
-          f"count={r['count']} 已達絕對捷徑 {m.ECHO_ABS_STRONG}，這個 case 沒測到比例路徑")
-
-
-def test_echo_tiny_list_needs_min_refs(m) -> None:
-    """比例判準的反向：名單太小時不得因為「1／2 = 50%」就命中。"""
-    skills = {"only-a", "only-b"}
-    r = m.echo_of_injected("請參考 `/only-a` 這支", skills, set())
-    check("2 支名單裡提 1 支不算手抄（ECHO_MIN_REFS 下限）", not r["is_echo"],
-          f"is_echo={r['is_echo']} coverage={r.get('coverage')}")
+    src = CS_PY.read_text(encoding="utf-8")
+    gone = [n for n in ("def echo_of_injected", "def injected_names",
+                        "ECHO_MIN_PAIRS", "ECHO_DESC_CHARS", "is_echo")
+            if n in src]
+    check("P-9 的實作沒有被加回來", not gone, f"又出現了：{gone}")
+    check("scan() 不再吃 project_path（P-9 是它唯一的用途）",
+          "def scan(path: Path, kind: str)" in src,
+          "scan 的簽章變了 —— 確認不是又把 P-9 接回來")
 
 
 def test_list_markers_align_with_check_bloat(m) -> None:
-    """🔑 **F-12**：`*`／`+` 開頭的長規則不得兩支工具都看不見。
+    """🔑 **邊界對齊**：`check_bloat` 管得到的條目形狀，本支一律不重複報。
 
-    `check_bloat.parse_entries()` 只認 `line.startswith("- ")`。所以 check_prose_blocks
-    在 rules 模式要跳過的**只有 `- `**——首版寫成 `^[-*+]\\s`，於是 `* ` 與 `+ ` 開頭的
-    長規則兩支都是 0，而 SKILL.md 還寫著「兩支盲區互補」。
-    **互補的前提是邊界對齊，不是各自有各自的漏。**
+    ⚠ **這條的期望在 v9 翻轉了**（R4-F）。翻轉的理由不是「改成綠的」，是**另一半補上了**：
+      v7 首版：本支跳過 `^[-*+]\\s` → `* `／`+ ` 開頭的長規則**兩支都看不見**（F-12）。
+      v8 修法：本支改成只跳 `- `，去對齊 check_bloat 當時的 `startswith("- ")`。
+               對齊了，但用的是**抄一份一樣的常數**而不是問同一個來源，
+               於是 `1. ` 這種兩邊都沒想到的形狀又漏掉——實測全域 CLAUDE.md §3
+               交接契約 1./2./3. 三條各自合法的短條目黏成一塊 128 字假散文。
+      v9 現在：`check_bloat` 認得 `- `／`* `／`+ `／`N. `，本支改呼叫 `is_entry_line()`。
+               **四種形狀都歸條目層管，本支都不報。**
+    另一半（那些形狀在 check_bloat 真的被收成條目並套 120 字）由
+    `test_entry_shapes_are_actually_covered` 驗——**只驗這一半會退化成「兩支都不管」**，
+    那正是 F-12 的原病。
     """
     long_rule = "這是一條很長的規則內容" * 12          # 遠超 120 字
-    for lead, should_flag in (("- ", False), ("* ", True), ("+ ", True)):
+    for lead in ("- ", "* ", "+ ", "1. "):
         p = _tmp("## 8. 速查\n<!-- rules-section -->\n" + lead + long_rule + "\n")
         r = m.scan(p, "rules")
-        got = bool(r["blocks"])
-        check(f"rules 模式：`{lead.strip()}` 開頭的長規則 "
-              f"{'要' if should_flag else '不該'}被 check_prose_blocks 報",
-              got == should_flag,
-              f"lead={lead!r} blocks={len(r['blocks'])}（`- ` 由 check_bloat 管，其餘由本支管）")
+        check(f"rules 模式：`{lead.strip()}` 開頭的長規則歸條目層管，本支不重複報",
+              not r["blocks"], f"lead={lead!r} blocks={len(r['blocks'])}")
         p.unlink(missing_ok=True)
 
 
-def test_echo_via_scan_integration(m) -> None:
-    """🔑 **F-10**：P-9 要走得通 `scan()` 這條**整合路徑**，不只是直呼 `echo_of_injected`。
+def test_entry_shapes_are_actually_covered(m) -> None:
+    """🔑 **R4-F 的另一半**：那四種形狀在 `check_bloat` 真的被收成條目並套 120 字。
 
-    三條 echo 測試原本全部直呼內部函式。接線壞掉（`injected_names` 掃錯目錄回空集合、
-    `scan()` 沒把 `project_path` 傳下去）時它們仍全綠，
-    **而報告裡再也不會出現 ⟪P-9⟫ 標記——能力消失，畫面跟「沒有手抄清單」一模一樣。**
+    只驗「本支不報」會退化成**兩支都不管**——F-12 當初就是這樣漏掉 `* `／`+ `：
+    一支說「那是別人管的」，而另一支根本沒認得它。
     """
-    import tempfile as _tf
-    root = Path(_tf.mkdtemp())
-    sk = root / ".claude" / "skills"
-    sk.mkdir(parents=True)
-    names = [f"probe{i}-skill" for i in range(5)]
-    for n in names:
-        (sk / n).mkdir()
-    body = "本地 skills：" + "、".join(f"`/{n}` 負責這一塊工作內容說明" for n in names)
-    f = root / "MEMORY.md"
-    f.write_text("# Index\n\n> " + body + "\n", encoding="utf-8")
+    cb_spec = importlib.util.spec_from_file_location(
+        "_cb_shapes", HARNESS / "rulefile" / "check_bloat.py")
+    cb = importlib.util.module_from_spec(cb_spec)
+    cb_spec.loader.exec_module(cb)
 
-    r = m.scan(f, "index", root)
-    echoes = r.get("echo_blocks", [])
-    check("P-9 走得通 scan() 整合路徑（F-10）", bool(echoes),
-          f"blocks={len(r['blocks'])} echo_blocks={len(echoes)}")
-    if echoes:
-        hit = set(echoes[0]["echo"]["skills"])
-        check("整合路徑抓到的名字與目錄裡的一致", hit == set(names),
-              f"抓到 {sorted(hit)}，目錄裡是 {names}")
-    # 反向：不給 project_path 就不該有 P-9 結果（證明它真的靠那個參數）
-    r2 = m.scan(f, "index", None)
-    check("沒給 project_path 時不做 P-9（證明接線真的靠那個參數）",
-          not r2.get("echo_blocks"), f"竟然有 {len(r2.get('echo_blocks') or [])} 筆")
+    long_rule = "這是一條很長的規則內容" * 12
+    for lead in ("- ", "* ", "+ ", "1. "):
+        md = "## 8. 速查\n<!-- rules-section -->\n" + lead + long_rule + "\n"
+        entries = cb.parse_entries(md, "rules")
+        over = [e for e in entries if e["chars"] > cb.LIMIT]
+        check(f"check_bloat 收得到 `{lead.strip()}` 開頭的條目並判它超標",
+              len(entries) == 1 and len(over) == 1,
+              f"entries={len(entries)} over={len(over)}")
 
+    # 反向：fence 內的同樣形狀不得被收。擴充條目形狀之後才會踩到這個——
+    # 假條目一旦進快照就會**每次都出現在 diff 裡**，正是「重複的警報等於沒有警報」。
+    md = "## 8. 速查\n<!-- rules-section -->\n```\n1. " + long_rule + "\n```\n"
+    check("fence 內的條目形狀不算條目", not cb.parse_entries(md, "rules"),
+          f"entries={cb.parse_entries(md, 'rules')}")
 
-def test_echo_detects_copied_list(m) -> None:
-    """P-9／V-12 正向：手抄的 skill 清單要抓到，**且列出的名字要對得上真實名單**。"""
-    skills = {"alpha-skill", "beta-skill", "gamma-skill", "delta-skill", "epsilon-skill"}
-    text = ("本地 skills：`/alpha-skill` 做這個、`/beta-skill` 做那個、"
-            "`/gamma-skill` 又做別的、`/delta-skill` 還有這個、`/epsilon-skill` 最後一個")
-    r = m.echo_of_injected(text, skills, set())
-    check("手抄清單抓得到（P-9 正向）", r["is_echo"] and r["count"] == 5,
-          f"is_echo={r['is_echo']} count={r['count']}")
+    # 邊界對齊必須是**同一個來源**，不是兩份長得一樣的常數（v8 就是這樣漂掉的）
+    check("check_prose_blocks 是呼叫 check_bloat.is_entry_line() 決定邊界",
+          "is_entry_line" in CS_PY.read_text(encoding="utf-8"),
+          "本支自己又寫了一份條目 regex ⇒ 兩份常數遲早會漂")
 
 
-def test_echo_requires_real_names(m) -> None:
-    """🔑 **V-12 的關鍵反向**：名字對不上真實清單就不算。
+def test_comment_line_is_a_boundary(m) -> None:
+    """HTML comment 行是**給機器讀的錨不是內容**：不進散文塊，也不得把前後黏起來。
 
-    沒有這一項的話，判準退化成「數 `/xxx` 有幾個」——那對任何含斜線的文字都會誤報，
-    而誤報的結果是叫人去刪一段根本不是清單的文字。
+    實測（R4-F）：IT-dept CLAUDE.md 的 `<!-- rules-section -->` 底下就是一段
+    「這行錨不可刪」的說明。讓 comment 行進 buf 的話，報告的 head 會指著那行錨，
+    **叫人去瘦一個刪掉就會讓整節退出監控的東西**。
     """
-    skills = {"alpha-skill", "beta-skill", "gamma-skill", "delta-skill", "epsilon-skill"}
-    text = ("本地 skills：`/zzz-fake` 做這個、`/yyy-fake` 做那個、`/xxx-fake` 又做別的、"
-            "`/www-fake` 還有這個、`/vvv-fake` 最後一個")
-    r = m.echo_of_injected(text, skills, set())
-    check("名字對不上真實清單就不算（P-9 反向）", not r["is_echo"] and r["count"] == 0,
-          f"is_echo={r['is_echo']} hits={r['hits']}")
+    half = "說明文字內容" * 12          # 約 72 字，單獨都不到 120
+    p = _tmp("# H\n\n" + half + "\n<!-- rules-section -->\n" + half + "\n")
+    r = m.scan(p, "index")
+    check("comment 行是邊界，前後兩段各自合法就不該報",
+          not r["blocks"],
+          f"blocks={len(r['blocks'])} heads={[b['head'][:30] for b in r['blocks']]}")
+    check("前提成立：兩段合計會超過門檻（否則這個 case 什麼都沒測到）",
+          len(m._visible(half)) * 2 > m.LIMIT, f"單段 {len(m._visible(half))} 字")
+    p.unlink(missing_ok=True)
 
 
-def test_echo_ignores_mere_pointers(m) -> None:
-    """指路句（只提 3–4 個名字）不該被當成手抄清單 —— `ECHO_MIN_REFS` 存在的理由。"""
-    # 真實規模名單（IT-dept 實際 17 支）——小名單下 3/6 = 50% 會命中，那是比例判準的
-    # 正確行為而非誤報，所以測試資料必須反映真實情境。
-    skills = {f"x{i}-skill" for i in range(17)}
-    text = "動到序號匯入前先讀 `/x0-skill`；驗證紀律看 `/x1-skill`；難 bug 走 `/x2-skill`"
-    r = m.echo_of_injected(text, skills, set())
-    check("指路句不算手抄（P-9·避免叫人刪索引）", not r["is_echo"],
-          f"is_echo={r['is_echo']} count={r['count']} coverage={r.get('coverage')}")
+def test_hanging_continuation_belongs_to_the_entry(m) -> None:
+    """🔑 **R5-F2（高）**：條目的懸掛續行屬於**那一條條目**，不是散文。
+
+    這是「量測單位」的核心測試。v10 以前：`parse_entries` 只量 lead 那一行、
+    續行落到 `continue`；而 `scan()` 只累積續行（lead 被 `is_entry_line` 擋掉）。
+    於是**同一條規則被切成兩半，兩邊各自都在門檻以下**——
+    一條 195 字的規則只要加一個換行折成 98/97，`check_bloat` 超標 1→0、prose 仍 0。
+    **這正是 R4-A 宣稱已收回的「按 Enter 就達標」，在條目↔散文接縫處原地重演。**
+    實測 live：全域 CLAUDE.md 因此有 4 條超標被報成 0、960 字不在雷達內。
+    """
+    cb = _load_cb()
+    half_a = "這是一條規則的前半內容" * 9        # 各約 99 字，單獨都不超標
+    half_b = "這是同一條規則的後半內容" * 8
+    md = "## 8. 速查\n<!-- rules-section -->\n- " + half_a + "\n  " + half_b + "\n"
+
+    entries = cb.parse_entries(md, "rules")
+    over = [e for e in entries if e["chars"] > cb.LIMIT]
+    check("折行的長規則算成**一條**條目（不是兩條、也不是半條）",
+          len(entries) == 1, f"entries={len(entries)}")
+    check("而且長度含續行 ⇒ 判得出超標（R5-F2）", len(over) == 1,
+          f"量到 {[e['chars'] for e in entries]} 字，門檻 {cb.LIMIT}")
+    check("前提成立：兩半各自都不超標（否則這個 case 什麼都沒測到）",
+          len(m._visible(half_a)) < cb.LIMIT and len(m._visible(half_b)) < cb.LIMIT,
+          f"前半 {len(m._visible(half_a))}／後半 {len(m._visible(half_b))}")
+
+    p = _tmp(md)
+    r = m.scan(p, "rules")
+    check("續行不得再被散文層當成獨立段落報（head 會指著規則中段）",
+          not r["blocks"], f"誤報 {[(b['line'], b['head'][:24]) for b in r['blocks']]}")
+    p.unlink(missing_ok=True)
+
+    # ⚠ **續行必須自己就超過門檻**，否則上面那條斷言證明不了任何事：
+    # 99 字的續行就算被當成散文，也不到 120 ⇒ 不報 ⇒ 「續行歸誰管」這個變異不會紅。
+    # （2026-08-14 實測：把 `continuation` 改判成 `prose`，上面那條照樣綠。）
+    long_cont = "這是一段長到自己就超過門檻的續行內容" * 8      # 約 144 字
+    p2 = _tmp("## 8\n<!-- rules-section -->\n- 很短的 lead\n  " + long_cont + "\n")
+    r2 = m.scan(p2, "rules")
+    check("前提成立：這一行續行自己就超過門檻",
+          len(m._visible(long_cont)) > m.LIMIT, f"{len(m._visible(long_cont))} 字")
+    check("超過門檻的續行也歸條目層，散文層不得報它",
+          not r2["blocks"], f"誤報 {[(b['line'], b['chars']) for b in r2['blocks']]}")
+    p2.unlink(missing_ok=True)
+
+
+def test_folding_an_entry_changes_nothing(m) -> None:
+    """🔑 **R4-A 的硬規則延伸到條目層**：只折行、一字未刪，量到的字數不得改變。
+
+    這是上一條的變異形式，但驗的是**不變性**而不是單點門檻——
+    「折行前後長度一樣」比「折行後仍超標」更難繞過。
+    """
+    cb = _load_cb()
+    body = "這是一條需要被搬走的長規則內容" * 13        # 約 195 字
+    one = cb.parse_entries("## 8\n<!-- rules-section -->\n- " + body + "\n", "rules")
+    chunks = [body[i:i + 40] for i in range(0, len(body), 40)]
+    folded = cb.parse_entries(
+        "## 8\n<!-- rules-section -->\n- " + chunks[0] + "\n"
+        + "".join(f"  {c}\n" for c in chunks[1:]), "rules")
+    check("折行前後都算成一條", len(one) == 1 and len(folded) == 1,
+          f"單行 {len(one)} 條／折行 {len(folded)} 條")
+    check("折行不改變條目長度（按 Enter 不能達標·R4-A）",
+          one and folded and one[0]["chars"] == folded[0]["chars"],
+          f"單行 {one[0]['chars'] if one else '?'} 字 → 折成 {len(chunks)} 行後 "
+          f"{folded[0]['chars'] if folded else '?'} 字")
+
+
+def test_single_pipe_line_is_not_lost(m) -> None:
+    """**R5-F8**：只有一根 `|` 的長行不得兩支都不管。
+
+    舊版 `scan()` 用 `^\\|` 無條件當表格跳過，而 `is_entry_line()` 要求 `count >= 2`
+    ⇒ **一支當表格、一支不當條目**。那是「一支認為別人管、另一支根本沒認得它」
+    的又一個實例（F-12 的原病）。合法表格列要兩根柱子，只有一根的是散文。
+    """
+    cb = _load_cb()
+    line = "| " + "這是一行沒有第二根柱子的長內容" * 9
+    p = _tmp("# H\n\n" + line + "\n")
+    r = m.scan(p, "index")
+    check("單一 `|` 的長行由散文層接住", len(r["blocks"]) == 1,
+          f"blocks={len(r['blocks'])}")
+    check("而它確實不被條目層當成表格列（否則就是兩支都收，重複報）",
+          not cb.is_entry_line(line), "is_entry_line 竟然認了它")
+    p.unlink(missing_ok=True)
+
+
+def test_prose_before_the_anchor_is_scanned(m) -> None:
+    """**R5-F7**：同一節內、**錨之前**的散文不得從報告消失。
+
+    `check_bloat.entry_scope()` 從節標題算起，而舊版 `_rules_scope()` 從**錨那一行**算起
+    ⇒ 把一段散文從錨下面移到錨上面，它就同時退出兩支的視野。
+    """
+    p = _tmp("## 8. 速查\n\n" + LONG + "\n\n<!-- rules-section -->\n"
+             + "- 一條短規則\n")
+    r = m.scan(p, "rules")
+    check("錨之前、同節內的散文照樣掃得到（R5-F7）", len(r["blocks"]) == 1,
+          f"blocks={len(r['blocks'])} —— 0 代表起點還是錨那一行")
+    p.unlink(missing_ok=True)
+
+
+def test_line_classification_is_single_source(m) -> None:
+    """🔑 **量測單位的單一來源**：本支不得自己再判一次「哪一行歸誰管」。
+
+    v10 的教訓：邊界對齊做在**行**上（`is_entry_line`）並不夠，因為兩支的
+    **量測單位**不同（多行條目 vs 連續非條目行）。現在整份行分類共用
+    `check_bloat.classify_lines()`，`entry` 與它的 `continuation` 一起歸條目層。
+    """
+    src = CS_PY.read_text(encoding="utf-8")
+    check("scan() 呼叫 check_bloat.classify_lines()", "classify_lines" in src,
+          "本支又自己判行類別 ⇒ 兩份規則遲早會漂")
+    cb = _load_cb()
+    kinds = [k for _i, k, _s in cb.classify_lines(
+        ["## H", "", "- 條目", "  續行", "", "散文", "<!-- x -->", "| a | b |",
+         "```", "1. 在 fence 裡", "```"])]
+    check("分類覆蓋全部九種行別且順序正確",
+          kinds == ["heading", "blank", "entry", "continuation", "blank", "prose",
+                    "comment", "table", "fence", "code", "fence"],
+          f"實際={kinds}")
 
 
 def test_cost_uses_shared_price_table(m) -> None:
@@ -522,11 +618,14 @@ def run() -> "tuple[int, list]":
                test_blank_line_breaks_accumulation, test_no_price_literal_in_cost_fn,
                test_price_really_comes_from_shared_table,
                test_price_table_is_the_same_object_as_source,
-               test_unknown_model_refuses_to_guess, test_echo_threshold_lower_bound,
-               test_echo_small_project_full_copy, test_echo_tiny_list_needs_min_refs,
-               test_list_markers_align_with_check_bloat, test_echo_via_scan_integration,
-               test_echo_detects_copied_list,
-               test_echo_requires_real_names, test_echo_ignores_mere_pointers,
+               test_unknown_model_refuses_to_guess, test_p9_is_gone,
+               test_list_markers_align_with_check_bloat,
+               test_entry_shapes_are_actually_covered, test_comment_line_is_a_boundary,
+               test_hanging_continuation_belongs_to_the_entry,
+               test_folding_an_entry_changes_nothing,
+               test_single_pipe_line_is_not_lost,
+               test_prose_before_the_anchor_is_scanned,
+               test_line_classification_is_single_source,
                test_cost_uses_shared_price_table, test_limit_is_shared_constant):
         try:
             fn(mod)

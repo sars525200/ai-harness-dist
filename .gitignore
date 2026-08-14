@@ -12,6 +12,12 @@ harness.config.json
 __pycache__/
 *.pyc
 
+# V-14 變異測試的暫時備份（`test_context_health_skill.py` 會把**版控中**的腳本
+# 改名成 `.v14bak` 來驗「拿掉零件會不會被抓到」，跑完立刻還原）。
+# 中途被殺（Ctrl+C／timeout）就會留下來——不 ignore 的話它會出現在 `git status`，
+# 而它長得像一個該被 commit 的新檔案。測試開跑時會先收拾殘留並印警告。
+*.v14bak
+
 # 探針的「hook 有沒有跑過」分母證據：每次跑都重建，不是紀錄
 tests/*/fired.log
 # 探針執行時讓模型建出來的樣本檔
