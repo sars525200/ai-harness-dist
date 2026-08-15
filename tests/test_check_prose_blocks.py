@@ -58,6 +58,41 @@ def _tmp(text: str) -> Path:
 LONG = "這是一段刻意寫得很長的敘述文字用來觸發散文塊判定" * 8      # 遠超 120 字
 HOOK = "簡短的索引說明句"
 
+# ── R8 fixture（Round 8 覆核·2026-08-15）：**掃描範圍自己被騙走** ──────────────
+#
+# 上一輪把「量測單位」改由 CommonMark 決定（`parse_blocks()`）成功了，
+# 但**「要掃哪一段」還是行層級 regex**：本支的 `_rules_scope()` 用字面比對找錨、
+# 用 `^#{2,6}\s` 找節界，兩者都不問 AST。同一個病原地搬了一層樓。實測兩種構造：
+#   R8-2a：真錨**之前**先出現一個 `<!-- rules-section -->` 字面值 ⇒ 範圍被騙到
+#          那一節（只剩 37 個可見字），條目層 0 條、散文層 0 塊，兩支一起印綠燈。
+#          ⚠ 那句誘餌正是本工具失明時**印給人的處置指示**——照著貼進 CLAUDE.md
+#          的說明段，監控就從那一刻起關掉。
+#   R8-2b：fence 裡有一行 `## 9. 假標題` ⇒ 節界提前結束（範圍只剩 23 個可見字）。
+#
+# 🔒 **fixture 一定要在規則節裡放一段真的散文**（171 字）：只放五條規則的話，
+# 「散文層 0 塊」**改前改後都成立** —— 一個永遠為真的等式證明不了範圍有沒有被騙走。
+# 這是對照組紀律在同一組 fixture 內部的版本。
+_R8_SEED = "改共用邏輯前必先盤點全部副本再決定要改幾處"          # 21 字·純中文無空白
+R8_RULE_CHARS = 5 + len(_R8_SEED) * 6                          # 131 > LIMIT
+_R8_RULES = "\n".join(f"- 第{c}條規則" + _R8_SEED * 6 for c in "一二三四五")
+R8_PROSE = "這是一段本來就該被散文層報出來的長敘述" * 9          # 171 字·純中文無空白
+R8_DECOY_REAL = "沒被掃到就在規則節標題後補一行 `<!-- rules-section -->` 錨。"
+R8_DECOY_SAFE = "沒被掃到就在規則節標題後補一行 `rules-section` 錨。"
+
+
+def _r8_md(decoy: str = "", fenced: str = "") -> str:
+    """§3（可選誘餌句）＋ §8 真錨 ＋（可選 fence）＋ 五條規則 ＋ 一段 171 字散文。
+
+    ⚠ 可見字數一律用 `len()` 算 —— 這兩個字串**刻意不含任何空白字元**（純中文），
+    所以 `len` 就是可見字數。**不呼叫被測實作的 `_visible()`**（檔頭紀律 1：
+    兩支自己寫的實作互相比對，共享同一個誤解時會一起錯），也不 `import re`
+    （本檔沒有 import 它，這一輪剛因此踩過一次 `py_compile` 過、執行期 NameError）。
+    """
+    head = f"## 3. 維護\n\n{decoy}\n\n" if decoy else ""
+    fence = f"```\n{fenced}\n```\n\n" if fenced else ""
+    return (head + "## 8. 硬規則\n\n<!-- rules-section -->\n\n"
+            + fence + _R8_RULES + "\n\n" + R8_PROSE + "\n")
+
 
 def _load_cb():
     """載入 `check_bloat` —— 條目層與行分類的單一真相。"""
@@ -102,19 +137,36 @@ def test_long_index_row_not_flagged(m) -> None:
 
 
 def test_headings_tables_fences_skipped(m) -> None:
-    """標題／表格列／程式碼區塊都不是散文。"""
+    """標題／表格列／程式碼區塊都不是散文。
+
+    ⚠ **fixture 在 2026-08-15 改過，因為它在斷言一個不合規格的舊行為**：
+    舊版拿一行孤立的 `| 欄 | LONG |`（**沒有分隔列**）當「表格列」。
+    在 GFM／CommonMark 裡沒有分隔列就不是表格，那一行是**段落**。
+    舊實作用「開頭是 `|` 且至少兩根柱子」把它當表格跳過 ⇒ 條目層不收、
+    散文層也不收，**對兩支都隱形**——R5-F8 記的正是這個縫。
+    所以正向案例改用完整表格，孤立列另外釘一條反向斷言（那才是防復發的守門）。
+    """
     p = _tmp(
         "# H\n\n"
-        f"| 欄 | {LONG} |\n"
+        f"| 欄 | 值 |\n|---|---|\n| 資料 | {LONG} |\n"
         f"## {LONG}\n"
         "```\n"
         f"{LONG}\n"
         "```\n"
     )
     r = m.scan(p, "index")
-    check("表格列／標題／fence 內容都不算散文塊", not r["blocks"],
+    check("完整表格的資料列／標題／fence 內容都不算散文塊", not r["blocks"],
           f"誤報 {[b['head'][:30] for b in r['blocks']]}")
     p.unlink(missing_ok=True)
+
+    orphan = f"| 欄 | {LONG} |"
+    p2 = _tmp("# H\n\n" + orphan + "\n")
+    r2 = m.scan(p2, "index")
+    check("反向：沒有分隔列的孤立 `|` 行不是表格，必須被散文層認領（R5-F8）",
+          [b["chars"] for b in r2["blocks"]] == [len(m._visible(orphan))],
+          f"blocks={[(b['line'], b['chars']) for b in r2['blocks']]}"
+          f"（應為 [{len(m._visible(orphan))}]）")
+    p2.unlink(missing_ok=True)
 
 
 def test_rules_scope_respects_anchor(m) -> None:
@@ -389,9 +441,32 @@ def test_p9_is_gone(m) -> None:
                         "ECHO_MIN_PAIRS", "ECHO_DESC_CHARS", "is_echo")
             if n in src]
     check("P-9 的實作沒有被加回來", not gone, f"又出現了：{gone}")
-    check("scan() 不再吃 project_path（P-9 是它唯一的用途）",
-          "def scan(path: Path, kind: str)" in src,
-          "scan 的簽章變了 —— 確認不是又把 P-9 接回來")
+
+    # ⚠ **2026-08-15 從 grep 簽章字面值改成驗行為**：舊版斷言
+    # `"def scan(path: Path, kind: str)" in src`。它不是假綠燈（是正向必須存在的
+    # 斷言，加不回來就會紅），但**失效方式與同檔那兩條被實測抓到的 grep 同型**：
+    # 加一個型別註記、被格式化工具換行、或把 `path` 改名，它就紅，
+    # **而紅的原因與「P-9 有沒有被加回來」無關**。
+    # 現在問行為：P-9 的唯一用途是第三個參數 `project_path`，
+    # 所以判準改成「**scan 收不下第三個引數**」——多一個註記、換個行、改個參數名
+    # 都不影響它，而真的把 `project_path` 接回來一定會讓它綠變紅。
+    p = _tmp("# H\n\n" + HOOK + "\n")
+    try:
+        res = m.scan(p, "index")
+        two_ok = isinstance(res, dict) and "blocks" in res
+    except TypeError as exc:
+        two_ok, res = False, exc
+    try:
+        m.scan(p, "index", "D:\\any-project")
+        third = "收下了第三個引數"
+    except TypeError:
+        third = "TypeError"
+    p.unlink(missing_ok=True)
+    check("前提成立：兩個引數的 `scan(path, kind)` 是活的"
+          "（否則下面那個 TypeError 只是它自己壞了，證明不了任何事）",
+          two_ok, f"scan(p, 'index') 回了 {res!r}")
+    check("scan() **拒收第三個引數**（P-9 的 project_path 沒有被接回來·驗行為不 grep 簽章）",
+          third == "TypeError", third)
 
 
 def test_list_markers_align_with_check_bloat(m) -> None:
@@ -444,10 +519,23 @@ def test_entry_shapes_are_actually_covered(m) -> None:
     check("fence 內的條目形狀不算條目", not cb.parse_entries(md, "rules"),
           f"entries={cb.parse_entries(md, 'rules')}")
 
-    # 邊界對齊必須是**同一個來源**，不是兩份長得一樣的常數（v8 就是這樣漂掉的）
-    check("check_prose_blocks 是呼叫 check_bloat.is_entry_line() 決定邊界",
-          "is_entry_line" in CS_PY.read_text(encoding="utf-8"),
-          "本支自己又寫了一份條目 regex ⇒ 兩份常數遲早會漂")
+    # 邊界對齊必須是**同一個來源**，不是兩份長得一樣的常數（v8 就是這樣漂掉的）。
+    # ⚠ **2026-08-15 從 grep 原始碼改成驗行為**：舊版斷言「`is_entry_line` 出現在
+    # check_prose_blocks 的原始碼裡」，而實測那個 token 從 v12 起**沒有任何呼叫**，
+    # 只剩檔頭演化史註解裡的一次出現 —— **它靠一句註解綠了不知道多久**，
+    # 而那正是這條測試要防的事情本身（兩支對邊界的看法悄悄分岔）。
+    # 現在問同一件事的行為面：四種 lead 的規則，條目層量到的就是那條規則的字數，
+    # 散文層 0 字 —— 一份內容只被切一次，也只被收一次。
+    for lead in ("- ", "* ", "+ ", "1. "):
+        md = "## 8. 速查\n<!-- rules-section -->\n" + lead + long_rule + "\n"
+        got = [e["chars"] for e in cb.parse_entries(md, "rules")]
+        p = _tmp(md)
+        r = m.scan(p, "rules")
+        p.unlink(missing_ok=True)
+        check(f"`{lead.strip()}`：條目層剛好量到 {len(m._visible(long_rule))} 字、"
+              f"散文層 0 字（同一份切分·不重不漏）",
+              got == [len(m._visible(long_rule))] and r["prose_chars"] == 0,
+              f"entries={got} prose_chars={r['prose_chars']}")
 
 
 def test_comment_line_is_a_boundary(m) -> None:
@@ -536,18 +624,31 @@ def test_folding_an_entry_changes_nothing(m) -> None:
 def test_single_pipe_line_is_not_lost(m) -> None:
     """**R5-F8**：只有一根 `|` 的長行不得兩支都不管。
 
-    舊版 `scan()` 用 `^\\|` 無條件當表格跳過，而 `is_entry_line()` 要求 `count >= 2`
+    舊版 `scan()` 用 `^\\|` 無條件當表格跳過，而當時的行分類器要求 `count >= 2`
     ⇒ **一支當表格、一支不當條目**。那是「一支認為別人管、另一支根本沒認得它」
     的又一個實例（F-12 的原病）。合法表格列要兩根柱子，只有一根的是散文。
+
+    ⚠ **2026-08-15 改錨點**：舊版問 `cb.is_entry_line(line)`——那是**行層級的近似**，
+    在它被整組移除之後這個問法連跑都跑不起來。更重要的是它**名不副實**：
+    「條目層會不會收這一行」的真相在 `parse_entries()`，問一個不參與該決定的
+    近似函式，答對了也只是碰巧。**這一條的重點是「不重不漏」，所以兩層都要實際問。**
     """
     cb = _load_cb()
     line = "| " + "這是一行沒有第二根柱子的長內容" * 9
-    p = _tmp("# H\n\n" + line + "\n")
+    md = "# H\n\n" + line + "\n"
+    p = _tmp(md)
     r = m.scan(p, "index")
+    # 期望值用 str 內建算，**不呼叫被測實作的 `_visible()`**（檔頭紀律 1：
+    # 兩支自己寫的實作互相比對，共享同一個誤解時會一起錯）。該行無 tab 無換行，
+    # 去掉空格就是可見字數。
+    vis = len(line.replace(" ", ""))
+    check("前提成立：這一行本身超過門檻（否則兩層都不報也是對的，測不到東西）",
+          vis >= cb.LIMIT, f"該行只有 {vis} 字")
     check("單一 `|` 的長行由散文層接住", len(r["blocks"]) == 1,
           f"blocks={len(r['blocks'])}")
-    check("而它確實不被條目層當成表格列（否則就是兩支都收，重複報）",
-          not cb.is_entry_line(line), "is_entry_line 竟然認了它")
+    check("而條目層確實不收它（否則就是兩支都收，重複報）",
+          len(cb.parse_entries(md, "index")) == 0,
+          f"parse_entries 收了 {len(cb.parse_entries(md, 'index'))} 條")
     p.unlink(missing_ok=True)
 
 
@@ -565,24 +666,404 @@ def test_prose_before_the_anchor_is_scanned(m) -> None:
     p.unlink(missing_ok=True)
 
 
-def test_line_classification_is_single_source(m) -> None:
-    """🔑 **量測單位的單一來源**：本支不得自己再判一次「哪一行歸誰管」。
+def test_measurement_unit_is_single_source(m) -> None:
+    """🔑 **量測單位的單一來源**：同一份檔，兩層各收各的一半，**不重也不漏**。
 
-    v10 的教訓：邊界對齊做在**行**上（`is_entry_line`）並不夠，因為兩支的
-    **量測單位**不同（多行條目 vs 連續非條目行）。現在整份行分類共用
-    `check_bloat.classify_lines()`，`entry` 與它的 `continuation` 一起歸條目層。
+    ⚠ **這條在 2026-08-15 從「grep 原始碼」改成「驗行為」**（原名
+    `test_line_classification_is_single_source`）。舊版斷言的是
+    `"classify_lines" in <check_prose_blocks 的原始碼>`，而同一份檔裡的姊妹條
+    （`is_entry_line`）已被實測抓到是**假綠燈**：那個 token 從 v12 起
+    **沒有任何一行程式碼在呼叫它**，只剩演化史註解裡的一次出現——
+    它靠一句註解綠了不知道多久。grep 原始碼當測試有兩種失效方式：
+    實作改名的那天它紅，而紅的原因與對錯無關；註解留著時它綠，而行為早就搬走了。
+    **換一個新 token 再 grep 一次，只是把同一個坑換個字串再踩。**
+
+    現在驗行為：一條 63 字的規則 ＋ 一段 168 字的散文放在同一節裡，
+    條目層必須**剛好**量到 63、散文層必須**剛好**量到 168。任一邊多算或少算
+    （散文被併進條目、或條目的內容漏給散文層）都會讓其中一個等式破掉——
+    那正是 R5-F2／R6-1 的失效形狀，而它們當初都能讓「有沒有呼叫某函式」照樣綠。
     """
-    src = CS_PY.read_text(encoding="utf-8")
-    check("scan() 呼叫 check_bloat.classify_lines()", "classify_lines" in src,
-          "本支又自己判行類別 ⇒ 兩份規則遲早會漂")
     cb = _load_cb()
-    kinds = [k for _i, k, _s in cb.classify_lines(
-        ["## H", "", "- 條目", "  續行", "", "散文", "<!-- x -->", "| a | b |",
-         "```", "1. 在 fence 裡", "```"])]
-    check("分類覆蓋全部九種行別且順序正確",
-          kinds == ["heading", "blank", "entry", "continuation", "blank", "prose",
-                    "comment", "table", "fence", "code", "fence"],
-          f"實際={kinds}")
+    rule = "這是一條規則的內容" * 7               # 63 字
+    prose = "這是一段不屬於任何條目的散文" * 12    # 168 字
+    md = "## 8. 速查\n<!-- rules-section -->\n- " + rule + "\n\n" + prose + "\n"
+    check("前提成立：規則不到門檻、散文超過門檻（兩層該有的判定本來就不同）",
+          len(m._visible(rule)) < m.LIMIT < len(m._visible(prose)),
+          f"規則 {len(m._visible(rule))} 字／散文 {len(m._visible(prose))} 字"
+          f"／門檻 {m.LIMIT}")
+
+    entries = cb.parse_entries(md, "rules")
+    check("條目層剛好收到那一條規則的字數（不漏）",
+          [e["chars"] for e in entries] == [len(m._visible(rule))],
+          f"entries={[e['chars'] for e in entries]}"
+          f"（應為 [{len(m._visible(rule))}]）")
+
+    p = _tmp(md)
+    r = m.scan(p, "rules")
+    p.unlink(missing_ok=True)
+    check("散文層剛好收到那一段散文的字數（不重）",
+          [b["chars"] for b in r["blocks"]] == [len(m._visible(prose))],
+          f"blocks={[(b['line'], b['chars']) for b in r['blocks']]}"
+          f"（應為 [{len(m._visible(prose))}]）")
+
+
+# ── 量測單位（`parse_blocks()`）的**組合**形狀（W-4·2026-08-15）───────────────
+#
+# ⚠ 上一條之前的全部覆蓋是**一份 11 行 input、九種行別各碰一次、零組合零邊界**，
+# 而已知的接縫盲區全部出在組合上：逐行看每一種都對，組合起來照樣兩支同時印綠燈。
+# 實例（R6-1）：一條 151 字的規則寫成「條目 → **空行** → 縮排續段」，
+# 條目層量到 37 字、散文層量到 114 字，**兩邊都在 120 以下**。
+#
+# 🔒 **這一組一律打 `parse_blocks()`，不打 `classify_lines()`。**
+# 後者在 W-1 之後被明文凍結成「行層級的近似」（`check_bloat.py` 的 `LINE_KINDS`
+# 註解：不要刪、也不要改行為），它**按定義**就處理不了跨行的單位——
+# 空行之後的縮排續段在它眼裡永遠是 `prose`。拿它當斷言對象會得到一條
+# **永遠紅、而且紅得沒有意義**的測試（本檔首版就是這樣寫的，四條打在凍結函式上，
+# 而同一份 fixture 打 `parse_blocks()`／`parse_entries()` 全是綠的）。
+# **測試要打在「現在誰是真相」上，不是打在「以前誰是真相」上。**
+#
+# 單位契約見 `CONTEXT_HEALTH_PLAN.md` §8.2：**同一條規則不論哪一種 markdown 寫法，
+# `parse_entries()` 都要回恰好 1 條、字數相同**，七種寫法實測都是 151 字。
+
+
+def _units(cb, md: str) -> list:
+    """回 `parse_blocks()` 切出來的量測單位（兩支工具共用的單一真相）。
+
+    ⚠ 沒有這支就**不要退回 `classify_lines()` 硬湊**：那是行層級近似，量不出
+    跨行單位，而斷言會照樣印綠 —— 靜默降級是這一輪在收的主要形狀。
+    """
+    if not hasattr(cb, "parse_blocks"):
+        raise AttributeError(
+            "check_bloat 沒有 parse_blocks() —— 量測單位的單一真相不在，"
+            "本組測試無從斷言（**不退回 classify_lines 硬湊**）")
+    return cb.parse_blocks(md)
+
+
+def _unit_kinds(cb, md: str) -> list:
+    return [u["kind"] for u in _units(cb, md)]
+
+
+def test_one_rule_stays_one_unit_in_every_writing(m) -> None:
+    """🔑 **§8.2 單位契約**：同一條規則換一種寫法，**單位與字數都不得變**。
+
+    四種等價寫法（緊接續行／空行＋縮排續段／巢狀子條目／item 內 blockquote）
+    餵進去要拿到完全一樣的結果：`parse_entries` 恰好 1 條、字數都是 141、
+    散文層一塊都不報。舊的逐行判準在後三種上會把同一條切成兩半
+    （條目層 36 字、散文層 105 字，**兩邊都在 120 以下 ⇒ 兩支同時印綠燈**），
+    這正是「列舉行首長相追不上 markdown 的等價寫法集合」的實證。
+
+    ⚠ 斷言用**等式**不用「有超過門檻就好」：後者在「只量到後半 105 字」時
+    也可能碰巧成立（門檻調低一點就成立），而等式會直接指出少算了哪一半。
+    """
+    cb = _load_cb()
+    head = "這是一條規則的開頭" * 4                # 36 字
+    tail = "這是同一條規則被空行隔開的續段" * 7     # 105 字
+    want = len(m._visible(head)) + len(m._visible(tail))          # 141
+    check("前提成立：兩半各自都不到門檻、合計超過（接縫盲區的必要條件）",
+          len(m._visible(head)) < cb.LIMIT and len(m._visible(tail)) < cb.LIMIT
+          and want > cb.LIMIT,
+          f"前半 {len(m._visible(head))}／後半 {len(m._visible(tail))}／門檻 {cb.LIMIT}")
+
+    writings = (
+        ("緊接續行", f"- {head}\n  {tail}\n"),
+        ("空行＋縮排續段", f"- {head}\n\n  {tail}\n"),
+        ("巢狀子條目", f"- {head}\n  - {tail}\n"),
+        ("item 內 blockquote", f"- {head}\n\n  > {tail}\n"),
+    )
+    for name, body in writings:
+        md = "## 8. 速查\n<!-- rules-section -->\n" + body
+        entries = cb.parse_entries(md, "rules")
+        check(f"「{name}」＝1 條、{want} 字（換寫法不改單位也不改字數·§8.2）",
+              [e["chars"] for e in entries] == [want],
+              f"量到 {[e['chars'] for e in entries]} 字")
+        kinds = _unit_kinds(cb, body)
+        check(f"「{name}」切出來只有一個 entry 單位（prose 不得分走半條）",
+              [k for k in kinds if k != "exempt"] == ["entry"], f"實際={kinds}")
+        p = _tmp(md)
+        r = m.scan(p, "rules")
+        p.unlink(missing_ok=True)
+        check(f"「{name}」散文層 0 塊 0 字（兩支不得重複報同一段內容）",
+              not r["blocks"] and r["prose_chars"] == 0,
+              f"blocks={[(b['line'], b['chars']) for b in r['blocks']]} "
+              f"prose_chars={r['prose_chars']}")
+
+
+def test_long_continuation_is_not_reported_twice(m) -> None:
+    """上一條的「散文層 0 塊」在**短續段**上證明不了任何事——這條把它補實。
+
+    105 字的續段就算被判成散文也不到門檻，所以那個「不報」是白撿的。
+    要讓「續段歸誰管」這個變異真的會紅，**續段必須自己就超過門檻**：
+    判錯的話散文層會多報一塊、而條目層那一條同時短了一截，兩邊一起錯。
+    （2026-08-14 實測過同型：把 `continuation` 改判成 `prose`，短續段版本照樣綠。）
+
+    這裡的 7＋144＝**151 字**，就是計畫書 §8.2 那條「七種寫法都量到 151」的規則。
+    """
+    cb = _load_cb()
+    lead = "很短的 lead"
+    cont = "這是一段長到自己就超過門檻的續段內容" * 8      # 144 字
+    want = len(m._visible(lead)) + len(m._visible(cont))     # 151
+    check("前提成立：這一段續段自己就超過門檻（否則這個 case 什麼都沒測到）",
+          len(m._visible(cont)) > m.LIMIT, f"續段 {len(m._visible(cont))} 字")
+    for name, body in (("空行＋縮排續段", f"- {lead}\n\n  {cont}\n"),
+                       ("item 內 blockquote", f"- {lead}\n\n  > {cont}\n")):
+        md = "## 8\n<!-- rules-section -->\n" + body
+        entries = cb.parse_entries(md, "rules")
+        p = _tmp(md)
+        r = m.scan(p, "rules")
+        p.unlink(missing_ok=True)
+        check(f"「{name}」：超長續段算進條目，量到 {want} 字",
+              [e["chars"] for e in entries] == [want],
+              f"量到 {[e['chars'] for e in entries]} 字")
+        check(f"「{name}」：散文層不得再報它一次", not r["blocks"],
+              f"誤報 {[(b['line'], b['chars']) for b in r['blocks']]}")
+
+
+def test_soft_wrapped_paragraph_is_one_prose_unit(m) -> None:
+    """🔑 **F-1 回歸**：硬斷行的一整段散文＝**一個** prose 單位。
+
+    F-1 是這支工具最貴的一次失效：第一版逐行比 120 字，而 harness 全部 `.md`
+    都硬斷行在 ~90 欄 ⇒ 一段 1,000 字的散文兩支同時報 0。v13 把「要記得累積」
+    換成「**單位定義上就不可能被折行切開**」（CommonMark 的 soft break 不斷段），
+    所以這條守的是**那個假設本身**：10 行 × 46 字只能吐一個 prose 單位、460 字。
+    假設被改掉（例如有人為了對行號而按行切），F-1 會原地復活而報告仍然是綠的。
+
+    ⚠ `lines == 10` 與 `test_multiline_prose_accumulates` 是同一個判準
+    （2026-08-15 實測那裡量到 9）——**同一個根因在 `_align_to_source` 的行數對位**，
+    不是兩個獨立缺陷；這裡刻意不改小數字去遷就它。
+    """
+    cb = _load_cb()
+    line = "這是一行大約五十多個字的敘述文字用來模擬硬斷行" * 2    # 46 字
+    body = "\n".join(line for _ in range(10))                      # 460 字
+    want = len(m._visible(body))
+    check("前提成立：單行 46 字遠低於門檻（超標只可能來自合併後的長度）",
+          len(m._visible(line)) < m.LIMIT, f"單行 {len(m._visible(line))} 字")
+    prose = [u for u in _units(cb, body) if u["kind"] == "prose"]
+    check(f"10 行硬斷行＝一個 prose 單位、{want} 字（soft break 不切段）",
+          [u["chars"] for u in prose] == [want],
+          f"單位={[(u['kind'], u['chars']) for u in _units(cb, body)]}")
+
+    p = _tmp("# H\n\n" + body + "\n")
+    r = m.scan(p, "index")
+    p.unlink(missing_ok=True)
+    check(f"散文層報成恰好 1 塊：{want} 字、涵蓋原始的 10 行",
+          [(b["chars"], b["lines"]) for b in r["blocks"]] == [(want, 10)],
+          f"blocks={[(b['chars'], b['lines'], b['max_line']) for b in r['blocks']]}")
+
+
+def test_fenced_entry_shapes_are_never_entries(m) -> None:
+    r"""fence 內的條目形狀不算條目——**`~~~` 也是 fence，而且是免費拿到的**。
+
+    這條是「判準改由規格定義」最直接的證據。legacy 的 `_FENCE = ^\s*``` `
+    只認反引號，`~~~` 圍起來的內容整段被當成一般行：裡面的 `- ` 收成假條目
+    （假條目一進快照就**每次都出現在 diff 裡**＝重複的警報等於沒有警報），
+    裡面的長敘述被散文層報成散文塊，收尾的 `~~~` 還會被判成 continuation
+    ——2026-08-15 對 legacy 實測就是 `['prose', 'entry', 'entry', 'continuation']`。
+    改用 CommonMark 解析之後**沒有為 `~~~` 寫任何一行程式碼**，它就對了：
+    列舉標記的判準永遠追不上規格，而規格本來就寫著兩種 fence。
+    """
+    cb = _load_cb()
+    check("前提成立：fence 內的內容超過門檻（不然「不報」也證明不了什麼）",
+          len(m._visible(LONG)) > m.LIMIT, f"{len(m._visible(LONG))} 字")
+    inner = "假條目內容" * 5
+    for mark in ("```", "~~~"):
+        body = f"{mark}\n- {inner}\n1. {inner}\n{mark}\n"
+        check(f"`{mark}` 圍起來的整段是一個 exempt 單位（既不是條目也不是散文）",
+              _unit_kinds(cb, body) == ["exempt"], f"實際={_unit_kinds(cb, body)}")
+        fake = cb.parse_entries("## 8\n<!-- rules-section -->\n" + body, "rules")
+        check(f"條目層不得從 `{mark}` fence 裡收出條目", not fake,
+              f"收到假條目 {[e['text'][:20] for e in fake]}")
+        p = _tmp(f"# H\n\n{mark}\n{LONG}\n{mark}\n")
+        r = m.scan(p, "index")
+        p.unlink(missing_ok=True)
+        check(f"散文層也不得報 `{mark}` fence 內的長內容", not r["blocks"],
+              f"誤報 {[(b['line'], b['chars']) for b in r['blocks']]}")
+
+
+def test_table_rows_and_orphan_pipe_lines_are_told_apart(m) -> None:
+    """**完整表格**的資料列歸條目層；**沒有分隔列的 `|` 行**歸散文層。都不得無人認領。
+
+    R5-F8 記過的縫：舊實作用「開頭是 `|` 且至少兩根柱子」當表格跳過，而條目層
+    又不收它 ⇒ **對兩支都隱形**。GFM 的判準是**有沒有分隔列**，不是有幾根柱子：
+    沒有分隔列的那一行根本不是表格，是段落，該由散文層接住。
+    2026-08-15 實測：孤立列 → `prose`、`parse_entries` 0 條；
+    完整表格 → 表頭與分隔列 `exempt`、資料列 `table`、`parse_entries` 1 條。
+    """
+    cb = _load_cb()
+    full = "| 欄 | 值 |\n|---|---|\n| 資料 | 內容 |\n"
+    kinds = _unit_kinds(cb, full)
+    check("完整表格：只有資料列算 table，表頭與分隔列都是 exempt",
+          [k for k in kinds if k != "exempt"] == ["table"], f"實際={kinds}")
+    entries = cb.parse_entries("## 8\n<!-- rules-section -->\n" + full, "rules")
+    check("條目層只收到資料列那一條（表頭／分隔列不得變成假條目）",
+          len(entries) == 1, f"entries={[e['text'][:20] for e in entries]}")
+
+    lone = "| " + "這是一行沒有第二根柱子的長內容" * 9
+    orphan = "| 欄 | " + "這是一行有兩根柱子但沒有分隔列的長內容" * 7 + " |"
+    check("前提成立：兩種孤立行都超過門檻（不然分錯類也沒有人會報它）",
+          len(m._visible(lone)) > m.LIMIT and len(m._visible(orphan)) > m.LIMIT,
+          f"一根柱子 {len(m._visible(lone))} 字／兩根柱子 {len(m._visible(orphan))} 字")
+    check("只有一根 `|` 的長行是散文（R5-F8：一支當表格、一支不當條目＝兩支都不管）",
+          _unit_kinds(cb, lone) == ["prose"], f"實際={_unit_kinds(cb, lone)}")
+    check("兩根柱子但**沒有分隔列**的長行在 GFM 眼裡也是段落，同樣歸散文層",
+          _unit_kinds(cb, orphan) == ["prose"], f"實際={_unit_kinds(cb, orphan)}")
+
+
+def test_quoted_anchor_before_the_real_one_does_not_steal_the_scope(m) -> None:
+    """🔑 **R8-2a**：真錨**之前**出現的 `<!-- rules-section -->` 字面值不得把範圍騙走。
+
+    `_rules_scope()` 用「哪一行含得到這個字面值」找錨，所以檔案前段一句
+    「處置：在規則節標題後補一行 `<!-- rules-section -->` 錨」就把範圍拉到那一節
+    ——實測範圍只剩 **37 個可見字**，條目層 0 條、散文層 0 塊，**兩支一起印綠燈**。
+    ⚠ 那句話正是這支工具失明時印給人的處置指示：**修復指示變成失明開關**。
+
+    修法：錨只能由 **`html_block` 節點**認定（`check_bloat.rules_scope()`）。
+    行內程式碼裡的同一串字在 AST 眼裡是 `code_inline`，不是 html_block。
+    """
+    cb = _load_cb()
+    check("前提成立：誘餌句與對照句**只差一對 `<!--` `-->`**"
+          "（其餘逐字相同 ⇒ 兩者結果不同時，只可能是那一個改動造成的）",
+          R8_DECOY_REAL.replace("<!-- ", "").replace(" -->", "") == R8_DECOY_SAFE,
+          f"誘餌={R8_DECOY_REAL!r}／對照={R8_DECOY_SAFE!r}")
+
+    real_md, safe_md = _r8_md(decoy=R8_DECOY_REAL), _r8_md(decoy=R8_DECOY_SAFE)
+    check("前提成立：那個字面值出現在**真正的規則節標題之前**（被騙走的必要條件）",
+          real_md.index("<!-- rules-section -->") < real_md.index("## 8. 硬規則"),
+          f"字面值在第 {real_md.index('<!-- rules-section -->')} 字元、"
+          f"節標題在第 {real_md.index('## 8. 硬規則')} 字元")
+
+    p_safe = _tmp(safe_md)
+    r_safe = m.scan(p_safe, "rules")
+    p_safe.unlink(missing_ok=True)
+    p_real = _tmp(real_md)
+    r_real = m.scan(p_real, "rules")
+    p_real.unlink(missing_ok=True)
+
+    want = ([len(R8_PROSE)], len(R8_PROSE))
+    check(f"對照組：沒有誘餌時散文層剛好報 1 塊 {len(R8_PROSE)} 字"
+          "（少了這條，下面那條全紅時分不出「範圍被騙走」與「整支壞掉」）",
+          ([b["chars"] for b in r_safe["blocks"]], r_safe["prose_chars"]) == want,
+          f"blocks={[(b['line'], b['chars']) for b in r_safe['blocks']]} "
+          f"prose_chars={r_safe['prose_chars']}")
+    check("前提成立：誘餌那份**不是走無錨早退路徑**（scanned=True ⇒ 它的「0 塊」"
+          "不能被解釋成「本來就沒掃」）",
+          r_real.get("scanned") is True, f"scanned={r_real.get('scanned')!r}")
+    check(f"**R8-2a：範圍必須落在真正的規則節** —— 散文層照樣剛好報 1 塊 "
+          f"{len(R8_PROSE)} 字（實測改前 0 塊：範圍只剩那句誘餌的 37 個字）",
+          ([b["chars"] for b in r_real["blocks"]], r_real["prose_chars"]) == want,
+          f"blocks={[(b['line'], b['chars']) for b in r_real['blocks']]} "
+          f"prose_chars={r_real['prose_chars']}")
+    check(f"另一半：條目層也要落在同一節（五條各 {R8_RULE_CHARS} 字）——"
+          "**只驗散文層會退化成「兩支都不管」**，那是 F-12 的原病",
+          [e["chars"] for e in cb.parse_entries(real_md, "rules")]
+          == [R8_RULE_CHARS] * 5,
+          f"entries={[e['chars'] for e in cb.parse_entries(real_md, 'rules')]}")
+
+
+def test_fenced_fake_heading_does_not_end_the_scope(m) -> None:
+    """🔑 **R8-2b**：fence 裡的 `## 9. 假標題` 不是節界。
+
+    `_rules_scope()` 逐行比 `^#{2,6}\\s` 找下一個同級標題，**不管那一行在不在
+    fenced code 裡**。於是規則節裡放一段範例碼、碼裡剛好有一行 `## 9. …`，
+    範圍就在那裡截斷 —— 實測只剩 **23 個可見字**（錨 20 ＋ 開頭那三個反引號），
+    條目層 0 條、散文層 0 塊。**範例碼是規則檔裡最常見的東西。**
+
+    修法：節界只能由 **`heading_open` 節點**認定（`check_bloat.rules_scope()`）。
+    fence 內的文字在 AST 眼裡是 fence 的內容，不會產生 heading 節點。
+    """
+    cb = _load_cb()
+    fake_md, plain_md = _r8_md(fenced="## 9. 假標題"), _r8_md(fenced="九、假標題")
+    check("前提成立：那行假標題**確實包在 fence 裡**，而且緊接在錨之後"
+          "（不然截斷點不會落在範圍的最前面）",
+          "<!-- rules-section -->\n\n```\n## 9. 假標題\n```" in fake_md,
+          fake_md[:90])
+
+    p_plain = _tmp(plain_md)
+    r_plain = m.scan(p_plain, "rules")
+    p_plain.unlink(missing_ok=True)
+    p_fake = _tmp(fake_md)
+    r_fake = m.scan(p_fake, "rules")
+    p_fake.unlink(missing_ok=True)
+
+    want = ([len(R8_PROSE)], len(R8_PROSE))
+    check(f"對照組：fence 裡那一行不長得像標題時，散文層剛好報 1 塊 {len(R8_PROSE)} 字",
+          ([b["chars"] for b in r_plain["blocks"]], r_plain["prose_chars"]) == want,
+          f"blocks={[(b['line'], b['chars']) for b in r_plain['blocks']]} "
+          f"prose_chars={r_plain['prose_chars']}")
+    check("前提成立：假標題那份也走了掃描路徑（scanned=True）",
+          r_fake.get("scanned") is True, f"scanned={r_fake.get('scanned')!r}")
+    check(f"**R8-2b：範圍不得被 fence 裡的假標題截斷** —— 散文層照樣剛好報 1 塊 "
+          f"{len(R8_PROSE)} 字（實測改前 0 塊：範圍只剩錨那 23 個字）",
+          ([b["chars"] for b in r_fake["blocks"]], r_fake["prose_chars"]) == want,
+          f"blocks={[(b['line'], b['chars']) for b in r_fake['blocks']]} "
+          f"prose_chars={r_fake['prose_chars']}")
+    check(f"另一半：條目層同樣要涵蓋整節（五條各 {R8_RULE_CHARS} 字），"
+          "而 fence 內容不得被收成假條目",
+          [e["chars"] for e in cb.parse_entries(fake_md, "rules")]
+          == [R8_RULE_CHARS] * 5,
+          f"entries={[e['chars'] for e in cb.parse_entries(fake_md, 'rules')]}")
+
+
+def test_unscanned_is_distinguishable_from_scanned_and_clean(m) -> None:
+    """🔑 **A-5**：「根本沒掃」與「掃過而且乾淨」必須在**機器可讀的層級**分得開。
+
+    現況：規則型檔沒有錨 → `scan()` 回 `blocks: []` 帶一句 `note`，而 `--json`
+    吐出去的只有那句給人讀的字串。消費端（看板、閘門、下一支工具）拿到的
+    是**一個與「乾淨」一模一樣的空清單** ⇒ 沒掃的檔被算成「已檢查通過」，
+    而且是靜默的。這正是 A-1（條目層無錨）疊在同一份檔上時兩支同時盲的形狀。
+
+    ⚠ **主斷言刻意不綁欄位名**：存在一個 `note` 以外、**四份結果都有**的欄位，
+    它在兩份內容完全不同的無錨檔上取同一個值，且與「有錨乾淨」「有錨有散文」
+    兩者都不同。**這比「兩份回傳不相等」嚴格**：後者在寫這條之前就已經成立
+    （無錨走早退路徑、剛好少了 `cost` 鍵），**那是巧合不是訊號**，
+    拿它當判準等於一開始就綠。欄位名（`scanned`／`scope_chars`）2026-08-15 已定案，
+    另外釘一條——**兩條一起留**：定案的那條講「現在叫什麼」，行為那條保證
+    改名或換設計時判準還在。
+    """
+    b_text = "## 8. 速查\n<!-- rules-section -->\n- 一條短規則\n"       # 有錨·乾淨
+    a = _tmp("## 1. 說明\n\n" + LONG + "\n")                          # 無錨
+    a2 = _tmp("## 9. 另一份無錨檔\n\n" + HOOK + "\n")                  # 無錨·內容不同
+    b = _tmp(b_text)
+    c = _tmp("## 8. 速查\n<!-- rules-section -->\n" + LONG + "\n")      # 有錨·有散文
+    ra, ra2, rb, rc = (m.scan(a, "rules"), m.scan(a2, "rules"),
+                       m.scan(b, "rules"), m.scan(c, "rules"))
+    for f in (a, a2, b, c):
+        f.unlink(missing_ok=True)
+
+    check("前提成立：無錨檔與乾淨檔的 blocks 都是空的（差別不可能來自 blocks）",
+          not ra["blocks"] and not rb["blocks"],
+          f"無錨 {len(ra['blocks'])} 塊／乾淨 {len(rb['blocks'])} 塊")
+    check("前提成立：同樣有錨但不乾淨的檔報得出來（證明錨內真的有被掃）",
+          len(rc["blocks"]) == 1, f"blocks={len(rc['blocks'])}")
+
+    common = sorted((set(ra) & set(ra2) & set(rb) & set(rc)) - {"note"})
+    disc = [k for k in common
+            if ra[k] == ra2[k] and ra[k] != rb[k] and ra[k] != rc[k]]
+    snap_a = {k: ra[k] for k in common}
+    snap_b = {k: rb[k] for k in common}
+    check("有一個 note 以外的欄位標示「這份根本沒掃」（A-5·--json 讀得到）",
+          len(disc) >= 1,
+          f"四份共同欄位 {common} 沒有一個分得出來；無錨={snap_a}／乾淨={snap_b}")
+    check("（已定案的欄位名）無錨 scanned=False／有錨 scanned=True",
+          ra.get("scanned") is False and rb.get("scanned") is True
+          and rc.get("scanned") is True,
+          f"無錨={ra.get('scanned')!r}／乾淨={rb.get('scanned')!r}／"
+          f"有散文={rc.get('scanned')!r}（缺欄位時 .get 回 None ⇒ 這條會紅）")
+    check("`scope_chars`＝真的進了範圍的字數：無錨 0、乾淨那份等於整節的可見字數",
+          ra.get("scope_chars") == 0
+          and rb.get("scope_chars") == len(m._visible(b_text)),
+          f"無錨={ra.get('scope_chars')!r}／乾淨={rb.get('scope_chars')!r}"
+          f"（該節可見 {len(m._visible(b_text))} 字）")
+
+    # 第三條 return 路徑：**讀不到檔**。它也是「沒掃」，消費端一律 fail-closed。
+    missing = Path(tempfile.gettempdir()) / "_a5_no_such_file_20260815.md"
+    check("前提成立：這個檔真的不存在（否則走的不是讀檔失敗那條路）",
+          not missing.exists(), f"{missing} 竟然存在")
+    rerr = m.scan(missing, "rules")
+    check("讀檔失敗那條路也帶齊 scanned／scope_chars（三條 return 路徑都分得出來）",
+          rerr.get("scanned") is False and rerr.get("scope_chars") == 0
+          and "error" in rerr,
+          f"scanned={rerr.get('scanned')!r} scope_chars={rerr.get('scope_chars')!r} "
+          f"keys={sorted(rerr)}")
 
 
 def test_cost_uses_shared_price_table(m) -> None:
@@ -625,7 +1106,17 @@ def run() -> "tuple[int, list]":
                test_folding_an_entry_changes_nothing,
                test_single_pipe_line_is_not_lost,
                test_prose_before_the_anchor_is_scanned,
-               test_line_classification_is_single_source,
+               test_measurement_unit_is_single_source,
+               # ── W-4（2026-08-15）：組合形狀 ＋ A-5 可區分性 ──────────────
+               test_one_rule_stays_one_unit_in_every_writing,
+               test_long_continuation_is_not_reported_twice,
+               test_soft_wrapped_paragraph_is_one_prose_unit,
+               test_fenced_entry_shapes_are_never_entries,
+               test_table_rows_and_orphan_pipe_lines_are_told_apart,
+               # ── R8（2026-08-15）：**掃描範圍**自己被騙走（單位對了、範圍不對）──
+               test_quoted_anchor_before_the_real_one_does_not_steal_the_scope,
+               test_fenced_fake_heading_does_not_end_the_scope,
+               test_unscanned_is_distinguishable_from_scanned_and_clean,
                test_cost_uses_shared_price_table, test_limit_is_shared_constant):
         try:
             fn(mod)

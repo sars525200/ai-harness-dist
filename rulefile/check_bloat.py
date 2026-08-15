@@ -6,7 +6,17 @@
     py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --write-snapshot --project <名稱>
     py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --append-history     # 寫一筆時序（收工時）
 
-exit code：0 = 沒有新增膨脹　1 = **cwd 所屬專案**有　2 = 快照壞掉／schema 不符／找不到錨
+exit code：0 = **該掃的都掃了**且沒有新增膨脹　1 = **cwd 所屬專案**有新增膨脹
+　　　　　 2 = **說不出答案**，四種來源：
+　　　　　     ①快照壞掉／schema 不符／零目標／快照 key 撞號
+　　　　　     ②**掃描範圍是空的**（`rules-section` 錨不見了 ⇒ 那一節整節沒受檢查，
+　　　　　       而條目 0 跟乾淨長得一樣）
+　　　　　     ③**範圍內有可見字，卻一個可量單位都認不到**（多半是沒收尾的 fence
+　　　　　       把整節吃成一塊·R8-1a）
+　　　　　     ④**條目數比基準少**（可能是瘦身成果、也可能是這個檔失明了，
+　　　　　       工具分不出來 ⇒ 交給人判斷·R8-3）
+旗標模式同樣不准用 0 表示「什麼都沒做」：`--history` 沒有任何時序＝2、
+`--append-history` 一個檔都沒量到＝2、`--list` 一個檔都沒量到＝2。**0 是一個判定。**
 
 ## 為什麼比對快照，不看絕對值（2026-07-28 定，仍然成立）
 
@@ -42,6 +52,48 @@ exit code：0 = 沒有新增膨脹　1 = **cwd 所屬專案**有　2 = 快照壞
 - **只寫自己的兩個檔**（快照＋時序）。不寫 `PENDING_VERIFY.md`、不寫任何別人的檔——
   多 session 並行是這個環境的常態，而看板的「完成」鈕正靠行號＋sha 寫回那個檔。
 
+## 2026-08-15 單位改由 CommonMark 定義（六輪對抗式覆核之後）
+
+**一條規則的邊界由 markdown 規格說了算，不由「行首長什麼樣」列舉。** 舊版逐行看
+`- `／`|`／縮排來決定條目邊界，六輪覆核**每一輪都找得到新的繞過寫法**——因為
+「還有哪些等價寫法」是 CommonMark 定義的集合，列舉法只能追在後面。實測證據：
+同一條 151 字的規則寫成「條目 → 空行 → 縮排續段」被切成 **37 ＋ 114** 兩個單位，
+兩個都在 120 以下 ⇒ **印綠燈**；巢狀子條目、blockquote 續段同型。
+
+改法：`parse_blocks()` 用 `markdown-it-py` 解析，**`list_item` 節點天生含整棵子樹**，
+所以七種寫法（單行／緊接續行／空行+縮排續段／巢狀子條目／blockquote 續段／
+三層巢狀／續段+巢狀混合）量出來都是同一個 151。`parse_entries()` 建在它上面；
+舊的行層級分類器（`classify_lines()` 那一組）已**整組移除**，理由見它原地的墓碑註解。
+
+⚠ 這次改動會讓**帶巢狀子條目的既有條目變長**（子項以前是各自獨立的短條目，
+現在併回母條）——那不是新增膨脹，是以前沒量到。快照要重建：對每個專案跑
+`--write-snapshot --project <名稱>`，**先看過 diff 再重建**，別把真的成長一起蓋掉。
+
+## 2026-08-15 第二刀：**掃描範圍**也交給規格（R8-1a／R8-2／R8-3）
+
+上一刀把「一條有多長」交給 CommonMark，成功了；但**同一個病搬到隔壁那層**——
+單位由規格定義，**範圍卻還是行 regex**。三條都是實測成立的失效路徑，不是推測：
+
+- **R8-2 範圍被字面值劫持**：`re.M` 的 `search()` 抓第一個就定案 ⇒ 檔案在真正的錨
+  之前出現那串字（散文裡／行內反引號裡／fence 的示範區塊裡）就綁錯節；行 regex 也
+  看不見 fence，碼塊裡的 `## 9. 假標題` 被當節界（實測範圍 1,045 字 → 23 字）。
+  ⚠ 第一種的觸發文字**正是本工具在失明時印給人的處置指示**——修之前，把那句話貼進
+  常駐層就會關掉這個檔的監控。改法：新增 `rules_scope()`，錨只認 `html_block` 節點、
+  節界只認 root 層 `heading` 節點；`entry_scope()` 與 `check_prose_blocks` 共用它。
+  修好之後那句處置指示可以照原樣印、照原樣抄：錨**只在自成一行時**才是 `html_block`，
+  夾在句子中間的同一串字是 inline HTML，綁不到任何範圍。
+- **R8-1a 未閉合 fence 讓整節同時對兩支消失**：規格說未閉合的 fence 吃到檔尾 ⇒ 整段
+  變一個 `exempt` 單位 ⇒ 條目層與散文層都丟掉它，而 `unscanned` 不會叫（範圍內
+  有可見字）。改法：`measure()` 加 `no_units`＝**範圍有可見字但可量單位是 0**。
+  刻意用零檢查而不是佔比門檻——門檻有可調參數，這個專案被門檻繞過過。
+- **R8-3 `diff()` 只往「變大」看**：條目集體消失、超標歸零、整節被搬走全是零訊號
+  （實測 68 條 3 超標 → 0 條 0 超標、bytes 幾乎沒變 ⇒ exit 0 且一個字都不印）。
+  快照裡的 `entry_count`／`over_limit_count` **只有寫入、沒有任何讀取端**。
+  改法：條目數比基準少就進 `blind`（說不出是瘦身還是失明 ⇒ 交給人判斷，不是 exit 1）。
+
+三條**各修各的、不互相頂替**：R8-1a 的零單位檢查對 R8-2 無效（劫持後的範圍裡通常
+有正常散文，可量單位不是 0），反之亦然。
+
 【核心層】常駐規則檔一定會膨脹，這是通病；被檢查的專案與檔案是探索出來的，不是設定。
 """
 from __future__ import annotations
@@ -72,7 +124,13 @@ REBOUND_PCT = 5      # 反彈判定：比歷史最低點高出這個百分比以
 # 全域 CLAUDE.md 是**所有專案共用同一個實體**，掛在任一專案名下都會被重複計。
 GLOBAL_PROJECT = "__global__"
 
+# ⚠ `_SECTION_HEAD` 只給 `parse_sections()`（報告用的各節大小排名）。**掃描範圍不准用它**
+#   ——範圍由 `rules_scope()` 按 AST 決定，理由見該函式的 docstring（R8-2）。
 _SECTION_HEAD = re.compile(r"^(#{2,6})\s+(.+?)\s*$", re.M)
+# ⚠ 這兩個只准拿去比對 **`html_block` 節點的內容**，**不准 `search(md_text)`**：
+#   對整份原始文字做行 regex 看不見 markdown 結構 —— 散文裡、行內反引號裡、fence 的
+#   示範區塊裡的同一串字全都會命中，而 `search()` 抓到第一個就定案 ⇒ 掃描範圍被劫持
+#   （R8-2·2026-08-15 實測，細節在 `rules_scope()`）。
 _RULES_ANCHOR_ALL = re.compile(r"<!--\s*rules-section\s*:\s*all\s*-->")
 _RULES_ANCHOR = re.compile(r"<!--\s*rules-section\s*-->")
 _DOC_MARKER = "**權威模組文件"
@@ -81,80 +139,30 @@ _WIKILINK = re.compile(r"\[\[([^\]]+)\]\]")
 _MDFILE = re.compile(r"`?([\w./-]+\.md)`?")
 _MEMFILE = re.compile(r"\b((?:feedback|project|reference)-[\w-]+)")
 _INDEX_ROW = re.compile(r"^(?:[-*+]|\d+\.)\s+\[")   # 索引列：`- [name](file.md) — hook`
-# 條目的開頭形狀。**`* `／`+ `／`1. ` 是 2026-08-14 Round 4（R4-F）補的**：
-# 舊版只認 `- `，於是那三種開頭的長規則**條目層完全看不見**，而 `check_prose_blocks`
-# 又把它們當散文累積 —— 實測全域 CLAUDE.md §3 交接契約的 1./2./3. 三條各自合法的短條目
-# 被黏成一塊 128 字的「假散文塊」，報告指著它叫人去瘦一段根本不該動的東西。
-_ENTRY_LEAD = re.compile(r"^(?:[-*+]|\d+\.)\s+")
-_FENCE = re.compile(r"^\s*```")
-# ⚠ 與 `_SECTION_HEAD`（只認 `##`+，用來切章節）**刻意不同**：分類每一行時
-# `#` 一級標題也是標題。兩邊各判一次曾讓兩支工具算出不同的掃描範圍（R5-F7）。
-_HEADING_ANY = re.compile(r"^#{1,6}\s")
-
-
-def is_entry_line(line: str) -> bool:
-    """這一行是不是 `parse_entries()` 管得到的條目**開頭**。
-
-    ⚠ 只判斷「lead 行」。要判斷整份檔的每一行歸誰管，用 `classify_lines()`——
-    **懸掛續行不是 lead 行，但它屬於條目**，只看這支會把續行漏給散文層（R5-F2）。
-    """
-    s = line.strip()
-    return bool(_ENTRY_LEAD.match(s) or _is_table_row(s))
-
-
-def _is_table_row(s: str) -> bool:
-    """表格資料列。**要求至少兩根柱子**——只有一根 `|` 的行不是合法表格列。
-
-    R5-F8：舊版 `check_prose_blocks` 用 `^\\|` 無條件把它當表格跳過，而這裡要求
-    `count >= 2` → **一支當表格、一支不當條目，於是兩支都不管**。
-    """
-    return s.startswith("|") and s.count("|") >= 2
-
-
-# 行的類別。**兩支工具共用這一份分類**（R5-F1／F2 的根因就是沒有這一份）：
-# 邊界對齊原本做在「行」的層級，但兩支的**量測單位**一個是「多行條目」、
-# 一個是「連續非條目行」。凡是跨越這兩個單位的內容（條列化的清單、折行的長規則），
-# 兩支都只看到自己那一半，於是都在門檻以下 —— **接縫本身就是盲區**。
-LINE_KINDS = ("blank", "fence", "code", "comment", "heading",
-              "table", "entry", "continuation", "prose")
-
-
-def classify_lines(lines: list) -> list:
-    """把每一行分類，回 `[(相對行號, 類別, 去空白後的文字), ...]`。
-
-    `continuation`＝**懸掛續行**：緊接在條目（或它的續行）之後、本身不是任何
-    其他結構的行。markdown 的條目續行慣例就是這樣，而它在量測上屬於**那一條條目**。
-
-    🔒 **`check_prose_blocks` 必須用這支決定要累積誰**，不得自己再判一次。
-    """
-    out, in_fence, prev_entry = [], False, False
-    for i, raw in enumerate(lines):
-        s = raw.strip()
-        if _FENCE.match(s):
-            in_fence, prev_entry = not in_fence, False
-            out.append((i, "fence", s))
-        elif in_fence:
-            out.append((i, "code", s))
-        elif not s:
-            prev_entry = False
-            out.append((i, "blank", s))
-        elif s.startswith("<!--"):
-            prev_entry = False
-            out.append((i, "comment", s))
-        elif _HEADING_ANY.match(s):
-            prev_entry = False
-            out.append((i, "heading", s))
-        elif _is_table_row(s):
-            prev_entry = False
-            out.append((i, "table", s))
-        elif _ENTRY_LEAD.match(s):
-            prev_entry = True
-            out.append((i, "entry", s))
-        elif prev_entry:
-            out.append((i, "continuation", s))
-        else:
-            out.append((i, "prose", s))
-    return out
+# ── 行層級分類器已於 2026-08-15 **整組移除** ───────────────────────────────────
+#
+# 移除的東西：`_ENTRY_LEAD`／`_FENCE`／`_HEADING_ANY`／`_is_table_row()`／
+#             `is_entry_line()`／`LINE_KINDS`／`classify_lines()`
+#
+# **為什麼刪，而不是留著當備援**：它們回答的是「這一行長得像什麼」，
+# 回答不了「這一行屬於哪一個單位」。一條規則的邊界由 `parse_blocks()` 按
+# CommonMark 決定（`list_item` 含整棵子樹），而行層級的近似**在定義上**就對不齊——
+# 空行＋縮排續段、巢狀子條目、blockquote 續段三種寫法它全部會判錯。
+#
+# ⚠ **刪除的真正理由是「零呼叫端 ＋ 零行為測試 ＋ 註解說謊」三者同時成立**：
+#   `check_prose_blocks` 於同日改吃 `parse_blocks()` 之後，這一組就沒有任何實作
+#   呼叫端了，但註解仍寫著「留著是因為 check_prose_blocks 還在用」——
+#   **那正是本輪 A-2 在收的病（文件宣稱一個不存在的關係）在同一支檔裡復發**。
+#   同一天在 `test_check_prose_blocks.py` 實測到的假綠燈也是這個形狀：
+#   一條斷言 grep 原始碼裡有沒有 `is_entry_line` 這個字串，而它只出現在
+#   **一句歷史註解**裡 —— 那條測試靠註解綠了不知道多久。
+#   **沒人呼叫、沒人守、卻有註解替它解釋為什麼留著 ⇒ 下一個假綠燈的溫床。**
+#
+# 演化史（為什麼「行層級對齊」這條路走不通）保留在 CONTEXT_HEALTH_PLAN §7：
+#   v9 抄一份常數 → v10 改呼叫 `is_entry_line()` → v12 統一成「lead ＋ 懸掛續行」
+#   → Round 6 發現空行一加就繞過 → Round 7 換成規格定義的單位。
+#   **每一版都把對齊做在更小的層級，於是縫往上跑一層。**
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def _visible(text: str) -> str:
@@ -255,52 +263,330 @@ def parse_sections(md_text: str) -> list[dict]:
     return sorted(out, key=lambda s: -s["chars"])
 
 
-def entry_scope(md_text: str, kind: str) -> "tuple[str, str] | None":
-    """決定條目層要掃哪一段。回 (要掃的文字, 範圍描述)；回 None＝不做條目層。
+def _heading_title(node, lines: list) -> str:
+    """標題文字。取 inline 子節點的**原始 markdown**（與 `parse_blocks()` 的 `text` 同原則：
+    不要渲染後的純文字，否則 `**粗體**`／`` `碼` `` 這些字面在描述裡就消失了）。"""
+    for ch in node.children:
+        if ch.type == "inline":
+            return ch.content.strip()
+    ln = lines[node.map[0]] if node.map and node.map[0] < len(lines) else ""
+    return ln.lstrip("#").strip()
 
-    **範圍由檔案自己宣告，不由「最大的那一節」推導。** 後者有一個會靜默失效的形狀：
-    壓完最大節之後**最大節會翻轉**（AI-Projects 實測 §4=12,073／§6=6,364，只要把 §4
-    壓到 6,364 以下，監控目標就跳到 §6），於是**剛壓過的規則節從此退出監控**——
-    正好是這支工具要防的事。
+
+def rules_scope(md_text: str, kind: str = "rules") -> "dict | None":
+    """由 **AST** 決定規則節的範圍。回 None＝這個檔不做範圍限定（沒有錨、且不是索引檔）。
+
+    **兩支工具共用的範圍契約**（`check_prose_blocks` 也吃這一份），欄位名不要隨手改：
+
+    | 欄位 | 意義 |
+    |---|---|
+    | `start_line` / `end_line` | **0-based 行號、end 不含**，給 `lines[start:end]` 用 |
+    | `desc` | 人看的範圍描述（例如「「8. 關鍵硬規則速查」節」） |
+    | `anchor_all` | bool，是不是 `: all` 形式 |
+    | `anchor_line` | 錨的 0-based 行號；索引檔慣例（沒有錨）＝`None` |
+    | `text` | 範圍內的文字，換行**已正規化成 `\\n`** |
+
+    行的切法是 `re.sub(r"\\r\\n?", "\\n", md_text).split("\\n")` —— 與 `parse_blocks()`
+    **逐字相同**（它只認 `\\r\\n`／`\\r`／`\\n`）。改用 `splitlines()` 會多斷垂直定位／換頁／
+    NEL 那幾個字元，行號整段錯位，而**錯位的行號看起來仍然是個正常的行號**。
+
+    ⚠ `start_line`／`end_line` 在**本檔**沒有消費端（本檔只用 `text`／`desc`）——
+    它們是給 `check_prose_blocks` 用的（那支的報告要回報檔內行號）。看到「本檔沒人讀」
+    **不要順手刪**：跨檔呼叫端 grep 得到，刪掉兩支的範圍就會再度分岔（R6-3 記過一次：
+    兩支對「錨之前沒有標題」的退路本來是相反的）。
+
+    ## 範圍由檔案自己宣告，不由「最大的那一節」推導
+
+    後者有一個會靜默失效的形狀：壓完最大節之後**最大節會翻轉**（實測某專案
+    §4=12,073／§6=6,364，只要把 §4 壓到 6,364 以下，監控目標就跳到 §6），於是
+    **剛壓過的規則節從此退出監控**——正好是這支工具要防的事。
+
+    ## 為什麼是 AST 不是行 regex（R8-2·2026-08-15，兩個實測成立的劫持）
+
+    ①**錨被前面的字面值劫持**：`re.M` 的 `search()` 抓到第一個就定案 ⇒ 檔案在真正的錨
+      **之前**任何地方出現那串字（寫在散文裡、包在行內反引號裡、或在 fence 的示範
+      區塊裡）就綁錯節。實測：把「沒被掃到就在規則節標題後補一行錨」這句**本工具自己
+      在失明時印給人的處置指示**貼進前面的章節，後面那節的規則就變成 entries=0／
+      over=0，而報告印出來的範圍是前面那一節，**看起來完全正常**。
+    ②**fence 裡的 `## 標題`** 被行 regex 當成節界，實測範圍從 1,045 可見字縮到 23 字。
+
+    AST 免費解掉兩者：block level 的 HTML 註解才是 `html_block` 節點（行內反引號裡的是
+    `code_inline`、fence 裡的是 `fence` 節點的內容，兩者都不是 `html_block`）；
+    fence 裡的 `##` 不產生 heading 節點。**只認 root 層的節點**，與舊的 `^#{2,6}` 一致
+    （`> ## x`／縮排的 `##` 本來就不該當節界）。
+
+    ## 兩個刻意保留的既有語意
+
+    - **節界只認 `h2`–`h6`**（沿用行 regex 時代的 `#{2,6}`）：`h1` 是檔名層標題，把它
+      當節界會讓「`#` 標題底下的錨」與 `check_prose_blocks` 算出不同範圍。
+    - **起點是節標題那一行本身**（不是標題的下一行、更不是錨那一行）：兩支共用同一個
+      起點，「標題與錨之間」的內容才不會兩支都看不到（R5-F7：把一段散文從錨下面移到
+      錨上面，它就同時退出兩支的視野）。⚠ 副作用要知道：標題那一行的可見字也算進
+      `scanned`，所以「**只有標題、沒有內容**的空規則節」不再由 `unscanned` 攔下——
+      改由 `measure()` 的 `no_units`（可量單位 0）攔（R8-1a），守門沒有變鬆。
     """
-    if _RULES_ANCHOR_ALL.search(md_text):
-        return md_text, "整份檔（rules-section: all）"
+    md, tree_cls = _markdown()          # `_markdown()` 定義在下面的量測單位區
+    lines = re.sub(r"\r\n?", "\n", md_text).split("\n")
 
-    m = _RULES_ANCHOR.search(md_text)
-    if m:
-        # 錨所在的那一節：往前找最近的標題，往後找下一個同級或更高級標題
-        heads = list(_SECTION_HEAD.finditer(md_text))
-        cur = None
-        for h in heads:
-            if h.start() < m.start():
-                cur = h
-            else:
+    heads: list = []        # (行號, 層級, 標題)，document order
+    anchors: list = []      # (起行, 迄行, 是不是 `: all`)
+    for node in tree_cls(md.parse(md_text)).children:
+        if node.map is None:
+            continue
+        if node.type == "heading":
+            lv = node.tag[1:]
+            if lv.isdigit() and 2 <= int(lv) <= 6:
+                heads.append((node.map[0], int(lv), _heading_title(node, lines)))
+        elif node.type == "html_block":
+            content = node.content or ""
+            if _RULES_ANCHOR_ALL.search(content):
+                anchors.append((node.map[0], node.map[1], True))
+            elif _RULES_ANCHOR.search(content):
+                anchors.append((node.map[0], node.map[1], False))
+
+    def _pack(start: int, end: int, desc: str, all_form: bool,
+              anchor_line: "int | None") -> dict:
+        return {"start_line": start, "end_line": end, "desc": desc,
+                "anchor_all": all_form, "anchor_line": anchor_line,
+                "text": "\n".join(lines[start:end])}
+
+    if anchors:
+        for a_line, _a_end, all_form in anchors:
+            if all_form:
+                # `: all` 的優先權高於位置：整份檔都是規則節，就沒有「哪一節」的問題
+                return _pack(0, len(lines), "整份檔（rules-section: all）", True, a_line)
+        a_line = anchors[0][0]          # 多個錨時取第一個（與舊版同）
+        cur = None                      # 錨所屬的節＝它前面最近的 h2–h6
+        for ln, level, title in heads:
+            if ln >= a_line:
                 break
+            cur = (ln, level, title)
         if cur is None:
-            return md_text[m.end():], "錨之後到檔尾"
-        level = len(cur.group(1))
-        end = len(md_text)
-        for h in heads:
-            if h.start() > cur.start() and len(h.group(1)) <= level:
-                end = h.start()
+            # 錨之前沒有任何 h2–h6：說不出「哪一節」，就從錨那一行掃到檔尾。
+            # **不猜一個節界**——猜窄了會讓後面的規則整段退出監控，而那是靜默的。
+            return _pack(a_line, len(lines), "錨起到檔尾（前面沒有 h2–h6 標題）",
+                         False, a_line)
+        end = len(lines)
+        for ln, level, _title in heads:
+            if ln > cur[0] and level <= cur[1]:
+                end = ln                # 下一個同級或更高級標題＝這一節的結尾
                 break
-        return md_text[cur.end():end], f"「{cur.group(2).strip()[:24]}」節"
+        return _pack(cur[0], end, f"「{cur[2][:24]}」節", False, a_line)
 
     if kind == "index":
         # 索引檔不必放錨：它整份就是索引列，而 MEMORY.md 檔頭自己寫著「一行 ≤~120 字」
-        return md_text, "索引列（MEMORY.md 慣例）"
+        return _pack(0, len(lines), "索引列（MEMORY.md 慣例）", False, None)
     return None
 
 
+def entry_scope(md_text: str, kind: str) -> "tuple[str, str] | None":
+    """條目層要掃哪一段。回 (要掃的文字, 範圍描述)；回 None＝不做條目層。
+
+    **範圍一律問 `rules_scope()`**（R8-2·2026-08-15）：本函式只是把那份契約收成條目層
+    要的兩個值。⚠ **不要在這裡另外判一次範圍** —— 上一輪的病就是「單位交給規格了，
+    範圍還留在行 regex」，同一個病搬到隔壁那層；兩支工具各判各的範圍時，
+    分岔出來的那幾行**兩邊都不會報**，而兩邊的報告都是綠的。
+    """
+    sc = rules_scope(md_text, kind)
+    return (sc["text"], sc["desc"]) if sc else None
+
+
+# ── 量測單位：由 CommonMark 定義，不由行首長相列舉（2026-08-15）──────────────
+
+BLOCK_KINDS = ("entry", "prose", "table", "exempt")
+
+# lead 標記要剝掉，否則「多縮一層」「多包一層引言」就等於加字。
+# `\d{1,9}[.)]` 是 **CommonMark 的 list marker 全集**：`{1,9}` 是規格上限，
+# `)` 也是合法 marker。**不要縮回「我看過的那幾種」**——舊的行分類器就是那樣寫的
+# （只認 `.`、不認 `)`），而它已於 2026-08-15 整組移除，理由見本檔上方的墓碑註解。
+_LEAD_STRIP = re.compile(r"^(?:[-*+]|\d{1,9}[.)])\s+")
+_BQ_STRIP = re.compile(r"^>\s?")
+
+_MD_CACHE = None
+
+
+def _markdown():
+    """回 (MarkdownIt 實例, SyntaxTreeNode 類別)。**載不到就拒跑，不退回逐行猜。**
+
+    🔒 靜默降級回舊的逐行判斷是這裡最貴的錯：那份判斷正是被繞過六輪的東西，
+    降級之後工具照樣印綠燈，而**綠燈的意思從「量過了」變成「沒量」且看不出來**。
+    只多開 `table`（commonmark preset 不含），其餘一律照 CommonMark 規格。
+    ⚠ 2026-08-15 起**掃描範圍**（`rules_scope()`）也走這裡：沒有它就連「要掃哪一節」
+    都答不出來，所以拒跑的守門範圍跟著變大 —— 這是刻意的 fail-closed。
+    """
+    global _MD_CACHE
+    if _MD_CACHE is None:
+        try:
+            from markdown_it import MarkdownIt             # noqa: PLC0415
+            from markdown_it.tree import SyntaxTreeNode    # noqa: PLC0415
+        except ModuleNotFoundError as exc:
+            print(f"⚠ 載不到 markdown-it-py（{exc}）—— 條目邊界改由 CommonMark 定義之後，"
+                  "沒有它就切不出量測單位。")
+            print("  裝法：py -3 -m pip install markdown-it-py")
+            print("  **不退回舊的逐行判斷**：那條路已被實測繞過六輪，靜默降級＝假綠燈。")
+            sys.exit(2)
+        _MD_CACHE = (MarkdownIt("commonmark").enable("table"), SyntaxTreeNode)
+    return _MD_CACHE
+
+
+def _strip_markers(line: str) -> str:
+    """剝掉一行的排版標記：縮排、blockquote 的 `>`、list 的 lead。
+
+    ⚠ 只剝**行首**。這是「同一條規則換一種寫法字數不變」的關鍵：巢狀子條目的 `- `
+    與續段的 `> ` 是排版不是內容，留著它們會讓「多縮一層」變成加字。
+    已知副作用（可接受，只影響個位數字元、不影響單位邊界）：條目內 fenced code 裡
+    剛好以 `- `／`1. ` 開頭的行也會被剝；段落**續行**剛好長得像 `2026. ` 時同理。
+    """
+    s = line.strip()
+    while True:
+        m = _BQ_STRIP.match(s)
+        if not m:
+            break
+        s = s[m.end():].lstrip()
+    m = _LEAD_STRIP.match(s)
+    return s[m.end():] if m else s
+
+
+def parse_blocks(md_text: str, line_offset: int = 0) -> list[dict]:
+    """把一段 markdown 切成**互斥**的量測單位。**兩支工具的單一真相。**
+
+    回 `[{kind, chars, text, raw, line, lines, max_line}, ...]`，依出現順序：
+
+    - `entry` ＝一個 `list_item` 節點的**整棵子樹**（含後續段落、巢狀子清單、
+      item 內的 blockquote）。一條規則不論折幾行、縮幾層都是**一個**單位。
+    - `prose` ＝**不在任何 list_item 內**的段落。**top-level 的 blockquote 引言算這類**
+      ——它不是條目（收成條目會讓檔頭說明變成假規則，索引檔的條目數也會多算）。
+      判準是「在不在 item 內」，不是「是不是 blockquote」。
+    - `table` ＝表格的**資料列**；表頭列（thead）與分隔列都不算。
+    - `exempt` ＝標題／fenced code／HTML 註解／水平線，以及 markdown-it 不產 token 的
+      殘行（表格分隔列、link reference 定義）。
+
+    **不變式：每個可見字元恰好屬於一個單位。** 切分做在「行」上（用 `token.map` 的
+    行區間）：兄弟節點的區間天生不重疊，剩下的缺口一律回填成 `exempt`。所以既不會
+    有字元同時屬於兩個單位，也不會有字元**誰都不屬於**——後者正是這支工具被繞過
+    六輪的形狀（那些字沒有任何一支工具在看，而兩邊的報告都是綠的）。
+
+    `chars`＝剝掉 lead 標記與 `>`、去掉全部空白之後的長度。
+    `text`／`raw` 一律是**原始 markdown 片段**，不是渲染後的純文字：
+    🔒 用 `node.content`／inline 子節點會讓 `[名字](檔名.md)` 拆成
+       link_open/text/link_close，`](` 從此消失 —— 而索引列「只算 hook 句」的判準、
+       以及「topic 檔沒失聯」的驗收（V-10）都靠那個字面。**兩邊會同時變成空集合，
+       而比對兩個空集合的斷言仍然是綠的**：紅綠各半是最難判讀的形狀。
+    `line`＝1-based 行號＋`line_offset`（給只餵一段的呼叫端還原檔內行號用）。
+    """
+    md, tree_cls = _markdown()
+    # ⚠ 行的切法要與 markdown-it 的 normalize **逐字相同**（它只認 `\r\n` / `\r` / `\n`）。
+    #   `str.splitlines()` 另外還會在垂直定位／換頁／NEL／行分隔／段分隔那幾個字元斷行 ——
+    #   多斷一行，`token.map` 的行號就與這裡的索引整段錯位，之後每一條量到的都是別條的字數。
+    src = re.sub(r"\r\n?", "\n", md_text).split("\n")
+    spans: list = []
+
+    def take(node, kind: str) -> None:
+        m = node.map
+        if m is not None:
+            spans.append((m[0], min(m[1], len(src)), kind))
+
+    def walk(node) -> None:
+        for ch in node.children:
+            t = ch.type
+            if t in ("bullet_list", "ordered_list", "blockquote"):
+                walk(ch)              # 容器本身不是單位。走到這裡的 blockquote 必在 item 外
+            elif t == "list_item":
+                take(ch, "entry")     # ⚠ 不往下鑽：整棵子樹＝一條
+            elif t == "table":
+                for part in ch.children:               # thead ／ tbody
+                    head = part.type == "thead"
+                    for row in part.children:
+                        take(row, "exempt" if head else "table")
+            elif t == "paragraph":
+                take(ch, "prose")
+            elif t == "code_block":
+                # 縮排 4 格的碼塊**不豁免**：契約的豁免清單只寫「fenced code」，
+                # 而「縮排四格就從兩支報告裡一起消失」會是下一條現成的繞過路徑。
+                take(ch, "prose")
+            else:
+                take(ch, "exempt")    # heading／fence／html_block／hr…
+
+    walk(tree_cls(md.parse(md_text)))
+
+    # 行的歸屬表。**寧可少算也不雙算**：重疊代表本函式有 bug（兄弟區間本不該重疊），
+    # 靜默雙算會讓某條的字數憑空變大，而那正是這支工具要量的東西。
+    spans = sorted(spans, key=lambda s: (s[0], s[1]))
+    owner: list = [None] * len(src)
+    kept: list = []
+    clash = None
+    for a, b, kind in spans:
+        hit = next((i for i in range(a, b) if owner[i] is not None), None)
+        if hit is not None:
+            clash = hit if clash is None else clash
+            continue
+        for i in range(a, b):
+            owner[i] = kind
+        kept.append((a, b, kind))
+    if clash is not None:
+        print(f"⚠ parse_blocks：第 {line_offset + clash + 1} 行被兩個單位認領 —— "
+              "這是本函式的 bug（CommonMark 的兄弟節點行區間不該重疊）。"
+              "已保留先到的單位、沒有重複計，但這一段的字數要人工複核。")
+
+    # 缺口回填：markdown-it 不產 token 的行（表格分隔列、link reference 定義、空行）。
+    # **有可見字卻沒有歸屬＝新的盲區**，所以一律收進 exempt，不讓它從帳面上消失。
+    i = 0
+    while i < len(src):
+        if owner[i] is None:
+            j = i
+            while j < len(src) and owner[j] is None:
+                j += 1
+            kept.append((i, j, "exempt"))
+            i = j
+        else:
+            i += 1
+    kept.sort(key=lambda s: s[0])
+
+    out: list[dict] = []
+    for a, b, kind in kept:
+        raw_lines = src[a:b]
+        if not raw_lines:
+            continue                    # 零行區間（理論上不會有，但別讓它變成 IndexError）
+        if kind == "table":
+            # 欄位用「｜」接起來，與 2026-08-13 以前的表格列量法**逐字相同**：
+            # 換一種接法會讓每條表格列的 key（開頭 24 字）跟著變，於是快照上所有
+            # 表格列一次全部變成「新增條目」，而它們一個字都沒改。
+            cells = [c.strip() for c in raw_lines[0].strip().strip("|").split("|")]
+            parts = [" ｜ ".join(c for c in cells if c)]
+        else:
+            parts = [_strip_markers(ln) for ln in raw_lines]
+        parts = [p for p in parts if p]
+        if not parts:
+            continue                    # 沒有可見字的單位不必留（空行、分隔線）
+        text = " ".join(parts)
+        out.append({
+            "kind": kind,
+            "chars": len(_visible(text)),
+            "text": text,
+            "raw": "\n".join(raw_lines),
+            "line": line_offset + a + 1,
+            "lines": len(parts),
+            "max_line": max(len(_visible(p)) for p in parts),
+        })
+    return out
+
+
 def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
-    """抽出條目。回 [{key, chars, text, block, kind}]。
+    """抽出條目。回 [{key, chars, text, block, kind, line}]。
 
-    形狀都要收：`- `／`* `／`+ `／`1. ` 開頭的 bullet、表格資料列、索引列。
-    表格的分隔列（|---|）與表頭要排除，否則會被當成兩條假條目每次都出現在 diff 裡。
+    **單位一律問 `parse_blocks()`**（2026-08-15）：一個 `list_item` 的整棵子樹算一條，
+    不論它寫成單行、緊接續行、空行+縮排續段、巢狀子條目、item 內 blockquote 或它們的
+    混合。舊版逐行判斷時，同一條 151 字的規則換個寫法就被切成 37＋114 兩個單位、
+    兩個都在門檻下 ⇒ 印綠燈。**列舉行首長相追不上 markdown 的等價寫法集合。**
 
-    ⚠ **fence 內不算條目**（2026-08-14 隨 R4-F 一起補）：擴充條目形狀之後，
-    範例程式碼裡的 `1. `／`- ` 會被收成假條目——而假條目一旦進了快照就會**每次都出現**，
-    正是這支工具開頭那段「重複的警報等於沒有警報」要防的東西。
+    這一層只收 `entry` 與 `table` 兩種單位：
+    - `prose`（不在任何 item 內的段落，含 top-level blockquote 引言）**不是條目**，
+      它歸 `check_prose_blocks` 的結構層管 —— 兩支各管一半、不重複報。
+      這裡只借它抓分組標題（`**xxx**` 那行）。
+    - `exempt`（標題／fence／HTML 註解／表格分隔列與表頭）不算條目。
+      ⚠ **fence 內不算條目**（2026-08-14 R4-F）：範例碼裡的 `1. `／`- ` 若被收成
+      假條目，一進快照就**每次都出現在 diff 裡**，正是「重複的警報等於沒有警報」。
+      現在這件事由 CommonMark 免費保證（fence 是獨立節點），不靠額外的行狀態。
     """
     scoped = entry_scope(md_text, kind)
     if scoped is None:
@@ -310,79 +596,74 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     entries: list[dict] = []
     block = "（未分組）"
     in_doc_section = False
-    pending: list = []          # 累積中的條目：[lead 內容, 續行, 續行…]
-    pending_raw = ""            # lead 那一行的原文（判索引列形狀用）
 
-    def _emit() -> None:
-        """把累積中的條目結算成一條。**含懸掛續行**（R5-F2）。
-
-        舊版只量 lead 那一行、續行落到 `continue` → 一條 195 字的規則
-        只要折成 98/97 兩行，`check_bloat` 只看到 98、`check_prose_blocks` 只看到 97，
-        **兩支都在門檻下**。實測全域 CLAUDE.md 因此有 4 條超標被報成 0、960 字不在雷達內。
-        這正是 R4-A「按 Enter 不能達標」那條硬規則在條目↔散文接縫處的重演。
-        """
-        nonlocal pending, pending_raw
-        if not pending:
-            return
-        text, raw = " ".join(pending), pending_raw
-        pending, pending_raw = [], ""
+    for u in parse_blocks(body):
+        if u["kind"] == "prose":
+            # 分組標題只從散文取。⚠ 與舊版的差異：舊版逐**行**看 `**xxx**`，
+            # 現在一個段落是一個單位 ⇒ 同段落內的第二個粗體開頭不再覆蓋分組名。
+            # 只影響報告的分組標籤，不影響任何長度判定。
+            if u["text"].startswith(_DOC_MARKER):
+                in_doc_section, block = True, "權威模組文件"
+                continue
+            head = _BLOCK_HEAD.match(u["text"])
+            if head and "|" not in u["text"]:
+                block = head.group(1).strip()
+            continue
+        if u["kind"] not in ("entry", "table"):
+            continue
+        text = u["text"]
         vis = _visible(text)
         if not vis:
-            return
+            continue
         # 索引列（`- [name](name.md) — hook`）**長度只算 hook 句**。
         # ⚠ 2026-08-13 實測發現的判準錯誤：markdown link 把檔名寫了兩次，
         # 光是 `- [feedback-windows-deploy-script-traps](feedback-windows-deploy-script-traps.md)`
         # 這個前綴就 **76 字**，佔 120 字上限的 63% —— 於是「檔名長的條目」不論
         # hook 寫得多精簡都必定超標，而「檔名短的」可以寫得又臭又長還不會被抓。
         # **量錯東西的判準會把人逼去改不該改的地方**（去縮檔名？那會斷連結）。
+        # 判索引列形狀用**原始行**（`raw`），不是剝過 lead 的 text ——
+        # 這也是 `text` 必須留原始 markdown 的理由之一。
         body_txt = text
-        if _INDEX_ROW.match(raw):
+        if u["kind"] == "entry" and _INDEX_ROW.match(u["raw"].lstrip().split("\n", 1)[0]):
             for sep in ("—", "──", " - "):
                 k = text.find(sep)
                 if k > 0:
                     body_txt = text[k + len(sep):]
                     break
         entries.append({
-            "key": vis[:KEY_CHARS],          # key 用第一行開頭：那是身分，要穩定
-            "chars": len(_visible(body_txt) or vis),   # 長度只算內容（含續行）
+            "key": vis[:KEY_CHARS],          # key 用條目開頭：那是身分，要穩定
+            "chars": len(_visible(body_txt) or vis),   # 長度只算內容（含續段與巢狀）
             "text": text,
             "block": block,
             "kind": "doc" if in_doc_section else "rule",
+            "line": u["line"],               # 相對於**掃描範圍**的行號（給報告定位用）
         })
-
-    for _i, line_kind, line in classify_lines(body.splitlines()):
-        if line_kind == "continuation":
-            pending.append(line)
-            continue
-        _emit()                                  # 其餘任何形狀都結算前一條
-        if line_kind == "entry":
-            lead = _ENTRY_LEAD.match(line)
-            pending, pending_raw = [line[lead.end():].strip()], line
-            continue
-        if line_kind == "table":
-            if set(line) <= set("|-: "):         # 分隔列
-                continue
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if cells and cells[0] in ("規則", "項目", "#"):   # 表頭
-                continue
-            pending, pending_raw = [" ｜ ".join(c for c in cells if c)], line
-            _emit()
-            continue
-        if line_kind != "prose":
-            continue
-        if line.startswith(_DOC_MARKER):
-            in_doc_section = True
-            block = "權威模組文件"
-            continue
-        head = _BLOCK_HEAD.match(line)
-        if head and "|" not in line:
-            block = head.group(1).strip()
-    _emit()
     return entries
 
 
 def measure(target: dict) -> "dict | None":
-    """量一個檔。回 None＝檔案不存在（呼叫端要把它列成「無」，不是讓它從報告消失）。"""
+    """量一個檔。回 None＝檔案不存在（呼叫端要把它列成「無」，不是讓它從報告消失）。
+
+    **兩道「說不出答案」的守門，都不是門檻、都沒有可調參數**：
+
+    - `unscanned`＝**進入掃描範圍的可見字數 == 0** 而檔案本身非空（A-1）。沒有它時，
+      「有錨、掃過、剛好 0 條」與「沒有錨、整節根本沒看」在報告上長得一模一樣，
+      而後者還會被算進「沒有新增膨脹」的結論裡 —— **靜默的綠燈比紅燈貴**。
+    - `no_units`＝**範圍內有可見字，但條目層＋散文層加起來認領 0 個可量單位**
+      （R8-1a·2026-08-15）。CommonMark 規定**未閉合的 fence 一路吃到檔尾** ⇒ 整節
+      變成一個 `exempt` 單位 ⇒ 條目層與散文層**同時**丟掉它。實測：錨之後放 5 條各
+      120 字的規則、前面加一行沒有收尾的 fence → 條目 0／超標 0／散文塊 0，
+      而 `unscanned` 是 False（範圍可見字 628 > 0）⇒ **兩支同時印綠燈**。那是
+      「兩支同時綠」原封不動回來，只是通道從『接縫』換成『exempt』。
+      ⚠ 判準刻意是**零檢查**而不是「exempt 佔比 > X%」：這個專案的歷史就是被門檻
+      繞過的歷史（某個門檻在 [193,460] 全區間都能讓回歸網全綠）。零沒有參數可調。
+
+    兩者都進 `blind`（＝說不出答案 ⇒ exit 2），**不得計入「沒有新增膨脹」**；
+    `blind_why` 是給人看的那一句，報告端不要各自再拼一次。
+    判準不用「有字落在範圍外」當警報：正常檔案本來就有大量合法的範圍外文字
+    （§1–§7 的章節說明），那個判準會天天叫。
+    `ondemand`（PROJECT_CONTEXT.md）不納管 ≠ 沒掃到，所以兩個旗標都不掛。
+    """
     p = target.get("path")
     if not p or not Path(p).exists():
         return None
@@ -390,10 +671,36 @@ def measure(target: dict) -> "dict | None":
     md_text = p.read_text(encoding="utf-8", errors="replace")
     entries = parse_entries(md_text, target["kind"])
     scoped = entry_scope(md_text, target["kind"])
+    visible = len(_visible(md_text))
+    scanned = len(_visible(scoped[0])) if scoped else 0
+    # 可量單位＝條目層收的兩種（entry／table）＋散文層收的一種（prose）。
+    # `exempt`（標題／fence／HTML 註解／水平線）刻意不算：它正是「誰都不量」的那一類。
+    units = 0
+    if scoped:
+        units = sum(1 for u in parse_blocks(scoped[0])
+                    if u["kind"] in ("entry", "table", "prose"))
+    managed = target["kind"] != "ondemand"
+    unscanned = bool(managed and visible and not scanned)
+    no_units = bool(managed and scanned and not units)
+    why = ""
+    if unscanned:
+        why = (f"掃描範圍的可見字數是 0"
+               f"（{scoped[1] if scoped else '找不到 <!-- rules-section --> 錨'}）"
+               "—— 條目 0／超標 0 是「沒看」的結果，不是「沒有」。")
+    elif no_units:
+        why = (f"範圍內有 {scanned:,} 個可見字，卻**一個可量單位都認不到**"
+               f"（{scoped[1]}）—— 條目層與散文層會同時看不到它；"
+               "最常見的原因是那一節裡有沒收尾的 fence，整節被吃成一塊豁免區。")
     return {
         # ⚠ getsize 不是 len(read_text())：text mode 會把 CRLF 收斂成 LF
         "bytes": os.path.getsize(p),
-        "visible": len(_visible(md_text)),
+        "visible": visible,
+        "scanned": scanned,
+        "units": units,
+        "unscanned": unscanned,
+        "no_units": no_units,
+        "blind": unscanned or no_units,
+        "blind_why": why,
         "sections": parse_sections(md_text),
         "entries": entries,
         "scope": scoped[1] if scoped else None,
@@ -598,13 +905,23 @@ def suggest(entry: dict, skills: list[str]) -> "tuple[str, str]":
 
 # ── diff ──────────────────────────────────────────────────────────────────
 
-def diff(old: "dict | None", targets: list[dict], only_project: "str | None" = None) -> list[str]:
-    """回這次新增的膨脹。`only_project` 限定要算進 exit code 的專案（其他走報告）。"""
-    if old is None:
-        return ["找不到 bloat_snapshot.json（第一次跑）—— 跑 --write-snapshot --project <名稱> 建立基準。"]
+def diff(old: "dict | None", targets: list[dict],
+         only_project: "str | None" = None) -> "tuple[list[str], list[str]]":
+    """回 `(新增的膨脹, 說不出答案的檔)`。`only_project` 限定算進 exit code 的專案。
 
-    old_files = old.get("files", {})
-    reasons = []
+    🔒 **兩份清單刻意分開**（A-1）：「掃過且乾淨」與「根本沒掃」是兩種不同的結論，
+    混在一起的話後者會被 `if not reasons` 讀成前者 —— 那正是舊版每次都印
+    「沒有新增膨脹」而某一節整節沒受檢查的形狀。呼叫端給它們不同的 exit code：
+    有膨脹＝1（量到了、可以處理），說不出來＝2（先把前提補回去再談結論）。
+
+    **兩個方向都要看**（R8-3·2026-08-15）：舊版只迭代 `m["over"]`，問的是「有沒有比
+    基準大」—— 於是**條目集體消失、超標數歸零、整節被搬走一律是零訊號**。實測：基準
+    68 條 3 超標 → 現況 0 條 0 超標、bytes 幾乎沒變 ⇒ `reasons=[]`、`blind=[]` ⇒
+    exit 0，**一行字都不印**。快照裡明明存著 `entry_count`／`over_limit_count`，
+    但全 repo grep 下去只有寫入那一行、沒有任何一行讀它。
+    """
+    blind: list[str] = []
+    live: list = []
     for t in targets:
         if t["kind"] == "ondemand":
             continue
@@ -613,6 +930,20 @@ def diff(old: "dict | None", targets: list[dict], only_project: "str | None" = N
         m = measure(t)
         if m is None:
             continue
+        if m["blind"]:
+            # ⚠ **要判在快照比對之前**：有沒有基準都一樣是「沒掃到」，而下面那句
+            #    `prev_file is None → continue` 會把這種檔靜靜吃掉，一個字都不吭。
+            blind.append(f"{t['project']}/{t['label']}：{m['blind_why']}")
+            continue
+        live.append((t, m))
+
+    if old is None:
+        return (["找不到 bloat_snapshot.json（第一次跑）—— "
+                 "跑 --write-snapshot --project <名稱> 建立基準。"], blind)
+
+    old_files = old.get("files", {})
+    reasons = []
+    for t, m in live:
         fk = f"{t['project']}\u0001{t['label']}"
         prev_file = old_files.get(fk)
         if prev_file is None:
@@ -631,16 +962,57 @@ def diff(old: "dict | None", targets: list[dict], only_project: "str | None" = N
         delta = m["bytes"] - prev_file.get("bytes", m["bytes"])
         if delta >= TOTAL_JUMP:
             reasons.append(f"{tag} 總量單次增加 {delta:,} bytes（可能是新增區塊或散文）")
-    return reasons
+
+        # ── 反方向：條目集體消失（R8-3）────────────────────────────────────
+        #
+        # ⚠ **放 `blind` 不放 `reasons`**：`reasons` 的語意是「有新增膨脹、量到了、
+        #   知道要處理什麼」＝exit 1。條目數掉下去**不是**那件事 —— 同一組數字既可能是
+        #   「壓下去了」也可能是「這個檔失明了」（範圍被綁到別節／整段被 fence 吃掉／
+        #   條目改寫成工具看不見的形狀），**工具分不出來**，所以走「說不出答案」那條，
+        #   把判斷交回給人，而不是假裝它是一個內容判定。
+        # ⚠ **沒有門檻**：任何下降都出聲。定一個「掉超過 X% 才報」等於留一條慢慢縮的
+        #   路，而基準是累積比對的（比到上次 `--write-snapshot` 為止），慢慢縮照樣會
+        #   跨過去 —— 門檻只換來「小幅下降靜默」這個純虧損。
+        # ⚠ `over_limit_count` **只當上下文印出來、不單獨當警報**：它下降正是這支工具
+        #   要的結果（超標條目被壓掉了），對它報警等於懲罰目標達成。它的價值在於和
+        #   條目數一起看 ——「68→0 條且 3→0 超標」與「68→66 條且 3→1 超標」是兩件事。
+        prev_n = prev_file.get("entry_count")
+        now_n = len(m["entries"])
+        if isinstance(prev_n, int) and now_n < prev_n:
+            prev_over = prev_file.get("over_limit_count")
+            over_txt = (f"、超標 {prev_over} → {len(m['over'])} 條"
+                        if isinstance(prev_over, int) else "")
+            prev_bytes = prev_file.get("bytes")
+            byte_txt = (f"{prev_bytes:,} → {m['bytes']:,} bytes"
+                        if isinstance(prev_bytes, int)
+                        else f"現在 {m['bytes']:,} bytes（基準沒記 bytes）")
+            blind.append(
+                f"{t['project']}/{t['label']}：條目數下降 —— 基準 {prev_n} 條 → 現在 "
+                f"{now_n} 條{over_txt}（檔案 {byte_txt}）。**可能是瘦身成果，也可能是"
+                "這個檔失明了**（掃描範圍被綁到別節／整節被未收尾的 fence 吃掉／條目被"
+                "改寫成工具認不得的形狀）—— 工具分不出來。怎麼讀上面那組數字："
+                "bytes 跟著少 ⇒ 字真的搬走了；bytes 幾乎沒變而條目少了 ⇒ 那些字還在，"
+                "只是沒被數到。確認是真的壓下去了，就重建基準："
+                "--write-snapshot --project <名稱>。")
+    return reasons, blind
 
 
 # ── 報告 ──────────────────────────────────────────────────────────────────
 
-def report_overview(targets: list[dict]) -> None:
+def report_overview(targets: list[dict]) -> dict:
+    """印總表，回 `{measured, blind}`。
+
+    ⚠ **「條目 0／超標 0」與「根本沒掃」不得長成同一列**（A-1）：後者印「未掃」
+    （範圍是空的）或「無單位」（範圍有字但一個可量單位都認不到·R8-1a），並在表後
+    單獨列一段。舊版兩者都印 `0 0`，於是「那一節整節沒受檢查」看起來
+    跟「那個檔很乾淨」一模一樣 —— 與下面「檔案不存在要印無」是同一條理由。
+    """
     print("常駐層現況（**每則對話都付** ／ 開工讀一次）")
     print(f"{'專案':<16} {'檔案':<20} {'bytes':>9} {'條目':>5} {'超標':>5}  最大節 / 趨勢")
     print("-" * 96)
     always_total = 0
+    measured = 0
+    blind: list[str] = []
     for t in targets:
         m = measure(t)
         weight = "" if t["weight"] == "always" else "（開工讀）"
@@ -649,15 +1021,34 @@ def report_overview(targets: list[dict]) -> None:
             #    因為「消失」跟「那個檔很乾淨」在畫面上長得一模一樣。
             print(f"{t['project']:<16} {t['label']+weight:<20} {'無':>9}")
             continue
+        measured += 1
         if t["weight"] == "always":
             always_total += m["bytes"]
         top = m["sections"][0]["title"][:20] if m["sections"] else "（無章節結構）"
         st, _why = trend(t["project"], t["label"], m["visible"])
+        if m["blind"]:
+            # 兩種盲法要分得出來：「未掃」＝範圍是空的；「無單位」＝範圍有字但沒有
+            # 任何可量單位（未收尾的 fence 那一類）。印成同一個字會讓處置方式混掉。
+            ent_col, over_col = ("未掃" if m["unscanned"] else "無單位"), "—"
+            blind.append(f"{t['project']}/{t['label']}：{m['blind_why']}")
+        else:
+            ent_col, over_col = str(len(m["entries"])), str(len(m["over"]))
         print(f"{t['project']:<16} {t['label']+weight:<20} {m['bytes']:>9,} "
-              f"{len(m['entries']):>5} {len(m['over']):>5}  {top} · {st}")
+              f"{ent_col:>5} {over_col:>5}  {top} · {st}")
     print("-" * 96)
     print(f"{'每則都付合計':<16} {'':<20} {always_total:>9,} bytes"
           f"（全域那份每個專案各付一次，這裡只算一次）")
+    if blind:
+        print()
+        print("⚠ **這幾個檔的條目層沒有被檢查**（是「沒看」，不是「乾淨」）：")
+        for b in blind:
+            print(f"   - {b}")
+        print("   處置：①範圍是空的／沒有錨 → 在規則節標題後**自成一行**補上 "
+              "<!-- rules-section -->（整份都要掃就用 <!-- rules-section: all -->），"
+              "否則那一節長多少都不會有人叫。")
+        print("         ②範圍有字卻認不到單位 → 找那一節裡沒有收尾的 fence，"
+              "它會一路吃到檔尾，把整節變成豁免區。")
+    return {"measured": measured, "blind": blind}
 
 
 def report_project(targets: list[dict], project: str) -> None:
@@ -692,9 +1083,11 @@ def report_project(targets: list[dict], project: str) -> None:
                 f"{s['title'][:18]} {s['chars']:,}" for s in m["sections"][:5]))
         else:
             print("   （本檔無章節結構，改用條目層分析）")
-        if m["scope"] is None:
-            print("   ⚠ 找不到 <!-- rules-section --> 錨 → **條目層沒有被檢查**。"
-                  "在規則節標題後加一行錨才會納管。")
+        if m["blind"]:
+            # 判 `blind` 不判 `scope is None`：**有錨但範圍是空的**（錨被搬到空節、
+            # 或那一節被整段搬走）同樣是沒檢查到，而它的 scope 不是 None；
+            # **有錨、範圍有字、卻一個可量單位都認不到**（未收尾的 fence）也一樣。
+            print(f"   ⚠ **條目層沒有被檢查**：{m['blind_why']}")
             continue
         print(f"   條目層範圍：{m['scope']} · {len(m['entries'])} 條 · "
               f"超過 {LIMIT} 字 {len(m['over'])} 條")
@@ -705,11 +1098,12 @@ def report_project(targets: list[dict], project: str) -> None:
             print(f"             切點：{cut}")
 
 
-def report_history() -> None:
+def report_history() -> int:
+    """印時序，**回筆數**（0＝說不出任何趨勢，呼叫端要用非 0 exit code 表達·A-8）。"""
     rows = load_history()
     if not rows:
         print("還沒有時序資料 —— 跑 --append-history 寫第一筆（收工流程會自動做）。")
-        return
+        return 0
     keys = sorted({(r.get("project"), r.get("file")) for r in rows})
     print(f"時序（{HISTORY_PATH.name} · {len(rows)} 筆）")
     for proj, label in keys:
@@ -718,23 +1112,48 @@ def report_history() -> None:
         st, why = trend(proj, label, vis[-1])
         spark = " → ".join(f"{v:,}" for v in vis[-6:])
         print(f"  {proj}/{label}: {spark}   [{st}] {why}")
+    return len(rows)
 
 
 def main() -> None:
     argv = sys.argv[1:]
     targets = discover_targets()
 
+    # ⚠ 這三個旗標**不准一律 exit 0**（A-8）：0 的意思是「做了，結果是這樣」，
+    #   不是「跑完了」。空轉（沒有時序可看／一個檔都沒量到）要用 2 講出來，
+    #   否則收工腳本看到 0 會以為量過了 —— 與 A-1 的「沒掃到長得像乾淨」同一種病。
     if "--history" in argv:
-        report_history()
-        sys.exit(0)
+        n = report_history()
+        if not n:
+            print("⚠ 一筆時序都沒有 ⇒ 壓下去了／沒動／反彈**全部說不出來**。")
+        sys.exit(0 if n else 2)
 
     if "--append-history" in argv:
+        # 先數「有幾個檔真的量得到」。只看 append_history 的回傳值分不出兩件事：
+        #   ①今天已寫過且值沒變（正常重跑，0 筆是對的）
+        #   ②所有 target 都 measure()==None（空轉，0 筆代表偵測是死的）
+        usable = [t for t in targets if t["kind"] != "ondemand" and measure(t) is not None]
         n = append_history(targets)
         print(f"已寫入 {n} 筆時序到 {HISTORY_PATH.name}（每個 (專案,檔案) 保留最近 {HISTORY_KEEP} 筆）")
+        if not usable:
+            print("⚠ **一個檔都沒量到** —— 這次是空轉，寫入 0 筆不代表「沒有變化」。"
+                  "先確認 survey_projects() 與各專案的 CLAUDE.md／MEMORY.md 路徑。")
+            sys.exit(2)
+        blind = [t for t in usable if measure(t)["blind"]]
+        if blind:
+            print(f"⚠ 其中 {len(blind)} 個檔的條目層沒被掃到（缺 rules-section 錨、"
+                  "範圍是空的、或整節被未收尾的 fence 吃成豁免區），"
+                  "它們這一筆的「條目／超標」是 0，**那是沒看不是沒有**："
+                  + "、".join(f"{t['project']}/{t['label']}" for t in blind))
+        if not n:
+            print(f"（0 筆＝這 {len(usable)} 個檔今天已寫過且值沒變，不是沒量到。）")
         sys.exit(0)
 
     if "--list" in argv:
-        report_overview(targets)
+        summary = report_overview(targets)
+        if not summary["measured"]:
+            print("\n⚠ **一個檔都沒量到** —— 沒有候選可列，這是空轉不是「很乾淨」。")
+            sys.exit(2)
         seen = []
         for t in targets:
             if t["project"] not in seen:
@@ -759,19 +1178,38 @@ def main() -> None:
                 break
 
     report_overview(targets)
-    reasons = diff(load_snapshot(), targets, only_project=only)
+    reasons, blind = diff(load_snapshot(), targets, only_project=only)
 
-    if not reasons:
+    if not reasons and not blind:
         print(f"\n沒有新增膨脹（exit code 只看 {only or 'cwd 所屬專案'}；其他專案見上表）。")
         sys.exit(0)
 
-    print(f"\n這次變大了（{only or 'cwd 所屬專案'}）：")
-    for r in reasons:
-        print(f"  - {r}")
-    print("\n處置：把超出的細節搬進對應 topic 檔／skill，常駐層只留「精髓＋去處」。")
-    print("看候選與切分點：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list")
-    print("壓完或決定接受現況後：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py "
-          "--write-snapshot --project <名稱>")
+    if reasons:
+        print(f"\n這次變大了（{only or 'cwd 所屬專案'}）：")
+        for r in reasons:
+            print(f"  - {r}")
+        print("\n處置：把超出的細節搬進對應 topic 檔／skill，常駐層只留「精髓＋去處」。")
+        print("看候選與切分點：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list")
+        print("壓完或決定接受現況後：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py "
+              "--write-snapshot --project <名稱>")
+
+    if blind:
+        # **「說不出來」優先於「有膨脹」**：後者至少量到了、看得到要處理什麼；
+        # 前者連量都沒量，而它以前是靜默走 exit 0 的（A-1／A-2 是同一個洞的兩半）。
+        print(f"\n⚠ 這幾個檔**說不出結論**（{only or 'cwd 所屬專案'} ＋全域）：")
+        for b in blind:
+            print(f"  - {b}")
+        print("\n處置（對應上面三種）：")
+        print("  ①範圍是空的／沒有錨 → 在規則節標題後**自成一行**補上 "
+              "<!-- rules-section -->（整份都要掃就用 <!-- rules-section: all -->）。")
+        print("     （錨只在**自成一行**時才算數；夾在句子裡、包在反引號裡、"
+              "寫在範例碼塊裡的同一串字都不會綁到範圍——所以這句話可以照抄。）")
+        print("  ②範圍有字卻認不到可量單位 → 找那一節裡沒有收尾的 fence。")
+        print("  ③條目數比基準少 → 先看一眼是真的壓下去了（那就重建基準："
+              "--write-snapshot --project <名稱>），還是這個檔已經失明。")
+        print("三種任何一種沒排除之前，這個檔的『超標 0 條』不能當成結論。")
+        sys.exit(2)
+
     sys.exit(1)
 
 

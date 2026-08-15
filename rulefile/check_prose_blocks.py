@@ -6,11 +6,14 @@ r"""結構異常偵測：always-loaded 檔裡有沒有「不該長這個形狀�
     py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --file <path> --kind index
     py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --json
 
-exit code：0 = 掃完　2 = 環境不對／零目標拒跑
+exit code：0 = 跑完　2 = 環境不對／零目標拒跑
+⚠ **0 不等於「每一份都掃到」**：規則型檔沒有 `<!-- rules-section -->` 錨時該檔
+`scanned: false`，報告印警告而不是打勾，但 exit code 仍是 0（逐檔的事不改變全程結論）。
 
 ## 這支工具補的是 `check_bloat.py` 的盲區（CONTEXT_HEALTH_PLAN P-8b）
 
-`check_bloat` 只認兩種形狀：`- [` 索引列與 `|` 表格列。**任何不長成那樣的東西，
+**當時的** `check_bloat` 只認兩種形狀：`- [` 索引列與 `|` 表格列（v13 起兩支改用
+同一個切分函式，見下方「量測單位」）。**任何不長成那樣的東西，
 它完全看不見**。2026-08-13 的實例：IT-dept MEMORY.md 尾段有 **6 段散文共 5,978 字**
 （最長一段 2,271 字），而同一天 `check_bloat` 對該檔報告「88 條、**超標 0 條**」——
 兩件事同時為真，因為那 6 段一條都不是「條目」。**盲區不會叫，它只是安靜。**
@@ -28,9 +31,27 @@ exit code：0 = 掃完　2 = 環境不對／零目標拒跑
 ## 判準（刻意沿用既有的 120 字，不發明新數字）
 
 - **索引型檔（MEMORY.md）**：整份都該是 `- [name](file.md) — hook`。
-  任何非索引列、非標題、非空行的內容，正規化後 ≥`LIMIT` 字 → 標為散文塊。
+  任何不屬於條目／表格／標題／程式碼的段落（＝`prose` 單位），
+  正規化後 ≥`LIMIT` 字 → 標為散文塊。
 - **規則型檔（CLAUDE.md）**：**只看 `<!-- rules-section -->` 錨內**。
   錨外的章節說明本來就是散文，那是正常的；速查節裡的整段敘述才是異常。
+
+**量測單位由 CommonMark 定義**（v13·Round 7 W-2）：怎麼切一律問
+`check_bloat.parse_blocks()`，本支只結算 `kind=="prose"`（不在任何條目內的段落）。
+兩支工具過去各切各的（條目層量「lead＋懸掛續行」、散文層量「連續非條目行」），
+**接縫本身就是盲區**：一條 151 字的規則寫成「條目 → 空行 → 縮排續段」時，
+條目層看到 37 字、散文層看到 114 字，**兩邊都在 120 以下 ⇒ 兩支同時印綠燈**。
+
+**掃描範圍同樣不自己判**（v14·2026-08-15）：規則節從哪一行到哪一行一律問
+`check_bloat.rules_scope()`（由 AST 決定）。v13 只把「單位」交給規格，
+**範圍還留著行層級 regex** —— 同一個病原地搬到隔壁那一層，而且兩種寫法就打得穿：
+在真正的錨**之前**出現 `<!-- rules-section -->` 這串字（散文裡、反引號裡、fence 的
+示範區塊裡都算），範圍從 1,045 可見字縮成 **37** 字、5 條超標規則全部落在範圍外，
+**兩支都印綠燈**。細節見 `_rules_scope()` 上方的墓碑註解。
+
+⚠ **「沒掃」跟「乾淨」不是同一件事**（A-5）：規則型檔沒有錨時 `scan()` 回
+`scanned: False`，文字報告印警告**而不是打勾**，`--json` 也帶得出這個欄位。
+只看 `len(blocks)==0` 的消費者會把「根本沒掃」讀成「掃過、很乾淨」。
 
 ⚠ **工具只說「這裡有 N 字的散文塊」，不說「這是錯的」。** 指路行、檔頭說明都可能
 合法地超過 120 字（2026-08-13 瘦身後留下的 3 行指路就是），是不是該處理由人決定。
@@ -53,19 +74,39 @@ HARNESS = HERE.parent
 CHECK_BLOAT_PY = HERE / "check_bloat.py"
 
 LIMIT = 120             # 與 check_bloat.LIMIT／MEMORY.md 檔頭／CLAUDE.md §4 同一個數字
-# ⚠ **這裡不再自己判斷「哪一行歸誰管」**——每一行的類別一律問
-# `check_bloat.classify_lines()`（v12·R5-F1／F2）。演化史值得留著，因為它是
-# 「同一個錯換三種寫法」的紀錄：
+# ⚠ **這裡不自己切量測單位**——怎麼切一律問 `check_bloat.parse_blocks()`（v13·W-2）。
+# 演化史值得留著，因為它是「同一個錯換四種寫法」的紀錄，而每一版的修法都是
+# **把邊界對齊做在更小的層級上，於是縫往上一層跑**：
 #   v7 首版：自己寫 `^[-*+]\s` 跳過條目 → `* `／`+ ` 開頭的長規則**兩支都看不見**（F-12）
 #   v8：改成只跳 `- `，去對齊 check_bloat 當時的 `startswith("- ")`
 #       → 對齊了，但用的是**抄一份一樣的常數**，於是 `1. ` 又漏掉
-#   v10：改成呼叫 `is_entry_line()` → 行的層級真的對齊了，
+#   v10：改成問 check_bloat「這一行是不是條目開頭」→ **行**的層級真的對齊了，
 #       但**量測單位沒有**：條目的懸掛續行仍被當散文累積，一條折行的長規則
 #       被切成兩半，兩支都在門檻下（R5-F2·實測全域 CLAUDE.md 4 條超標報成 0）
-#   v12：整份行分類共用 `classify_lines()`，`entry` 與它的 `continuation` 一起歸條目層
-_SECTION_HEAD_LINE = re.compile(r"^(#{2,6})\s")   # 與 check_bloat._SECTION_HEAD 同規則
-_RULES_ANCHOR = re.compile(r"<!--\s*rules-section\s*(?::\s*all\s*)?-->")
-_ANCHOR_ALL = re.compile(r"<!--\s*rules-section\s*:\s*all\s*-->")
+#   v12：整份**行分類**共用 check_bloat 的分類器，條目與它的懸掛續行一起歸條目層
+#       → 縫再往上跑一層：「條目 → **空行** → 縮排續段」的續段接不回那條條目
+#         （R6-1 實測 96 字兩支都看不到）。**列舉「行」的形狀補不完這一類。**
+#   v13（現在）：**單位改由 CommonMark 決定**，不再逐行判。`parse_blocks()` 保證
+#       每個可見字元恰好屬於一個單位，本支只結算 `kind=="prose"` 那一種。
+#
+# ── `_SECTION_HEAD_LINE`／`_RULES_ANCHOR`／`_ANCHOR_ALL` 已於 2026-08-15 v14 **整組移除** ──
+#
+# 它們是**掃描範圍**的行層級近似（找錨、找節界）。`_rules_scope()` 改問
+# `check_bloat.rules_scope()` 之後零呼叫端 —— 留著就是第二把尺：同一份檔兩支各切
+# 各的範圍，而兩邊的報告都正常。刪除理由與上面那段量測單位的演化史同型，
+# 差別只在「這一半晚了一版才收」：v13 把單位交給規格時，**範圍還留在行層級**。
+#
+# 兩個**實測成立**（不是推測）的攻擊，正是行層級判範圍必然的失效形狀：
+#   ①**錨被前面的字面值劫持**：`_RULES_ANCHOR` 逐行 `search`、抓到第一個就定案 ⇒
+#     真正的錨**之前**只要出現過 `<!-- rules-section -->` 這串字（寫在散文裡、
+#     包在反引號裡、或在 fence 的示範區塊裡）就綁錯節。實測範圍從 1,045 可見字
+#     縮到 **37** 字，5 條超標規則全部落在範圍外，**兩支都印綠燈**。
+#   ②**fence 裡的 `## 標題`**：`_SECTION_HEAD_LINE` 看不見 fence，把碼塊裡的
+#     `## 9. 假標題` 當成節界 ⇒ 實測範圍縮到 **23** 字。
+# 兩者都**不是「再多列舉一種行首長相」補得起來的**：HTML 註解與標題是不是節點，
+# 由它在 block level 的位置決定（`html_block`／`heading_open`），
+# 而「這一行長得像不像」在定義上答不出「它是不是一個節點」。
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 CHARS_PER_TOKEN = 1.5   # 中文為主的 markdown 粗估。**是估算不是量測**，報告要標明前提
@@ -171,130 +212,214 @@ def _load_check_bloat():
     return mod
 
 
-def _rules_scope(lines: list) -> tuple:
-    """回規則型檔要看的行範圍 `(start, end)`（0-indexed, end 不含）。
+def _rules_scope(cb, md_text: str) -> tuple:
+    r"""規則節要掃的行範圍 `(start, end)`（0-based、`end` 不含）；`(None, None)`＝本檔沒宣告規則節。
 
-    有 `: all` 錨＝整份都算規則節；有一般錨＝**從錨所屬那一節的標題**到下一個同級標題；
-    **沒有錨＝回 (None, None)**，呼叫端要明講「本檔沒宣告規則節，只做檔頭檢查」，
-    不得靜默當成整份掃（那會把 §1–§7 的章節說明全報成異常）。
+    🔒 **範圍不在這裡判，一律問 `check_bloat.rules_scope()`**（v14·2026-08-15）。
+    理由與 v13 把量測單位交出去**完全相同**：兩份規則遲早會漂，而漂掉的症狀是
+    **兩支對同一份檔給出相反的範圍描述，卻都印得出漂亮的數字**。
+    舊版自己用行層級 regex 找錨與節界，兩種寫法就能把整節移出視野
+    （實測資料見上方墓碑註解）。
 
-    ⚠ **起點是「節標題」不是「錨那一行」**（v12·R5-F7）：`check_bloat.entry_scope()`
-    從節標題開始，這裡舊版從錨開始 —— 於是**同一節內、錨之前的散文兩支都看不到**，
-    把一段文字從錨下面移到錨上面它就從報告消失。
-    節標題的判定也改用 `#{2,6}`（與 `check_bloat._SECTION_HEAD` 同規則），
-    否則 `#` 一級標題下的錨兩邊會算出不同範圍。
+    本函式只做三件事：**問、把回傳翻成行切片、把「沒有錨」原樣往上傳。**
+    既有語意由 `rules_scope()` 那一側保證，這裡不得自己補：
+
+      - **起點是「節標題」那一行，不是錨那一行**（v12·R5-F7）：從錨算起的話，
+        同一節內、錨之前的散文兩支都看不到 —— **把一段文字從錨下面移到錨上面，
+        它就從報告消失**。`scope_chars` 也會跟著少掉標題那一行。
+      - **`: all` ⇒ 整份檔**：回傳的 `start_line`／`end_line` 已經涵蓋整份，
+        本支**不另外判 `anchor_all`**（那就是第二把尺，正是本輪在收的形狀）。
+      - **沒有錨 ⇒ 回 `None`**：呼叫端要明講「本檔沒宣告規則節」，
+        不得靜默當成整份掃（那會把 §1–§7 的章節說明全報成異常）。
+        ⚠ 本支把 `None` **一律讀成「沒有錨」**：`kind="rules"` 下另一個 `None` 來源
+        （「這個檔不做範圍限定」）不成立，因為 `: all` 會回一個涵蓋整份的 dict。
+        那一側若改了 `None` 的語意，症狀是**整份檔被報成「沒宣告規則節」**
+        （`scanned=False`）——會被 `main()` 的「⚠ 未掃描」擋下來，不會變成假打勾。
+
+    `kind="index"` **不走這裡**：索引檔整份都該是索引列，範圍就是整份檔（見 `scan()`）。
+
+    行號的基準：`start_line`／`end_line` 對的是 `re.sub(r"\r\n?", "\n", text).split("\n")`
+    ——與 `parse_blocks()` 逐字相同的切法。**本支不再做第二次換算**：`scan()` 把 `start`
+    直接餵成 `line_offset`，多一處換算就多一個會靜默錯位的地方。
     """
-    text = "\n".join(lines)
-    if _ANCHOR_ALL.search(text):
-        return 0, len(lines)
-    idx = next((i for i, ln in enumerate(lines) if _RULES_ANCHOR.search(ln)), None)
-    if idx is None:
+    if not hasattr(cb, "rules_scope"):
+        # 🔒 **不偷偷退回舊的行 regex**：靜默降級會讓兩支又各切各的範圍，而畫面完全正常
+        # —— 綠燈的意思從「掃過」變成「沒掃到」，且看不出來。
+        # 拒跑用 exit 2（＝本檔 docstring 宣告的「環境不對」），與 `parse_blocks` 那道守門同構。
+        print("⚠ check_bloat 沒有 rules_scope() —— 掃描範圍的單一真相不在，"
+              "拒跑（不猜、不退回行層級 regex）。")
+        sys.exit(2)
+    scope = cb.rules_scope(md_text, "rules")
+    if scope is None:
         return None, None
-    # 往回找該錨所屬的節標題（起點）與它的層級
-    start, level = idx, 2
-    for j in range(idx, -1, -1):
-        if _SECTION_HEAD_LINE.match(lines[j]):
-            start = j
-            level = len(lines[j]) - len(lines[j].lstrip("#"))
-            break
-    for k in range(idx + 1, len(lines)):
-        if (_SECTION_HEAD_LINE.match(lines[k])
-                and (len(lines[k]) - len(lines[k].lstrip("#"))) <= level):
-            return start, k
-    return start, len(lines)
+    start, end = scope.get("start_line"), scope.get("end_line")
+    if start is None or end is None:
+        # 契約缺欄位就拒跑。**不得自己補一個看起來合理的預設**（`0`／檔尾／錨那一行）：
+        # 補下去就是「範圍靜默變成整份」或「靜默變成空」，兩種都不報錯、都印得出數字。
+        print(f"⚠ check_bloat.rules_scope() 沒給 start_line／end_line"
+              f"（拿到 {sorted(scope)}）—— 契約不符，拒跑（不自己算範圍）。")
+        sys.exit(2)
+    return int(start), int(end)
+
+
+# ── `_align_to_source()` 已於 2026-08-15 **整支移除** ────────────────────────
+#
+# 它存在的唯一理由是「`parse_blocks()` 的契約當時只保證 kind／chars／text／line
+# 四個鍵」，所以我自己把單位**對回原始行**：`line` 的基準（0-based／1-based）
+# **用首行內容比對來挑**，視窗長度再用 `chars` 反推。實作落地後那些不確定性全部
+# 消失（`raw`／`line`／`lines`／`max_line` 都是回傳欄位），而那段反推**當場咬人**：
+#
+#   **根本原因只有一個：拿「內容」去反推「位置」，在內容重複時必然挑錯。**
+#   實測 fixture 的 10 行內容完全相同 ⇒ 真值是 1-based 的 `line=3`，但 0-based 的
+#   解讀（`scope_lines[3]`）指到的是**下一行**、而那一行長得一模一樣、比對照樣成功
+#   ⇒ 起點整體位移一行，視窗又被下一個空行截斷 ⇒ **10 行報成 9 行**；
+#   同一個位移套在兩行的 blockquote 上 ⇒ **2 行報成 1 行**。
+#
+# ⚠ 當時我把第二個症狀寫成「比對失敗、退回 `text` 的行」——**證據不支持**：
+#   真的走到那條 fallback 的話 `max_line` 會是整段 join 後的 144，而實測是 73
+#   （＝原始行含 `>` 的長度）⇒ 它其實對到了原始行，只是對錯一行。
+#   **兩個症狀是同一個 bug，不是兩個。**
+# 三個壞掉的值都**不影響判不判**（`blocks` 仍是 1），壞的是 `lines`／`max_line`／
+# `kind` 這三個給人判斷用的數字 —— 正是「失真是安靜的」那一類。
+# **教訓：API 未定時寫的相容層，API 定了要回頭刪，不是留著當保險。**
+# 留著的話它會繼續用自己那把尺去猜，而猜錯不會報錯。
 
 
 def scan(path: Path, kind: str) -> dict:
-    """回 {blocks: [...], prose_chars: int, note: str}。
+    """回 {blocks, prose_chars, scanned, scope_chars, cost, note}。
 
     `kind`：`index`＝整份都該是索引／`rules`＝只看 rules-section 錨所屬那一節。
+
+    🔒 **`scanned` 是必讀欄位**（A-5·2026-08-15）：`blocks: []` 有兩種來源 ——
+    「掃過、乾淨」與「**根本沒掃**」（規則型檔沒有錨、或檔案讀不到）。
+    只看 `len(blocks)==0` 的消費者會把後者讀成前者，而後者正是膨脹躲得最久的地方
+    （同一份無錨檔上，`check_bloat` 的條目層也同時是盲的 → 兩支一起印綠燈）。
+    `scope_chars`＝**真的進入量測範圍**的可見字數：`scanned=True` 但 `scope_chars=0`
+    也不是乾淨，是空範圍。
     """
     try:
         text = path.read_text(encoding="utf-8-sig", errors="replace")
     except Exception as exc:
-        return {"error": f"讀不到：{exc}", "blocks": [], "prose_chars": 0}
+        return {"error": f"讀不到：{exc}", "blocks": [], "prose_chars": 0,
+                "scanned": False, "scope_chars": 0, "cost": None, "note": ""}
 
+    # 🔒 **行的切法要與 `parse_blocks()` 逐字相同**（它只認 `\r\n`／`\r`／`\n`，
+    # 而且刻意不用 `splitlines()`）。這裡是**行號的共用原點**：`check_bloat.rules_scope()`
+    # 回的 `start` 會當成 `line_offset` 餵給 `parse_blocks()`，**三方用的是同一種切法**，
+    # 任一邊切得不一樣，回報的行號就整段錯位 —— 而錯位的行號看起來仍然是個正常的行號。
+    text = re.sub(r"\r\n?", "\n", text)
     lines = text.split("\n")
+    cb = _load_check_bloat()
     note = ""
     if kind == "rules":
-        start, end = _rules_scope(lines)
+        start, end = _rules_scope(cb, text)
         if start is None:
             return {"blocks": [], "prose_chars": 0,
+                    "scanned": False, "scope_chars": 0, "cost": None,
                     "note": "本檔沒有 <!-- rules-section --> 錨 → 只能做檔頭檢查，"
                             "條目層與結構層都不掃（與 check_bloat 同一個限制）"}
     else:
+        # `index`＝整份都該是索引列 ⇒ 範圍就是整份檔，**不問 `rules_scope()`**：
+        # 索引檔本來就不必宣告錨（`check_bloat.entry_scope()` 對 `kind=="index"` 同樣
+        # 回整份），而把索引檔也交出去判會多出一條「MEMORY.md 裡剛好出現錨字面值
+        # 就只掃半份」的路徑 —— 那是新盲區，不是對齊。
         start, end = 0, len(lines)
 
-    blocks = []
-    buf: list = []          # 累積中的散文段：[(行號, 原文)]
+    scope_lines = lines[start:end]
+    scope_text = "\n".join(scope_lines)
 
-    def _flush() -> None:
-        """把累積的連續散文行結算成**一個**區塊。
+    blocks: list = []
 
-        🔒 **必須累積，不可逐行判斷**（2026-08-13 覆核 F-1·致命）：
+    def _emit(b: dict) -> None:
+        """把一個 `prose` 單位（＝一個不在條目內的 CommonMark 段落）結算成報告的一列。
+
+        🔒 **量的是「合併後」的長度，不是單行長度**（2026-08-13 覆核 F-1·致命）：
         第一版對每一行單獨比 120 字，於是「一段 1,000 字的散文照 markdown 習慣
-        斷成每行 ~100 字」→ `check_structure` 回報 0 塊、`check_bloat` 也回報 0 條，
+        斷成每行 ~100 字」→ 本支回報 0 塊、`check_bloat` 也回報 0 條，
         **兩支工具同時印「✔ 沒有散文塊」而那 1,000 字每則對話照收費**。
         當日那 6 段之所以抓得到，只是因為它們剛好是**未斷行的單行 blockquote**——
         「7 塊 5,423 字」是那個巧合的產物，不是判準的性質。
         harness 自己所有 `.md` 都硬斷行在 ~90 欄，全域 CLAUDE.md 實測
         最長單行 114 字、≥120 的行 0 條：它被報成「乾淨」可能只是因為它換行。
-        """
-        if not buf:
-            return
-        text = "".join(t for _, t in buf)
-        vis = _visible(text)
-        max_line = max(len(_visible(t)) for _, t in buf)
-        # 🔒 **單一門檻，靠「多帶一個數字」而不是「多一道門檻」來區分**
-        #    （2026-08-14 Round 4 覆核 R4-A／R4-C）。
-        #
-        # 演化史（三個版本，每一版都修掉前一版的病又生一個新的）：
-        #   v5 逐行判 → **硬斷行的散文整段逃逸**（F-1 致命）
-        #   v7 段落累積＋兩段門檻（`max_line>=120` 或 `合計>=240`）
-        #      → 修掉了假陽性，卻**在 120–239 之間開了一條縫**：實測把規則
-        #        「只折行、一字未刪」，IT-dept CLAUDE.md 從 7 塊 1,733 字
-        #        變成 4 塊 1,227 字 —— **506 字（29%）憑空消失**。
-        #        F-1 當初的致命點正是「按 Enter 就能達標」，兩段門檻把它放回來了。
-        #      → 而且 `PARA_LIMIT` 在 [193,460] 全區間都能讓回歸網全綠（R4-C），
-        #        沒有任何測試釘得住那個常數。
-        #   v8（現在）**門檻只有一個**：合併後 ≥ LIMIT。
-        #
-        # 那假陽性怎麼辦？—— **不靠門檻解，靠報告解。**
-        # 「連續 4 行各 62 字」與「一段折成 4 行共 248 字」在結構上無法區分
-        # （中文長段落內部本來就有句號，用標點當邊界會把長段落切碎）。
-        # 但**人一眼就能分**，只要報告把 `lines` 與 `max_line` 講出來。
-        # 這也正是本工具的定位：**只報形狀不報對錯，判斷留給人（C-1）**。
-        if len(vis) >= LIMIT:
-            head_line, head_text = buf[0]
-            entry = {
-                "line": head_line,
-                "chars": len(vis),
-                "lines": len(buf),
-                "max_line": max_line,
-                # 分類只是**給人看的提示**，不影響要不要報 —— 一旦拿它當門檻，
-                # 「哪一類不報」就會變成下一個可以用排版繞過的縫。
-                "kind": "單行超標" if max_line >= LIMIT else f"{len(buf)} 行合計",
-                "head": head_text[:70],
-                "lead": head_text[:2] if head_text[:1] in (">", "*") else head_text[:1],
-            }
-            blocks.append(entry)
-        buf.clear()
+        v13 起「合併」不再靠本支自己累積連續行，而是直接吃 `parse_blocks()` 的段落單位
+        ——**硬斷行在 CommonMark 眼裡本來就是同一個段落**，F-1 從「要記得累積」
+        變成「單位定義上就不可能被折行切開」。
 
-    # 🔒 **每一行歸誰管，一律問 `check_bloat.classify_lines()`**（v12·R5-F1／F2）。
-    # 這裡只累積 `prose`：`entry` 與它的 `continuation` 都屬於條目層。
-    # 舊版只跳過 lead 行、**卻把懸掛續行當散文累積**，於是一條折行的長規則
-    # 被切成兩半（條目層看前半、散文層看後半），兩邊都在門檻下 —— 而報告的 head
-    # 還會指著規則的中段。量測單位不統一，邊界對齊做在行上也補不起來。
-    for rel, line_kind, s in _load_check_bloat().classify_lines(lines[start:end]):
-        if line_kind == "prose":
-            buf.append((start + rel + 1, s))
+        🔒 **門檻只有一個**：合併後 `chars >= LIMIT`（2026-08-14 Round 4·R4-A／R4-C）。
+        演化史（每一版都修掉前一版的病又生一個新的）：
+          v5 逐行判 → **硬斷行的散文整段逃逸**（F-1 致命）
+          v7 段落累積＋兩段門檻（`max_line>=120` 或 `合計>=240`）
+             → 修掉了假陽性，卻**在 120–239 之間開了一條縫**：實測把規則
+               「只折行、一字未刪」，IT-dept CLAUDE.md 從 7 塊 1,733 字變成
+               4 塊 1,227 字 —— **506 字（29%）憑空消失**。F-1 當初的致命點
+               正是「按 Enter 就能達標」，兩段門檻把它放回來了。
+             → 而且 `PARA_LIMIT` 在 [193,460] 全區間都能讓回歸網全綠（R4-C），
+               沒有任何測試釘得住那個常數。
+          v8 起**門檻只有一個**，v13 沿用（換的是單位，不是門檻）。
+        那假陽性怎麼辦？——**不靠門檻解，靠報告解。**
+        「連續 4 行各 62 字」與「一段折成 4 行共 248 字」在結構上無法區分
+        （中文長段落內部本來就有句號，用標點當邊界會把長段落切碎），
+        但**人一眼就能分**，只要報告把 `lines` 與 `max_line` 講出來。
+        這也正是本工具的定位：**只報形狀不報對錯，判斷留給人（C-1）**。
+        """
+        # 契約要求每個單位都有 `chars`。**缺了不得當成 0** —— `0 < LIMIT` 會讓這一塊
+        # 靜默消失，而畫面上跟「量過、沒超標」長得一模一樣（本輪在收的正是這種分支）。
+        chars = b.get("chars")
+        chars = len(_visible(str(b.get("text") or ""))) if chars is None else int(chars)
+        if chars < LIMIT:
+            return
+        # ⚠ `lines`／`max_line`／`head` 一律從 **`raw`（原始 markdown 片段）** 算，
+        # 不用 unit 自己的同名欄位：那兩欄是**剝掉 `>`／lead 標記之後**量的，
+        # 而這三個數字要回答的是「**它在檔案裡長什麼樣**」——報一個比人眼看到的短的
+        # 「最長行」，人就分不出「一段折行的長散文」與「幾條各自合法的短規則」（R4-A）。
+        # 對照之下 `chars` 是正規化後的內容量：兩者差幾個標記字元是正常的，各答各的問題。
+        # （`raw` 缺席時才退回 unit 的數字 —— 寧可用剝過標記的值，也不要自己反推視窗。）
+        raw_lines = [t for t in str(b.get("raw") or "").split("\n") if t.strip()]
+        if raw_lines:
+            n_lines = len(raw_lines)
+            max_line = max(len(_visible(t)) for t in raw_lines)
+            head_text = raw_lines[0].strip()
         else:
-            _flush()
-    _flush()
+            n_lines = int(b.get("lines") or 1)
+            max_line = int(b.get("max_line") or chars)
+            head_text = str(b.get("text") or "")
+        blocks.append({
+            # `line` 直接用 unit 的：呼叫端已把 `line_offset` 餵成該節在檔內的起點，
+            # 所以它就是**檔案的 1-based 絕對行號**，本支不再自己換算。
+            "line": int(b.get("line") or 0),
+            "chars": chars,
+            "lines": n_lines,
+            "max_line": max_line,
+            # 分類只是**給人看的提示**，不影響要不要報 —— 一旦拿它當門檻，
+            # 「哪一類不報」就會變成下一個可以用排版繞過的縫。
+            "kind": "單行超標" if max_line >= LIMIT else f"{n_lines} 行合計",
+            "head": head_text[:70],
+            "lead": head_text[:2] if head_text[:1] in (">", "*") else head_text[:1],
+        })
+
+    # 🔒 **怎麼切一律問 `check_bloat.parse_blocks()`，本支只結算 `kind=="prose"`**（v13）。
+    # `entry`（含它後面的續段、巢狀子清單、blockquote）與 `table` 歸條目層、
+    # `exempt`（標題／fenced code／HTML 註解）誰都不管。**每個可見字元恰好屬於一個單位**
+    # ——這條保證就是接縫盲區的解：舊版兩支各切各的，一條 151 字的規則寫成
+    # 「條目 → 空行 → 縮排續段」時，條目層看到 37 字、散文層看到 114 字，兩邊都在門檻下，
+    # 而報告的 head 還會指著規則的中段。邊界對齊做在「行」上補不起來這一類。
+    if not hasattr(cb, "parse_blocks"):
+        # 🔒 **不偷偷退回舊的逐行判法**：那會讓兩支又各切各的單位，而畫面上一切正常。
+        # 拒跑用 exit 2（＝本檔 docstring 宣告的「環境不對」），不是印個 note 繼續。
+        print("⚠ check_bloat 沒有 parse_blocks() —— 量測單位的單一真相不在，"
+              "拒跑（不猜、不退回逐行判）。")
+        sys.exit(2)
+    # `line_offset=start`＝這一節在**檔案**裡的 0-based 起點 ⇒ 回來的 `line` 直接是
+    # 檔案的絕對行號。行號的換算只做在這一處（本支自己再算一次就是第二把尺）。
+    for b in cb.parse_blocks(scope_text, line_offset=start):
+        if b.get("kind") == "prose":
+            _emit(b)
 
     prose = sum(b["chars"] for b in blocks)
     return {"blocks": blocks,
             "prose_chars": prose,
+            "scanned": True,
+            "scope_chars": len(_visible(scope_text)),
             "cost": cost_estimate(prose) if prose else None,
             "note": note}
 
@@ -338,6 +463,13 @@ def main() -> int:
                          "path": str(t["path"]), **scan(Path(t["path"]), kind)})
 
     if args.json:
+        # `--json` schema（消費者：`/context-health` SKILL.md 步驟 2）——每列：
+        #   {project, label, kind, path, blocks[], prose_chars,
+        #    scanned: bool, scope_chars: int, cost, note, error?}
+        # ⚠ **`scanned`／`scope_chars` 是 2026-08-15 新增的（A-5）**：舊 schema 只有
+        #   `blocks: []`，於是「規則型檔沒有錨、根本沒掃」與「掃過、很乾淨」
+        #   **在 JSON 裡完全分不出來**。新消費者一律**先看 `scanned`**：
+        #   `False` 時 `blocks`／`prose_chars` 不是「0」而是「未知」，不得拿去做結論或加總。
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return 0
 
@@ -352,9 +484,17 @@ def main() -> int:
             continue
         if r.get("note"):
             print(f"  ※ {r['note']}")
+        # 🔒 **沒掃就不准印打勾**（A-5）：舊版先印 note 說「不掃」，緊接著又印
+        # 「✔ 沒有散文塊」——前後矛盾，而讀報告的人記得住的是那個打勾。
+        # `.get("scanned", False)` 刻意 **fail-closed**：欄位缺了就當沒掃。
+        # 少印一次「乾淨」的代價，遠低於印一個假打勾。
+        if not r.get("scanned", False):
+            print("  ⚠ **未掃描**——這一份沒有量到任何東西，不是乾淨"
+                  "（原因見上方 ※；下方合計不含它）")
+            continue
         blocks = r.get("blocks", [])
         if not blocks:
-            print("  ✔ 沒有 ≥120 字的散文塊")
+            print(f"  ✔ 沒有 ≥{LIMIT} 字的散文塊（範圍內掃了 {r.get('scope_chars', 0)} 字）")
             continue
         print(f"  {len(blocks)} 個散文塊、共 {r['prose_chars']} 字"
               f"（該檔自己訂的上限是 {LIMIT} 字/條）")
@@ -369,18 +509,27 @@ def main() -> int:
 
     print("\n" + "=" * 82)
     print(f"合計散文字數：{total}")
+    # 🔒 **合計旁邊一定要講出「有幾份沒進這個合計」**（A-5）：只印一個總數的話，
+    # 它讀起來就是「全部檔案的全貌」。沒掃的那幾份貢獻 0，於是**掃得越少數字越漂亮**。
+    skipped = [r for r in rows if not r.get("error") and not r.get("scanned", False)]
+    if skipped:
+        names = "、".join(f"{r['project']}/{r['label']}" for r in skipped[:6])
+        more = f" 等 {len(skipped)} 份" if len(skipped) > 6 else ""
+        print(f"⚠ 其中 {len(skipped)} 份**完全沒掃**（{names}{more}）——上面的合計不含它們。"
+              "「沒掃」與「乾淨」是兩件事，要讓它進監控就補 `<!-- rules-section -->` 錨。")
     if total:
         c = cost_estimate(total)
         print(f"約 {c['tokens']} tokens；全部清掉每月約省 ${c['usd_month']}")
         print(f"  {c['note']}")
         print("  ⚠ 這是**估算不是量測**——真正的量測在 `gen_cost_panel.py`（讀 transcript）。"
               "省錢也不是主要理由：規則太多會找不到、讀不完。")
-    print("※ 工具只報「形狀」不報「對錯」——指路行與檔頭說明也可能合法地超過 120 字。")
+    print(f"※ 工具只報「形狀」不報「對錯」——指路行與檔頭說明也可能合法地超過 {LIMIT} 字。")
     print("※ 要不要處理、搬去哪，是人的判斷（CONTEXT_HEALTH_PLAN C-1）。")
-    print("※ **這支只看得見「散文」這一半**：條列、表格、條目的續行都歸 `check_bloat` 的"
-          "條目層管（每條各自 ≤120 字）。**把一段長散文改寫成條列，這裡的數字會下降"
-          "而內容一個字都沒搬**——所以瘦身成效要看整份檔的總量（`check_bloat` 的"
-          "`visible` 趨勢），不能只看這裡的散文字數。")
+    print("※ **這支只看得見「散文」這一半**：條列、表格、條目的續段與巢狀子清單"
+          f"都歸 `check_bloat` 的條目層管（每條各自 ≤{LIMIT} 字）。"
+          "**把一段長散文改寫成條列，這裡的數字會下降而內容一個字都沒搬**"
+          "——所以瘦身成效要看整份檔的總量（`check_bloat` 的 `visible` 趨勢），"
+          "不能只看這裡的散文字數。")
     return 0
 
 

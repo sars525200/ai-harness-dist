@@ -61,9 +61,15 @@ MUTATIONS = [
         '        "bytes": len(md_text.encode("utf-8")),',
     ),
     (
-        "條目層改由「最大的那一節」推導（壓完最大節會翻轉→規則節退出監控）",
-        '    if _RULES_ANCHOR_ALL.search(md_text):',
-        '    if True:',
+        # 2026-08-15 v14 **重新指錨**：R8-2 把範圍判定從行 regex 改成 AST，舊錨點
+        # `    if _RULES_ANCHOR_ALL.search(md_text):` 已不存在（`test_mutation_anchors`
+        # 當場抓到漂掉）。⚠ **不可以回填一行假的 `search(md_text)` 把它救綠**——
+        # 那行不再決定任何事，後面仍由 AST 走，做出來會是一個**等價變異**
+        # （測試不會紅），而「變異沒紅」與「回歸網沒保護」印出來一模一樣。
+        # 新錨點打在真正的閘門上：每個錨都被當成 `: all` ⇒ 範圍永遠是整份檔。
+        "任何錨都當成 `: all`（範圍永遠整份檔→「哪一節」的判定整個失效）",
+        '            if all_form:',
+        '            if True:',
     ),
     (
         "沒有錨時改成掃全檔（首次跑噴一整批假警報＝D5 的 WARN 疲勞）",
@@ -101,10 +107,78 @@ MUTATIONS = [
         '        if prev:',
     ),
     (
+        # ── 以下兩條打在**條目單位契約所依賴的既有常數**上 ──────────────
+        # 條目層的「一條有多長」與「一條是誰」兩個判準各由一個模組常數承載，
+        # 把它們調鬆／調碎是最省事也最容易被當成「調參數」放過去的退法。
+        #
+        # ⚠ **「單位邊界怎麼決定」那一類的變異已於 2026-08-15 補上**（見最下面那組
+        # `parse_blocks()`）。這裡原本寫著「實作還沒落地、待補」——**實作早就落地了，
+        # 註解沒更新**，而這正是同一輪剛在 `check_bloat.py` 因此刪掉整組死碼的形狀
+        # （零呼叫端 ＋ 零測試 ＋ 一句註解替它解釋為什麼留著）在變異檔裡復發。
+        # 補的時候仍守原則：**錨點字串必須真的存在於被測檔裡**，猜一個塞進來的話
+        # `tests/test_mutation_anchors.py` 會紅在**錯的理由**上——「錨點漂掉」與
+        # 「錨點從來沒對過」印出來一模一樣，但前者要更新錨點、後者要刪掉整條。
+        "120 字上限放寬十倍（條目超標判定整個失效，含七種寫法的單位契約）",
+        "LIMIT = 120 ",
+        "LIMIT = 1200 ",
+    ),
+    (
+        "條目身分只取前 4 字（跨版本對不上同一條→既有條目全被報成新增）",
+        "KEY_CHARS = 24 ",
+        "KEY_CHARS = 4 ",
+    ),
+    (
         "把專案路徑寫死回模組層（U-1 倒退）",
         "PROJECTS_ROOT = Path.home() / \".claude\" / \"projects\"",
         "PROJECTS_ROOT = Path.home() / \".claude\" / \"projects\"\n"
         "CLAUDE_MD = Path(r\"D:\\IT-department\\CLAUDE.md\")",
+    ),
+
+    # ── `parse_blocks()`：量測單位的單一真相（2026-08-15 補）──────────────────
+    #
+    # 覆核實測：上面 13 條錨點**沒有一條**打在 `parse_blocks()` 上，而 2026-08-15
+    # 起兩支工具「怎麼切一條」全部問它。下面五條各守一個「改了不會有任何斷言紅」的
+    # 決定 —— 補之前實測這五個變異在 153 條斷言下**全綠**（＝零保護），
+    # 守門斷言同批補在 `tests/test_check_bloat.py` 的 `[R8-M]` 段。
+    (
+        # 原始碼註解自己寫著「縮排四格就從兩支報告裡一起消失會是下一條現成的
+        # 繞過路徑」，而在補這條之前，那個決定**一條測試都沒有**。
+        "縮排四格的碼塊改判 exempt（走 else 分支＝從兩支報告裡一起消失）",
+        '            elif t == "code_block":',
+        '            elif t == "code_block" and False:',
+    ),
+    (
+        # 判成 prose 的話，`<!-- rules-section -->` 那行錨自己會被報成散文塊
+        # ——報告會叫人去瘦一個「刪掉就整節退出監控」的東西。
+        "html_block 改判 prose（錨與 HTML 註解會被當成散文報出來）",
+        '            else:\n                take(ch, "exempt")',
+        '            elif t == "html_block":\n                take(ch, "prose")\n'
+        '            else:\n                take(ch, "exempt")',
+    ),
+    (
+        # markdown-it 對表格分隔列與 link reference 定義**不產 token**。不回填的話
+        # 那幾行誰都不認領 ——「有可見字卻不在任何一支的帳上」，而兩份報告都是綠的。
+        "拿掉缺口回填（不產 token 的行從帳面上消失，兩支都看不到）",
+        '            kept.append((i, j, "exempt"))\n            i = j',
+        '            i = j',
+    ),
+    (
+        # ⚠ 真實 markdown 造不出重疊區間（CommonMark 的兄弟節點不重疊），
+        # 所以守門斷言用**假樹**直接餵 `_MD_CACHE`。「造不出來」正是它零保護的原因：
+        # 拿掉整段偵測，跑真檔一切正常。
+        "拿掉重疊偵測（同一行被兩個單位認領時雙算，某條的字數憑空變大）",
+        "        if hit is not None:\n            clash = hit if clash is None else clash\n"
+        "            continue",
+        "        if False:\n            clash = hit if clash is None else clash\n"
+        "            continue",
+    ),
+    (
+        # `max_line` 是報告裡讓人分辨「一段折行的長散文」與「幾條各自合法的短規則」
+        # 的唯一依據（R4-A）。改回整段長度 ⇒ 每一塊都變成「單行超標」，形狀資訊全失真，
+        # 而**判不判仍然一樣**，所以只看 blocks 數的斷言全部照樣綠。
+        "max_line 改回整段長度（形狀資訊失真，人分不出多條還是一段）",
+        '            "max_line": max(len(_visible(p)) for p in parts),',
+        '            "max_line": len(_visible(text)),',
     ),
 ]
 
