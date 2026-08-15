@@ -29,3 +29,8 @@
 {"date": "2026-08-15", "ts": "2026-08-15T00:30:03", "project": "IT-department", "file": "MEMORY.md", "bytes": 16808, "visible": 11426, "over": 0, "entries": 88}
 {"date": "2026-08-15", "ts": "2026-08-15T04:34:31", "project": "IT-department", "file": "MEMORY.md", "bytes": 16878, "visible": 11477, "over": 0, "entries": 88}
 {"date": "2026-08-15", "ts": "2026-08-15T04:50:37", "project": "__global__", "file": "全域 CLAUDE.md", "bytes": 9846, "visible": 4062, "over": 0, "entries": 38}
+{"date": "2026-08-16", "ts": "2026-08-16T00:31:25", "project": "__global__", "file": "全域 CLAUDE.md", "bytes": 9846, "visible": 4062, "over": 0, "entries": 38}
+{"date": "2026-08-16", "ts": "2026-08-16T00:31:26", "project": "AI-Projects", "file": "CLAUDE.md", "bytes": 27069, "visible": 13561, "over": 3, "entries": 112}
+{"date": "2026-08-16", "ts": "2026-08-16T00:31:26", "project": "AI-Projects", "file": "MEMORY.md", "bytes": 3245, "visible": 1700, "over": 0, "entries": 14}
+{"date": "2026-08-16", "ts": "2026-08-16T00:31:26", "project": "IT-department", "file": "CLAUDE.md", "bytes": 23036, "visible": 12987, "over": 3, "entries": 68}
+{"date": "2026-08-16", "ts": "2026-08-16T00:31:26", "project": "IT-department", "file": "MEMORY.md", "bytes": 16878, "visible": 11477, "over": 0, "entries": 88}
