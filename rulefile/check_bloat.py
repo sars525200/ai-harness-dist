@@ -594,6 +594,7 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     body, _desc = scoped
 
     entries: list[dict] = []
+    seen_keys: dict[str, int] = {}       # 同檔內開頭撞號的計數（R8-4，見下面 append 處）
     block = "（未分組）"
     in_doc_section = False
 
@@ -630,8 +631,37 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
                 if k > 0:
                     body_txt = text[k + len(sep):]
                     break
+        # ── 條目身分：開頭 KEY_CHARS 字；同檔內撞號時第 2 條起加尾碼（R8-4）──────
+        #
+        # 舊行為是 `gather_current()` 撞到就 exit 2，訊息叫人「把其中一條的開頭改得
+        # 不一樣」——**那是用工具的實作細節去逼改規則正文**，正是上面 `body_txt`
+        # 那段自己命名過的反模式（「量錯東西的判準會把人逼去改不該改的地方」）。
+        # 後果不只是難用：AI-Projects 有兩條規則都以 ``**`_organize_desktop.ps1``
+        # 開頭 ⇒ 該專案的 `--write-snapshot` 從此跑不動 ⇒ 基準停在 56 條而現況 112 條，
+        # 而 `diff()` 的判準是 `chars > prev` ⇒ **過期的高基準＝靜默成長額度**
+        # （實測 25 條，最誇張的現 110 字／基準 578 字）。修復路徑被守門一起擋掉。
+        #
+        # ⚠ **第 1 條原封不動、第 2 條起才加尾碼**：實測 320 條裡只有 1 組撞號，
+        #   這個形狀讓 319 把既有 key **逐字不變** ⇒ 零基準重建。改成全體 by-index
+        #   （每條都帶序號）雖然更整齊，但會讓所有 key 一起位移＝一次全面基準重寫，
+        #   那一輪的 diff 全是雜訊、蓋過真正的訊號。
+        # ⚠ **去重必須做在這裡，不能做在 `gather_current()`**：`measure()["over"]` 是
+        #   `entries` 的**同一批 dict 物件**，`diff()` 比對時讀的也是這把 `key`。
+        #   做在 gather_current 只有寫入端算得到尾碼，而 diff() 迭代的是 `over`
+        #   （超標子集）—— 兩邊數出來的「第 n 條」不是同一條，key 從此對不上，
+        #   而症狀是「既有條目全被報成新增」，看起來像基準壞了，不像去重寫錯地方。
+        # ⚠ 代價（已知且接受）：兩條撞號的規則**對調順序**時尾碼會跟著換手，那一條的
+        #   歷史成長紀錄會斷一次。比起「兩條互相遮蔽、永遠報不出來」這是嚴格的改善。
+        # 分隔符用 \u0002（控制字元，markdown 正文不會有），與 snap_key 用 \u0001
+        # 同慣例。⚠ **一律寫成跳脫序列、不要貼字面控制字元**：那個字元在編輯器
+        # 與 git diff 上都不顯形，貼進去看起來像沒有分隔符——本輪第一次就寫成
+        # 字面字元，肉眼完全看不出對錯，是靠 repr() 量位元組才確認的。
+        key = vis[:KEY_CHARS]
+        seen_keys[key] = nth = seen_keys.get(key, 0) + 1
+        if nth > 1:
+            key = f"{key}\u0002{nth}"
         entries.append({
-            "key": vis[:KEY_CHARS],          # key 用條目開頭：那是身分，要穩定
+            "key": key,                      # key 用條目開頭：那是身分，要穩定
             "chars": len(_visible(body_txt) or vis),   # 長度只算內容（含續段與巢狀）
             "text": text,
             "block": block,
@@ -717,6 +747,10 @@ def snap_key(project: str, label: str, entry_key: str) -> str:
 
 
 def gather_current(targets: list[dict]) -> dict:
+    """量現況、組成新基準。**只有 `--write-snapshot` 呼叫它**（報告路徑走 `diff()`）。
+
+    ⚠ **失明的檔一律不寫**（R8-9·2026-08-15）：見下面 `m["blind"]` 那道守門。
+    """
     files: dict = {}
     for t in targets:
         if t["kind"] == "ondemand":
@@ -724,13 +758,42 @@ def gather_current(targets: list[dict]) -> dict:
         m = measure(t)
         if m is None:
             continue
+        if m["blind"]:
+            # ── R8-9：說不出答案的時候，不准把它落成答案 ──────────────────────
+            #
+            # `--write-snapshot` 的語意是「**接受現況為基準**」。失明狀態下的「現況」
+            # 是量不到的結果 —— 條目 0／超標 0 是「沒看」不是「沒有」（`measure()`
+            # 的 docstring 寫得很清楚）。寫進去等於把「沒看到」封存成「沒有」，
+            # 而且**下一輪 diff 會拿它當比較基準**：從此每一輪都拿假基準比，
+            # 沒有任何後續步驟會再質疑它。這是 `diff()` 把 `blind` 與 `reasons`
+            # 分成兩條路（exit 2 vs exit 1）那個決定在**寫入端**的對應物 ——
+            # 少了這一半，讀取端再怎麼小心都會被寫入端灌進來的假基準廢掉。
+            #
+            # ⚠ **整批拒寫，不做部分寫入**：一個專案裡有一個檔失明就全部不動。
+            #   部分寫入會留下「一半新一半舊」的基準，而報告上分不出是哪一半 ——
+            #   那正是這支工具存在的理由（分得出「量到了」與「沒量到」）的反面。
+            # ⚠ 這不是「守門把修復路徑一起擋掉」（`load_snapshot` 那段咬過的形狀）：
+            #   失明是可修的（補回錨、收掉沒閉合的 fence），修完再跑就寫得進去。
+            print(f"⚠ 拒絕寫入基準：{t['project']}/{t['label']} 現在是**失明狀態**。")
+            print(f"  {m['blind_why']}")
+            print("  先把它修到量得到再寫基準 —— 現在寫進去的會是「沒看到」，"
+                  "而下一輪 diff 會拿它當真。")
+            sys.exit(2)
         fk = f"{t['project']}\u0001{t['label']}"
         ent = {}
         for e in m["entries"]:
             k = snap_key(t["project"], t["label"], e["key"])
             if k in ent:
-                print(f"⚠ 快照 key 重複（同檔內開頭 {KEY_CHARS} 字相同）：{e['text'][:40]}…")
-                print("  兩條會互相遮蔽對方的成長 —— 請把其中一條的開頭改得不一樣。")
+                # 走到這裡＝**工具自己的不變式破了**，不是使用者要處理的事。
+                # `parse_entries()` 已保證同檔內 key 唯一（R8-4 的撞號尾碼），
+                # 這裡留著是為了讓「去重被改壞」有東西擋 —— 刪掉的話那個退化會
+                # 靜默退回「兩條互相遮蔽、成長永遠報不出來」，而且測試全綠。
+                # ⚠ **訊息不可以再叫人去改規則正文**：舊版那句「請把其中一條的開頭
+                # 改得不一樣」把工具的實作細節變成規則怎麼寫的約束，是本檔在索引列
+                # 那一段自己命名過的反模式。責任歸屬寫錯，人就會去修錯的東西。
+                print("⚠ 內部錯誤：快照 key 重複 —— parse_entries() 的撞號去重失效。")
+                print(f"  條目：{e['text'][:40]}…")
+                print("  這是工具的 bug，不是規則寫法的問題 —— 先查 parse_entries 的 seen_keys。")
                 sys.exit(2)
             ent[k] = e["chars"]
         files[fk] = {"bytes": m["bytes"], "entry_count": len(m["entries"]),

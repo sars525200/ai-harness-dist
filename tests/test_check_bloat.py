@@ -470,6 +470,92 @@ def run() -> "tuple[int, list]":
     check("同一條開頭在不同專案是不同 key", k1 != k2)
     check("同一條開頭在同專案不同檔是不同 key", k1 != k3)
 
+    # ── R8-4 同檔內撞號：第 2 條起加尾碼，**第 1 條逐字不變** ──────────────────
+    #
+    # 舊行為是 `gather_current()` 撞到就 exit 2，訊息叫人「把其中一條的開頭改得不
+    # 一樣」——工具的實作細節變成規則怎麼寫的約束，而且**修復路徑（--write-snapshot）
+    # 被自己的守門一起擋掉**：AI-Projects 的基準因此卡在 56 條而現況 112 條，
+    # 而 `diff()` 判 `chars > prev` ⇒ 過期的高基準＝**靜默成長額度**（實測 25 條，
+    # 最誇張的現 110 字／基準 578 字）。那個檔的一部分已經實際退出監控。
+    print("\n[R8-4] 同檔內條目撞號")
+    DUP_HEAD = "**`_organize_desktop.ps1`"        # 取自真實案例（AI-Projects CLAUDE.md）
+    fx_dup = (
+        "# T\n\n## 1. 規則\n<!-- rules-section -->\n\n"
+        f"- {DUP_HEAD} 要掃到穩定**（連續兩輪無新增）：有些安裝程式非同步發佈捷徑。\n"
+        f"- {DUP_HEAD} 必須純 ASCII 無 BOM**（中文用 code point 組）。\n"
+        "- 一條開頭完全不同的規則，擺在這裡確認去重沒有波及旁邊的條目。\n"
+    )
+    de = m.parse_entries(fx_dup, "rules")
+    raw = [m._visible(e["text"])[:m.KEY_CHARS] for e in de]
+    check("前提成立：fixture 解出 3 條條目（少一條的話下面全部是空跑）",
+          len(de) == 3, f"{len(de)} 條")
+    check("前提成立：前兩條**去空白後前 24 字逐字相同**（這才是撞號的形狀；"
+          "fixture 若被改到不再撞號，下面三條會變成不可證偽的假綠）",
+          len(raw) == 3 and raw[0] == raw[1] and raw[0] != raw[2],
+          f"{raw[0]!r} / {raw[1]!r} / {raw[2]!r}")
+    check("撞號的兩條拿到**不同的 key**（相同＝互相遮蔽，該條的成長永遠報不出來）",
+          de[0]["key"] != de[1]["key"], f"{de[0]['key']!r} / {de[1]['key']!r}")
+    check("**第 1 條的 key 逐字等於未去重時的原值**（零位移契約：既有基準不得失效。"
+          "改成全體 by-index 會讓所有 key 一起位移＝一次全面基準重寫）",
+          de[0]["key"] == raw[0], f"{de[0]['key']!r} vs {raw[0]!r}")
+    check("第 2 條才帶尾碼，且尾碼掛在原 key 後面（看得出它是同開頭的第 2 條）",
+          de[1]["key"].startswith(raw[1]) and de[1]["key"] != raw[1],
+          repr(de[1]["key"]))
+    check("**沒撞號的條目不受影響**（去重不得波及旁邊的 key）",
+          de[2]["key"] == raw[2], f"{de[2]['key']!r} vs {raw[2]!r}")
+
+    dupmd = tmp / "dup.md"
+    dupmd.write_text(fx_dup, encoding="utf-8")
+    tgt_dup = {"project": "PX", "label": "dup.md", "kind": "rules", "path": dupmd}
+    try:
+        got_dup, dup_err = m.gather_current([tgt_dup]), None
+    except SystemExit as e:
+        got_dup, dup_err = None, e.code
+    check("**撞號的檔現在寫得進基準**（舊版在這裡 exit 2 ⇒ 該專案的基準永遠更新不了，"
+          "而過期基準比「沒有基準」更糟：它會被當成真的）",
+          dup_err is None, f"exit {dup_err}")
+    dup_ents = (next(iter(got_dup["files"].values()))["entries"] if got_dup else {})
+    check("三條各佔一把快照 key（撞號那兩條沒有一條蓋掉另一條）",
+          len(dup_ents) == 3, f"{len(dup_ents)} 把")
+
+    # ── R8-9 `--write-snapshot` 不得把「失明狀態」寫成正式基準 ─────────────────
+    #
+    # 這是 `diff()` 把 `blind` 與 `reasons` 分成兩條路那個決定在**寫入端**的對應物。
+    # 少了它，讀取端再怎麼小心都會被寫入端灌進來的假基準廢掉：失明時的「條目 0／
+    # 超標 0」一旦落成基準，往後每一輪都拿它比，沒有任何步驟會再質疑它。
+    print("\n[R8-9] 失明的檔不得被寫成基準")
+    blindmd = tmp / "blind.md"
+    blindmd.write_text(
+        "# T\n\n## 1. 規則\n<!-- rules-section -->\n\n"
+        "```\n"                     # 沒收尾的 fence：CommonMark 規定它一路吃到檔尾
+        "- 這幾條規則會被整段吃成一個 exempt 單位，條目層與散文層同時看不到。\n"
+        "- 第二條規則，內容夠長，確保範圍內的可見字數遠大於 0。\n",
+        encoding="utf-8")
+    tgt_blind = {"project": "PX", "label": "blind.md", "kind": "rules", "path": blindmd}
+    mb = m.measure(tgt_blind)
+    check("前提成立：這個 fixture 真的失明（範圍有可見字但可量單位 0；"
+          "不成立的話下面那條 exit 2 測到的是別的原因）",
+          mb["blind"] and mb["no_units"] and mb["scanned"] > 0 and mb["units"] == 0,
+          f"blind={mb['blind']} no_units={mb['no_units']} "
+          f"scanned={mb['scanned']} units={mb['units']}")
+    try:
+        m.gather_current([tgt_blind])
+        got_b = "沒有 exit"
+    except SystemExit as e:
+        got_b = e.code
+    check("**失明的檔必須拒寫（exit 2）**（寫進去＝把「沒看到」封存成「沒有」）",
+          got_b == 2, str(got_b))
+    check("對照組：沒失明的檔照樣寫得進去（否則上面那條 exit 2 是白撿的 —— "
+          "一個什麼都拒寫的守門也會通過它）",
+          dup_err is None and len(dup_ents) == 3)
+    try:
+        m.gather_current([tgt_dup, tgt_blind])
+        got_mix = "沒有 exit"
+    except SystemExit as e:
+        got_mix = e.code
+    check("**一批裡有一個失明就整批拒寫**（部分寫入會留下一半新一半舊的基準，"
+          "而報告上分不出是哪一半）", got_mix == 2, str(got_mix))
+
     # ── [R8] 掃描範圍的可信度：三種「範圍被騙走」的構造 ＋ 各自的對照組 ────────
     #
     # 判準一律用**等式**（`== [131]*5`）不用「有量到就好」：後者在「只量到半條」

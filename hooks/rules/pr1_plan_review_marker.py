@@ -140,9 +140,16 @@ _IGNORE_BLOCK = re.compile(
     re.DOTALL,
 )
 
+# ⚠ **兩個 path 都要插**（2026-08-15 實際踩到）：本模組住在 `hooks\rules\`，但它
+# import 的 `contract` 住在 `hooks\`。只插 rules 那一層 ⇒ **照抄這行指令會拿到
+# `ModuleNotFoundError: No module named 'contract'`**，而那個症狀看起來像「工具壞了」，
+# 不像「指令少插一個 path」—— 人會去查 hook 而不是去補路徑。
+# 這道閘門攔下來之後**唯一的出路就是這行指令**；指令自己跑不動＝擋了人卻沒給路走，
+# 與 PR-1 每個判斷都往 fail-open 走的設計方向相反。
 _RECOMPUTE_HINT = (
     "重算 hash："
-    "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\.ai-harness\\hooks\\rules');"
+    "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\.ai-harness\\hooks');"
+    "sys.path.insert(0,r'D:\\.ai-harness\\hooks\\rules');"
     "import pr1_plan_review_marker as p;"
     "print(p.content_hash(open(r'{path}',encoding='utf-8').read()))\"`"
 )
