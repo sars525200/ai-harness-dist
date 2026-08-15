@@ -212,6 +212,54 @@ MUTATIONS = [
         '        if m["blind"]:\n            # ── R8-9',
         '        if False:\n            # ── R8-9',
     ),
+
+    # ── exit code 的誠實性（R8-7）與 cwd 專案判定（R8-8）·2026-08-15 補 ──────────
+    (
+        # 這條與下一條是**同一個洞的兩半**：exit 1 的語意被檔頭契約釘死成
+        # 「有新增膨脹」，而 Python 對未捕捉的例外用的也是 exit 1。
+        "run_guarded 改成 exit 1（工具自己炸掉會被收工腳本讀成「量過了、去壓」）",
+        '        print("  所以 exit 2（說不出答案）而不是 exit 1（有膨脹）：先修工具再談結論。")\n'
+        "        sys.exit(2)",
+        '        print("  所以 exit 2（說不出答案）而不是 exit 1（有膨脹）：先修工具再談結論。")\n'
+        "        sys.exit(1)",
+    ),
+    (
+        # 反方向：守門攔太寬。SystemExit 繼承 BaseException，攔它等於把唯一合法的
+        # exit 1（真的有膨脹）也改判成 2 ⇒「有膨脹」從此永遠報不出來。
+        # ⚠ 這條證明「例外要 exit 2」與「SystemExit 要穿透」**必須各有各的斷言**：
+        #   只驗前者的話，一個 except BaseException 的實作照樣全綠。
+        "run_guarded 改攔 BaseException（連 sys.exit(1) 都被改判成 2）",
+        "    except Exception:                                      # noqa: BLE001",
+        "    except BaseException:                                  # noqa: BLE001",
+    ),
+    (
+        # ModuleNotFoundError 是 ImportError 的**子**類別 —— 只接子類別接不到
+        # 「名字被搬走」這種升版最可能的形狀，例外外拋 ⇒ CLI exit 1。
+        "_markdown 退回只接 ModuleNotFoundError（升版把名字搬走拋的是父類別 ImportError）",
+        "        except Exception as exc:                           # noqa: BLE001",
+        "        except ModuleNotFoundError as exc:                 # noqa: BLE001",
+    ),
+    (
+        # 字串前綴沒有路徑邊界概念：D:\AI-Projects-old 會被判成在 D:\AI-Projects 底下。
+        # 現形方式是**綁到錯的專案** —— 那個專案的膨脹算進 exit code、
+        # 真正所在的專案反而沒算，兩邊都錯。
+        "_under 退回字串 startswith（同前綴的姊妹目錄被判成在專案底下）",
+        "    return len(c) >= len(p) and c[:len(p)] == p",
+        "    return str(child).casefold().startswith(str(parent).casefold())",
+    ),
+    (
+        # 舊版 break 在第一個命中 ⇒ 巢狀專案綁到哪一個取決於 discover_targets 的順序。
+        "resolve_cwd_project 取第一個命中而非最深（巢狀專案綁到外層）",
+        "        if _under(cwd, root) and len(root.parts) > best_depth:",
+        "        if _under(cwd, root) and best_depth < 0:",
+    ),
+    (
+        # diff() 的 `if only_project and ...` 讓 None 的意思變成**不過濾**
+        # ⇒ 從不屬於任何專案的目錄跑，反而是管得最寬的一次。
+        "cwd 不在任何專案時保底改回 None（所有專案都算進 exit code，與設計意圖相反）",
+        "    best_name, best_depth = GLOBAL_PROJECT, -1",
+        "    best_name, best_depth = None, -1",
+    ),
 ]
 
 # 語意等價的改動：**不該**讓測試變紅（防「測試綁死實作細節」）

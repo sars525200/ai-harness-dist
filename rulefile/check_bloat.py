@@ -419,13 +419,25 @@ def _markdown():
         try:
             from markdown_it import MarkdownIt             # noqa: PLC0415
             from markdown_it.tree import SyntaxTreeNode    # noqa: PLC0415
-        except ModuleNotFoundError as exc:
-            print(f"⚠ 載不到 markdown-it-py（{exc}）—— 條目邊界改由 CommonMark 定義之後，"
-                  "沒有它就切不出量測單位。")
+            # ⚠ **建構也在 try 裡**：preset 或 rule 改名會拋 ValueError／KeyError，
+            #   那同樣是「切不出量測單位」，只是不叫 ImportError。
+            _MD_CACHE = (MarkdownIt("commonmark").enable("table"), SyntaxTreeNode)
+        except Exception as exc:                           # noqa: BLE001
+            # ⚠ **接 `Exception` 而不是 `ModuleNotFoundError`**（R8-7·2026-08-15）：
+            # 升版把 `SyntaxTreeNode` 搬走拋的是 **`ImportError`**（`ModuleNotFoundError`
+            # 的**父**類別，子類別的 except 接不到）⇒ 例外外拋 ⇒ Python 以 **exit 1**
+            # 結束 ⇒ 而本檔契約寫著 `1 = 有新增膨脹` ⇒ **收工腳本會判成「量過了、去壓」，
+            # 真相是「一個字都沒量」**。靜默，而且方向剛好相反。
+            # 這裡窄接一種例外沒有任何好處：這個 try 只做一件事（把 parser 生出來），
+            # 它的**每一種**失敗都是同一個結論「量不了」，都該走同一個 exit 2。
+            # `sys.exit(2)` 本身不會被自己接住（`SystemExit` 繼承 BaseException）。
+            kind = ("載不到 markdown-it-py" if isinstance(exc, ImportError)
+                    else "markdown-it-py 裝得起來但**建不起 parser**")
+            print(f"⚠ {kind}（{type(exc).__name__}: {exc}）—— 條目邊界改由 CommonMark "
+                  "定義之後，沒有它就切不出量測單位。")
             print("  裝法：py -3 -m pip install markdown-it-py")
             print("  **不退回舊的逐行判斷**：那條路已被實測繞過六輪，靜默降級＝假綠燈。")
             sys.exit(2)
-        _MD_CACHE = (MarkdownIt("commonmark").enable("table"), SyntaxTreeNode)
     return _MD_CACHE
 
 
@@ -1178,6 +1190,49 @@ def report_history() -> int:
     return len(rows)
 
 
+def _under(child: Path, parent: Path) -> bool:
+    """`child` 是否落在 `parent` 底下（含相等）—— **逐路徑段比對，不是字串前綴**。
+
+    ⚠ `str.startswith` 沒有邊界概念（R8-8·2026-08-15）：`D:\\AI-Projects-old` 會被判成
+    在 `D:\\AI-Projects` 底下，`D:\\ITx` 會被判成在 `D:\\IT` 底下。這一類 bug 平常不會
+    現形（要剛好有同前綴的姊妹目錄才會），而它現形的方式是**綁到錯的專案**，
+    然後那個專案的膨脹算進了 exit code、真正所在的專案反而沒算 —— 兩邊都錯。
+    大小寫用 casefold 折疊（Windows 路徑不分大小寫）。
+    """
+    c = [seg.casefold() for seg in child.parts]
+    p = [seg.casefold() for seg in parent.parts]
+    return len(c) >= len(p) and c[:len(p)] == p
+
+
+def resolve_cwd_project(targets: list[dict], cwd: "Path | None" = None) -> str:
+    """cwd 落在哪個專案。**回專案名；不在任何專案時回 `GLOBAL_PROJECT`。**
+
+    只有它的膨脹算進 exit code —— 否則在 A 專案收工會被 B 專案的膨脹卡住，
+    那是被否決掉的「擋收工」從後門進來。
+
+    兩個 R8-8 的修正：
+
+    1. **取最深的命中，不是第一個**。本機已有 `D:\\AI-Projects` 與
+       `D:\\AI-Projects\\codebase-health-dashboard` 兩個專案根；在後者底下工作時，
+       舊版依 `targets` 的順序有機會綁到前者，**而且 `break` 掉、不再看下去**。
+       巢狀專案裡「最深的那個根」才是你真正在的專案。
+    2. **不在任何專案時回 `GLOBAL_PROJECT`，不是 `None`**。舊版回 `None`，而
+       `diff()` 的 `if only_project and ...` 讓 `None` 的意思變成**不過濾** ⇒
+       **所有專案都算進 exit code**，與這個函式存在的理由完全相反：從一個
+       不屬於任何專案的目錄跑，反而是管得最寬的一次。全域 CLAUDE.md 每個專案
+       都付，拿它當保底是有訊號的；其餘專案照樣進報告，只是不進 exit code。
+    """
+    cwd = cwd or Path.cwd()
+    best_name, best_depth = GLOBAL_PROJECT, -1
+    for t in targets:
+        if t["project"] == GLOBAL_PROJECT or not t.get("path"):
+            continue
+        root = Path(t["path"]).parent
+        if _under(cwd, root) and len(root.parts) > best_depth:
+            best_name, best_depth = t["project"], len(root.parts)
+    return best_name
+
+
 def main() -> None:
     argv = sys.argv[1:]
     targets = discover_targets()
@@ -1229,26 +1284,19 @@ def main() -> None:
         print("  刪一行等於那個 topic 檔失聯，而且不會有任何地方報錯。")
         sys.exit(0)
 
-    # cwd 所屬專案：只有它的膨脹算進 exit code，其他專案走報告
-    # （否則在 A 專案收工會被 B 專案的膨脹卡住 —— 那是被否決掉的「擋收工」從後門進來）
-    cwd = str(Path.cwd()).casefold()
-    only = None
-    for t in targets:
-        if t["project"] != GLOBAL_PROJECT and t.get("path"):
-            root = str(Path(t["path"]).parent).casefold()
-            if cwd.startswith(root):
-                only = t["project"]
-                break
+    # cwd 所屬專案：只有它的膨脹算進 exit code，其他專案走報告。判定見該函式的
+    # docstring（R8-8：邊界感知比對／取最深命中／不在任何專案時保底 __global__）。
+    only = resolve_cwd_project(targets)
 
     report_overview(targets)
     reasons, blind = diff(load_snapshot(), targets, only_project=only)
 
     if not reasons and not blind:
-        print(f"\n沒有新增膨脹（exit code 只看 {only or 'cwd 所屬專案'}；其他專案見上表）。")
+        print(f"\n沒有新增膨脹（exit code 只看 {only}；其他專案見上表）。")
         sys.exit(0)
 
     if reasons:
-        print(f"\n這次變大了（{only or 'cwd 所屬專案'}）：")
+        print(f"\n這次變大了（{only}）：")
         for r in reasons:
             print(f"  - {r}")
         print("\n處置：把超出的細節搬進對應 topic 檔／skill，常駐層只留「精髓＋去處」。")
@@ -1259,7 +1307,7 @@ def main() -> None:
     if blind:
         # **「說不出來」優先於「有膨脹」**：後者至少量到了、看得到要處理什麼；
         # 前者連量都沒量，而它以前是靜默走 exit 0 的（A-1／A-2 是同一個洞的兩半）。
-        print(f"\n⚠ 這幾個檔**說不出結論**（{only or 'cwd 所屬專案'} ＋全域）：")
+        print(f"\n⚠ 這幾個檔**說不出結論**（{only} ＋全域）：")
         for b in blind:
             print(f"  - {b}")
         print("\n處置（對應上面三種）：")
@@ -1276,7 +1324,36 @@ def main() -> None:
     sys.exit(1)
 
 
-if __name__ == "__main__":
+def run_guarded(fn) -> None:
+    """跑 `fn`，**任何未捕捉的例外一律 exit 2**（R8-7 的根層·2026-08-15）。
+
+    理由是 exit code 的語意被檔頭契約釘死：`1 = 有新增膨脹`。而 **Python 對未捕捉的
+    例外用的也是 exit 1** ⇒ 這支工具自己炸掉時，收工腳本會讀成「量過了、去壓」，
+    真相是「一個字都沒量」。**靜默，而且方向剛好相反** —— 比沒有守門更糟，
+    因為它產生了一個看起來像結論的東西。
+
+    `_markdown()` 那道 except 是同一件事的窄版（只管 parser 建不建得起來）；
+    這一道管其餘所有路徑，兩道都要有：窄的那道給得出「去裝 markdown-it-py」這種
+    可行動的訊息，寬的這道保證**沒有任何一條路徑走得到 exit 1 而不是真的有膨脹**。
+
+    ⚠ **`SystemExit` 不得被攔**：`sys.exit(1)`（真的有膨脹）與 `sys.exit(2)`（說不出
+      答案）都必須原樣穿透，否則這道守門會把唯一合法的 exit 1 也改判成 2 —— 那是
+      另一種說謊，而且會讓「有膨脹」這件事從此永遠報不出來。靠的是 `SystemExit`
+      與 `KeyboardInterrupt` 繼承 `BaseException` 而非 `Exception`，**不是靠先判型別**
+      （先判型別的寫法一旦有人改成 `except BaseException` 就靜默失效）。
+    """
+    try:
+        fn()
+    except Exception:                                      # noqa: BLE001
+        import traceback                                   # noqa: PLC0415
+        print("⚠ check_bloat 自己炸了 —— 這是「一個字都沒量」，不是「量到膨脹」。")
+        traceback.print_exc()
+        print("  所以 exit 2（說不出答案）而不是 exit 1（有膨脹）：先修工具再談結論。")
+        sys.exit(2)
+
+
+def _cli() -> None:
+    """CLI 分派。**這裡不加 try**——包在 `run_guarded()` 外面，兩者要分開才測得到。"""
     if "--write-snapshot" in sys.argv:
         # **強制帶 --project**：舊版是全域覆蓋，多專案化之後「接受 A 專案的現況」
         # 會順手把 B 專案未處理的成長寫成新基準，而且沒有任何提示。
@@ -1302,3 +1379,7 @@ if __name__ == "__main__":
         print(f"已更新 {SNAPSHOT_PATH.name} 的 {want}（{n} 個檔）——其他專案的基準原封不動。")
     else:
         main()
+
+
+if __name__ == "__main__":
+    run_guarded(_cli)

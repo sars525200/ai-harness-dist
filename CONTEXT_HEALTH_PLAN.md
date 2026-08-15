@@ -550,8 +550,8 @@ Round 6 的 marker 問「這個偵測器的判準要不要繼續用列舉法定�
 | R8-4 | 高 | 活資料基準已嚴重過期（AI-Projects 快照 56 條 vs 現況 112 條），而 `chars > prev` 的判準把過期基準變成**靜默成長額度**（實測 24 條，最誇張的現 110 字／基準 578 字）；且 `--write-snapshot --project AI-Projects` 今天直接 **exit 2**（兩條同開頭 24 字撞 key），**修復路徑被守門一起擋掉** | 未逐項複核。⚠ 審查者**自我否證**過一次：它原本假設位移是 Round 7 造成的，用 `git show HEAD` 的舊實作對同一批現況檔實跑得到 115/116 條 ⇒ **舊實作也對不上**，主因是檔案改過而基準沒重寫。**這同時推翻了 §8.6 D-3「逐字相同」的依據**——那個結論只在 IT-department 那三條上驗過，沒有涵蓋 AI-Projects。⚠ **續修時訂正了兩個數字**：額度條目是 **25 條不是 24**，而且橫跨**兩個檔**（CLAUDE.md 18 條＋MEMORY.md 7 條）——「現 110 字／基準 578 字」那條在 **MEMORY.md**，不在 CLAUDE.md。MEMORY.md 的條目數 **14→14 完全對得上**，所以它從頭到尾沒觸發任何守門，卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變） | **接受·已修並驗**（2026-08-15 續修·見下方「Round 8 續修」） |
 | R8-5 | 中 | `mutate_check_bloat.py` 的 13 條錨點**沒有一條打在 `parse_blocks` 上**——這一輪的核心零變異覆蓋。實測 5 個變異在 153 條斷言下全綠（縮排四格改判 exempt／`html_block` 改判 prose／拿掉缺口回填／拿掉 clash 偵測／`max_line` 改回整段）。檔內還留著「待實作落地後補」的過期註解 | 未逐項複核。**這正是本輪剛因此刪掉整組死碼的形狀，在變異檔裡復發** | **接受·修** |
 | R8-6 | 中 | 「每個可見字元恰好屬於一個單位」成立，但它保證的不是「每個字元被某支工具量到」——`exempt` 讓兩者分家。缺口回填被文件寫成盲區的解藥，實際**沒有任何消費端**（拿掉整段回填，153 條斷言全綠） | 未逐項複核（與 R8-1 同源） | **接受·隨 R8-1 一起修** |
-| R8-7 | 中 | fail-closed 只涵蓋 `ModuleNotFoundError`。若 markdown-it-py 升版把 `SyntaxTreeNode` 搬走（拋 `ImportError`）⇒ 例外外拋、CLI **exit 1**，而契約寫著 `1 = 有新增膨脹` ⇒ 收工腳本會判成「量過了、去壓」，真相是「一個字都沒量」 | 未複核。`ModuleNotFoundError → exit 2` 那一半審查者已實測 | **接受·未修** |
-| R8-8 | 中 | `only` 用 `cwd.startswith(root)` 無邊界比對且取第一個命中 ⇒ 巢狀／同前綴專案根會綁錯（本機已有 `D:\AI-Projects` 與 `D:\AI-Projects\codebase-health-dashboard`）；反向則 cwd 不在任何專案時 `only=None` ⇒ 所有專案都算進 exit code，與 docstring 的設計意圖相反 | 未複核 | **接受·未修** |
+| R8-7 | 中 | fail-closed 只涵蓋 `ModuleNotFoundError`。若 markdown-it-py 升版把 `SyntaxTreeNode` 搬走（拋 `ImportError`）⇒ 例外外拋、CLI **exit 1**，而契約寫著 `1 = 有新增膨脹` ⇒ 收工腳本會判成「量過了、去壓」，真相是「一個字都沒量」 | 未複核。`ModuleNotFoundError → exit 2` 那一半審查者已實測。⚠ **續修時發現破口比表上寫的更寬**：除了 `ImportError`，`MarkdownIt("commonmark")` 與 `.enable("table")` 這兩步若 preset／rule 改名會拋 `ValueError`／`KeyError`——同樣是「切不出量測單位」、同樣走到 exit 1。而**根本問題不在那個 except**：Python 對**任何**未捕捉例外用的都是 exit 1，所以窄修一處只擋得住已知的那條路 | **接受·已修並驗**（2026-08-15 續修·兩層都修） |
+| R8-8 | 中 | `only` 用 `cwd.startswith(root)` 無邊界比對且取第一個命中 ⇒ 巢狀／同前綴專案根會綁錯（本機已有 `D:\AI-Projects` 與 `D:\AI-Projects\codebase-health-dashboard`）；反向則 cwd 不在任何專案時 `only=None` ⇒ 所有專案都算進 exit code，與 docstring 的設計意圖相反 | 已複核。⚠ **訂正審查者舉的例子**：`D:\AI-Projects\codebase-health-dashboard` **沒有 `CLAUDE.md`** ⇒ 不在 `discover_targets()` 裡 ⇒ 它不是「現成可觸發」的巢狀實例（它在 `~/.claude/projects` 有登記，那是 **session 專案**，與納管目標是兩件事）。**風險屬實但目前未實體化**，會在有人替該目錄加一份 CLAUDE.md 的當下成立。無邊界前綴與「回 None 反而全算」兩半則是**現在就成立**的 | **接受·已修並驗**（2026-08-15 續修·三個缺陷一起修） |
 | R8-9 | 中 | `--write-snapshot` 會把「失明狀態」寫成正式基準（`gather_current()` 不看 `unscanned`）；檔案被移走時舊基準永遠留成殭屍，與檔頭「探索不到的要留痕跡」自相矛盾 | 已複核前半（實測未閉合 fence 的檔在舊實作下寫得進基準）。⚠ **這條有兩半，續修只收了前半**：「失明不得寫成基準」已修並驗；**「檔案被移走留成殭屍基準」那一半仍未修**（`gather_current` 只更新它量得到的檔，量不到的舊 key 原封不動留在快照裡） | **接受·前半已修並驗**（2026-08-15 續修）／**後半未修** |
 | R8-10 | 中低 | 索引檔在定義上不可能被判 blind（`entry_scope(md,"index")` 一律回整份檔 ⇒ `scanned == visible` ⇒ `unscanned` 對 MEMORY.md 恆為 False） | 未複核 | **接受·未修** |
 | R8-11 | 低 | 兩支對錨與編碼仍有可分岔細節：`check_bloat._RULES_ANCHOR` 的 `\s` 跨行、`check_prose_blocks` 逐行 search；`measure()` 用 `utf-8` 讀而 `scan()` 用 `utf-8-sig` ⇒ 帶 BOM 的檔兩支 `visible` 差 1 字 | 未複核 | **接受·未修**（R8-2 的修法會順手收掉錨那一半） |
@@ -622,8 +622,9 @@ R8-2 把範圍判定從行 regex 換成 AST 之後，變異 4 的錨點
 且**沒有跑 Round 9**——前八輪每一輪都在上一輪的修法裡找到新缺陷，
 而這一輪動的是掃描範圍這種結構性的東西，改動面與 Round 7 同級。
 
-**2026-08-15 續修後**：R8-4 全修、R8-9 修前半 ⇒ **未修剩 R8-6／R8-7／R8-8／R8-9 後半／R8-10／R8-11**。
-仍**沒有跑 Round 9**，marker 仍 `SKIP`（收斂判準沒有因為少了兩項就變寬）。
+**2026-08-15 續修（兩批）後**：R8-4／R8-7／R8-8 全修、R8-9 修前半
+⇒ **未修剩 R8-6／R8-9 後半／R8-10／R8-11**（四項半）。
+仍**沒有跑 Round 9**，marker 仍 `SKIP`（收斂判準沒有因為修掉幾項就變寬）。
 
 #### Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」＋順手收 R8-9）
 
@@ -683,19 +684,67 @@ R8-2 把範圍判定從行 regex 換成 AST 之後，變異 4 的錨點
 - 改 `"key": vis[:KEY_CHARS],` 會打斷 `mutate_check_bloat.py` 第 6 條的錨點（已更新為 `"key": key,`）。
   `test_mutation_anchors` 會抓到，但它只說「漂掉」不說「該改成什麼」。
 
-#### 下一棒的第一件事（2026-08-15 續修後重排）
+#### Round 8 續修·第二批（2026-08-15·R8-7 ＋ R8-8）
 
-**R8-4 已結案，不要重做。** 剩下五項半按「已經在失血 vs 會出事」重排：
+**主套件 837 → 858／變異 21 → 27／`test_check_bloat` 86 → 101，全綠。**
 
-- 五項半（R8-6／R8-7／R8-8／**R8-9 後半**／R8-10／R8-11）**全部是「會出事」**，
-  沒有一項像 R8-4 那樣正在失血——所以**優先度由「會不會被靜默觸發」決定**：
-  - **R8-7**（fail-closed 只涵蓋 `ModuleNotFoundError`）最像下一個 R8-4：
-    markdown-it-py 一升版就可能觸發，而它的失敗形狀是 **exit 1 被收工腳本讀成「量過了」**
-    ——**靜默、且方向錯得剛好相反**。
-  - **R8-8**（`only` 無邊界前綴比對）本機已有 `D:\AI-Projects` 與
-    `D:\AI-Projects\codebase-health-dashboard` 兩個實例，是**現成可觸發**的。
-- **跑 Round 9 才談收斂**：這一輪又動了 `parse_entries()` 的身分產生與 `gather_current()` 的
-  寫入路徑，前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這輪例外。
+**R8-7 的破口比表上寫的寬兩層**
+
+1. `except ModuleNotFoundError` 接不到 **`ImportError`**（它是父類別）——升版把
+   `SyntaxTreeNode` 搬走正是這個形狀。
+2. 更寬的一層：`MarkdownIt("commonmark")` 與 `.enable("table")` 若 preset／rule 改名
+   會拋 `ValueError`／`KeyError`，同樣是「切不出量測單位」，同樣走到 exit 1。
+3. **最寬的一層（表上完全沒提）**：Python 對**任何**未捕捉例外用的都是 exit 1，
+   而本檔契約寫著 `1 = 有新增膨脹` ⇒ **工具自己炸掉會被收工腳本讀成「量過了、去壓」**。
+   窄修一處只擋得住已知的那條路。
+
+⇒ **兩層都修**：`_markdown()` 的 try 改接 `Exception` 並把建構也納入（窄的那道給得出
+「去裝 markdown-it-py」這種可行動訊息）；新增 `run_guarded(fn)` 包住 CLI，任何未捕捉
+例外一律 exit 2（寬的那道保證沒有任何路徑走得到「假的 exit 1」）。
+⚠ **`SystemExit` 必須原樣穿透**——守門若連 `sys.exit(1)` 也改判成 2，「有膨脹」這件事
+從此永遠報不出來，那是另一種說謊。靠的是 `SystemExit` 繼承 `BaseException` 而非
+`Exception`，**不是靠先判型別**（先判型別的寫法一旦有人改成 `except BaseException` 就靜默失效）。
+變異 23 存在的全部理由就是釘住這一半：只驗「例外要 exit 2」的話，
+一個 `except BaseException` 的實作照樣全綠。
+
+**R8-8 是三個缺陷疊在一起**
+
+| 缺陷 | 現在成立嗎 | 修法 |
+|---|---|---|
+| `str.startswith` 沒有路徑邊界（`D:\AI-Projects-old` 被判成在 `D:\AI-Projects` 底下） | **是** | `_under()` 逐路徑段比對＋casefold |
+| 取第一個命中並 `break`（巢狀專案綁到哪個取決於 `discover_targets` 的順序） | 風險屬實但**未實體化**（見下） | 取**最深**命中 |
+| cwd 不在任何專案時回 `None` ⇒ `diff()` 的 `if only_project` 變成不過濾 ⇒ **所有專案都算進 exit code** | **是** | 保底回 `GLOBAL_PROJECT` |
+
+⚠ **訂正審查者舉的巢狀例子**：`D:\AI-Projects\codebase-health-dashboard` **沒有 `CLAUDE.md`**
+⇒ 不在 `discover_targets()` 裡 ⇒ 綁外層 `AI-Projects` 才是正確行為。它在 `~/.claude/projects`
+有登記，但**session 專案與納管目標是兩件事**。這個坑會在有人替該目錄加一份 CLAUDE.md 的
+當下實體化，現在還沒有。
+
+⚠ **第三項是行為改變**（不只是修 bug）：從不屬於任何專案的目錄跑 `check_bloat`，
+exit code 從「所有專案都算」變成「只算 `__global__`」。依 R8-8 記載的設計意圖修
+（「否則在 A 專案收工會被 B 專案的膨脹卡住」）；其餘專案照樣進報告，只是不進 exit code。
+
+**驗到什麼**
+
+- 契約 +15（`[R8-7]` 6 條、`[R8-8]` 9 條），變異 +6（22～27）全紅。
+- **活資料驗證**：真的從五個不同 cwd 跑 CLI，比對它印的「exit code 只看 X」——
+  專案根／專案深處子目錄／另一個專案根／巢狀目錄／不屬於任何專案，五格全對。
+- ⚠ **這一輪的驗證自己又錯了一次（本線第 5 次）**：活資料腳本原本期望巢狀那格回
+  `codebase-health-dashboard`，實際回 `AI-Projects`。查下去是**我的期望錯**——
+  我照抄了審查者舉的例子而**沒查它是不是納管目標**。共同形狀依舊是
+  「驗證程式對被測介面做了未經確認的假設」，這次的變體是**照抄上游的事實主張當前提**。
+
+#### 下一棒的第一件事（2026-08-15 第二批續修後重排）
+
+**R8-4／R8-7／R8-8 已結案，不要重做。** 剩四項半：
+
+- **R8-9 後半**（檔案被移走留成殭屍基準）——`gather_current()` 只更新它量得到的檔，
+  量不到的舊 key 原封留著。與檔頭「探索不到的要留痕跡」自相矛盾。
+- **R8-6**（缺口回填沒有消費端）／**R8-10**（索引檔在定義上不可能被判 blind）／
+  **R8-11**（兩支對 BOM 與跨行錨的解析分岔）。
+- **跑 Round 9 才談收斂**：兩批續修動了 `parse_entries()` 的身分產生、`gather_current()` 的
+  寫入路徑、`_markdown()` 的例外面、CLI 的進入點與 exit code 語意——**改動面比第一批還大**。
+  前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這兩批例外。
 
 ### Round 7（2026-08-15·**§8 規格全數落地並實跑驗收**·主套件 691 → **783/783**）
 
@@ -1522,4 +1571,4 @@ IT-department **30,731 tokens**／AI-Projects **21,869 tokens**（含 system pro
 
 ---
 
-<!-- ADVERSARIAL_REVIEW_SKIP sha256=4dfd3b5b89122208a586cdd8648581c06d513fd404f07db77f6d5f19f379483c: Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」並順手收 R8-9）。R8-4 已全修並實跑驗過，R8-9 只修了前半。**仍未收斂、仍不標 PASSED。**做法三件：①條目 key 改在 parse_entries 產生時去重——同檔內第 1 條原封不動、第 2 條起加 U+0002 尾碼；②gather_current 的撞號守門保留 exit 2 但改判主體，從「請把其中一條的開頭改得不一樣」改成「parse_entries 去重失效，這是工具的 bug」；③gather_current 寫入前檢查 blind，失明整批拒寫（R8-9 前半）。為什麼是這個形狀：去重必須做在 parse_entries 而非 gather_current，因為 measure 的 over 是 entries 的同一批 dict 物件、diff 比對讀的也是同一把 key——做在 gather_current 只有寫入端算得到尾碼，而 diff 迭代的是 over（超標子集），兩邊數出來的第 n 條不是同一條，症狀會是「既有條目全被報成新增」，看起來像基準壞了、不像去重寫錯地方。選「第 1 條不動、第 2 條起加尾碼」而不是全體 by-index：動工前實測 320 條只有 1 組撞號，這個形狀讓 319 把既有 key 逐字不變 ⇒ 零基準重建；交接要求的前置條件「先確認不會讓所有 key 位移」答案是不會。已知代價：兩條撞號的規則對調順序時尾碼換手、該條歷史成長紀錄斷一次，接受。驗收：主套件 822 到 837/837、test_check_bloat 74 到 86/86、變異 18 到 21/21 全抓到＋1 等價未誤判＋還原雜湊一致、test_check_prose_blocks 112/112、check_prose_blocks 本體 exit 0。實跑 --write-snapshot --project AI-Projects 印「已更新（2 個檔）」不再 exit 2；**靜默成長額度 25 條降到 0 條**；**零位移契約在活資料上驗過**——比對 git show HEAD 的舊快照，IT-department/CLAUDE.md（67）、IT-department/MEMORY.md（87）、__global__（38）三檔的 key 集合與每一把的值全部逐字相同，只有 AI-Projects 兩檔變。這條刻意在活資料上驗而不是 fixture：fixture 只證明實作在合成資料上的行為，位移是活資料才量得到的，而 R8-4 之所以沒被更早發現正是「拿三條同專案的抽樣支撐全稱結論」。**訂正上一輪兩個數字**：額度是 25 條不是 24，且橫跨兩個檔（CLAUDE.md 18＋MEMORY.md 7）——「現 110 字／基準 578 字」那條在 MEMORY.md。MEMORY.md 條目數 14 對 14 完全對得上、從頭到尾沒觸發任何守門卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變）。**未修剩五項半**：R8-6／R8-7／R8-8／**R8-9 後半**（檔案被移走留成殭屍基準）／R8-10／R8-11，且**沒有跑 Round 9**——這一輪又動了 parse_entries 的身分產生與 gather_current 的寫入路徑，前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這輪例外。下一棒建議：R8-7 最像下一個 R8-4（markdown-it-py 一升版就觸發，失敗形狀是 exit 1 被收工腳本讀成「量過了」，靜默且方向剛好相反）；R8-8 本機已有兩個現成可觸發的實例。本輪新踩的坑已寫進計畫書：Edit 工具寫 U+0002 會把跳脫序列轉成字面控制字元存進原始碼，功能正確但在編輯器與 git diff 上都不顯形，判準是 repr 量位元組不是看檔案。PR-1 下次仍會擋，那是對的。 -->
+<!-- ADVERSARIAL_REVIEW_SKIP sha256=a751829f93152a46efb505f3a7cd106e52ee2a49394aac987334fad010b0c9ca: Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」並順手收 R8-9）。R8-4 已全修並實跑驗過，R8-9 只修了前半。**仍未收斂、仍不標 PASSED。**做法三件：①條目 key 改在 parse_entries 產生時去重——同檔內第 1 條原封不動、第 2 條起加 U+0002 尾碼；②gather_current 的撞號守門保留 exit 2 但改判主體，從「請把其中一條的開頭改得不一樣」改成「parse_entries 去重失效，這是工具的 bug」；③gather_current 寫入前檢查 blind，失明整批拒寫（R8-9 前半）。為什麼是這個形狀：去重必須做在 parse_entries 而非 gather_current，因為 measure 的 over 是 entries 的同一批 dict 物件、diff 比對讀的也是同一把 key——做在 gather_current 只有寫入端算得到尾碼，而 diff 迭代的是 over（超標子集），兩邊數出來的第 n 條不是同一條，症狀會是「既有條目全被報成新增」，看起來像基準壞了、不像去重寫錯地方。選「第 1 條不動、第 2 條起加尾碼」而不是全體 by-index：動工前實測 320 條只有 1 組撞號，這個形狀讓 319 把既有 key 逐字不變 ⇒ 零基準重建；交接要求的前置條件「先確認不會讓所有 key 位移」答案是不會。已知代價：兩條撞號的規則對調順序時尾碼換手、該條歷史成長紀錄斷一次，接受。驗收：主套件 822 到 837/837、test_check_bloat 74 到 86/86、變異 18 到 21/21 全抓到＋1 等價未誤判＋還原雜湊一致、test_check_prose_blocks 112/112、check_prose_blocks 本體 exit 0。實跑 --write-snapshot --project AI-Projects 印「已更新（2 個檔）」不再 exit 2；**靜默成長額度 25 條降到 0 條**；**零位移契約在活資料上驗過**——比對 git show HEAD 的舊快照，IT-department/CLAUDE.md（67）、IT-department/MEMORY.md（87）、__global__（38）三檔的 key 集合與每一把的值全部逐字相同，只有 AI-Projects 兩檔變。這條刻意在活資料上驗而不是 fixture：fixture 只證明實作在合成資料上的行為，位移是活資料才量得到的，而 R8-4 之所以沒被更早發現正是「拿三條同專案的抽樣支撐全稱結論」。**訂正上一輪兩個數字**：額度是 25 條不是 24，且橫跨兩個檔（CLAUDE.md 18＋MEMORY.md 7）——「現 110 字／基準 578 字」那條在 MEMORY.md。MEMORY.md 條目數 14 對 14 完全對得上、從頭到尾沒觸發任何守門卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變）。本批新踩的坑已寫進計畫書：Edit 工具寫 U+0002 會把跳脫序列轉成字面控制字元存進原始碼，功能正確但在編輯器與 git diff 上都不顯形，判準是 repr 量位元組不是看檔案。＝＝＝ 第二批續修（同日·R8-7 ＋ R8-8）＝＝＝ 主套件 837 到 858/858、test_check_bloat 86 到 101/101、變異 21 到 27/27、prose 112/112。R8-7 的破口比表上寫的寬兩層：①except ModuleNotFoundError 接不到 ImportError（父類別），②MarkdownIt(commonmark) 與 .enable(table) 若 preset／rule 改名會拋 ValueError／KeyError，③**最寬的一層表上完全沒提**——Python 對任何未捕捉例外用的都是 exit 1，而契約寫 1 ＝ 有新增膨脹 ⇒ 工具自己炸掉會被收工腳本讀成「量過了、去壓」。故兩層都修：_markdown 的 try 改接 Exception 並把建構納入（窄的那道給得出可行動訊息），新增 run_guarded(fn) 包住 CLI（寬的那道保證沒有路徑走得到假的 exit 1）。⚠ SystemExit 必須原樣穿透，否則唯一合法的 exit 1 也被改判成 2 ＝ 另一種說謊；靠的是它繼承 BaseException 而非 Exception，不是靠先判型別。變異 23 專釘這一半——只驗「例外要 exit 2」的話，一個 except BaseException 的實作照樣全綠。R8-8 是三個缺陷疊在一起：startswith 無路徑邊界（現在就成立）／取第一個命中而非最深（風險屬實但未實體化）／cwd 不在任何專案時回 None 讓 diff 不過濾、所有專案都算進 exit code（現在就成立，且與設計意圖完全相反）。⚠ **訂正審查者舉的巢狀例子**：D:\AI-Projects\codebase-health-dashboard 沒有 CLAUDE.md ⇒ 不在 discover_targets 裡 ⇒ 綁外層 AI-Projects 才是正確行為；它在 ~/.claude/projects 有登記，但 session 專案與納管目標是兩件事。該坑要等有人替它加 CLAUDE.md 才實體化。⚠ **第三項是行為改變不只是修 bug**：從不屬於任何專案的目錄跑，exit code 從「所有專案都算」變成「只算 __global__」，依 R8-8 記載的設計意圖修，其餘專案照樣進報告只是不進 exit code。活資料驗證：真的從五個不同 cwd 跑 CLI 比對它印的「exit code 只看 X」，五格全對。⚠ **本線第 5 次「驗證自己有問題」**：活資料腳本原本期望巢狀那格回 codebase-health-dashboard，實際回 AI-Projects——是我的期望錯，我照抄了審查者舉的例子而沒查它是不是納管目標。共同形狀仍是驗證程式對被測介面做了未經確認的假設，這次的變體是**照抄上游的事實主張當前提**。**未修剩四項半**：R8-6／**R8-9 後半**（檔案被移走留成殭屍基準）／R8-10／R8-11，且**沒有跑 Round 9**——兩批續修動了 parse_entries 的身分產生、gather_current 的寫入路徑、_markdown 的例外面、CLI 的進入點與 exit code 語意，改動面比第一批還大。前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這兩批例外。PR-1 下次仍會擋，那是對的。 -->

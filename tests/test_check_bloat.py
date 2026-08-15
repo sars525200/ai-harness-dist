@@ -556,6 +556,116 @@ def run() -> "tuple[int, list]":
     check("**一批裡有一個失明就整批拒寫**（部分寫入會留下一半新一半舊的基準，"
           "而報告上分不出是哪一半）", got_mix == 2, str(got_mix))
 
+    # ── R8-7 工具自己炸掉不得被讀成「有膨脹」 ────────────────────────────────
+    #
+    # exit code 的語意被檔頭契約釘死：1 = 有新增膨脹。而 **Python 對未捕捉的例外用的
+    # 也是 exit 1** ⇒ 工具炸掉時收工腳本會讀成「量過了、去壓」，真相是「一個字都沒量」。
+    # 靜默，而且方向剛好相反 —— 比沒有守門更糟，它產生了一個看起來像結論的東西。
+    print("\n[R8-7] 工具自己炸掉不得被讀成「有膨脹」")
+
+    def _guard(fn):
+        try:
+            m.run_guarded(fn)
+            return "沒有 exit"
+        except SystemExit as e:
+            return e.code
+
+    check("對照組：fn 正常結束時不得 exit（否則下面那些 exit 判定是白撿的 —— "
+          "一個無條件 exit 2 的守門也會通過它們）",
+          _guard(lambda: None) == "沒有 exit", str(_guard(lambda: None)))
+
+    def _boom():
+        raise ValueError("模擬 markdown-it 升版後的任意故障")
+
+    check("**未捕捉的例外必須 exit 2，不得是 1**（Python 預設就是 1，"
+          "而契約寫 1 = 有新增膨脹）", _guard(_boom) == 2, str(_guard(_boom)))
+
+    def _bloat():
+        raise SystemExit(1)
+
+    check("**sys.exit(1) 必須原樣穿透**（守門若連它也改判成 2，"
+          "「有膨脹」從此永遠報不出來 —— 那是另一種說謊）",
+          _guard(_bloat) == 1, str(_guard(_bloat)))
+
+    def _blind_exit():
+        raise SystemExit(2)
+
+    check("sys.exit(2) 同樣原樣穿透", _guard(_blind_exit) == 2, str(_guard(_blind_exit)))
+
+    # `_markdown()` 的窄守門：**ImportError 也要接**。升版把 SyntaxTreeNode 搬走拋的是
+    # ImportError，而 ModuleNotFoundError 是它的**子**類別 —— 子類別的 except 接不到父類別。
+    import types
+    saved_cache, saved_mod = m._MD_CACHE, sys.modules.get("markdown_it.tree")
+    try:
+        m._MD_CACHE = None
+        sys.modules["markdown_it.tree"] = types.ModuleType("markdown_it.tree")
+        try:
+            m._markdown()
+            md_got = "沒有 exit"
+        except SystemExit as e:
+            md_got = e.code
+        except ImportError:
+            md_got = "例外外拋（CLI 會 exit 1）"
+    finally:
+        m._MD_CACHE = saved_cache
+        if saved_mod is not None:
+            sys.modules["markdown_it.tree"] = saved_mod
+        else:
+            sys.modules.pop("markdown_it.tree", None)
+    check("**名字被搬走（ImportError 而非 ModuleNotFoundError）也必須 exit 2**"
+          "——那是升版最可能的形狀，而只接子類別接不到它",
+          md_got == 2, str(md_got))
+    check("前提成立：測完有把 _MD_CACHE 還原（沒還原的話後面所有解析都會重載）",
+          m._MD_CACHE is saved_cache and m._MD_CACHE is not None)
+
+    # ── R8-8 cwd 落在哪個專案（只有它算進 exit code）────────────────────────
+    print("\n[R8-8] cwd 所屬專案的判定")
+
+    def _tg(name, path):
+        return {"project": name, "label": "CLAUDE.md", "kind": "rules", "path": Path(path)}
+
+    T_OUT = _tg("AI-Projects", r"D:\AI-Projects\CLAUDE.md")
+    T_IN = _tg("codebase-health-dashboard",
+               r"D:\AI-Projects\codebase-health-dashboard\CLAUDE.md")
+    T_IT = _tg("IT-department", r"D:\IT-department\CLAUDE.md")
+    T_G = {"project": m.GLOBAL_PROJECT, "label": "全域 CLAUDE.md", "kind": "rules",
+           "path": Path(r"C:\Users\x\.claude\CLAUDE.md")}
+    ALL = [T_G, T_OUT, T_IN, T_IT]
+    NESTED = Path(r"D:\AI-Projects\codebase-health-dashboard\src")
+
+    check("前提成立：fixture 真的構成巢狀（內層根確實在外層根底下，"
+          "否則「取最深」那條測不到東西）",
+          m._under(Path(r"D:\AI-Projects\codebase-health-dashboard"),
+                   Path(r"D:\AI-Projects")))
+    check("根目錄自己算在自己底下", m._under(Path(r"D:\AI-Projects"),
+                                            Path(r"D:\AI-Projects")))
+    check("**同前綴的姊妹目錄不得命中**（AI-Projects-old 不在 AI-Projects 底下；"
+          "字串 startswith 會判成命中，逐段比對不會）",
+          not m._under(Path(r"D:\AI-Projects-old\sub"), Path(r"D:\AI-Projects")))
+    check("大小寫不敏感（Windows 路徑）",
+          m._under(Path(r"d:\ai-projects\x"), Path(r"D:\AI-Projects")))
+
+    check("**巢狀時取最深的那個根**（人在內層工作就該綁內層）",
+          m.resolve_cwd_project(ALL, NESTED) == "codebase-health-dashboard",
+          m.resolve_cwd_project(ALL, NESTED))
+    check("**清單順序反過來結果一樣**（證明取的是最深命中，不是清單裡第一個 —— "
+          "舊版 break 在第一個命中，結果取決於 discover_targets 的順序）",
+          m.resolve_cwd_project(list(reversed(ALL)), NESTED)
+          == "codebase-health-dashboard",
+          m.resolve_cwd_project(list(reversed(ALL)), NESTED))
+    check("在外層但不在內層時綁外層（對照組：不是無論如何都回最深的那個）",
+          m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects\other")) == "AI-Projects",
+          m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects\other")))
+    check("同前綴姊妹目錄不得綁到 AI-Projects（`_under` 改回 startswith 這條會紅）",
+          m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects-old"))
+          == m.GLOBAL_PROJECT,
+          m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects-old")))
+    check("**cwd 不在任何專案時回 __global__ 而不是 None**（回 None 會讓 diff() 的 "
+          "`if only_project` 變成不過濾 ⇒ 所有專案都算進 exit code，"
+          "與這個函式存在的理由完全相反）",
+          m.resolve_cwd_project(ALL, Path(r"C:\Windows\Temp")) == m.GLOBAL_PROJECT,
+          str(m.resolve_cwd_project(ALL, Path(r"C:\Windows\Temp"))))
+
     # ── [R8] 掃描範圍的可信度：三種「範圍被騙走」的構造 ＋ 各自的對照組 ────────
     #
     # 判準一律用**等式**（`== [131]*5`）不用「有量到就好」：後者在「只量到半條」
