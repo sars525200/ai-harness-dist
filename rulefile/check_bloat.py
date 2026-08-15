@@ -106,6 +106,31 @@ import re
 import sys
 from pathlib import Path
 
+# ── 輸出編碼：**必須在任何 print 之前**（Round 9 F-2·2026-08-15）──────────────
+#
+# 這支工具的訊息含 `⚠`（U+26A0）與大量中文。Windows 上 stdout **導向 pipe 或檔案**時
+# 走的是 ANSI codepage（本機 cp950），不是 locale 的 utf-8 ⇒ `print` 會拋
+# `UnicodeEncodeError`。而腳本判讀 exit code 時，stdout 正是 pipe。
+#
+# ⚠ **它炸掉的位置最壞**：`run_guarded()` 的 except 區塊自己在印訊息時炸 ⇒ 例外從
+#   例外處理器裡拋出 ⇒ 沒有人接 ⇒ Python 以 **exit 1** 結束。那道守門的全部意義就是
+#   「不要讓工具自己的故障變成 exit 1（＝有新增膨脹）」，結果**它自己就是那條路徑**。
+#   實測兩個入口：`--write-snapshot` 漏帶 `--project`（契約要 exit 2，實際 exit 1）、
+#   `_load_layers()` 找不到 gen_layers 的拒跑守門（同樣 fail-closed 變 fail-open）。
+# ⚠ **本檔在此之前完全沒有 reconfigure**，而 `tests/test_check_bloat.py:25`、
+#   `tests/mutations/mutate_check_bloat.py:21`、`dashboard/gen_layers.py` 三支都有 ——
+#   所以不帶參數的正常路徑一直是好的，靠的是 `_load_layers()` exec 進來的
+#   `gen_layers.py` 順手把 stdout 修好了。**那是意外，不是設計**：例外發生在
+#   `discover_targets()` 之前的每一條路徑都是裸的，而那正好包含所有 fail-closed 守門。
+# ⚠ 這個 bug 在**設了 `PYTHONIOENCODING` 的環境下看不到**（開發 session 常設）。
+#   要重現得清掉那個環境變數、不帶 `-X utf8`、且 stdout 導向 pipe。
+# 包 try：stdout 被替換成不支援 reconfigure 的物件時（測試攔截輸出）不該讓整支掛掉。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                                          # noqa: BLE001,S110
+        pass
+
 HERE = Path(__file__).resolve().parent
 HARNESS = HERE.parent
 SNAPSHOT_PATH = HERE / "bloat_snapshot.json"     # ⚠ 檔名不可改：capability_checks._p_anti_bloat() 綁死它
@@ -583,6 +608,57 @@ def parse_blocks(md_text: str, line_offset: int = 0) -> list[dict]:
     return out
 
 
+def _assign_keys(entries: list[dict]) -> None:
+    """就地決定每條的 `key`（條目身分）。**撞號時把前綴延長到唯一為止。**
+
+    身分的三個要求彼此拉扯：①同檔內唯一 ②在「條目變長」這種我們要追蹤的編輯下
+    保持不變 ③**與條目在檔內的序位無關**。
+
+    ⚠ **序位尾碼（第 1 條不動、第 2 條起加 `\u0002{n}`）滿足①③但不滿足③**，
+      而它壞掉的方式正是 R8-4 要消滅的那個病（Round 9 F-1 實跑證出來）：
+      撞號組是 A(626 字)、B(526 字)，基準記著 `K=626`、`K\u0002 2=526`。若刪掉 A、
+      另外新增一條開頭不同的短規則（**條目數不變 ⇒ R8-3 的「條目數下降」不會叫**），
+      B 就遞補成第 1 條、拿到 key `K`、跟 **A 的 626** 比 —— 於是 B 可以從 526
+      一路長到 626 而工具全程沉默。**過期的高基準＝靜默成長額度，原封不動地回來了。**
+      舊註解只承認「對調順序時歷史紀錄斷一次」，那個評估低估了一個量級。
+
+    現在的做法：同一個 24 字開頭的組，找**最短的 L（> KEY_CHARS）讓組內全部互異**，
+    整組都用 `vis[:L]`。身分純由**該條自己的內容**決定 ⇒ 刪掉組裡任何一條都不會讓
+    別條改變身分，更不會繼承別條的基準。
+
+    - **不會跨組撞號**：組的 24 字開頭本身互異，而組內的 key 都以該開頭起頭。
+    - **兄弟被刪掉時**組會解散、倖存者的 key 縮回 24 字 ⇒ 那條**查不到基準**
+      （`prev is None`）。這是安全的失敗方向：查不到基準只會讓它在超標時被報成
+      「新增」，**不會繼承一個錯的基準值**。F-1 的危險正是後者。
+    - **全文逐字相同**時沒有任何 L 分得開 —— 那兩條可互換（`chars` 也一樣），
+      繼承彼此的基準不會產生錯誤結論，所以退回序號是安全的。
+    """
+    groups: dict[str, list[dict]] = {}
+    for e in entries:
+        groups.setdefault(e["_vis"][:KEY_CHARS], []).append(e)
+
+    for head, grp in groups.items():
+        if len(grp) == 1:
+            grp[0]["key"] = head
+            continue
+        longest = max(len(e["_vis"]) for e in grp)
+        pick = next((L for L in range(KEY_CHARS + 1, longest + 1)
+                     if len({e["_vis"][:L] for e in grp}) == len(grp)), None)
+        if pick is not None:
+            for e in grp:
+                e["key"] = e["_vis"][:pick]
+        else:
+            # 全文相同：序號是唯一的辦法，而此時它無害（見 docstring）。
+            # 分隔符用 \u0002，與 snap_key 的 \u0001 同慣例。
+            # ⚠ 一律寫跳脫序列、不要貼字面控制字元：那個字元在編輯器與 git diff
+            #   上都不顯形，貼進去看起來像沒有分隔符（本輪踩過，靠 repr() 才發現）。
+            for i, e in enumerate(grp, 1):
+                e["key"] = head if i == 1 else f"{head}\u0002{i}"
+
+    for e in entries:
+        e.pop("_vis", None)
+
+
 def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     """抽出條目。回 [{key, chars, text, block, kind, line}]。
 
@@ -606,7 +682,6 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
     body, _desc = scoped
 
     entries: list[dict] = []
-    seen_keys: dict[str, int] = {}       # 同檔內開頭撞號的計數（R8-4，見下面 append 處）
     block = "（未分組）"
     in_doc_section = False
 
@@ -643,43 +718,18 @@ def parse_entries(md_text: str, kind: str = "rules") -> list[dict]:
                 if k > 0:
                     body_txt = text[k + len(sep):]
                     break
-        # ── 條目身分：開頭 KEY_CHARS 字；同檔內撞號時第 2 條起加尾碼（R8-4）──────
-        #
-        # 舊行為是 `gather_current()` 撞到就 exit 2，訊息叫人「把其中一條的開頭改得
-        # 不一樣」——**那是用工具的實作細節去逼改規則正文**，正是上面 `body_txt`
-        # 那段自己命名過的反模式（「量錯東西的判準會把人逼去改不該改的地方」）。
-        # 後果不只是難用：AI-Projects 有兩條規則都以 ``**`_organize_desktop.ps1``
-        # 開頭 ⇒ 該專案的 `--write-snapshot` 從此跑不動 ⇒ 基準停在 56 條而現況 112 條，
-        # 而 `diff()` 的判準是 `chars > prev` ⇒ **過期的高基準＝靜默成長額度**
-        # （實測 25 條，最誇張的現 110 字／基準 578 字）。修復路徑被守門一起擋掉。
-        #
-        # ⚠ **第 1 條原封不動、第 2 條起才加尾碼**：實測 320 條裡只有 1 組撞號，
-        #   這個形狀讓 319 把既有 key **逐字不變** ⇒ 零基準重建。改成全體 by-index
-        #   （每條都帶序號）雖然更整齊，但會讓所有 key 一起位移＝一次全面基準重寫，
-        #   那一輪的 diff 全是雜訊、蓋過真正的訊號。
-        # ⚠ **去重必須做在這裡，不能做在 `gather_current()`**：`measure()["over"]` 是
-        #   `entries` 的**同一批 dict 物件**，`diff()` 比對時讀的也是這把 `key`。
-        #   做在 gather_current 只有寫入端算得到尾碼，而 diff() 迭代的是 `over`
-        #   （超標子集）—— 兩邊數出來的「第 n 條」不是同一條，key 從此對不上，
-        #   而症狀是「既有條目全被報成新增」，看起來像基準壞了，不像去重寫錯地方。
-        # ⚠ 代價（已知且接受）：兩條撞號的規則**對調順序**時尾碼會跟著換手，那一條的
-        #   歷史成長紀錄會斷一次。比起「兩條互相遮蔽、永遠報不出來」這是嚴格的改善。
-        # 分隔符用 \u0002（控制字元，markdown 正文不會有），與 snap_key 用 \u0001
-        # 同慣例。⚠ **一律寫成跳脫序列、不要貼字面控制字元**：那個字元在編輯器
-        # 與 git diff 上都不顯形，貼進去看起來像沒有分隔符——本輪第一次就寫成
-        # 字面字元，肉眼完全看不出對錯，是靠 repr() 量位元組才確認的。
-        key = vis[:KEY_CHARS]
-        seen_keys[key] = nth = seen_keys.get(key, 0) + 1
-        if nth > 1:
-            key = f"{key}\u0002{nth}"
         entries.append({
-            "key": key,                      # key 用條目開頭：那是身分，要穩定
+            # `key` 是**兩段式**的：這裡先留空，整份掃完之後由 `_assign_keys()` 一次
+            # 決定 —— 撞號時要把前綴延長到唯一，而那需要看過同檔內全部條目才算得出來。
+            "key": "",
+            "_vis": vis,                     # 只給 _assign_keys 用，指派完就刪掉
             "chars": len(_visible(body_txt) or vis),   # 長度只算內容（含續段與巢狀）
             "text": text,
             "block": block,
             "kind": "doc" if in_doc_section else "rule",
             "line": u["line"],               # 相對於**掃描範圍**的行號（給報告定位用）
         })
+    _assign_keys(entries)
     return entries
 
 
@@ -805,7 +855,7 @@ def gather_current(targets: list[dict]) -> dict:
                 # 那一段自己命名過的反模式。責任歸屬寫錯，人就會去修錯的東西。
                 print("⚠ 內部錯誤：快照 key 重複 —— parse_entries() 的撞號去重失效。")
                 print(f"  條目：{e['text'][:40]}…")
-                print("  這是工具的 bug，不是規則寫法的問題 —— 先查 parse_entries 的 seen_keys。")
+                print("  這是工具的 bug，不是規則寫法的問題 —— 先查 _assign_keys() 的前綴延長。")
                 sys.exit(2)
             ent[k] = e["chars"]
         files[fk] = {"bytes": m["bytes"], "entry_count": len(m["entries"]),
@@ -1000,8 +1050,6 @@ def diff(old: "dict | None", targets: list[dict],
     for t in targets:
         if t["kind"] == "ondemand":
             continue
-        if only_project and t["project"] not in (only_project, GLOBAL_PROJECT):
-            continue
         m = measure(t)
         if m is None:
             continue
@@ -1009,6 +1057,20 @@ def diff(old: "dict | None", targets: list[dict],
             # ⚠ **要判在快照比對之前**：有沒有基準都一樣是「沒掃到」，而下面那句
             #    `prev_file is None → continue` 會把這種檔靜靜吃掉，一個字都不吭。
             blind.append(f"{t['project']}/{t['label']}：{m['blind_why']}")
+            continue
+        # ── `only_project` **只收斂膨脹判定，不收斂「說不出答案」**（Round 9 F-4）──
+        #
+        # 過濾放在 `measure()` 之前是錯的：那會讓被過濾掉的檔**連量都不量**，
+        # 於是它的失明也不會進 `blind` ⇒ exit 2 變 exit 0。實測情境：
+        # `IT-department/CLAUDE.md` 的規則節有個沒收尾的 fence（失明），從一個
+        # 不屬於任何專案的目錄跑 —— `only_project='__global__'` ⇒ blind=0 ⇒ **exit 0**。
+        # 而 `D:\.ai-harness`（這支工具與測試自己所在的目錄）正是那種目錄。
+        #
+        # 兩者的語意本來就不同層：「B 專案有膨脹」不該擋 A 專案收工（所以 reasons
+        # 要收斂），但「B 專案量不到」是**工具說不出答案**，而檔頭契約寫的是
+        # `0 = 該掃的都掃了且沒有新增膨脹` —— 把它藏起來就是在偽造那個「都掃了」。
+        # 這支工具存在的唯一理由是分得出「量到了」與「沒量到」，靜默的綠燈比紅燈貴。
+        if only_project and t["project"] not in (only_project, GLOBAL_PROJECT):
             continue
         live.append((t, m))
 

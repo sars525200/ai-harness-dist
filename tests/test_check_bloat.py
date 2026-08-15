@@ -291,9 +291,13 @@ def run() -> "tuple[int, list]":
     e = m.parse_entries(f"# I\n\n{row}\n", "index")
     check("索引列的長度**只算 hook 句**，不含 markdown link 前綴",
           len(e) == 1 and e[0]["chars"] < 20, str(e[0]["chars"]) if e else "沒解出來")
+    # ⚠ 判準前面要先擋空 list（Round 9 F-6）：原本直接寫 `e[0]["key"]`，某個變異讓
+    #   索引檔解不出條目時**整支測試在這裡 IndexError 中斷** ⇒ 後面約 70 條斷言
+    #   一條都沒跑，而變異腳本只看 exit code 會把那次記成「紅了 ✔」。
+    #   回歸網的一處壞掉不該讓其餘部分停跑 —— 那會讓它被讀得比實際強。
     check("但 key 仍取整行開頭（那是身分，要跨版本穩定；`- ` 前綴在解析時已剝掉）",
-          e[0]["key"].startswith("[") and long_name[:10] in e[0]["key"],
-          e[0]["key"][:30])
+          len(e) == 1 and e[0]["key"].startswith("[") and long_name[:10] in e[0]["key"],
+          e[0]["key"][:30] if e else "沒解出條目")
     long_hook = f"- [x](x.md) — {'長' * 200}"
     e2 = m.parse_entries(f"# I\n\n{long_hook}\n", "index")
     check("hook 句本身超長仍要抓得到（不是一律豁免索引檔）",
@@ -495,14 +499,83 @@ def run() -> "tuple[int, list]":
           f"{raw[0]!r} / {raw[1]!r} / {raw[2]!r}")
     check("撞號的兩條拿到**不同的 key**（相同＝互相遮蔽，該條的成長永遠報不出來）",
           de[0]["key"] != de[1]["key"], f"{de[0]['key']!r} / {de[1]['key']!r}")
-    check("**第 1 條的 key 逐字等於未去重時的原值**（零位移契約：既有基準不得失效。"
-          "改成全體 by-index 會讓所有 key 一起位移＝一次全面基準重寫）",
-          de[0]["key"] == raw[0], f"{de[0]['key']!r} vs {raw[0]!r}")
-    check("第 2 條才帶尾碼，且尾碼掛在原 key 後面（看得出它是同開頭的第 2 條）",
-          de[1]["key"].startswith(raw[1]) and de[1]["key"] != raw[1],
-          repr(de[1]["key"]))
-    check("**沒撞號的條目不受影響**（去重不得波及旁邊的 key）",
+    check("**沒撞號的條目 key 逐字等於 vis[:24]**（零位移：撞號的處理不得波及旁邊，"
+          "否則每次有人新增一組撞號就會讓全檔基準失效）",
           de[2]["key"] == raw[2], f"{de[2]['key']!r} vs {raw[2]!r}")
+    check("撞號兩條的 key 都是**自己內容的前綴**（身分由內容決定，不是由序位決定）",
+          de[0]["key"] == m._visible(de[0]["text"])[:len(de[0]["key"])]
+          and de[1]["key"] == m._visible(de[1]["text"])[:len(de[1]["key"])],
+          f"{de[0]['key']!r} / {de[1]['key']!r}")
+
+    # ⚠ 這一條是 Round 9 F-1 的核心。舊做法（第 1 條不動、第 2 條加序號尾碼）把身分
+    #   綁在**序位**上：刪掉組裡第 1 條，第 2 條就遞補成第 1 條、拿到前者的 key、
+    #   於是**繼承前者的基準值**。而 diff() 判 `chars > prev` ⇒ 過期的高基準＝
+    #   靜默成長額度 —— 那正是 R8-4 本來要消滅的病，被修法自己重新製造出來。
+    #   （且條目數不變時 R8-3 的「條目數下降」也不會叫，完全沉默。）
+    fx_dropped = (
+        "# T\n\n## 1. 規則\n<!-- rules-section -->\n\n"
+        f"- {DUP_HEAD} 必須純 ASCII 無 BOM**（中文用 code point 組）。\n"
+        "- 一條開頭完全不同的規則，擺在這裡確認去重沒有波及旁邊的條目。\n"
+    )
+    dd = m.parse_entries(fx_dropped, "rules")
+    check("前提成立：刪掉撞號組第 1 條之後，倖存的那條確實還在（否則下面是空跑）",
+          len(dd) == 2 and dd[0]["text"] == de[1]["text"],
+          f"{len(dd)} 條")
+    check("**刪掉撞號組第 1 條後，倖存者的 key 不得變成被刪那條的 key**"
+          "（否則它會繼承一個屬於別條的基準值 ⇒ 靜默成長額度·Round 9 F-1）",
+          dd[0]["key"] != de[0]["key"],
+          f"倖存者 {dd[0]['key']!r} vs 被刪的 {de[0]['key']!r}")
+
+    # ── 跨版本往返：這才是 F-1 真正的缺口 ────────────────────────────────────
+    #
+    # 上面全部是**單一版本的靜態解析**。F-1 的失效只在「寫基準 → 編輯 → 再 diff」
+    # 這條路上才看得到，而舊的 6 條斷言沒有任何一條走過它。
+    # 情境：撞號組 A(長)、B(短)。刪掉 A、補一條開頭不同的規則（**條目數不變 ⇒
+    # R8-3 的「條目數下降」不會叫**）。序位尾碼方案下 B 會遞補成第 1 條、拿到 A 的
+    # key、跟 A 的大基準比 ⇒ B 可以一路長到 A 那麼大而工具全程沉默。
+    PAD_A, PAD_B = "安" * 150, "純" * 90
+    v1 = ("# T\n\n## 1. 規則\n<!-- rules-section -->\n\n"
+          f"- {DUP_HEAD} 要掃到穩定**：{PAD_A}\n"
+          f"- {DUP_HEAD} 必須純 ASCII**：{PAD_B}\n")
+    # v2：A 刪掉、補一條開頭完全不同的規則（條目數維持 2）、**B 長大了**
+    v2 = ("# T\n\n## 1. 規則\n<!-- rules-section -->\n\n"
+          f"- {DUP_HEAD} 必須純 ASCII**：{PAD_B}{'長' * 40}\n"
+          f"- 一條開頭完全不同的規則：{'他' * 150}\n")
+
+    rt = tmp / "roundtrip.md"
+    rt.write_text(v1, encoding="utf-8")
+    tgt_rt = {"project": "PR", "label": "rt.md", "kind": "rules", "path": rt}
+    e1 = m.parse_entries(v1, "rules")
+    e2 = m.parse_entries(v2, "rules")
+    check("前提成立：v1 兩條都超標且 A 比 B 長（額度才有得繼承）；"
+          "v2 的條目數與 v1 相同（否則 R8-3 會插話，測到的就不是本條）",
+          len(e1) == 2 and len(e2) == 2
+          and e1[0]["chars"] > e1[1]["chars"] > m.LIMIT,
+          f"v1={[x['chars'] for x in e1]} v2={[x['chars'] for x in e2]}")
+    check("前提成立：v2 裡的 B **真的比 v1 長了**（沒長的話下面那條不管實作對錯都會綠）",
+          e2[0]["chars"] > e1[1]["chars"],
+          f"B: {e1[1]['chars']} → {e2[0]['chars']}")
+
+    # ⚠ 同樣要擋（Round 9 F-6）：`gather_current()` 失敗時走的是 `sys.exit(2)`，
+    #   不包起來的話 SystemExit 會讓整支測試中斷，後面全部不跑。
+    try:
+        base_rt, rt_err = m.gather_current([tgt_rt]), None
+    except SystemExit as ex:
+        base_rt, rt_err = None, ex.code
+    check("前提成立：v1 的基準寫得出來（寫不出來的話下面的往返整段是空跑）",
+          rt_err is None and base_rt is not None, f"exit={rt_err}")
+    rt.write_text(v2, encoding="utf-8")
+    rs, bl = m.diff(base_rt or {"schema": m.SCHEMA, "files": {}},
+                    [tgt_rt], only_project="PR")
+    check("**寫基準→刪掉撞號組第 1 條→倖存者長大 ⇒ 必須出聲**"
+          "（序位尾碼方案在這裡是完全沉默的：B 繼承 A 的大基準，"
+          "可以一路長到 A 那麼大都不吭 —— Round 9 F-1 實跑證出來的形狀）",
+          len(rs) > 0 or len(bl) > 0,
+          f"reasons={rs} blind={bl}")
+    check("而且出聲的內容要提到那條倖存者（出聲但講的是別條＝錯誤歸屬，"
+          "人會去改沒問題的那一條）",
+          any(m._visible(e2[0]["text"])[:20] in r for r in rs + bl),
+          f"reasons={rs} blind={bl}")
 
     dupmd = tmp / "dup.md"
     dupmd.write_text(fx_dup, encoding="utf-8")
@@ -545,9 +618,20 @@ def run() -> "tuple[int, list]":
         got_b = e.code
     check("**失明的檔必須拒寫（exit 2）**（寫進去＝把「沒看到」封存成「沒有」）",
           got_b == 2, str(got_b))
-    check("對照組：沒失明的檔照樣寫得進去（否則上面那條 exit 2 是白撿的 —— "
-          "一個什麼都拒寫的守門也會通過它）",
-          dup_err is None and len(dup_ents) == 3)
+    okmd = tmp / "ok.md"
+    okmd.write_text("# T\n\n## 1. 規則\n<!-- rules-section -->\n\n- 一條正常的短規則。\n",
+                    encoding="utf-8")
+    tgt_ok = {"project": "PX", "label": "ok.md", "kind": "rules", "path": okmd}
+    try:
+        got_ok, ok_err = m.gather_current([tgt_ok]), None
+    except SystemExit as e:
+        got_ok, ok_err = None, e.code
+    check("對照組：**在這一段重跑一次** `gather_current()`，沒失明的檔要寫得進去"
+          "（否則上面那條 exit 2 是白撿的 —— 一個什麼都拒寫的守門也會通過它）。"
+          "⚠ 不可以沿用 [R8-4] 那段算出來的變數：那是**重述**不是對照組"
+          "（Round 9 F-6 抓到的原始寫法就是那樣）",
+          ok_err is None and got_ok is not None and len(got_ok["files"]) == 1,
+          f"exit={ok_err}")
     try:
         m.gather_current([tgt_dup, tgt_blind])
         got_mix = "沒有 exit"
@@ -656,15 +740,76 @@ def run() -> "tuple[int, list]":
     check("在外層但不在內層時綁外層（對照組：不是無論如何都回最深的那個）",
           m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects\other")) == "AI-Projects",
           m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects\other")))
-    check("同前綴姊妹目錄不得綁到 AI-Projects（`_under` 改回 startswith 這條會紅）",
+    check("同前綴姊妹目錄不得綁到 AI-Projects（⚠ 這條同時被 `_under` 與保底值兩種"
+          "退化打紅，不是 `_under` 的專屬守門——專屬的那條是上面的 `_under` 直接呼叫）",
           m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects-old"))
           == m.GLOBAL_PROJECT,
           m.resolve_cwd_project(ALL, Path(r"D:\AI-Projects-old")))
-    check("**cwd 不在任何專案時回 __global__ 而不是 None**（回 None 會讓 diff() 的 "
-          "`if only_project` 變成不過濾 ⇒ 所有專案都算進 exit code，"
-          "與這個函式存在的理由完全相反）",
+    check("**cwd 不在任何專案時回 __global__ 而不是 None**（膨脹判定收斂到全域檔；"
+          "⚠ 這個收斂之所以安全，靠的是下面 [F-4]：失明**不受**這個過濾影響）",
           m.resolve_cwd_project(ALL, Path(r"C:\Windows\Temp")) == m.GLOBAL_PROJECT,
           str(m.resolve_cwd_project(ALL, Path(r"C:\Windows\Temp"))))
+
+    # ── Round 9 F-4：`only_project` 只收斂膨脹，不收斂「說不出答案」──────────────
+    #
+    # 舊寫法把過濾放在 `measure()` 之前 ⇒ 被過濾掉的檔**連量都不量** ⇒ 它的失明
+    # 不會進 blind ⇒ exit 2 變 exit 0。而「不屬於任何專案的目錄」不是假想情境：
+    # `D:\.ai-harness`（這支工具與測試自己所在的目錄）就是其中之一。
+    print("\n[F-4] 失明不受專案過濾")
+    EMPTY_SNAP = {"schema": m.SCHEMA, "files": {}}
+    tgt_blind_other = {"project": "PZ", "label": "blind.md", "kind": "rules",
+                       "path": blindmd}
+    _rs, _bl = m.diff(EMPTY_SNAP, [tgt_blind_other], only_project="PY")
+    check("**別的專案失明時，即使不在 only_project 範圍內也必須進 blind**"
+          "（藏起來就是在偽造契約裡那句「該掃的都掃了」）",
+          len(_bl) == 1, f"blind={_bl}")
+    _rs2, _bl2 = m.diff(base_rt, [tgt_rt], only_project="PY")
+    check("對照組：不在範圍內的**膨脹**仍要被過濾掉（否則 A 專案收工會被 B 專案的"
+          "膨脹卡住 —— 那是被否決掉的「擋收工」從後門進來；少了這條對照組，"
+          "一個乾脆不過濾的實作也會通過上一條）",
+          len(_rs2) == 0 and len(_bl2) == 0, f"reasons={_rs2} blind={_bl2}")
+
+    # ── Round 9 F-2／F-3：CLI 層 —— 單元測試在定義上碰不到的那一半 ──────────────
+    #
+    # 本檔用 `spec_from_file_location("_cb_test", …)` 載入 ⇒ `__name__` 是 `_cb_test`
+    # ⇒ `if __name__ == "__main__":` 那塊**永遠不會執行**。所以在補這一段之前，
+    # 101 條斷言裡沒有任何一條驗證 `run_guarded(_cli)` 與 `only = resolve_cwd_project(…)`
+    # 真的接上了 —— 實測把它們各改一行（`_cli()`／`only = None`）**全部斷言照樣全綠**。
+    print("\n[F-2/F-3] CLI 層：輸出編碼與接線")
+    import subprocess
+    CLEAN_ENV = {k: v for k, v in os.environ.items()
+                 if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
+
+    def _cli_run(args, cwd=None):
+        """跑真實 CLI。**刻意不帶 `-X utf8`、刻意清掉 `PYTHONIOENCODING`、stdout 是
+        pipe** —— 那正是腳本判讀 exit code 時的形狀，也是 F-2 唯一會現形的形狀
+        （開發 session 多半設了 `PYTHONIOENCODING`，那會把這個 bug 完全遮住）。"""
+        r = subprocess.run([sys.executable, str(TARGET)] + args,
+                           capture_output=True, env=CLEAN_ENV, cwd=cwd)
+        return r.returncode, ((r.stdout or b"") + (r.stderr or b"")).decode("utf-8",
+                                                                           "replace")
+
+    rc_a, out_a = _cli_run(["--write-snapshot"])          # 缺 --project ⇒ 契約要 exit 2
+    check("**fail-closed 守門在 pipe ＋ 無 -X utf8 下仍要 exit 2**（本檔檔頭自己寫的"
+          "呼叫形式就沒帶 -X utf8；印不出 ⚠ ⇒ UnicodeEncodeError 從例外處理器裡拋出"
+          " ⇒ exit 1 ＝ 契約說的「有新增膨脹」·Round 9 F-2）",
+          rc_a == 2,
+          f"exit={rc_a} UnicodeEncodeError={'UnicodeEncodeError' in out_a}")
+    check("而且不是靠吞掉訊息換來的（守門說明仍要印得出來，"
+          "否則「exit 2 但什麼都沒說」與修好了長得一樣）",
+          "--project" in out_a, out_a[:160])
+
+    rc_b, _ = _cli_run(["--write-snapshot", "--project"])  # 後面沒值 ⇒ IndexError
+    check("**未預期的例外必須被 run_guarded 接成 exit 2**（`--project` 後面沒帶值會"
+          "丟 IndexError）—— 這條同時釘住「run_guarded 真的包住了 CLI」這件**接線**"
+          "事實：改成 `_cli()` 這裡就變 exit 1·Round 9 F-3",
+          rc_b == 2, f"exit={rc_b}")
+
+    rc_c, out_c = _cli_run([], cwd=str(tmp))
+    check("**cwd 不在任何專案時 CLI 要印「只看 __global__」** —— 釘住 "
+          "`only = resolve_cwd_project(targets)` 真的接上（改成 `only = None` "
+          "會印出 None·Round 9 F-3）",
+          "只看 __global__" in out_c, out_c[-240:])
 
     # ── [R8] 掃描範圍的可信度：三種「範圍被騙走」的構造 ＋ 各自的對照組 ────────
     #

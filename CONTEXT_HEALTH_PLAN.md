@@ -624,7 +624,8 @@ R8-2 把範圍判定從行 regex 換成 AST 之後，變異 4 的錨點
 
 **2026-08-15 續修（兩批）後**：R8-4／R8-7／R8-8 全修、R8-9 修前半
 ⇒ **未修剩 R8-6／R8-9 後半／R8-10／R8-11**（四項半）。
-仍**沒有跑 Round 9**，marker 仍 `SKIP`（收斂判準沒有因為修掉幾項就變寬）。
+**Round 9 已跑**（見下），6 個發現全數已修 —— 但 **Round 9 自己的修法沒有被覆核過**，
+且上面四項半仍未動，marker 仍 `SKIP`。
 
 #### Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」＋順手收 R8-9）
 
@@ -734,17 +735,75 @@ exit code 從「所有專案都算」變成「只算 `__global__`」。依 R8-8 
   我照抄了審查者舉的例子而**沒查它是不是納管目標**。共同形狀依舊是
   「驗證程式對被測介面做了未經確認的假設」，這次的變體是**照抄上游的事實主張當前提**。
 
-#### 下一棒的第一件事（2026-08-15 第二批續修後重排）
+### Round 9（2026-08-15·**6 個發現全部已查證·全數已修**·主套件 858 → 875/875）
 
-**R8-4／R8-7／R8-8 已結案，不要重做。** 剩四項半：
+審查者：Claude Code `Plan` subagent／opus —— `reviewer_config.json` 指定的就是這個，
+**沒有換人**（Codex 未安裝，但設定本來也沒選它）。⚠ **`effort: high` 沒有真的傳進去**：
+主 session 的 `Agent` tool 只有 `model` 參數、沒有 `effort`，設定檔那一欄由角色定義承載。
+
+覆核對象是兩批續修的實作與新增的 27 條變異。**六個發現全部附了實跑證據**，
+其中兩個「高」都是這兩批自己引入或沒補起來的。
+
+| # | 嚴重 | 發現 | 我的處置 |
+|---|---|---|---|
+| **F-1** | 高 | **序位尾碼把身分綁在序位上** ⇒ 刪掉撞號組第 1 條，第 2 條遞補並**繼承前者的基準值**。合成 fixture 實跑：B 從 526 一路長到 626 字（+19%）而 `reasons=[] blind=[]`、exit 0。**R8-4 要消滅的「過期高基準＝靜默成長額度」被修法自己重新製造出來**，且條目數不變時 R8-3 也不會叫。原註解只承認「歷史斷一次」——**低估了一個量級** | **接受·已修**：改成**前綴延長到唯一**（見下） |
+| **F-2** | 高 | **`run_guarded()` 的例外處理器自己會拋例外**：它印的 `⚠`(U+26A0) 在 cp950 編不出來 ⇒ `UnicodeEncodeError` 從 except 區塊裡拋出 ⇒ 沒人接 ⇒ **exit 1**。它的 docstring 寫「保證沒有任何路徑走得到 exit 1」——**它自己就是那條路徑**。實測兩個入口：`--write-snapshot` 漏帶 `--project`、`_load_layers()` 的拒跑守門，兩個 fail-closed 都變成 fail-open | **接受·已修**：工具本體補 `reconfigure` |
+| **F-3** | 中 | **R8-7／R8-8 的「接線」零覆蓋**：`spec_from_file_location("_cb_test", …)` 讓 `__name__` 不是 `__main__` ⇒ 那一塊永遠不執行。實測把 `run_guarded(_cli)` 改成 `_cli()`、`only = resolve_cwd_project(…)` 改成 `only = None`，**101 條斷言全綠、27 條變異的錨點一條都沒蓋到** | **接受·已修**：補 subprocess 層 CLI 測試 ＋ 兩條接線變異 |
+| **F-4** | 中 | **R8-8 第 3 項把別的專案的「失明」從 exit 2 變成 exit 0**：`only_project` 的過濾放在 `measure()` 之前 ⇒ 被過濾掉的檔連量都不量 ⇒ 失明不進 `blind`。而 `D:\.ai-harness`（工具與測試自己所在的目錄）正是「不屬於任何專案」的目錄 | **接受·已修**：`only_project` **只收斂膨脹、不收斂失明**（user 拍板選這條，而非回退） |
+| **F-5** | 低 | 我上一輪的訂正**自己也錯了**：`discover_targets()` 對每個專案無條件產 3 個 target（缺檔只是 `missing: True`），所以「沒有 CLAUDE.md」不是它不在清單裡的原因。真正的閘門是 `gen_layers.discover_projects()` 要 `.claude/` 目錄，且 `SCAN_ROOTS` **非遞迴** ⇒ 巢狀目錄**加了 CLAUDE.md 也不會被發現**，唯一入口是 `harness.config.json` 的 `extraProjects` | **接受·已訂正**（見 R8-8 列） |
+| **F-6** | 低 | ①**變異腳本分不出「斷言抓到」與「測試中途炸掉」**：變異 6 讓測試在 `IndexError` 中斷，後面約 70 條（含這幾輪新增的全部）一條都沒跑，而只讀 `rc != 0` 會記成「紅了 ✔」。②兩條新斷言不是它們自稱的東西（R8-9 的「對照組」沿用 R8-4 算過的變數＝重述） | **接受·已修**：`verdict()` 判收尾摘要行 ＋ 兩個炸點補守門 ＋ 對照組重跑 |
+
+**F-1 的修法：前綴延長到唯一（`_assign_keys()`）**
+
+身分的三個要求彼此拉扯 ——①同檔內唯一 ②在「條目變長」這種要追蹤的編輯下不變
+③**與序位無關**。序位尾碼滿足①②卻不滿足③，而③正是 F-1 的破口。
+
+現在：同一個 24 字開頭的組，找**最短的 L（> KEY_CHARS）讓組內全部互異**，整組用 `vis[:L]`。
+身分純由**該條自己的內容**決定 ⇒ 刪掉組裡任何一條都不會讓別條改變身分。
+兄弟被刪時組會解散、倖存者的 key 縮回 24 字 ⇒ **查不到基準（`prev is None`）**——
+這是安全的失敗方向：查不到基準只會讓它超標時被報成「新增」，**不會繼承一個錯的基準值**。
+全文逐字相同時沒有任何 L 分得開，退回序號 —— 此時兩條可互換（`chars` 也一樣），無害。
+
+**驗收（全部實跑）**
+
+- 主套件 858 → **875/875**、`test_check_bloat` 101 → **113/113**、
+  變異 27 → **31/31** ＋ **2** 條等價未誤判、`test_check_prose_blocks` 112/112。
+- **F-2 精確重現**：清掉 `PYTHONIOENCODING`、不帶 `-X utf8`、stdout 導向 pipe
+  ⇒ 修前 `exit=1 UnicodeEncodeError=是`，修後 `exit=2`。
+  ⚠ **這個 bug 在設了 `PYTHONIOENCODING` 的環境下完全看不到**（開發 session 常設，
+  本 session 就設了）—— 那正是它一直沒被發現的原因，也是重現時必須清掉它的原因。
+- **F-1 的活資料驗證**：重寫 AI-Projects 基準後，`CLAUDE.md` **110 把 key 逐字不變**、
+  只有撞號那 2 條換成延長前綴；其餘專案零位移；靜默成長額度維持 **0 條**。
+- **F-6 的新判準當場做事**：導入後變異 6 與 20 立刻被判成「測試中途炸掉，不算抓到」。
+  修法**不是放寬判準**，是把那兩個炸點補上守門讓回歸網不會被一處壞掉打斷。
+
+**Round 9 沒查到的（審查者自己列的，下一棒不得當成已窮盡）**
+
+- **找不到任何腳本或 hook 真的讀 check_bloat 的 exit code** —— F-2／F-4 是**契約層**
+  的違反，沒有驗證到具體的下游消費端。若目前只有人眼在看，實際嚴重度低於標示等級。
+- `/shougong` 執行時的真實 cwd 沒有追（F-4 是否在現行收工流程上實體化，答不出來）。
+- F-1 的往返**沒在活資料上驗**（需要 `--write-snapshot`，覆核時被明確禁止）。
+- 只在這一台 Windows／zh-TW／cp950 上測過；並行競態（多 session 同時
+  `--append-history`／`--write-snapshot`）完全沒碰。
+- R8-6／R8-9 後半／R8-10／R8-11 與 Round 8 以前各輪的修法是否仍成立，完全沒碰。
+
+#### 下一棒的第一件事（2026-08-15 Round 9 後重排）
+
+**R8-4／R8-7／R8-8 與 Round 9 的 F-1～F-6 都已結案，不要重做。** 剩四項半：
 
 - **R8-9 後半**（檔案被移走留成殭屍基準）——`gather_current()` 只更新它量得到的檔，
   量不到的舊 key 原封留著。與檔頭「探索不到的要留痕跡」自相矛盾。
 - **R8-6**（缺口回填沒有消費端）／**R8-10**（索引檔在定義上不可能被判 blind）／
   **R8-11**（兩支對 BOM 與跨行錨的解析分岔）。
-- **跑 Round 9 才談收斂**：兩批續修動了 `parse_entries()` 的身分產生、`gather_current()` 的
-  寫入路徑、`_markdown()` 的例外面、CLI 的進入點與 exit code 語意——**改動面比第一批還大**。
-  前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這兩批例外。
+- **跑 Round 10 才談收斂**：Round 9 的六個修法**自己沒有被覆核過**，而其中
+  `_assign_keys()`（全新的身分產生規則）與「`only_project` 只收斂膨脹不收斂失明」
+  兩項改動面不小 —— 後者更是 user 在 Round 9 當下拍板、**Round 9 沒審過的新設計**。
+  前九輪每一輪都在上一輪的修法裡找到新缺陷（Round 9 抓到的兩個「高」正是前一輪的產物），
+  沒有理由假設這一輪例外。
+- **先答「這個 exit code 有沒有人讀」**：Round 9 找不到任何腳本或 hook 真的判讀
+  `check_bloat` 的 exit code。若確認沒有消費端，F-2／F-4 那一類「contract 違反」的
+  優先度要整批下修，而該補的其實是**把它接上收工流程**——否則整支工具的 exit code
+  語意是在對空氣講話。這件事沒答之前，別再為 exit code 的細節投更多人力。
 
 ### Round 7（2026-08-15·**§8 規格全數落地並實跑驗收**·主套件 691 → **783/783**）
 
@@ -1571,4 +1630,4 @@ IT-department **30,731 tokens**／AI-Projects **21,869 tokens**（含 system pro
 
 ---
 
-<!-- ADVERSARIAL_REVIEW_SKIP sha256=a751829f93152a46efb505f3a7cd106e52ee2a49394aac987334fad010b0c9ca: Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」並順手收 R8-9）。R8-4 已全修並實跑驗過，R8-9 只修了前半。**仍未收斂、仍不標 PASSED。**做法三件：①條目 key 改在 parse_entries 產生時去重——同檔內第 1 條原封不動、第 2 條起加 U+0002 尾碼；②gather_current 的撞號守門保留 exit 2 但改判主體，從「請把其中一條的開頭改得不一樣」改成「parse_entries 去重失效，這是工具的 bug」；③gather_current 寫入前檢查 blind，失明整批拒寫（R8-9 前半）。為什麼是這個形狀：去重必須做在 parse_entries 而非 gather_current，因為 measure 的 over 是 entries 的同一批 dict 物件、diff 比對讀的也是同一把 key——做在 gather_current 只有寫入端算得到尾碼，而 diff 迭代的是 over（超標子集），兩邊數出來的第 n 條不是同一條，症狀會是「既有條目全被報成新增」，看起來像基準壞了、不像去重寫錯地方。選「第 1 條不動、第 2 條起加尾碼」而不是全體 by-index：動工前實測 320 條只有 1 組撞號，這個形狀讓 319 把既有 key 逐字不變 ⇒ 零基準重建；交接要求的前置條件「先確認不會讓所有 key 位移」答案是不會。已知代價：兩條撞號的規則對調順序時尾碼換手、該條歷史成長紀錄斷一次，接受。驗收：主套件 822 到 837/837、test_check_bloat 74 到 86/86、變異 18 到 21/21 全抓到＋1 等價未誤判＋還原雜湊一致、test_check_prose_blocks 112/112、check_prose_blocks 本體 exit 0。實跑 --write-snapshot --project AI-Projects 印「已更新（2 個檔）」不再 exit 2；**靜默成長額度 25 條降到 0 條**；**零位移契約在活資料上驗過**——比對 git show HEAD 的舊快照，IT-department/CLAUDE.md（67）、IT-department/MEMORY.md（87）、__global__（38）三檔的 key 集合與每一把的值全部逐字相同，只有 AI-Projects 兩檔變。這條刻意在活資料上驗而不是 fixture：fixture 只證明實作在合成資料上的行為，位移是活資料才量得到的，而 R8-4 之所以沒被更早發現正是「拿三條同專案的抽樣支撐全稱結論」。**訂正上一輪兩個數字**：額度是 25 條不是 24，且橫跨兩個檔（CLAUDE.md 18＋MEMORY.md 7）——「現 110 字／基準 578 字」那條在 MEMORY.md。MEMORY.md 條目數 14 對 14 完全對得上、從頭到尾沒觸發任何守門卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變）。本批新踩的坑已寫進計畫書：Edit 工具寫 U+0002 會把跳脫序列轉成字面控制字元存進原始碼，功能正確但在編輯器與 git diff 上都不顯形，判準是 repr 量位元組不是看檔案。＝＝＝ 第二批續修（同日·R8-7 ＋ R8-8）＝＝＝ 主套件 837 到 858/858、test_check_bloat 86 到 101/101、變異 21 到 27/27、prose 112/112。R8-7 的破口比表上寫的寬兩層：①except ModuleNotFoundError 接不到 ImportError（父類別），②MarkdownIt(commonmark) 與 .enable(table) 若 preset／rule 改名會拋 ValueError／KeyError，③**最寬的一層表上完全沒提**——Python 對任何未捕捉例外用的都是 exit 1，而契約寫 1 ＝ 有新增膨脹 ⇒ 工具自己炸掉會被收工腳本讀成「量過了、去壓」。故兩層都修：_markdown 的 try 改接 Exception 並把建構納入（窄的那道給得出可行動訊息），新增 run_guarded(fn) 包住 CLI（寬的那道保證沒有路徑走得到假的 exit 1）。⚠ SystemExit 必須原樣穿透，否則唯一合法的 exit 1 也被改判成 2 ＝ 另一種說謊；靠的是它繼承 BaseException 而非 Exception，不是靠先判型別。變異 23 專釘這一半——只驗「例外要 exit 2」的話，一個 except BaseException 的實作照樣全綠。R8-8 是三個缺陷疊在一起：startswith 無路徑邊界（現在就成立）／取第一個命中而非最深（風險屬實但未實體化）／cwd 不在任何專案時回 None 讓 diff 不過濾、所有專案都算進 exit code（現在就成立，且與設計意圖完全相反）。⚠ **訂正審查者舉的巢狀例子**：D:\AI-Projects\codebase-health-dashboard 沒有 CLAUDE.md ⇒ 不在 discover_targets 裡 ⇒ 綁外層 AI-Projects 才是正確行為；它在 ~/.claude/projects 有登記，但 session 專案與納管目標是兩件事。該坑要等有人替它加 CLAUDE.md 才實體化。⚠ **第三項是行為改變不只是修 bug**：從不屬於任何專案的目錄跑，exit code 從「所有專案都算」變成「只算 __global__」，依 R8-8 記載的設計意圖修，其餘專案照樣進報告只是不進 exit code。活資料驗證：真的從五個不同 cwd 跑 CLI 比對它印的「exit code 只看 X」，五格全對。⚠ **本線第 5 次「驗證自己有問題」**：活資料腳本原本期望巢狀那格回 codebase-health-dashboard，實際回 AI-Projects——是我的期望錯，我照抄了審查者舉的例子而沒查它是不是納管目標。共同形狀仍是驗證程式對被測介面做了未經確認的假設，這次的變體是**照抄上游的事實主張當前提**。**未修剩四項半**：R8-6／**R8-9 後半**（檔案被移走留成殭屍基準）／R8-10／R8-11，且**沒有跑 Round 9**——兩批續修動了 parse_entries 的身分產生、gather_current 的寫入路徑、_markdown 的例外面、CLI 的進入點與 exit code 語意，改動面比第一批還大。前八輪每一輪都在上一輪的修法裡找到新缺陷，沒有理由假設這兩批例外。PR-1 下次仍會擋，那是對的。 -->
+<!-- ADVERSARIAL_REVIEW_SKIP sha256=ef7ea0fa29f2b633a1b444231f2dee57d830989a54c0fe2edb4d416656eab811: Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」並順手收 R8-9）。R8-4 已全修並實跑驗過，R8-9 只修了前半。**仍未收斂、仍不標 PASSED。**做法三件：①條目 key 改在 parse_entries 產生時去重——同檔內第 1 條原封不動、第 2 條起加 U+0002 尾碼；②gather_current 的撞號守門保留 exit 2 但改判主體，從「請把其中一條的開頭改得不一樣」改成「parse_entries 去重失效，這是工具的 bug」；③gather_current 寫入前檢查 blind，失明整批拒寫（R8-9 前半）。為什麼是這個形狀：去重必須做在 parse_entries 而非 gather_current，因為 measure 的 over 是 entries 的同一批 dict 物件、diff 比對讀的也是同一把 key——做在 gather_current 只有寫入端算得到尾碼，而 diff 迭代的是 over（超標子集），兩邊數出來的第 n 條不是同一條，症狀會是「既有條目全被報成新增」，看起來像基準壞了、不像去重寫錯地方。選「第 1 條不動、第 2 條起加尾碼」而不是全體 by-index：動工前實測 320 條只有 1 組撞號，這個形狀讓 319 把既有 key 逐字不變 ⇒ 零基準重建；交接要求的前置條件「先確認不會讓所有 key 位移」答案是不會。已知代價：兩條撞號的規則對調順序時尾碼換手、該條歷史成長紀錄斷一次，接受。驗收：主套件 822 到 837/837、test_check_bloat 74 到 86/86、變異 18 到 21/21 全抓到＋1 等價未誤判＋還原雜湊一致、test_check_prose_blocks 112/112、check_prose_blocks 本體 exit 0。實跑 --write-snapshot --project AI-Projects 印「已更新（2 個檔）」不再 exit 2；**靜默成長額度 25 條降到 0 條**；**零位移契約在活資料上驗過**——比對 git show HEAD 的舊快照，IT-department/CLAUDE.md（67）、IT-department/MEMORY.md（87）、__global__（38）三檔的 key 集合與每一把的值全部逐字相同，只有 AI-Projects 兩檔變。這條刻意在活資料上驗而不是 fixture：fixture 只證明實作在合成資料上的行為，位移是活資料才量得到的，而 R8-4 之所以沒被更早發現正是「拿三條同專案的抽樣支撐全稱結論」。**訂正上一輪兩個數字**：額度是 25 條不是 24，且橫跨兩個檔（CLAUDE.md 18＋MEMORY.md 7）——「現 110 字／基準 578 字」那條在 MEMORY.md。MEMORY.md 條目數 14 對 14 完全對得上、從頭到尾沒觸發任何守門卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變）。本批新踩的坑已寫進計畫書：Edit 工具寫 U+0002 會把跳脫序列轉成字面控制字元存進原始碼，功能正確但在編輯器與 git diff 上都不顯形，判準是 repr 量位元組不是看檔案。＝＝＝ 第二批續修（同日·R8-7 ＋ R8-8）＝＝＝ 主套件 837 到 858/858、test_check_bloat 86 到 101/101、變異 21 到 27/27、prose 112/112。R8-7 的破口比表上寫的寬兩層：①except ModuleNotFoundError 接不到 ImportError（父類別），②MarkdownIt(commonmark) 與 .enable(table) 若 preset／rule 改名會拋 ValueError／KeyError，③**最寬的一層表上完全沒提**——Python 對任何未捕捉例外用的都是 exit 1，而契約寫 1 ＝ 有新增膨脹 ⇒ 工具自己炸掉會被收工腳本讀成「量過了、去壓」。故兩層都修：_markdown 的 try 改接 Exception 並把建構納入（窄的那道給得出可行動訊息），新增 run_guarded(fn) 包住 CLI（寬的那道保證沒有路徑走得到假的 exit 1）。⚠ SystemExit 必須原樣穿透，否則唯一合法的 exit 1 也被改判成 2 ＝ 另一種說謊；靠的是它繼承 BaseException 而非 Exception，不是靠先判型別。變異 23 專釘這一半——只驗「例外要 exit 2」的話，一個 except BaseException 的實作照樣全綠。R8-8 是三個缺陷疊在一起：startswith 無路徑邊界（現在就成立）／取第一個命中而非最深（風險屬實但未實體化）／cwd 不在任何專案時回 None 讓 diff 不過濾、所有專案都算進 exit code（現在就成立，且與設計意圖完全相反）。⚠ **訂正審查者舉的巢狀例子**：D:\AI-Projects\codebase-health-dashboard 沒有 CLAUDE.md ⇒ 不在 discover_targets 裡 ⇒ 綁外層 AI-Projects 才是正確行為；它在 ~/.claude/projects 有登記，但 session 專案與納管目標是兩件事。該坑要等有人替它加 CLAUDE.md 才實體化。⚠ **第三項是行為改變不只是修 bug**：從不屬於任何專案的目錄跑，exit code 從「所有專案都算」變成「只算 __global__」，依 R8-8 記載的設計意圖修，其餘專案照樣進報告只是不進 exit code。活資料驗證：真的從五個不同 cwd 跑 CLI 比對它印的「exit code 只看 X」，五格全對。⚠ **本線第 5 次「驗證自己有問題」**：活資料腳本原本期望巢狀那格回 codebase-health-dashboard，實際回 AI-Projects——是我的期望錯，我照抄了審查者舉的例子而沒查它是不是納管目標。共同形狀仍是驗證程式對被測介面做了未經確認的假設，這次的變體是**照抄上游的事實主張當前提**。＝＝＝ Round 9（同日·claude-code／opus·6 個發現全部已查證·全數已修）＝＝＝ ⚠ effort:high 沒真的傳進去——主 session 的 Agent tool 只有 model 沒有 effort，設定檔那一欄由角色定義承載。主套件 858 到 875/875、test_check_bloat 101 到 113/113、變異 27 到 31/31 ＋ 2 條等價未誤判、prose 112/112。**兩個「高」都是前兩批自己引入或沒補起來的**：F-1：序位尾碼把身分綁在序位上 ⇒ 刪掉撞號組第 1 條，第 2 條遞補並**繼承前者的基準值**；合成 fixture 實跑 B 從 526 長到 626 字而 reasons/blind 皆空、exit 0 ——**R8-4 要消滅的靜默成長額度被修法自己重新製造出來**，且條目數不變時 R8-3 也不會叫。原註解只承認「歷史斷一次」，低估了一個量級。修法改成**前綴延長到唯一**（_assign_keys）：身分純由該條自己的內容決定，刪掉組裡任何一條都不會讓別條改變身分；兄弟被刪時倖存者 key 縮回 24 字而**查不到基準**——那是安全的失敗方向，不會繼承一個錯的基準值。F-2：run_guarded 的例外處理器**自己會拋例外**——它印的 ⚠ 在 cp950 編不出來 ⇒ UnicodeEncodeError 從 except 裡拋出 ⇒ 沒人接 ⇒ exit 1，而它的 docstring 寫「保證沒有任何路徑走得到 exit 1」，**它自己就是那條路徑**。修法：工具本體補 stdout/stderr 的 reconfigure（兩支測試檔早就有，本體沒有）。⚠ 這個 bug 在設了 PYTHONIOENCODING 的環境下完全看不到（本 session 就設了），那正是它沒被發現的原因；重現必須清掉該環境變數、不帶 -X utf8、stdout 導向 pipe。F-3：R8-7／R8-8 的**接線**零覆蓋——spec_from_file_location 讓 __name__ 不是 __main__，實測把 run_guarded(_cli) 改成 _cli()、only=resolve_cwd_project(…) 改成 only=None，101 條斷言全綠、27 條變異一條都沒蓋到。已補 subprocess 層 CLI 測試與兩條接線變異。F-4：only_project 的過濾放在 measure() 之前 ⇒ 被過濾的檔連量都不量 ⇒ 失明不進 blind ⇒ **別的專案失明時 exit 2 靜默變 exit 0**，而 D:\.ai-harness 正是「不屬於任何專案」的目錄。**user 拍板選「only_project 只收斂膨脹、不收斂失明」而非回退**。F-5：我上一輪的訂正自己也錯了——真正的閘門是 gen_layers.discover_projects 要 .claude/ 目錄且 SCAN_ROOTS 非遞迴，所以巢狀目錄加了 CLAUDE.md 也不會被發現，唯一入口是 harness.config.json 的 extraProjects。F-6：變異腳本分不出「斷言抓到」與「測試中途炸掉」；導入 verdict() 判收尾摘要行之後，變異 6 與 20 當場被判成「炸掉、不算抓到」。**修法不是放寬判準**，是把那兩個炸點補上守門讓回歸網不會被一處壞掉打斷。**Round 9 沒查到的**（不得當成已窮盡）：找不到任何腳本或 hook 真的讀 check_bloat 的 exit code ⇒ F-2／F-4 是契約層違反、沒有驗證到具體下游消費端；/shougong 的真實 cwd 沒追；F-1 的往返沒在活資料上驗（需要 --write-snapshot，覆核時被禁）；只在單一 Windows/cp950 機器測過；並行競態完全沒碰。**未修剩四項半**：R8-6／**R8-9 後半**（檔案被移走留成殭屍基準）／R8-10／R8-11。**仍未收斂**：Round 9 的六個修法自己沒有被覆核過，其中 _assign_keys 與「只收斂膨脹不收斂失明」改動面不小，後者更是 Round 9 沒審過的新設計。前九輪每一輪都在上一輪的修法裡找到新缺陷（Round 9 抓到的兩個高正是前一輪的產物）。下一棒：跑 Round 10；並先答「這個 exit code 到底有沒有人讀」——沒答之前別再為 exit code 的細節投人力。PR-1 下次仍會擋，那是對的。 -->

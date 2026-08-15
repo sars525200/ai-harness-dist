@@ -80,9 +80,9 @@ MUTATIONS = [
         # 錨點 2026-08-15 v15 更新：R8-4 的撞號去重把 `"key": vis[:KEY_CHARS],`
         # 改成 `"key": key,`（身分在 append 之前就算好），舊錨點從此對不到。
         "索引檔排除在 120 字判準外（覆核時的錯誤主張，MEMORY.md 檔頭寫著 ≤120）",
-        '        entries.append({\n            "key": key,',
+        '        entries.append({',
         '        if kind == "index" and vis and True:\n            continue\n'
-        '        entries.append({\n            "key": key,',
+        '        entries.append({',
     ),
     (
         "快照 key 退回扁平（跨檔同開頭條目互相遮蔽，成長永遠報不出來）",
@@ -185,24 +185,26 @@ MUTATIONS = [
 
     # ── 條目身分的撞號去重（R8-4）與寫入端的失明守門（R8-9）·2026-08-15 補 ──────
     (
-        # 退回舊行為的「後果」那一半：key 不再唯一 ⇒ 同檔內第 2 條被第 1 條蓋掉，
-        # 它的成長從此永遠報不出來。⚠ 舊實作在 `gather_current()` 會 exit 2 擋下來，
-        # 所以這個變異不只是「少一條」——它同時把該專案的 `--write-snapshot`
-        # 修復路徑一起關掉（AI-Projects 的基準就是這樣卡在 56 條而現況 112 條）。
-        "拿掉撞號去重（同檔內第 2 條沿用同一把 key → 兩條互相遮蔽，成長永遠報不出來）",
-        '        if nth > 1:\n            key = f"{key}\\u0002{nth}"',
-        '        if False:\n            key = f"{key}\\u0002{nth}"',
+        # 關掉前綴延長 ⇒ 退回**序位尾碼**（2026-08-15 第一批的做法，Round 9 F-1 推翻）。
+        # key 仍然唯一，所以只驗唯一性的斷言對它是綠的 —— 壞的是**身分綁在序位上**：
+        # 刪掉撞號組第 1 條，第 2 條遞補、拿到前者的 key、**繼承前者的基準值** ⇒
+        # 過期的高基準＝靜默成長額度，正是 R8-4 本來要消滅的那個病。
+        # 守住它的是 `[R8-4]` 段的**跨版本往返**斷言（寫基準→編輯→再 diff），
+        # 不是任何一條單一版本的靜態斷言。
+        "退回序位尾碼（身分綁序位 → 刪掉撞號組第 1 條，第 2 條繼承它的基準＝靜默成長額度）",
+        "        if pick is not None:",
+        "        if False:",
     ),
     (
-        # 守的是**零位移**那半邊：去重仍然成立（key 照樣唯一），但第 1 條也帶尾碼
-        # ⇒ 全部既有 key 一起位移 ⇒ 下一輪每一條都被報成「新增超標」，
-        # 那正是「一次全面基準重建、噪音蓋過訊號」的形狀。
-        # ⚠ **只驗「兩把 key 不同」的斷言對這個變異是綠的** —— 所以零位移必須有
-        #   自己的斷言（`de[0]["key"] == raw[0]`），不能靠唯一性順帶保證。
-        #   這也是這條變異存在的全部理由：它證明那個斷言不是多餘的。
-        "第 1 條也加尾碼（唯一性仍成立，但所有既有 key 一起位移＝全面基準重建）",
-        "        if nth > 1:",
-        "        if nth > 0:",
+        # 兩段式指派的**接線**：`key` 在 append 時是空字串，全靠掃完之後這一句
+        # 補上。漏掉它 ⇒ 全檔條目共用同一把空 key ⇒ 互相遮蔽。
+        # ⚠ 這條在補「測試炸掉 ≠ 斷言抓到」的判準之前，是被記成「紅了 ✔」的假通過：
+        #   它讓 `gather_current()` 走 `sys.exit(2)`，SystemExit 直接中斷整支測試 ⇒
+        #   後面所有斷言一條都沒跑。修法不是放寬判準，是**讓回歸網不會被一處壞掉打斷**
+        #   （那兩處已補上守門，見 test_check_bloat.py 的兩段 Round 9 F-6 註解）。
+        "不呼叫 _assign_keys（key 全是空字串 → 全檔條目互相遮蔽成同一把 key）",
+        "    _assign_keys(entries)",
+        "    pass  # _assign_keys(entries)",
     ),
     (
         # R8-9。⚠ 錨點必須帶下一行的 `# ── R8-9`：`if m["blind"]:` 在 `diff()` 與
@@ -260,10 +262,52 @@ MUTATIONS = [
         "    best_name, best_depth = GLOBAL_PROJECT, -1",
         "    best_name, best_depth = None, -1",
     ),
+
+    # ── Round 9 的三個發現：輸出編碼、接線、失明過濾 ·2026-08-15 補 ──────────────
+    (
+        # F-2。守門自己在印訊息時 UnicodeEncodeError ⇒ 例外從例外處理器裡拋出
+        # ⇒ 沒有人接 ⇒ **exit 1**，正是 run_guarded 存在要防止的那個假結論。
+        # 只在「stdout 是 pipe ＋ 無 -X utf8 ＋ 沒設 PYTHONIOENCODING」時現形。
+        "拿掉輸出編碼重設（fail-closed 守門印不出 ⚠ 而炸掉 ⇒ exit 2 變 exit 1）",
+        '        _stream.reconfigure(encoding="utf-8", errors="replace")',
+        "        pass",
+    ),
+    (
+        # F-3。`spec_from_file_location` 載入時 __name__ 不是 __main__，所以任何
+        # 單元測試都碰不到這一行 —— 補之前實測：改掉它，101 條斷言全綠。
+        "拆掉 run_guarded 接線（根層守門整個下線，任何例外恢復成 exit 1）",
+        "    run_guarded(_cli)",
+        "    _cli()",
+    ),
+    (
+        # F-3 的另一半。同樣是接線，同樣一行，同樣過去零覆蓋。
+        "拆掉 resolve_cwd_project 接線（cwd 專案判定整組回退成不過濾）",
+        "    only = resolve_cwd_project(targets)",
+        "    only = None",
+    ),
+    (
+        # F-4。把過濾移回 measure() 之前 ⇒ 被過濾掉的檔連量都不量 ⇒ 它的失明
+        # 不會進 blind ⇒ exit 2 靜默變 exit 0。這是這支工具最貴的一種錯。
+        "失明也被專案過濾吃掉（別的專案量不到時 exit 2 變 exit 0）",
+        "            blind.append(f\"{t['project']}/{t['label']}：{m['blind_why']}\")\n"
+        "            continue\n"
+        "        # ── `only_project` **只收斂膨脹判定",
+        "            if not (only_project and t[\"project\"] not in (only_project, GLOBAL_PROJECT)):\n"
+        "                blind.append(f\"{t['project']}/{t['label']}：{m['blind_why']}\")\n"
+        "            continue\n"
+        "        # ── `only_project` **只收斂膨脹判定",
+    ),
 ]
 
 # 語意等價的改動：**不該**讓測試變紅（防「測試綁死實作細節」）
 EQUIVALENT = [
+    (
+        # L == KEY_CHARS 時組內必然逐字相同（那正是「同組」的定義），
+        # set 大小恆為 1、永遠不等於 len(grp) ⇒ 一定會往下找。起點差 1 是等價的。
+        "_assign_keys 的前綴搜尋起點從 KEY_CHARS+1 改成 KEY_CHARS（同組在該長度必然全同）",
+        "        pick = next((L for L in range(KEY_CHARS + 1, longest + 1)",
+        "        pick = next((L for L in range(KEY_CHARS, longest + 1)",
+    ),
     (
         "REBOUND_PCT 從 5 改成 5.0（數值相同，型別不同）",
         "REBOUND_PCT = 5 ",
@@ -272,19 +316,41 @@ EQUIVALENT = [
 ]
 
 
-def run_tests() -> int:
+def run_tests() -> "tuple[int, str]":
     r = subprocess.run([sys.executable, "-X", "utf8", TESTS],
                        capture_output=True, text=True, encoding="utf-8")
-    return r.returncode
+    return r.returncode, (r.stdout or "") + (r.stderr or "")
+
+
+def verdict(rc: int, out: str) -> "tuple[bool, str]":
+    """把「測試紅了」拆成兩種：**斷言抓到**，還是**測試自己炸了**（Round 9 F-6）。
+
+    ⚠ 只看 `rc != 0` 分不出這兩件事。實測：變異 6 讓 `test_check_bloat.py` 在中途
+    拋 `IndexError`（`e[0]["key"]`，list 空了）⇒ 它**後面約 70 條斷言一條都沒執行**，
+    包含這幾輪新增的全部斷言。那次剛好前段先打紅了正確的 3 條，所以沒有假陽性 ——
+    **但那是運氣**：一個「只破壞後段斷言」的變異會被記成「紅了 ✔」，而它該守的那條
+    從頭到尾沒跑過。回歸網於是被讀得比實際強，而這正是變異測試存在要防的事。
+
+    判準是測試腳本的收尾摘要行在不在：`run()` 正常回來才印得出「通過 N / M」。
+    """
+    if rc == 0:
+        return False, "測試沒紅"
+    if "通過 " not in out:
+        return False, "測試**中途炸掉**（沒有收尾摘要行）—— 紅燈原因不明，不算抓到"
+    return True, f"斷言抓到 (exit {rc})"
 
 
 print("=" * 66)
 print("check_bloat 變異測試")
 print("=" * 66)
 
-base = run_tests()
+base, base_out = run_tests()
 if base != 0:
     print(f"⚠ 未變異時測試就是紅的（exit={base}）—— 先修好再跑變異，否則結果無意義。")
+    sys.exit(2)
+if "通過 " not in base_out:
+    print("⚠ 未變異時測試 exit 0 但**印不出收尾摘要行** —— 下面的 verdict() 判準"
+          "整組失效（它靠那一行分辨「斷言抓到」與「測試炸掉」）。先查測試腳本。")
     sys.exit(2)
 print("基準：未變異時測試全綠 ✔\n")
 
@@ -295,12 +361,13 @@ for i, (name, old, new) in enumerate(MUTATIONS, 1):
         fail += 1
         continue
     write(original.replace(old, new, 1))
-    rc = run_tests()
+    rc, out = run_tests()
     write(original)
-    if rc != 0:
-        print(f"變異 {i}：{name}\n   → 測試 紅了 ✔ (exit {rc})")
+    ok, why = verdict(rc, out)
+    if ok:
+        print(f"變異 {i}：{name}\n   → 測試 紅了 ✔ （{why}）")
     else:
-        print(f"變異 {i}：{name}\n   ✘ **測試沒紅** —— 回歸網對這條修法沒有保護")
+        print(f"變異 {i}：{name}\n   ✘ **{why}** —— 這條變異沒有被有效守住")
         fail += 1
 
 for i, (name, old, new) in enumerate(EQUIVALENT, 1):
@@ -309,7 +376,7 @@ for i, (name, old, new) in enumerate(EQUIVALENT, 1):
         fail += 1
         continue
     write(original.replace(old, new, 1))
-    rc = run_tests()
+    rc, out = run_tests()
     write(original)
     if rc == 0:
         print(f"等價 {i}：{name}\n   → 測試 仍綠 ✔（沒有綁死實作細節）")
