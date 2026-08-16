@@ -92,6 +92,16 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # 與 ENC-1 同一個槽位（PostToolUse＋改檔工具），理由也同一條：驗的是
+        # 「寫進去之後長什麼樣」。刻意**不掛 PreToolUse、不 BLOCK**——把一段 HTML
+        # 從 A 形狀改成 B 形狀，中途經過「暫時不平衡」是正常施工路徑，在 Pre 擋掉
+        # 會讓兩段式改法整個做不下去（誤擋成本 > 漏報，下一次寫入會再檢查一次）。
+        "id": "HTML-1",
+        "module": "html1_nesting",
+        "events": {"PostToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         "id": "R1",
         "module": "r1_default_migration",
         "events": {"PreToolUse"},
