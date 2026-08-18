@@ -60,7 +60,7 @@ BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
 ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "BUDGET-1", "PR-1", "ENC-1",
-         "HTML-1"]
+         "HTML-1", "UI-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -134,6 +134,16 @@ DESC = {
                "刻意不掛 Pre、不 BLOCK：兩段式改法中途本來就會不平衡。"
                "起因是 8/16 正式站 16 個視窗同時失效——父層 opacity:0 讓子樹不渲染、"
                "子層 pointer-events 卻還活著＝「看不見卻點得到」，而 JS 全綠、截圖也拍不到",
+    },
+    "UI-1": {
+        "badge": "8/18 新·warn", "on": "<b>PostToolUse</b> Write/Edit/MultiEdit",
+        "why": "同一條件式的兩個分支，互斥 class 家族取值不同（＝只改了其中一個分支）",
+        "tip": "**第一個讀專案設定的規則**——互斥家族清單來自 <專案>/.claude/PROJECT_CONTEXT.md 的 "
+               "ui-variant-families 區塊，讀不到就完全不出聲，核心層因此一個 class 名字都不必知道。"
+               "只認三元運算子（if/else 沒涵蓋，已知缺口）；兩分支要共用某個元件專屬 class 才比對，"
+               "否則那是兩顆不同用途的按鈕、取值本來就該不同。"
+               "起因是 8/18 節點卡的按鈕只改了一個分支，被 user 退回「你改東西改一半的嗎」——"
+               "狀態分支的差異一張截圖只照得到一種，使用者不可能幫你列全",
     },
 }
 
