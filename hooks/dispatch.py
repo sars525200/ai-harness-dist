@@ -102,6 +102,17 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # 同一個槽位、同一條理由：驗的是「寫進去之後長什麼樣」。WARN 不 BLOCK——
+        # 把兩個分支從 A 改到 B，中間必然經過「一邊改好一邊還沒改」，Pre 擋掉會讓
+        # 正常施工路徑做不下去（誤擋成本 > 漏報，下一次寫入會再檢查一次）。
+        # ⚠ 這是**第一個讀專案設定的規則**（PROJECT_CONTEXT.md 的 ui-variant-families
+        #   區塊）。核心層因此不必知道任何一個 class 名字，換部門照樣成立。
+        "id": "UI-1",
+        "module": "ui1_variant_parity",
+        "events": {"PostToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         "id": "R1",
         "module": "r1_default_migration",
         "events": {"PreToolUse"},
