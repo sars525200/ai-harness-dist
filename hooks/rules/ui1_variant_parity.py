@@ -51,7 +51,14 @@ import json
 import os
 import re
 
-from contract import allow, warn
+try:
+    from contract import allow, warn
+except ModuleNotFoundError:
+    # 直接把這支當批次掃描器跑時（見檔尾 __main__），hooks/ 不在 sys.path 上。
+    # dispatch 走 importlib 載入時走的是上面那條，不會進到這裡。
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from contract import allow, warn
 
 RULE_ID = "UI-1"
 
