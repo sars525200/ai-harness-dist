@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r3-08",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "status_paths": [],
+    "show": {},
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/ops/fail2ban-itportal.conf.jail"
+      ]
+    }
+  },
+  "name": "R3 第三條部署路徑：改 fail2ban 設定 → WARN",
+  "rule": "r3_ops_backup_scp",
+  "why": "與 r3_07 同一條路徑但不同副檔名族。判準綁 basename 前綴 `fail2ban-` 而不是副檔名，因為這族的副檔名有三種（.conf／.conf.jail／.sh）—— 綁副檔名會漏掉，而漏掉的症狀是「改了封鎖規則但攻擊照樣進得來」。",
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "fail2ban"
+  }
+}

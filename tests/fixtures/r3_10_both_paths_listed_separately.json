@@ -1,0 +1,29 @@
+{
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r3-10",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "status_paths": [],
+    "show": {},
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/ops/health_check.py",
+        "SOP_PROD/05_UI_Demo/ops/it-asset-health.service"
+      ]
+    }
+  },
+  "name": "R3 兩條路徑同時命中時，訊息必須**分開講**兩個補救動作",
+  "rule": "r3_ops_backup_scp",
+  "why": "scp 到 /srv/it-asset-backup 與 sudo cp 到 /etc 是**兩個不同的動作**。混成一段的話人只會做他先看到的那一個，而漏掉的那一半沒有任何症狀。這一條釘住訊息裡兩個編號都在。",
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "②"
+  }
+}

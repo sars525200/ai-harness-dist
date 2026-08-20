@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r3-09",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "status_paths": [],
+    "show": {},
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/ops/restore_from_gpg.sh"
+      ]
+    }
+  },
+  "name": "R3 復原腳本也走 scp 那條路 → WARN（2026-08-20 補的覆蓋缺口）",
+  "rule": "r3_ops_backup_scp",
+  "why": "`ops/backup_db.sh:58` 每天 `cp -p \"$BACKUP_ROOT/restore_from_gpg.sh\" \"$BACKUP_ROOT/RESTORE_RUNBOOK.md\" \"$dest/\"`，而 $BACKUP_ROOT 就是 /srv/it-asset-backup（同檔 L10）⇒ 這兩支與原本清單裡的四支走完全一樣的路徑，卻沒被列進去。⚠ 漏掉的後果特別難發現：復原包會裝進一份**過期的還原腳本**，而它**只有在真的要災難復原那天才會被執行** —— 平時零症狀。",
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "restore_from_gpg.sh"
+  }
+}

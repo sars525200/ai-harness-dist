@@ -1,0 +1,28 @@
+{
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r3-07",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "status_paths": [],
+    "show": {},
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/ops/it-asset-backup.timer"
+      ]
+    }
+  },
+  "name": "R3 第三條部署路徑：改 systemd unit → WARN（要 sudo cp 到 /etc 並 daemon-reload）",
+  "rule": "r3_ops_backup_scp",
+  "why": "systemd unit 的落點是 /etc/systemd/system，而 **push 與 scp 兩條路都到不了那裡** —— post-receive 只做 `git checkout -f --work-tree=/srv/it-asset` ＋ `systemctl restart it-asset`。改了 .service/.timer 再 push，live 設定一個字都沒變**而且不會報錯**。2026-08-20 之前這條路徑完全沒有守門（R3 只守 scp 那條）。證據：ops/backup_db.sh:49 從 /etc/systemd/system 備份出來、ops/restore_from_gpg.sh:153 還原回去。",
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "daemon-reload"
+  }
+}
