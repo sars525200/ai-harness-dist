@@ -146,8 +146,21 @@ def check(ctx):
         ma = _BRANCH_A.search(line)
         if not ma:
             continue
-        for j in range(i + 1, min(i + 5, len(lines))):
-            mb = _BRANCH_B.search(lines[j])
+        # ⚠ **從 `i` 開始掃，不是 `i + 1`**（2026-08-20 修）：三元寫在**同一行**
+        #   是模板字串拼 HTML 的主要形狀（本檔 docstring 自己就是這樣描述那次事故的），
+        #   而舊版只從**下一行**開始找分支 B ⇒ **同一行的三元一律漏掉**。
+        #   實測：IT 資產平台的 app.js 有 12 處 A 與 B 同行、全部被跳過；把
+        #   2026-08-18 那次真實事故的原句（`? '<button class="tn-btn btn-primary">'
+        #   : '<button class="tn-btn btn-primary-outline">'`）餵進來也是 ALLOW ——
+        #   **這條規則從上線起就沒有能力抓到它建來防的那個東西**。
+        #   它是靠 `report.py` 新增的「findings ／ applies」對照欄才現形的
+        #   （applies 185 次、findings 0 次），在那之前報表上與「規則很好所以
+        #   沒事發生」長得一模一樣。這是該形狀的**第四例**（R4／R1／DECL-1 在前）。
+        # ⚠ 同一行時只在 **A 命中之後的區段**找 B：整行搜的話，A 之前的
+        #   `{ key: '<div class="…' }` 這種物件字面值會被當成「另一個分支」。
+        for j in range(i, min(i + 5, len(lines))):
+            seg = lines[j][ma.end():] if j == i else lines[j]
+            mb = _BRANCH_B.search(seg)
             if not mb:
                 continue
             for fam in families:

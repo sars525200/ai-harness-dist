@@ -308,6 +308,7 @@ def main() -> int:
         import test_cost_panel
         import test_enc1_encoding
         import test_html1_nesting
+        import test_ui1_parity
         import test_hook_rules
         import test_mutation_anchors
         import test_dashboard_server
@@ -337,6 +338,7 @@ def main() -> int:
             (test_layer_marks.run, "分層標註覆蓋率"),
             (test_enc1_encoding.run, "ENC-1 編碼閘門"),
             (test_html1_nesting.run, "HTML-1 標籤閉合閘門"),
+            (test_ui1_parity.run, "UI-1 互斥 class 家族對稱性"),
             (test_hook_rules.run, "hook 規則表產生器"),
             (test_workflow_compliance.run, "工作流程遵循度產生器"),
             (test_todos.run, "待辦產生器"),
