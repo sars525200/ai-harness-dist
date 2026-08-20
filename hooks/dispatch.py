@@ -534,33 +534,17 @@ def _force_utf8_output() -> None:
             pass  # 編碼是呈現層，不該讓 fail-open 的 dispatch 連帶爆掉
 
 
-def _entry_probe(raw: str) -> None:
-    """【臨時診斷・2026-08-05】無條件記一行「dispatch 被呼叫了」。
-
-    要分辨的是：Stop 事件在 5 個回合裡只有 3 次落進 events log —— 是 Claude Code
-    根本沒呼叫這支，還是呼叫了但後續早退／出錯？這支在**任何解析與判定之前**寫，
-    所以只要行程被啟動就一定留下痕跡。比對方式：
-
-        probe 的 Stop 筆數 == events 的 Stop 筆數  → Claude Code 沒呼叫（問題在上游）
-        probe 的 Stop 筆數 >  events 的 Stop 筆數  → 呼叫了但 dispatch 內部沒走完
-
-    ⚠ 這是診斷碼，查清楚後移除；追蹤在 IT 專案的 PENDING_VERIFY.md。
-    整段包在 try/except：診斷絕不能讓 fail-open 的 dispatch 變成 fail-closed。
-    """
-    try:
-        import datetime
-        ev = sid = "?"
-        try:
-            d = json.loads(raw)
-            ev = d.get("hook_event_name") or "?"
-            sid = (d.get("session_id") or "?")[:8]
-        except Exception:
-            pass
-        line = f"{datetime.datetime.now():%Y-%m-%dT%H:%M:%S}\t{ev}\t{sid}\t{len(raw)}\n"
-        with open(os.path.join(STATE_DIR, "stop_probe.log"), "a", encoding="utf-8", newline="\n") as f:
-            f.write(line)
-    except Exception:
-        pass
+# 【墓碑・2026-08-20】`_entry_probe` 已移除（2026-08-05 加的臨時診斷碼）。
+#   它在任何解析之前無條件寫 state/stop_probe.log，用來分辨「Stop 沒落進 events log」是
+#   Claude Code 沒呼叫、還是呼叫了但 dispatch 沒走完。**兩件事都查完了**：8/06 定案原始疑慮
+#   是分母算錯（不是 bug）；8/20 移除前用 15 天資料做最終量測 —— 時間窗對齊後
+#   Stop 481(probe) vs 480(events)、SubagentStop 181 vs 181 ⇒ **662 次只有 1 次沒走完（0.2%）**。
+#   完整量測與判讀留在 `STOP_HOOK_MARKER_PLAN.md` §5.1。
+#   移除的另外三個理由：累積到 21,436 行／958KB（登記時 463 行／20KB）、其中 74% 是
+#   `PreToolUse`（它是為診斷 `Stop` 才存在的）、而且**沒有任何讀取端**。它還在 hot path 上，
+#   每次工具呼叫都 open+append+close 一次。
+#   ⚠ 想再加同型診斷碼前先想好**移除條件**——這支從「查清楚後移除」到真的移除隔了 14 天，
+#   期間長了 46 倍。臨時碼要嘛自帶上限，要嘛在 docstring 寫死「哪個數字出現就可以刪」。
 
 
 def main() -> int:
@@ -570,7 +554,6 @@ def main() -> int:
     raw = ""
     try:
         raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
-        _entry_probe(raw)
         payload = json.loads(raw)
         session_id = payload.get("session_id", "unknown")
         agent_id = payload.get("agent_id") or ""
