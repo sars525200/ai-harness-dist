@@ -18,6 +18,7 @@ mojibake」而繼續全綠。
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -104,10 +105,22 @@ def run_dispatch_cases() -> "tuple[int, list[str]]":
     """
     passed, failed = 0, []
 
+    # ⚠ **`STATE_DIR` 必須改指臨時目錄**（2026-08-20）：這支測試跑的是**真的**
+    # `dispatch.main()`，而它的 `_log_error()` 會把例外寫進 `STATE_DIR` 底下的
+    # `hook_errors.<session>.log`。`dispatch.STATE_DIR` 是模組層寫死常數
+    # （`dispatch.py:56`），所以在補這幾行之前，**每跑一次 `run_hook_tests.py`
+    # 就往真的 event log 加一筆**——2026-07-29 到 2026-08-20 累積 **244 筆**，
+    # 指紋 100% 相同（都是這裡餵的 `"{ 壞 payload"` 造成的 `char 2` JSONDecodeError）。
+    # 後果不是「多幾行垃圾」：`report.py` 把它印成「Hook 內部錯誤（D7）」，
+    # 於是**那個數字量到的是「回歸網被跑了幾次」，不是生產失敗數**，而兩者
+    # 在報表上長得一模一樣。抄 `test_hook_rules.py` 對 `report.STATE_DIR` 的同款做法。
+    # `_log_error()` 是在呼叫時讀模組層變數 ⇒ driver 內指派就攔得住，生產碼一行不動。
+    state_tmp = tempfile.mkdtemp(prefix="enc_state_")
     driver = (
         "import sys\n"
         f"sys.path.insert(0, r'{HOOKS_DIR}')\n"
         "import dispatch\n"
+        f"dispatch.STATE_DIR = r'{state_tmp}'\n"
         "rc = dispatch.main()\n"
         "sys.stdout.write(str(sys.stderr.encoding))\n"
         "sys.stderr.write('唯讀角色')\n"
@@ -135,6 +148,9 @@ def run_dispatch_cases() -> "tuple[int, list[str]]":
             os.unlink(driver_path)
         except OSError:
             pass
+        # 連 state_tmp 一起收掉：不收的話每跑一次就在 %TEMP% 留一個目錄，
+        # 那是把「污染真的 event log」換成「污染暫存區」，不算修好。
+        shutil.rmtree(state_tmp, ignore_errors=True)
 
     return passed, failed
 

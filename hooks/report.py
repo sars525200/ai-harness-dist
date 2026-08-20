@@ -114,8 +114,36 @@ def main() -> None:
     if not applies_count:
         print("  ⚠ 沒有任何規則的 applies() 命中過 —— 若已知這段期間有相關操作發生，")
         print("    這是規則本身（regex/matcher）沒接對的紅燈，不是「沒有誤判」的證據。")
+
+    # ── findings ／ applies 分開呈現（2026-08-20）──────────────────────────
+    #
+    # ⚠ **`applies()` 是分母不是分子**。它回答的是「這次要不要叫這條規則」，
+    #   不是「這條規則抓到什麼」。把它講成「命中次數」會讓人把分母讀成戰績 ——
+    #   2026-08-20 的稽核就差點被 R1 的「450」誤導：那 450 是 push vm 的次數，
+    #   而 R1 的真實 findings 至今是 **0**。
+    # ⚠ **「接了線但永遠 0 findings」已經是第三例**（R4 → R1 → DECL-1），
+    #   每一次都是靠人工稽核才發現的。它值得一個**常設欄位**：
+    #   分母有值而分子恆為 0，代表判準綁錯了東西（規則在跑、但它看的地方不會變），
+    #   而那與「規則很好所以沒事發生」在舊版報表上長得一模一樣。
+    nonallow_by_rule: Counter = Counter(
+        d.get("rule_id") for d in decisions if d.get("decision") != "ALLOW"
+    )
+    print(f"  {'規則':<10}{'findings':>10}{'applies':>10}   判讀")
+    dead = []
     for rule_id, n in applies_count.most_common():
-        print(f"  {rule_id} applies() 命中次數: {n}")
+        f = nonallow_by_rule.get(rule_id, 0)
+        if f == 0:
+            note = "⚠ 接了線但從未產出 findings —— 判準可能綁錯東西"
+            dead.append(rule_id)
+        else:
+            note = ""
+        print(f"  {rule_id:<10}{f:>10}{n:>10}   {note}")
+    if dead:
+        print()
+        print(f"  ⚠ 上列 {len(dead)} 條（{'、'.join(dead)}）**分母有值、分子恆為 0**。")
+        print("    這不等於「規則很好所以沒事發生」—— 兩者在這張表以外分不出來。")
+        print("    判斷方法：去找一個**已知該被抓到**的歷史樣本，看它會不會命中；")
+        print("    不會的話就是判準綁錯層（R4／R1 都是這樣查出來的）。")
 
     print()
     print("=" * 70)

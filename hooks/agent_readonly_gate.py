@@ -103,14 +103,96 @@ def _decide(command: str) -> "str | None":
         if flags & _NODE_READONLY_FLAGS:
             return None
         return "node 只允許語法檢查（node --check <file>）"
+    if head in {"py", "python", "python3", "pythonw"}:
+        return _decide_py(cmd)
     if head in {"cmp", "fc", "diff"}:
         return None
 
     return (
         f"指令 {head!r} 不在唯讀角色的白名單內。"
-        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff；"
+        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、"
+        f"py -3 <D:\\.ai-harness 底下的探測腳本>；"
         f"讀檔請用 Read／Grep／Glob 工具。"
     )
+
+
+# 只放行 harness 根底下的腳本。**由 `__file__` 推導、不寫死專案路徑**——
+# 寫死會被 U-1／F-4 去專案化閘門擋下，而那條閘門是對的：這一層要能換部門直接用。
+_PY_ALLOWED_ROOT = os.path.dirname(HOOKS_DIR).replace("\\", "/").lower().rstrip("/") + "/"
+# 這幾支腳本現有的寫入開關。⚠ **黑名單天生擋不完**——它擋的是「已知會寫檔的旗標」，
+# 真正的守門是上面那條「只放行 harness 底下的既有腳本」。新增寫入開關要同步加進來。
+_PY_WRITE_FLAGS = {"--write", "--write-snapshot", "--apply", "--force", "--fix",
+                   "--init", "--append-history", "--commit", "--publish"}
+
+
+def _decide_py(raw_command: str) -> "str | None":
+    r"""`py -3 <D:\.ai-harness 底下的 .py>`：只放行**跑既有的、在版控裡的**探測腳本。
+
+    **為什麼開這個口**（2026-08-20）：稽核類角色（`harness-auditor`／`project-auditor`／
+    `sync-checker`）的工作是**取得獨立證據**，而這套 harness 的證據幾乎全在那幾支確定性
+    腳本裡（`report.py`／`capability_checks.py`／`check_freshness.py`／
+    `gen_workflow_compliance.py --check`／`check_bloat.py`）。擋掉它們的後果不是
+    「角色慢一點」，是**稽核退化成「稽核者相信被稽核者」**——它只剩下抄主 session
+    代跑的輸出，而那正是稽核要避免的事。2026-08-18 與 08-20 各撞一次；08-20 那次
+    五支 probe 一支都沒跑到，角色只好用 Grep 手工重建腳本的一小段邏輯，
+    **三輪工具呼叫換一個腳本一行輸出就有的答案，而且拿不到總分母**。
+
+    風險等級對齊 `node --check`：跑的是**版控裡的既有檔**，改動看得見、有回歸網守著。
+    三道收窄，缺一不可：
+
+    1. **只放行 `D:\.ai-harness` 底下的 `.py`**（絕對路徑）——不放行任意路徑，
+       更不放行角色自己剛寫出來的腳本。相對路徑一律拒絕：驗不了它指到哪就是判斷不出來。
+    2. **拒絕 `-c`／`-m`**——那是「執行任意程式碼」，與「跑一支看得見的檔」是兩件事。
+       既有測試已經釘住 `py -3 -c "open('x','w').write('1')"` 必須被擋。
+    3. **拒絕寫入型旗標**（`_PY_WRITE_FLAGS` ＋任何 `--write*`）。
+    """
+    # ⚠ 在函式內 import，與 `_decide_git()` 同款：`_decide()` 那邊的 `_unquote` 是
+    #   **它自己的區域名稱**，這裡看不到（`feedback-closure-scope-leak` 那條的形狀，
+    #   而且它是執行期才炸，靜態看兩個函式都很正常）。
+    import shlex
+
+    from contract import _unquote
+
+    # ⚠ **不能用 `_decide()` 那批 token 做路徑判定**（2026-08-20 實測）：
+    #   `contract._tokenize()` 先試 `shlex.split(posix=True)`，而 **posix 模式把 `\`
+    #   當跳脫字元** ⇒ `D:\.ai-harness\hooks\report.py` 被拆成
+    #   `D:.ai-harnesshooksreport.py`，路徑判定必然誤判成「不在 harness 底下」。
+    #   這個 bug 是**既有的**，只是在此之前沒有任何規則按「路徑落在哪」判定，
+    #   所以一直沒現形（既有測試的路徑全是正斜線）。這裡改用 non-posix 重拆一次：
+    #   Windows 上 `\` 是路徑分隔字元不是跳脫字元。
+    #   ⚠ 不去改 `contract._tokenize()`：那支被所有規則共用，它 posix-first 的取捨
+    #     在自己的 docstring 裡有理由，動它的影響面遠大於這裡。
+    try:
+        toks = shlex.split(raw_command, posix=False)
+    except ValueError:
+        return "指令拆不出 token —— 判斷不出形狀就不放行"
+    if not toks:
+        return "空指令"
+
+    args = [_unquote(t) for t in toks[1:]]
+
+    scripts = []
+    for a in args:
+        low = a.lower()
+        if low in {"-c", "-m"}:
+            return ("py/python 的 -c／-m 是執行任意程式碼，不在唯讀白名單內"
+                    "（放行的是「跑一支看得見的既有腳本」，不是「跑一段字串」）。")
+        if low.startswith("--write") or low in _PY_WRITE_FLAGS:
+            return (f"參數 {a!r} 會讓腳本寫檔——唯讀角色只能跑不帶寫入開關的形狀。"
+                    f"要寫請回報給主 session 代跑。")
+        if low.endswith(".py"):
+            scripts.append(a)
+
+    if not scripts:
+        return ("py/python 只放行「跑一支 .py 檔」的形狀，這條指令裡看不到 .py 檔。")
+
+    for s in scripts:
+        norm = s.replace("\\", "/").lower()
+        if not norm.startswith(_PY_ALLOWED_ROOT):
+            return (f"腳本 {s!r} 不在 D:\\.ai-harness 底下——唯讀角色只能跑那裡的既有探測"
+                    f"腳本（在版控裡、有回歸網守著）。相對路徑也一律不放行："
+                    f"驗不了它指到哪，就是判斷不出來。")
+    return None
 
 
 def _decide_git(tokens: list) -> "str | None":

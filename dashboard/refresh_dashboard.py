@@ -15,11 +15,13 @@ r"""看板一鍵重生：來源變了就重跑所有產生器，沒變就秒退�
 
 ## 這支不做的事
 
-**它不發布 artifact。** 發布只能由 Claude 呼叫 Artifact 工具完成，腳本做不到 ——
-所以它的產出是「HTML 檔已是最新」＋「要不要重新發布」的判定，
-把發布那一步留給人／Claude 決定。硬要腳本假裝能發布只會製造「以為發布了」的假象。
+**看板不對外發布**（2026-08-06 起 user 定：完全不對外）。本機服務
+`http://127.0.0.1:8099/` 直接吐 `dashboard/harness-dashboard.html`，檔案一變就自動
+重載 —— **沒有「發布」這個步驟**，所以這支腳本重生完就結束，沒有下一棒。
+⚠ 本檔到 2026-08-20 為止一直寫著「發布需要 Claude 呼叫 Artifact 工具」，
+那是改成本機服務之前的遺留；照著做的人會去產生一個不該存在的對外頁面。
 
-exit code：0 = 沒事或已重生成功　1 = 重生後驗證失敗（HTML 可能壞了，別發布）
+exit code：0 = 沒事或已重生成功　1 = 重生後驗證失敗（HTML 可能壞了，本機服務會直接吐它）
 
 【核心層】重生編排，與各產生器產出什麼無關。
 """
@@ -248,14 +250,14 @@ def main() -> int:
             line = out.strip().splitlines()[-1] if out.strip() else ""
             if rc != 0:
                 print(f"✘ {label} 產生失敗（exit {rc}）：{line}")
-                print("  HTML 可能處於半殘狀態，**先別發布**。")
+                print("  HTML 可能處於半殘狀態，**本機服務會直接吐這份半殘的檔**。")
                 return 1
             if not quiet:
                 print(f"✔ {label}：{line}")
 
         rc, out = run(VERIFIER)
         if rc != 0:
-            print("✘ 重生後結構驗證失敗，**先別發布**：")
+            print("✘ 重生後結構驗證失敗（本機服務仍會吐這份檔）：")
             for ln in out.splitlines():
                 if ln.strip().startswith("- ") or "FAIL" in ln:
                     print("  " + ln.strip())
@@ -271,8 +273,8 @@ def main() -> int:
         release_lock()
 
     print()
-    print("HTML 已是最新。**發布需要 Claude 呼叫 Artifact 工具**（腳本做不到）：")
-    print("  重新發布同一個 URL 即可，內容取自 dashboard\\harness-dashboard.html")
+    print("HTML 已是最新。**本機服務會自動重載，不必也不能「發布」**：")
+    print("  直接開 http://127.0.0.1:8099/ 即可（內容就是 dashboard\\harness-dashboard.html）")
     return 0
 
 

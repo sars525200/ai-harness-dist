@@ -1,5 +1,10 @@
-"""看板新鮮度檢查：比對 dashboard/snapshot.json（上次發布看板時記下的數字）與現在
-的即時數字，判斷「Harness 全景」看板（claude.ai Artifact）是不是該重新編輯發布。
+"""看板新鮮度檢查：比對 dashboard/snapshot.json（上次寫回基準時記下的數字）與現在
+的即時數字，判斷「Harness 全景」看板是不是該重新產生。
+
+⚠ **看板不對外發布**（2026-08-06 起 user 定：完全不對外）。它由本機服務
+`http://127.0.0.1:8099/` 直接吐 `dashboard/harness-dashboard.html`，檔案一變就自動
+重載 —— **沒有「發布」這個步驟**。本檔曾經一路寫著「重新編輯發布」「用 Artifact 工具
+帶 url 重新發布」，而照著做的人會去產生一個不該存在的對外頁面。
 
     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py
 
@@ -21,7 +26,7 @@ exit code：0 = 無需更新　1 = 建議更新（stdout 印出具體差異，�
 3/4 只當「有東西變了，該去看一眼」的觸發器，不假裝能自動生出跟原作者一樣品質的
 清冊敘述——那部分仍需要人（或我）讀內容判斷怎麼寫。
 
-【核心層】判斷看板該不該重新發布，與看板內容無關。
+【核心層】判斷看板該不該重新產生，與看板內容無關。
 """
 from __future__ import annotations
 
@@ -152,7 +157,7 @@ def main() -> None:
     reasons = diff(load_snapshot(), current)
 
     if not reasons:
-        print("看板無需更新——規則數／would-block／skill 與 tool 原始檔案數都跟上次發布時一致。")
+        print("看板無需更新——規則數／would-block／skill 與 tool 原始檔案數都跟上次寫回基準時一致。")
         sys.exit(0)
 
     print("看板建議更新，偵測到以下差異：")
@@ -168,7 +173,7 @@ def main() -> None:
         print("     py -3 D:\\.ai-harness\\dashboard\\gen_hook_rules.py")
     print("  ② 其餘差異（skill／tool 原始檔案數等）→ 讀 dashboard/harness-dashboard.html")
     print("     編輯對應分頁（那些還是手寫的）。")
-    print("  ③ 用 Artifact 工具帶 url 重新發布，發布後跑：")
+    print("  ③ 確認本機服務已重載（http://127.0.0.1:8099/ 會自動重讀），然後跑：")
     print("     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
     print("     把這次的數字寫回 snapshot.json（別忘了 commit）。")
     sys.exit(1)

@@ -28,6 +28,32 @@ CASES = [
     ('node --check "d:/IT-department/SOP/05_UI_Demo/app.js"', True,
      "CLAUDE.md §6 要求兩端都跑 node --check"),
     ("node -c app.js", True, "--check 的短旗標"),
+
+    # ── 該放行：稽核類角色要拿獨立證據的探測腳本（2026-08-20 開的口）────
+    #    擋掉它們的後果不是「角色慢一點」，是稽核退化成「稽核者相信被稽核者」。
+    (r"py -3 -X utf8 D:\.ai-harness\hooks\report.py", True,
+     "接線心跳與 would-block —— 稽核的主要證據來源"),
+    (r"py -3 D:\.ai-harness\dashboard\capability_checks.py", True,
+     "八大類 N/M，不帶 -X utf8 也該放行"),
+    (r"py -3 -X utf8 D:\.ai-harness\dashboard\gen_workflow_compliance.py --check", True,
+     "--check 是唯讀旗標"),
+    ("py -3 -X utf8 d:/.ai-harness/rulefile/check_bloat.py", True,
+     "正斜線與小寫磁碟機代號要正規化後才比對"),
+
+    # ── 該擋：py 的三道收窄 ─────────────────────────────────────────
+    (r"py -3 D:\.ai-harness\rulefile\check_bloat.py --write-snapshot --project X", False,
+     "**寫入型旗標**：這支會覆寫基準"),
+    (r"py -3 D:\.ai-harness\dashboard\check_freshness.py --write-snapshot", False,
+     "同上，另一支的寫入開關"),
+    (r"py -3 D:\.ai-harness\dashboard\gen_layers.py --init", False,
+     "--init 會建立設定檔"),
+    (r"py -3 D:\IT-department\SOP_PROD\05_UI_Demo\db\formal_excel_tools.py", False,
+     "**不在 harness 底下**：那是會動正式資料的腳本"),
+    ("py -3 some_script.py", False, "相對路徑驗不了指到哪 —— fail-closed"),
+    (r"py -3 -m pip install x", False, "-m 是執行任意模組"),
+    (r"py -3 D:\.ai-harness\hooks\report.py -c \"x\"", False,
+     "混進 -c 也要擋（不是只看第一個參數）"),
+    ("py -3", False, "沒有 .py 檔就不是「跑一支腳本」的形狀"),
     ("cmp -s a.js b.js", True, "逐位元組比對"),
     ("GIT.EXE diff", True, "大小寫與 .exe 後綴不該影響判定"),
 
