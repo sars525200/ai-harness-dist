@@ -1,0 +1,27 @@
+{
+  "name": "R1 多行物件字面值的**內部欄位**被改 → WARN（4 筆真實事故的形狀）",
+  "rule": "r1_default_migration",
+  "why": "CLAUDE.md §8 記載的 4 筆真實事故全部是這個形狀：宣告行一個字都沒變，改的是多行物件裡的欄位。2026-08-20 之前 R1 只比對宣告那一行 ⇒ findings 恆空，applies() 累積 456 次而一次都沒抓到。既有的 r1_01 用的是單行純量，而那一類在 app.js 完整歷史裡是零樣本 —— 六個 fixture 全綠而規則什麼都抓不到。這一條就是那個缺口。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": { "command": "git push vm master" },
+    "session_id": "fixture-r1-07",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": ["SOP_PROD/05_UI_Demo/app.js"]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_SPEC_RULES = {\n  cpu: { i3: 4, i5: 8 },\n  ram: { min: 8 },\n};\nfunction getRules(saved) { return Object.assign({}, DEFAULT_SPEC_RULES, saved); }\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_SPEC_RULES = {\n  cpu: { i3: 6, i5: 8 },\n  ram: { min: 8 },\n};\nfunction getRules(saved) { return Object.assign({}, DEFAULT_SPEC_RULES, saved); }\n"
+    }
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "DEFAULT_SPEC_RULES"
+  }
+}

@@ -1,37 +1,40 @@
 {
- "rules": {
-  "DB-1": {
-   "shadow": false
-  },
-  "R4": {
-   "shadow": false
-  },
-  "AWC-1": {
-   "shadow": false
-  },
-  "R1": {
-   "shadow": false
-  },
-  "R3": {
-   "shadow": false
-  },
-  "ENC-1": {
-   "shadow": false
-  },
-  "HTML-1": {
-   "shadow": false
-  },
-  "PR-1": {
-   "shadow": false
-  },
-  "BUDGET-1": {
-   "shadow": false
-  },
-  "DECL-1": {
-   "shadow": false
-  },
-  "DISP-1": {
-   "shadow": false
+  "rules": {
+    "DB-1": {
+      "shadow": false
+    },
+    "R4": {
+      "shadow": false
+    },
+    "AWC-1": {
+      "shadow": false
+    },
+    "R1": {
+      "shadow": false
+    },
+    "R3": {
+      "shadow": false
+    },
+    "ENC-1": {
+      "shadow": false
+    },
+    "HTML-1": {
+      "shadow": false
+    },
+    "PR-1": {
+      "shadow": false
+    },
+    "BUDGET-1": {
+      "shadow": false
+    },
+    "DECL-1": {
+      "shadow": false
+    },
+    "DISP-1": {
+      "shadow": false
+    },
+    "UI-1": {
+      "shadow": false
+    }
   }
- }
 }

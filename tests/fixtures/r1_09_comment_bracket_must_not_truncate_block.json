@@ -1,0 +1,31 @@
+{
+  "name": "R1 區塊裡的**行註解含不平衡括號**時不得截斷區塊 → 後面的欄位改動仍要 WARN",
+  "rule": "r1_default_migration",
+  "why": "括號深度若把註解裡的 `}` 算進去，區塊會在註解那一行提早結束 —— 於是**註解之後的欄位改動整段落在區塊外**，判定變成 ALLOW。這種失效方向比誤報更危險：它讓規則對「常數表下半段的改動」靜默失明，而上半段照樣抓得到，所以人會以為規則在運作。⚠ 被改的欄位刻意放在註解**之後**：放在之前的話，截斷後新舊兩份仍然一樣、照樣 ALLOW，那個 fixture 對這個變異沒有鑑別力（r1_08 就是那種情形）。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r1-09",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_C = {\n  // 注意：物件用 } 收尾\n  n: 1,\n};\nfunction get(saved) { return Object.assign({}, DEFAULT_C, saved); }\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_C = {\n  // 注意：物件用 } 收尾\n  n: 2,\n};\nfunction get(saved) { return Object.assign({}, DEFAULT_C, saved); }\n"
+    }
+  },
+  "expect": {
+    "decision": "WARN",
+    "message_contains": "DEFAULT_C"
+  }
+}

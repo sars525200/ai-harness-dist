@@ -1,0 +1,30 @@
+{
+  "name": "R1 區塊邊界：改動落在**下一個常數**時，不得算到前一個頭上 → ALLOW",
+  "rule": "r1_default_migration",
+  "why": "「取整個賦值區塊」的做法靠括號深度找結尾。深度算錯（例如被字串裡的括號騙過去）會讓區塊一路吃到檔尾，於是**檔案裡任何一處改動都會被算成第一個 DEFAULT_ 變了** —— 那不是多報一條，是規則失真成「只要動這個檔就出聲」，而 WARN 疲勞會讓整條被無視。這一條釘住邊界：DEFAULT_A 的值一字未改、只有 DEFAULT_B 在變，且 B 是新增的（新增不是遷移案例，見 r1_04）⇒ 必須 ALLOW。物件裡刻意放**括號不平衡的字串**當誘餌（`'左括號 { 開頭'`）：平衡的括號拿掉字串跳過也不會壞，那種誘餌對「_depth_delta 不再跳過字串」這個變異沒有鑑別力（第一版就是寫成平衡的）。",
+  "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "PowerShell",
+    "tool_input": {
+      "command": "git push vm master"
+    },
+    "session_id": "fixture-r1-08",
+    "cwd": "D:\\IT-department"
+  },
+  "git": {
+    "remote_ref": "vm/master",
+    "diff_names": {
+      "vm/master..HEAD": [
+        "SOP_PROD/05_UI_Demo/app.js"
+      ]
+    },
+    "status_paths": [],
+    "show": {
+      "vm/master:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_A = {\n  label: '左括號 { 開頭',\n  n: 1,\n};\nconst other = 1;\n",
+      "HEAD:SOP_PROD/05_UI_Demo/app.js": "const DEFAULT_A = {\n  label: '左括號 { 開頭',\n  n: 1,\n};\nconst other = 1;\nconst DEFAULT_B = {\n  n: 2,\n};\n"
+    }
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}
