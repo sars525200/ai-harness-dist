@@ -197,6 +197,60 @@ def _p_skills():
     return n > 0, f"{n} 支 skill（含流程執行器／唯讀報告／參考資料三型）"
 
 
+def _p_external_skills_pinned():
+    r"""外部 skill 沒有被 `npx skills update` 掉包。
+
+    兩件事一起驗，因為它們是同一個失效的兩半，而且**都是靜默的**：
+
+      1. **儲存形態**：`<harness>\skills\*` 必須是**實體資料夾**。`skills update` 不保留
+         安裝時的 `--copy`，會把資料夾換成指向 `~\.agents\skills\` 的 junction ——
+         內容就此離開 harness 這個 git repo，不再跨機器同步。畫面上只印一行
+         `✓ Updated <name>`，不會有任何字提到儲存形態被換掉。
+      2. **管轄範圍**：`~\.agents\.skill-lock.json` 的 `skills` 必須是空的。留在裡面的
+         entry 就是 update 的射程；2026-08-21 實測，把 entry 清空之後 `update` 回
+         「No installed skills found matching」、`update -y` 回「No global skills tracked」，
+         全樹 sha256 前後一致。**清單裡還會留著已經被刪掉的 skill**（當時是
+         `setup-matt-pocock-skills`），下次 update 有機會把它裝回來。
+
+    為什麼要當成能力檢查而不是收工提醒：這兩者發生時都不報錯、不留痕，
+    等到有人發現「skill 怎麼不見了／改動怎麼沒了」已經隔了好幾天。
+    設計出處 `SKILL_IMPORT_WAYFINDER_PLAN.md` §13.2。
+    """
+    gskills = HARNESS / "skills"
+    if not gskills.is_dir():
+        return False, f"找不到 {gskills}"
+
+    junctions = []
+    for d in sorted(gskills.iterdir()):
+        if not d.is_dir():
+            continue
+        # junction／symlink 都算被掉包：實體資料夾兩者皆 False
+        if d.is_symlink() or os.path.islink(str(d)):
+            junctions.append(d.name)
+            continue
+        try:
+            if d.resolve() != d:
+                junctions.append(d.name)
+        except OSError:
+            pass
+
+    lock = Path(os.path.expanduser("~")) / ".agents" / ".skill-lock.json"
+    tracked = []
+    if lock.is_file():
+        data = _json(lock) or {}
+        tracked = sorted((data.get("skills") or {}).keys())
+
+    total = sum(1 for d in gskills.iterdir() if d.is_dir())
+    problems = []
+    if junctions:
+        problems.append(f"{len(junctions)} 個已變成 junction（{'、'.join(junctions)}）")
+    if tracked:
+        problems.append(f"lock 仍管轄 {len(tracked)} 支（{'、'.join(tracked)}）")
+    if problems:
+        return False, "；".join(problems) + " —— update 會靜默覆寫本地修改並掉包儲存形態"
+    return True, f"{total} 支全為實體資料夾，lock 未管轄任何一支（update 搆不到）"
+
+
 def _p_model_routing():
     # 2026-08-07 修：原本是 `"§7" in _read(CLAUDE_MD)`——兩個病疊在一起，
     # 跟 `_p_mode_routing` 上方註解記的是同一個形狀：
@@ -524,6 +578,7 @@ CATEGORIES = [
         "items": [
             ("modes", "任務模式路由（含升級安全閥）", "auto", _p_mode_routing),
             ("skills", "skill 清冊", "auto", _p_skills),
+            ("extskills", "外部 skill 未被 update 掉包", "auto", _p_external_skills_pinned),
             ("model", "模型分級路由", "auto", _p_model_routing),
             ("agents", "自建角色", "auto", _p_agents),
             ("workflow", "多 agent workflow 編排", "auto", _p_workflow),

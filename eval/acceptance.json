@@ -1,4 +1,10 @@
 {
+  "domain-modeling": {
+    "file_mtime": 1787290294.7827032,
+    "note": "2026-08-21 實跑：從 junction 正常載入；套用其紀律稽核剛建的 root CONTEXT.md，抓到兩個真缺陷——①違反「glossary and nothing else」(混入 DEV/PROD 路徑、?v= 流程、gate 點數、待補清單)②從未做 Cross-reference with code。對程式碼查證後 app.js:13209 確認 division=部門/department=課，且 app.js:2567 揭露 division 是由課反查補回的衍生值(詞彙表原本沒寫)。CONTEXT.md 已重寫為純詞彙表，待補清單搬進 SKILL_IMPORT_WAYFINDER_PLAN §13。",
+    "result": "pass",
+    "verified_at": "2026-08-21T17:20:40"
+  },
   "license-rules": {
     "file_mtime": 1785210169.0737507,
     "note": "2026-07-28 本 session 實際載入，參考型 skill 載入即完成",
