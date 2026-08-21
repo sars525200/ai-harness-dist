@@ -420,8 +420,39 @@ def _p_decision_log():
 
 
 def _p_freshness():
-    p = HARNESS / "dashboard" / "check_freshness.py"
-    return p.exists(), "看板新鮮度檢查（比對 snapshot 與即時數字，抓「有新故事該講」）"
+    """驗「新鮮度偵測器**還活著**」，不驗「看板新不新鮮」。
+
+    2026-08-22 稽核前是 `return p.exists(), ...` —— 只看檔案在不在。而那一刻
+    `check_freshness.py` 自己 **exit 1、已經紅了 8 天**，這裡照印 ✔。
+    「檔案存在即綠」在本檔共 5 支，這是唯一一支有現場假綠證據的。
+
+    ⚠ 但**也不能改成「跑一次看 exit code」**（覆核 F3-4）：那支的 exit 1 語意是
+    **「建議更新」**，而 would-block 計數每個 session 都在漲 ⇒ 會變成構造上恆紅，
+    跑完 `/shougong` 轉綠、下一個 session 第一次 hook 命中就轉回紅。
+    而且那會把**能力表**和**待辦提醒**混成一件事：「看板過期了」是 `TODOS.md`／
+    `/shougong` 的職責，不是一個能力維度。
+
+    折衷＝驗它**還有基準可比**：腳本在 ＋ snapshot 解析得動 ＋ 帶得動判定要用的鍵。
+    snapshot 不見或壞掉時 `check_freshness` 自己會 `sys.exit(2)`（＝失去基準，
+    與「建議更新」是兩件事）——這條就是在能力表這一層提前抓它。
+    """
+    script = HARNESS / "dashboard" / "check_freshness.py"
+    if not script.exists():
+        return False, "找不到 check_freshness.py —— 沒有新鮮度偵測器"
+    snap = HARNESS / "dashboard" / "snapshot.json"
+    data = _json(snap)
+    if not isinstance(data, dict):
+        return False, ("snapshot.json 不存在或解析失敗 —— 偵測器失去比對基準"
+                       "（check_freshness 遇到這個狀況會 exit 2）")
+    # 綁「判定要用到的鍵」而不是綁鍵的總數：舊格式的快照解析得動但比不出差異，
+    # 那種「能讀但沒用」正是最難發現的一種壞法。
+    missing = [k for k in ("rule_ids", "would_block", "skill_count") if k not in data]
+    if missing:
+        return False, (f"snapshot.json 缺 {'／'.join(missing)} —— 舊格式，"
+                       "偵測器讀得動但比不出差異")
+    return True, (f"新鮮度偵測器在，且有可比基準（snapshot 記錄 "
+                  f"{len(data['rule_ids'])} 條規則）；**看板當下新不新鮮是待辦不是能力**，"
+                  "跑 check_freshness.py 看 exit code")
 
 
 def _p_progress_generated():
@@ -746,9 +777,16 @@ def evaluate() -> list:
             items.append(item)
         have = sum(1 for i in items if i["ok"])
         waived = sum(1 for i in items if i["kind"] == "waived")
+        # `waived_ok`＝已知不做**但實際上做到了**的項數。2026-08-22 覆核抓到的算術缺陷：
+        # 「實作面」的分子用 `have`（不分 kind）、分母卻是 `total - waived` ⇒ 一個 waived 項
+        # 變綠會讓分子 +1 而分母不動，實作面直接印成 100%。目前六個 waived 全部寫死
+        # `return False` 所以看不出來，**第一個帶活 probe 的 waived 項就會踩到**。
+        # 修法刻意取最小的那個：只加一個鍵，`have`／`total` 一個字不動 ——
+        # 它們的語意下游 `gen_progress_chart.py` 綁著（見本函式 docstring）。
+        waived_ok = sum(1 for i in items if i["kind"] == "waived" and i["ok"])
         out.append({"key": cat["key"], "name": cat["name"], "note": cat["note"],
                     "items": items, "have": have, "total": len(items),
-                    "waived": waived})
+                    "waived": waived, "waived_ok": waived_ok})
     return out
 
 
@@ -760,11 +798,25 @@ def main() -> None:
     total_have = sum(c["have"] for c in result)
     total_all = sum(c["total"] for c in result)
     total_waived = sum(c.get("waived", 0) for c in result)
+    total_waived_ok = sum(c.get("waived_ok", 0) for c in result)
     # **一個數字扛不了兩件事**：「有多少」和「刻意不要多少」。
     # 只印 N/M 會讓評估過的決定看起來像沒做完；只印實作面又會讓缺口從畫面上消失。
-    head = f"六大類能力檢查：{total_have} / {total_all} 項已具備"
+    # ⚠ 實作面的**分子要扣掉 `waived_ok`**，否則 waived 項變綠時分子 +1、分母不動 ⇒ 印成 100%。
+    # 類別數用 `len(CATEGORIES)` 算：原本寫死「六大類」，而 2026-07-30 早就擴成 8 類 ——
+    # **標籤本身錯了快一個月而沒有任何東西會叫**（同 §4.5.1，順手根治不留第二個要維護的數字）。
+    head = f"{len(CATEGORIES)} 大類能力檢查：{total_have} / {total_all} 項已具備"
     if total_waived:
-        head += f"（其中 {total_waived} 項為已知不做 → 實作面 {total_have} / {total_all - total_waived}）"
+        head += (f"（其中 {total_waived} 項為已知不做 → 實作面 "
+                 f"{total_have - total_waived_ok} / {total_all - total_waived}）")
+    if total_waived_ok:
+        # 扣掉分子是對的（它不在「我們正在做的事」那個分母裡），但**不能就這樣算了**：
+        # 一個標成「已知不做」的能力真的做到了，是要人回頭改分類的訊號，不是一個沉默的 0。
+        # 沒有這一句的話，分數不動＝畫面上完全看不出發生過什麼。
+        names = [i["label"] for c in result for i in c["items"]
+                 if i["kind"] == "waived" and i["ok"]]
+        head += (f"\n⚠ 有 {total_waived_ok} 項標成「已知不做」卻已具備："
+                 f"{'／'.join(names)} —— 請回頭把它從 waived 改回 auto，"
+                 f"否則它做到了也不會反映在分數上")
     print(head + "\n")
     for c in result:
         tail = f"（{c['note']}）"
