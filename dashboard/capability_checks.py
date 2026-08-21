@@ -9,13 +9,20 @@
 「Sandbox 要做到什麼程度才算 100%」沒有答案 —— 能力維度沒有終點，硬畫進度條會讀成假的。
 所以這裡不評分，改成**逐項可查證的具體能力**：有就是有，沒有就是沒有，比例是數出來的。
 
-## kind 的兩種值，差別很重要
+## kind 的三種值，差別很重要
 
     auto   —— 由 probe 讀實際狀態判定（檔案、設定、event log）。**改了程式狀態就會變**，
               這是它的價值：文件會過期，probe 不會。
     manual —— 無法自動判定，狀態寫死在這裡，**且必須註明依據**。
               每一條 manual 都是一筆技術債：它會過期而沒人知道。加 manual 之前先想
               能不能寫成 probe。
+    waived —— **評估過、決定不做**的能力。狀態同樣寫死，但語意跟 manual 不同：
+              manual 是「量不到」，waived 是「不打算做」。必須在 `_WAIVED_META`
+              登記 `reopen_when`（一句可檢查的重評條件）。
+
+    ⚠ **寫死的 `return False` 不准掛 `auto`**（2026-08-22 稽核抓到六條）。掛 auto 等於
+      躲在「probe 會自動反映現實」的假設底下：真的做了 worktree 隔離、分數也不會動，
+      而三個月後沒人分得出「刻意不做」和「忘了」。
 
 ## 誰維護這份清單
 
@@ -51,6 +58,11 @@ SKILLS_DIR = IT_DEPT / ".claude" / "skills"
 RULES_DIR = IT_DEPT / ".claude" / "rules"
 SETTINGS = IT_DEPT / ".claude" / "settings.json"
 SETTINGS_LOCAL = IT_DEPT / ".claude" / "settings.local.json"
+# **權限的生效範圍是三層聯集**，不是任何單一檔案。2026-08-22 稽核抓到：
+# `_p_deny_symmetric` 只讀專案 `settings.json`（9／9）就判 ✔，而全域那份是
+# Bash 13／PowerShell 11 —— `git filter-branch` 在 PowerShell 側完全沒有守門，
+# 看板卻顯示「對稱 ✔」。**假 ✔ 比 ✘ 危險，✘ 至少會被看見。**
+GLOBAL_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 
 # ── 小工具：所有 probe 都必須 fail-safe。讀不到檔案要回「否＋說明」，
@@ -139,14 +151,60 @@ def _p_allow_converged():
     return 0 < n <= 150, f"allow {n} 條（7/29 由 187 收斂）"
 
 
+# 刻意單邊的 deny：兩個 shell 對**同一件危險事**的慣用寫法本來就不同，
+# 字面核心永遠不會相等。列在這裡＝已經想過並各自守住了，不是漏掉。
+# 加東西進來之前先問：真的是「寫法不同」，還是「另一側其實沒守」？
+_SHELL_SPECIFIC_DENY = {
+    # 砍根目錄：POSIX 的根是 `/`、Windows 的根是 `C:\`，各用各的慣用命令。
+    # PowerShell 側要兩條：`rm` 是 `Remove-Item` 的**別名**，只擋 Remove-Item
+    # 擋不到 `rm -Recurse -Force C:\`（2026-08-22 稽核發現的實際破口）。
+    r"rm -rf /:*",
+    "Remove-Item -Recurse -Force C:\\:*",
+    "rm -Recurse -Force C:\\:*",
+}
+
+
+def _deny_core(entry: str) -> tuple[str, str] | None:
+    """`Bash(git push -f:*)` → `("Bash", "git push -f:*")`；不是這兩種工具就回 None。"""
+    for tool in ("Bash", "PowerShell"):
+        if entry.startswith(f"{tool}(") and entry.endswith(")"):
+            return tool, entry[len(tool) + 1:-1]
+    return None
+
+
 def _p_deny_symmetric():
-    cfg = _json(SETTINGS) or {}
-    deny = (cfg.get("permissions") or {}).get("deny") or []
-    bash = [d for d in deny if d.startswith("Bash(")]
-    ps = [d for d in deny if d.startswith("PowerShell(")]
-    ok = bool(bash) and len(bash) == len(ps)
-    return ok, f"deny {len(deny)} 條：Bash {len(bash)}／PowerShell {len(ps)}" + (
-        "" if ok else " —— 不對稱，deny 綁工具名，缺的那側形同沒設")
+    """比「指令核心」的集合差集，不比兩側的條數。
+
+    2026-08-22 稽核前是 `len(bash) == len(ps)`。比條數有兩個病：
+    ① 隨便補兩條無關的 PowerShell 規則就會變綠 —— 而「補了但補錯」正是這條
+       probe 該抓的東西；② 綠燈時講不出「對稱在哪」，紅燈時講不出「缺哪一條」。
+    比核心才能讓 evidence 直接照著補，也才擋得住「湊數量」。
+    """
+    deny, seen = [], set()
+    for path in (SETTINGS, SETTINGS_LOCAL, GLOBAL_SETTINGS):
+        for entry in ((_json(path) or {}).get("permissions") or {}).get("deny") or []:
+            if entry not in seen:
+                seen.add(entry)
+                deny.append(entry)
+
+    sides: dict[str, set] = {"Bash": set(), "PowerShell": set()}
+    for entry in deny:
+        parsed = _deny_core(entry)
+        if parsed:
+            sides[parsed[0]].add(parsed[1])
+    bash, ps = sides["Bash"], sides["PowerShell"]
+    if not bash:
+        return False, "三層 settings 都讀不到任何 Bash deny —— 判斷不出來，不當成通過"
+
+    missing = ([f"PowerShell 缺 `{c}`" for c in sorted(bash - ps - _SHELL_SPECIFIC_DENY)]
+               + [f"Bash 缺 `{c}`" for c in sorted(ps - bash - _SHELL_SPECIFIC_DENY)])
+    waived = len((bash | ps) & _SHELL_SPECIFIC_DENY)
+    head = f"deny {len(deny)} 條（專案＋local＋全域聯集）"
+    if missing:
+        return False, (f"{head}：{'；'.join(missing)}"
+                       " —— deny 綁工具名，缺的那側形同沒設")
+    return True, (f"{head}：Bash {len(bash)}／PowerShell {len(ps)}，指令核心對稱"
+                  f"（另 {waived} 條為刻意單邊：兩 shell 寫法不同，各自已守）")
 
 
 def _p_ops_scripts():
@@ -561,7 +619,7 @@ CATEGORIES = [
             ("allow", "allow 白名單已收斂", "auto", _p_allow_converged),
             ("deny", "deny 對稱覆蓋 Bash／PowerShell", "auto", _p_deny_symmetric),
             ("ops", "自建維運／診斷腳本", "auto", _p_ops_scripts),
-            ("mcp", "MCP 連接器已授權", "auto", _p_mcp_authorized),
+            ("mcp", "MCP 連接器已授權", "waived", _p_mcp_authorized),
         ],
     },
     {
@@ -569,8 +627,8 @@ CATEGORIES = [
         "items": [
             ("agent_tools", "subagent 有 tools 能力邊界", "auto", _p_agent_tool_boundary),
             ("agent_gate", "agent-scoped hook 收窄工具", "auto", _p_agent_scoped_gate),
-            ("main", "主 session 有隔離", "auto", _p_main_session_isolated),
-            ("worktree", "worktree／容器隔離已使用", "auto", _p_worktree_isolation),
+            ("main", "主 session 有隔離", "waived", _p_main_session_isolated),
+            ("worktree", "worktree／容器隔離已使用", "waived", _p_worktree_isolation),
         ],
     },
     {
@@ -581,7 +639,7 @@ CATEGORIES = [
             ("extskills", "外部 skill 未被 update 掉包", "auto", _p_external_skills_pinned),
             ("model", "模型分級路由", "auto", _p_model_routing),
             ("agents", "自建角色", "auto", _p_agents),
-            ("workflow", "多 agent workflow 編排", "auto", _p_workflow),
+            ("workflow", "多 agent workflow 編排", "waived", _p_workflow),
         ],
     },
     {
@@ -593,7 +651,7 @@ CATEGORIES = [
             ("heartbeat", "心跳／命中分開記（有分母）", "auto", _p_heartbeat_denominator),
             ("warn_ch", "WARN 訊息到得了模型", "auto", _p_warn_channel),
             ("stop_warn", "Stop 事件的 WARN 通道已驗", "auto", _p_stop_warn_channel),
-            ("non_tool", "非 tool-call 寫入者涵蓋", "auto", _p_non_toolcall_writers),
+            ("non_tool", "非 tool-call 寫入者涵蓋", "waived", _p_non_toolcall_writers),
             ("budget", "成本／資源上限閘門", "auto", _p_budget_ceiling),
         ],
     },
@@ -604,7 +662,7 @@ CATEGORIES = [
             ("decisions", "decision log（只記非 ALLOW）", "auto", _p_decision_log),
             ("freshness", "看板新鮮度檢查", "auto", _p_freshness),
             ("generated", "進度由來源產生，不手寫", "auto", _p_progress_generated),
-            ("traces", "traces／span 級追蹤", "auto", _p_traces),
+            ("traces", "traces／span 級追蹤", "waived", _p_traces),
             ("cost", "成本儀表", "auto", _p_cost_dashboard),
         ],
     },
@@ -639,8 +697,39 @@ CATEGORIES = [
 ]
 
 
+# ── waived 的登記表 ───────────────────────────────────────────────────────
+# 每一條要有 `reopen_when`：**一句可檢查的重評條件**，不是「以後再看」。
+# `decided_on` 查得到才寫日期，查不到寫 None —— **不准編**。None 會印成「未記錄」，
+# 那是一個待補的空缺記號，不是「沒有決定過」。
+#
+# **為什麼留在分母**：拿掉之後分數變 40/41 ≈ 98%，會被讀成「做完了」。三份外部標的
+# （faros 五層／ETCLOVG 七層／awesome-harness design primitives）都把 Sandbox 列為
+# 一級維度 —— 刪掉 ③ 那兩項不會讓沙盒變好，只會讓「我們在這個維度是 0 分」從畫面上
+# 消失。清單的價值一半在「有什麼」，另一半在「知道自己缺什麼」，後者不可壓縮。
+# 所以：留在分母，但**分數印兩個數**，讓「刻意不要」跟「還沒做」分得開。
+_WAIVED_META = {
+    "mcp": {"decided_on": None,
+            "reopen_when": "真的需要 claude.ai／Google Drive 的資料，且手上有互動式 session 能跑 OAuth"},
+    "main": {"decided_on": None,
+             "reopen_when": "主 session 要處理不可信輸入（外部來源的檔案／網頁內容／別人給的腳本）"},
+    "worktree": {"decided_on": None,
+                 "reopen_when": "同一個 repo 同時有第 2 台機器或第 2 個人在改"},
+    "workflow": {"decided_on": None,
+                 "reopen_when": "常態同時 >4 個 session 且需要跨 session 編排（現況實測 3–4 個）"},
+    # 決定與理由在 HARNESS_PROGRESS.md:211-213（2 輪對抗式覆核用實測重算），但沒記日期
+    "non_tool": {"decided_on": None,
+                 "reopen_when": "人手在終端機 push 或 VM post-receive 造成第 1 次事故"},
+    "traces": {"decided_on": None,
+               "reopen_when": "要歸因單一 hook 的延遲，或多 session 互相干擾到查不出是誰"},
+}
+
+
 def evaluate() -> list:
-    """跑完所有 probe，回可序列化的結果。probe 自己爆掉不能拖垮整份清單。"""
+    """跑完所有 probe，回可序列化的結果。probe 自己爆掉不能拖垮整份清單。
+
+    `have`／`total` 的語意刻意不變（下游 `gen_progress_chart.py` 綁著它們）；
+    waived 是**加一個鍵**，不是改既有的兩個 —— 改分母會讓看板的歷史數字對不上。
+    """
     out = []
     for cat in CATEGORIES:
         items = []
@@ -649,11 +738,17 @@ def evaluate() -> list:
                 ok, evidence = probe()
             except Exception as exc:  # noqa: BLE001
                 ok, evidence = False, f"probe 例外：{type(exc).__name__}: {exc}"
-            items.append({"id": item_id, "label": label, "kind": kind,
-                          "ok": bool(ok), "evidence": evidence})
+            item = {"id": item_id, "label": label, "kind": kind,
+                    "ok": bool(ok), "evidence": evidence}
+            if kind == "waived":
+                item.update(_WAIVED_META.get(item_id, {"decided_on": None,
+                                                       "reopen_when": None}))
+            items.append(item)
         have = sum(1 for i in items if i["ok"])
+        waived = sum(1 for i in items if i["kind"] == "waived")
         out.append({"key": cat["key"], "name": cat["name"], "note": cat["note"],
-                    "items": items, "have": have, "total": len(items)})
+                    "items": items, "have": have, "total": len(items),
+                    "waived": waived})
     return out
 
 
@@ -664,12 +759,26 @@ def main() -> None:
         return
     total_have = sum(c["have"] for c in result)
     total_all = sum(c["total"] for c in result)
-    print(f"六大類能力檢查：{total_have} / {total_all} 項已具備\n")
+    total_waived = sum(c.get("waived", 0) for c in result)
+    # **一個數字扛不了兩件事**：「有多少」和「刻意不要多少」。
+    # 只印 N/M 會讓評估過的決定看起來像沒做完；只印實作面又會讓缺口從畫面上消失。
+    head = f"六大類能力檢查：{total_have} / {total_all} 項已具備"
+    if total_waived:
+        head += f"（其中 {total_waived} 項為已知不做 → 實作面 {total_have} / {total_all - total_waived}）"
+    print(head + "\n")
     for c in result:
-        print(f"{c['name']}　{c['have']}/{c['total']}　（{c['note']}）")
+        tail = f"（{c['note']}）"
+        if c.get("waived"):
+            tail += f"　·　{c['waived']} 項已知不做"
+        print(f"{c['name']}　{c['have']}/{c['total']}　{tail}")
         for i in c["items"]:
-            print(f"   {'✔' if i['ok'] else '✘'} {i['label']}")
+            mark = "—" if i["kind"] == "waived" else ("✔" if i["ok"] else "✘")
+            print(f"   {mark} {i['label']}")
             print(f"      {i['evidence']}")
+            if i["kind"] == "waived":
+                # decided_on 為 None 印「未記錄」——那是待補的空缺記號，不是「沒決定過」
+                print(f"      〔已知不做·決定於 {i.get('decided_on') or '未記錄'}〕"
+                      f"重評條件：{i.get('reopen_when') or '**未寫**（waived 必須有）'}")
         print()
 
 
