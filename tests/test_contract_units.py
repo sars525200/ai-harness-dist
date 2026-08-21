@@ -57,6 +57,23 @@ PUSH_CASES = [
     (False, "gitk push vm master",                   "gitk 是另一支程式，不是 git"),
     (False, "git-lfs push vm master",                "git-lfs 是另一支程式"),
     (False, "mygit push vm master",                  "自訂 wrapper 名稱含 git"),
+
+    # ── Windows 反斜線路徑（2026-08-20 補·與 `git -C` 那個洞同一形狀）──────────
+    #    `_tokenize()` 先試 `shlex.split(posix=True)`，而 posix 把 `\` 當跳脫字元 ⇒
+    #    `C:\Git\bin\git.exe` 被拆成 `C:Gitbingit.exe`，`_is_git_token()` 認不出來
+    #    ⇒ **DB-1／R1／R3 三條規則同時靜默**，連 applies 都不會留紀錄。
+    #    ⚠ posix 模式對這種輸入**不會拋錯**，所以既有的 ValueError fallback 接不到。
+    #    ⚠ `_is_git_token()` 自己就做 `\`→`/` 正規化、docstring 也明寫要認
+    #      `C:\Program Files\Git\bin\git.exe` —— 也就是說**它一直預期反斜線會活著**，
+    #      而上游把它吃掉了。這幾條釘住「`\` 與 `/` 判定一致」。
+    (True,  r"C:\Git\bin\git.exe push vm master",     "**無空白的反斜線 git 路徑**（真實 shell 收得下）"),
+    (True,  r"D:\tools\git.exe push vm master",       "同上·另一個磁碟代號"),
+    (True,  "C:/Git/bin/git.exe push vm master",      "對照組：正斜線版本 —— 兩者判定必須一致"),
+    (True,  r'& "C:\Program Files\Git\bin\git.exe" push vm master',
+                                                     "PowerShell 呼叫運算子＋帶空白的引號路徑"),
+    (True,  r"git -C D:\IT-department push vm master", "反斜線 `-C` 值（值被吃掉不影響判定，但要釘住）"),
+    (False, r'echo "C:\x\git push vm master"',        "引號內含反斜線**仍不得**誤判（退路不可放寬引號保護）"),
+    (False, r"C:\Git\bin\gitk.exe push vm master",    "反斜線路徑指向 gitk＝另一支程式，仍不算"),
 ]
 
 

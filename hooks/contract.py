@@ -243,6 +243,38 @@ def is_push_to_remote(command: str, remote: str) -> bool:
     if tokens is None:
         return False  # 兩種斷詞法都失敗 → 判定不適用（fail-open，不硬猜）
 
+    if _scan_push(tokens, remote):
+        return True
+
+    # ── 反斜線退路（2026-08-20）─────────────────────────────────────────────
+    #
+    # `_tokenize()` 先試 `shlex.split(posix=True)`，而 **posix 把 `\` 當跳脫字元**：
+    #   `C:\Git\bin\git.exe push vm master`
+    #     → ['C:Gitbingit.exe', 'push', 'vm', 'master']
+    # `_is_git_token()` 認不出那顆 ⇒ 回 False ⇒ **DB-1／R1／R3 三條規則同時靜默**，
+    # 連 applies 都不會留紀錄。這與 2026-07-29 覆核抓到的 `git -C` 是**同一個形狀**：
+    # 一條等價寫法讓三條規則一起消失，而且比規則沒掛更難察覺。
+    #
+    # ⚠ **既有的 ValueError fallback 接不到它**：posix 模式對這種輸入不會拋錯，
+    #   所以 `_tokenize()` 永遠不會走到 non-posix 那一次。
+    # ⚠ **只在 posix 掃不到 git token 時才退**，不是改預設：非 posix 會把引號留在
+    #   token 裡，而 `is_push_to_remote` 有一處比對沒有 `_unquote`（remote 名那個
+    #   迴圈已經有，但別的呼叫端不保證），改預設的影響面遠大於這個洞。
+    # ⚠ 這不新增任何既有沒有的誤判類型：`_is_git_token()` 本來就做 `\`→`/` 正規化
+    #   （它的 docstring 明寫要認 `C:\Program Files\Git\bin\git.exe`），
+    #   所以這裡只是**讓 `\` 的行為與 `/` 一致**——正斜線版本今天就是這樣判的。
+    if "\\" in command:
+        try:
+            alt = shlex.split(command, posix=False)
+        except ValueError:
+            alt = None
+        if alt and _scan_push(alt, remote):
+            return True
+    return False
+
+
+def _scan_push(tokens: list, remote: str) -> bool:
+    """在一組 token 裡找「git … push <remote>」。回 True 代表確實在推該 remote。"""
     for i, tok in enumerate(tokens):
         if not _is_git_token(tok):
             continue
