@@ -457,6 +457,26 @@ temp clone 仍在同一台機器、同一個 `%USERPROFILE%`，`Path.home()` 相
   - 回歸：分母仍 **947**，通過 **938**。9 個失敗＝8 個成本／mix（同上）＋1 個
     「沒有新檔案引入 U-1 債」，後者抓的是 `tools/esc1_backtest.py`／`esc1_corpus.py`
     ——**另一 session 於 mtime 10:10 剛建的 `??` 檔**，不是我的。
+- ✅ **批 1c-i 已完成（2026-08-22）**：N4 → A3。項數 **47 → 48**，實作面 **41/42**。
+  - **N4**：新建 `skills/_meta/PROVENANCE.md`（放 `_meta/` 是覆核 F3-5 逼出來的，
+    避開 A4 的「非目錄項」判定）。內容**由 `.skill-lock.json.bak.20260821` 實際資料產生、
+    不手打**：外部 6 支（全部 `mattpocock/skills`·github·2026-08-21·帶 upstream tree SHA）、
+    自建 2 支（`context-health`／`visual-check`）、已移除留痕 1 支（`setup-matt-pocock-skills`）。
+    新增 `_provenance()` ＋ `_p_skill_provenance()`，判準是**雙清單對帳**：
+    `skills/` 每支資料夾兩張表都沒有就紅 ⇒ 解掉覆核 F-9 的循環（只讀 PROVENANCE 驗
+    PROVENANCE ＝恆綠）。檔案寫 **LF**（`.gitattributes` 要求 `*.md text eol=lf`）。
+  - **A3**：lock 判定改**四態**。分辨「沒裝過」與「被刪了」的依據就是 N4 的外部清單
+    ⇒ **A3 相依 N4** 這條相依是真的，批內次序 N4 → A3 正確。
+  - **⚠ 紅燈測試抓到我自己的新缺陷**：批 1a 的 A5 我寫死 `_EXTERNAL_SKILLS_BASELINE = 8`
+    ——那是**這台機器當下的支數**，harness 分發到別的部門就必紅。
+    **同一批 probe 一個量可攜（⑨）、一個罰可攜，正是覆核 F-4 在 N1 上點名過的形狀，我在 A5 原地重造了一次。**
+    已改成**從 PROVENANCE 推導**（`len(外部)+len(本地)`）——那份檔進版控、跟著 repo 走，
+    在任何機器上都是對的基準。寫死的常數完全移除。
+  - **紅燈證明（六態全驗，temp 樹＋monkeypatch `expanduser`，不碰真的 `~\.agents`）**：
+    N4 ①8 支全登記→綠 ②裝第 9 支沒登記→**紅** ③PROVENANCE 空→**紅**；
+    A3 ①lock 空→綠 ②lock 有 entry→**紅** ③lock 壞掉→**紅** ④lock 無＋有外部→**紅**
+    ⑤**全新機器（無外部＋無 lock）→綠**（這一態是 F-14 的整個重點）⑥磁碟少一支→**紅**。
+  - 回歸：**938/947，與本輪基準相同**，沒有新增失敗。
 - ~~**執行順序（v2）**：批 1＝A2–A6 → 批 2＝A1＋A7＋A8 → 批 3＝N1–N5 → …~~
   **v4 作廢（覆核 F2-3）**：v3 加了三個結構改動（新增 A2b／R2 拆 2a-2b／A3 相依 N4）
   但 §8 這三行一個字都沒同步 ⇒ **A3 被排在自己的前置 N4 之前、N3 被批 7 的前置卡住、

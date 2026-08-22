@@ -181,10 +181,53 @@ _SHELL_SPECIFIC_DENY = {
 }
 
 
-# `<harness>\skills` 的支數基準。**只在「少於」時判紅**——多出來是有人裝了新 skill
-# （那是好事，由 N4 的 provenance 對帳去管），少掉才是靜默失效。
-# 刻意寫死成一個要人手調的台帳：它變動時應該有人知道，而不是自動跟著現況走。
-_EXTERNAL_SKILLS_BASELINE = 8
+def _provenance() -> dict:
+    """讀 `skills/_meta/PROVENANCE.md`，回 `{"外部": [...], "本地": [...], "已移除": [...]}`。
+
+    **為什麼需要一份獨立的「外部性」來源**：唯一原本知道「誰是外部」的東西是
+    `~\\.agents\\.skill-lock.json`，而它的 `skills` 是**刻意清空的**（擋 `skills update`
+    靜默覆寫本地修改並掉包儲存形態）。清空之後就沒有任何機器可讀的來源說得出
+    `domain-modeling` 是外部、`context-health` 是自建。
+
+    沒有這一份的話，provenance 檢查只能讀 `PROVENANCE.md` 自己列的名單去驗
+    `PROVENANCE.md` 有沒有那些名字 —— **恆綠**。有了它，判準才變成
+    「`skills/` 底下每一支，兩張表都沒有就紅」，新裝而沒登記的那支會被抓到。
+    """
+    text = _read(GLOBAL_SKILLS_DIR / "_meta" / "PROVENANCE.md")
+    out: dict[str, list] = {"外部": [], "本地": [], "已移除": []}
+    section = None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            head = line[3:]
+            section = next((k for k in out if head.startswith(k)), None)
+            continue
+        if section and line.startswith("|"):
+            cell = line.split("|")[1].strip()
+            if cell.startswith("`") and cell.endswith("`"):
+                out[section].append(cell.strip("`"))
+    return out
+
+
+def _p_skill_provenance():
+    """全域層每一支 skill 都要有來歷登記——外部的記 upstream，自建的記在本地清單。"""
+    if not GLOBAL_SKILLS_DIR.is_dir():
+        return False, f"找不到 {GLOBAL_SKILLS_DIR}"
+    prov = _provenance()
+    known = set(prov["外部"]) | set(prov["本地"])
+    if not known:
+        return False, ("skills/_meta/PROVENANCE.md 不存在或解析不出任何名字"
+                       " —— 沒有來歷登記，等於不知道哪些指令是別人寫的")
+    present = {d.name for d in GLOBAL_SKILLS_DIR.iterdir()
+               if d.is_dir() and not d.name.startswith(("_", "."))}
+    unlisted = sorted(present - known)
+    ghosts = sorted(known - present)          # 登記了卻不在磁碟上
+    if unlisted:
+        return False, (f"{len(unlisted)} 支沒有來歷登記（{'、'.join(unlisted)}）"
+                       " —— 裝了新 skill 就要在 PROVENANCE.md 補一列")
+    note = f"（另 {len(ghosts)} 支已登記但不在磁碟上：{'、'.join(ghosts)}）" if ghosts else ""
+    return True, (f"{len(present)} 支全有來歷登記："
+                  f"外部 {len(prov['外部'])}／自建 {len(prov['本地'])}"
+                  f"／已移除留痕 {len(prov['已移除'])}{note}")
 
 
 def _deny_core(entry: str) -> tuple[str, str] | None:
@@ -333,11 +376,28 @@ def _p_external_skills_pinned():
             # 讀不到＝判斷不出來，不是「沒問題」。靜默 pass 會把「不知道」讀成「沒有」。
             strays.append(f"{d.name}（無法解析：{type(exc).__name__}）")
 
+    # ── lock 判定：四態，不是三態 ──────────────────────────────────────
+    # 2026-08-22 稽核抓到原本是「不存在 → tracked=[] → 綠」＝**把「不知道」當「沒有」**。
+    # 但直接改成「不存在 → 紅」會在**全新機器上必定誤報**：`.skill-lock.json` 是
+    # `npx skills` 的產物，harness clone 到別的部門機器上它根本不存在，判紅＝開箱即紅，
+    # 而唯一的轉綠路徑是去跑一次 `npx skills add` —— 正是這整套防線在避免的動作。
+    # ⇒ 「不知道」要跟「沒有」分開的同時，**「沒裝過」也要跟「被刪了」分開**，
+    #    否則只是把假綠換成假紅。分辨的依據是 PROVENANCE 登記的外部 skill 清單。
     lock = Path(os.path.expanduser("~")) / ".agents" / ".skill-lock.json"
-    tracked = []
+    prov = _provenance()
+    has_external = bool(prov["外部"])
+    tracked, lock_note = [], ""
     if lock.is_file():
-        data = _json(lock) or {}
+        data = _json(lock)
+        if data is None:
+            problems_lock = "lock 檔存在但解析失敗 —— 判斷不出射程，不當成沒有"
+            return False, problems_lock
         tracked = sorted((data.get("skills") or {}).keys())
+    elif has_external:
+        return False, ("lock 檔不存在，但本機確實裝過外部 skill（PROVENANCE 有登記）"
+                       " —— 可能是被刪了；下次 `skills add` 會重建並重新填滿管轄清單")
+    else:
+        lock_note = "；lock 不存在＝本機從未安裝外部 skill（非缺陷）"
 
     total = sum(1 for d in gskills.iterdir()
                 if d.is_dir() and not d.name.startswith(("_", ".")))
@@ -346,14 +406,20 @@ def _p_external_skills_pinned():
         problems.append(f"{len(junctions)} 個已變成 junction（{'、'.join(junctions)}）")
     if strays:
         problems.append(f"{len(strays)} 個非目錄項或解析不到（{'、'.join(strays)}）")
-    if total < _EXTERNAL_SKILLS_BASELINE:
-        # 沒有基準的話，skill 被砍掉幾支照樣綠 —— 「少了東西」比「多了東西」難發現得多。
-        problems.append(f"只剩 {total} 支，少於基準 {_EXTERNAL_SKILLS_BASELINE}")
+    # 基準**從 PROVENANCE 推導**，不寫死。沒有基準的話 skill 被砍掉幾支照樣綠
+    # ——「少了東西」比「多了東西」難發現得多。
+    # ⚠ 這裡原本寫死成 8（＝這台機器當下的支數），而那會讓 harness **分發到別的部門就必紅**
+    #   —— 同一批 probe 一個量可攜（⑨）、一個罰可攜，正是稽核在 N1 上點名過的形狀。
+    #   PROVENANCE.md 進版控、跟著 repo 走，所以它在任何一台機器上都是對的基準。
+    baseline = len(prov["外部"]) + len(prov["本地"])
+    if baseline and total < baseline:
+        problems.append(f"只剩 {total} 支，少於 PROVENANCE 登記的 {baseline} 支")
     if tracked:
         problems.append(f"lock 仍管轄 {len(tracked)} 支（{'、'.join(tracked)}）")
     if problems:
         return False, "；".join(problems) + " —— update 會靜默覆寫本地修改並掉包儲存形態"
-    return True, f"{total} 支全為實體資料夾，lock 未管轄任何一支（update 搆不到）"
+    return True, (f"{total} 支全為實體資料夾，lock 未管轄任何一支（update 搆不到）"
+                  + lock_note)
 
 
 def _p_model_routing():
@@ -745,6 +811,7 @@ CATEGORIES = [
             ("modes", "任務模式路由（含升級安全閥）", "auto", _p_mode_routing),
             ("skills", "skill 清冊", "auto", _p_skills),
             ("extskills", "外部 skill 未被 update 掉包", "auto", _p_external_skills_pinned),
+            ("provenance", "外部 skill 有來歷登記", "auto", _p_skill_provenance),
             ("model", "模型分級路由", "auto", _p_model_routing),
             ("agents", "自建角色", "auto", _p_agents),
             ("workflow", "多 agent workflow 編排", "waived", _p_workflow),
