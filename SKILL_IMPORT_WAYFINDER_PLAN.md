@@ -335,14 +335,31 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 
 ## §7 未驗項（施作後補；四欄缺一不可）
 
+<!-- REVIEW_SCOPE_IGNORE_START -->
+> 2026-08-22 把本節包進 `REVIEW_SCOPE_IGNORE`：**它本質是狀態欄**（記「哪些還沒驗」，
+> 會隨驗證進度變），而 `/design-spec` 步驟 5 明文說純狀態／進度區塊該包進這對標記，
+> 否則每更新一次進度就要蓋一次 SKIP。包起來這一次動用了逃生口，之後就不必了。
+
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| **`eval` L2 剩 1 項紅**：`domain-modeling` 引用的 `CONTEXT-MAP.md` | single-context 下永遠不存在，不能建檔解；唯一豁免是 `check_contracts.py:90` 寫死的正則，而 `eval/` 底下 12 檔正被另一 session 修改 | 全文四欄已寫在 `d:\IT-department\PENDING_VERIFY.md`（本表不重抄，避免兩份漂移） | 我（下次 session·需先確認另一 session 已收手） |
-| **`/to-tickets`、`/wayfinder` 從未實跑** | 兩支帶 `disable-model-invocation: true`，**模型被硬性禁止呼叫**，連繞路模擬都被明文擋下 | user 自己打 `/to-tickets`、`/wayfinder` 各一次，觀察是否讀到 `docs/agents/*`、是否踩 K13（`.scratch` 不在 `TMP_HINTS`） | **user** |
-| **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks
-eport.py` 看 AWC-1 的 WARN 率變化 | **user** |
-| **`prototype` 從未實跑** | 刻意不跑：原本會自行 commit 到分支，雖已加 `LOCAL EDIT` 約束但**約束本身未實測** | 真的用它做一次原型，確認它**沒有**建分支／commit：`git -C d:/IT-department branch --list` 前後一致 | 我或 user |
-| **`/audit` 未跑** | CLAUDE.md §8 硬規則「新增/改 skill·角色·規則後跑 `/audit`」；本次新增 6 支、改 2 支，明著跳過 | `/audit` 選 `project`（或 `harness`，本次兩邊都動了） | 我（下次 session） |
+| **`eval` L2 剩 1 項紅**：`domain-modeling` 引用的 `CONTEXT-MAP.md` | single-context 下永遠不存在，不能建檔解。⚠ **原本寫的「`eval/` 底下 12 檔正被另一 session 修改」2026-08-22 已證實是錯的**——那批 mtime 停在 2026-08-16，擱置 6 天不是進行中；當時只看了 `git status` 的 `M` 沒查 mtime | 處置已在 `AUDIT_FIX_PLAN_20260822.md` **分岔② 定案＝資料驅動 allowlist**（`(skill, 檔名)` 二元組＋`reason` 欄）。四欄全文見該檔 §5 | 我（未做） |
+| **`/to-tickets`、`/wayfinder` 從未實跑** | 兩支帶 `disable-model-invocation: true`，**模型被硬性禁止呼叫**，連繞路模擬都被明文擋下 | user 自己打 `/to-tickets`、`/wayfinder` 各一次，觀察是否讀到 `docs/agents/*`、是否踩 K13（`.scratch` 不在 `TMP_HINTS`） | **user**（未做） |
+| **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
+| **`prototype` 從未實跑** | 刻意不跑：原本會自行 commit 到分支，雖已加 `LOCAL EDIT` 約束但**約束本身未實測** | 真的用它做一次原型，確認它**沒有**建分支／commit：`git -C d:/IT-department branch --list` 前後一致 | 我或 user（未做） |
+| ✅ **`/audit` 已跑（2026-08-22）** | ~~明著跳過~~ | 已跑 `harness` ＋ `project` 兩側。**產出 28 處不一致**（高 3／中 13／低 12），另排除 3 項假發現 | 已完成 |
+
+### §7.1 `/audit` 的結果與本任務的關係（2026-08-22·**誠實標示範圍**）
+
+`/audit` 是本計畫 §7 的一列，跑它合法。但**它吐出的 28 項裡，絕大多數與 skill 導入無關**
+——是 harness 能力偵測器本身的缺陷（假 ✔ 的 deny 對稱、對全域層全盲的清冊、
+斷掉的 junction 不計不報、waived 變綠印成 100%…）。
+
+那 28 項另開了 `AUDIT_FIX_PLAN_20260822.md`（三輪對抗式覆核、43 個發現、6 個 commit，
+能力表 40/47 → 43/50）。**那是一條獨立的線，不是本任務的進度。**
+
+⚠ **這正是本計畫 §4 記過的「鎖鏈無停止條件」在上一層復發**（原記錄：原訂 4 批、實際做了 8 批）。
+本任務的實際進度是：第一階段完成、**§7 五列只關掉一列**、第二階段一步沒走。
+<!-- REVIEW_SCOPE_IGNORE_END -->
 
 ---
 
@@ -435,6 +452,23 @@ eport.py` 看 AWC-1 的 WARN 率變化 | **user** |
   §4 的批 5–8 表、§7 的 5 列未驗項。兩者都是**已發生事實的記錄**，不是待審的設計決定。
 
 - 施作未開始。**批 3 完成前不切換規劃層；批 1 不能在分岔 3 定案前跑（`.gitignore` 缺條目＝預設進版控）。**
+
+- 2026-08-22 **v7**：**只更新狀態，未改任何設計決定。**
+  - §7 第五列 `/audit` **已跑**（harness ＋ project 兩側），標成完成。
+  - §7 第一列的前提**被證偽並更正**：原寫「`eval/` 底下 12 檔正被另一 session 修改」，
+    實測那批 mtime 停在 2026-08-16、**擱置 6 天不是進行中**——當時只看了 `git status`
+    的 `M` 沒查 mtime。這是「跨階段不繼承推測」那條交接契約被違反的一個實例。
+  - §7 包進 `REVIEW_SCOPE_IGNORE`（它本質是狀態欄），以後更新進度不必再蓋 SKIP。
+  - 修掉 `grilling` 那列的**斷行 bug**：`\report.py` 的 `\r` 曾被當成真的控制字元，
+    把表格列攔腰切斷。⚠ **修的過程中我用產生器重寫，又原樣重造了一次同一個 bug**
+    （`feedback-python-write-crlf-preserve`：「產生器寫的跳脫序列會被多吃一層」），
+    第二次改用 `bytes([92])` 組反斜線才修掉。
+  - 新增 **§7.1**：誠實標示 `/audit` 的 28 項產出與本任務的關係（**大多無關**），
+    以及它另開的 `AUDIT_FIX_PLAN_20260822.md` 是**獨立的一條線、不是本任務的進度**。
+
+- **本任務實際進度（2026-08-22 對齊後）**：第一階段完成；
+  **§7 五列只關掉一列**（`/audit`）；其餘四列中三列需 user 實跑、一列（eval L2）處置已定案未做；
+  **第二階段（規劃層改用 wayfinder，K1–K7／K11–K14 共 14 個對撞）一步沒走**。
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
 ### v3 改版紀錄（user 決策 ＋ 我對覆核的一項反駁）
@@ -623,3 +657,5 @@ lock 檔測試前後內容一致（已比對）。完整 `capability_checks.py` 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
 <!-- ADVERSARIAL_REVIEW_PASSED sha256=ef47173339edf5a379cd8ecb8565aa83c394b805393dbdba1793e7ab290ede0e rounds=2 at=2026-08-21T15:02:01Z -->
+
+<!-- ADVERSARIAL_REVIEW_SKIP sha256=62cba8532a9fd3282356dcc4fd8bbbe76f7b039ab6c9f15349e1786029fde426: 只更新狀態欄——§7 的 /audit 標成已跑、更正一個被證偽的前提、修掉 grilling 那列的斷行 bug、新增 §7.1 誠實標示 audit 產出與本任務的關係、§12 加 v7。未改任何設計決定或分岔。§7 已包進 REVIEW_SCOPE_IGNORE，之後更新進度不需再 SKIP。上方 rounds=2 的 PASSED marker 刻意保留為歷史紀錄，它的 hash 對不上正說明內容自那次覆核後變過。 -->
