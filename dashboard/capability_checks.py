@@ -163,9 +163,33 @@ def _p_rule_index():
 
 # ── ② Tools ──────────────────────────────────────────────────────────────
 def _p_allow_converged():
-    cfg = _json(SETTINGS_LOCAL) or {}
-    n = len((cfg.get("permissions") or {}).get("allow") or [])
-    return 0 < n <= 150, f"allow {n} 條（7/29 由 187 收斂）"
+    """allow 的生效範圍是**三層聯集**，跟 deny 一樣。
+
+    判準 `0 < n <= 150` 的用意是對的：要「非空但已收斂」——allow 清空不是成就，
+    那只會讓每個指令都跳權限詢問。錯的是它只讀 `settings.local.json`，
+    而 **2026-08-15 commit `16eefbb3` 把 130 行從那裡搬走了** ⇒ 它讀到 0、判 ✘，
+    畫面上看起來像「收斂過頭」，實際上 allow 好端端地散在另外兩個檔裡。
+
+    ⚠ 順手拿掉證據字串裡寫死的「（7/29 由 187 收斂）」：**用一句寫死的敘述去解釋
+    一個動態讀出來的數字，等於把數字的可信度借給了沒人查的那句話。** 它讓「allow 0」
+    看起來像一個有來歷的結果而不是一個異常，這也是它躲過四次同型稽核的原因。
+    """
+    layers = [("專案 settings.json", SETTINGS),
+              ("專案 settings.local.json", SETTINGS_LOCAL),
+              ("全域 settings.json", GLOBAL_SETTINGS)]
+    # 印**各層的淨貢獻**而不是各層的條數：兩者差很多時代表有一層整個是冗餘的，
+    # 而那件事光看「77／0／102」是要人自己心算才發現的。
+    parts, seen, total = [], set(), 0
+    for label, path in layers:
+        rules = ((_json(path) or {}).get("permissions") or {}).get("allow") or []
+        fresh = [r for r in rules if r not in seen]
+        seen.update(fresh)
+        total += len(fresh)
+        note = "" if len(fresh) == len(rules) else f"（{len(rules)} 條中 {len(fresh)} 條是新的）"
+        parts.append(f"{label} +{len(fresh)}{note}")
+    ok = 0 < total <= 150
+    return ok, (f"allow {total} 條（三層聯集去重）：{'／'.join(parts)}"
+                + ("" if ok else "　—— 0 條＝每個指令都會跳詢問；>150＝沒收斂過"))
 
 
 # 刻意單邊的 deny：兩個 shell 對**同一件危險事**的慣用寫法本來就不同，
@@ -228,6 +252,62 @@ def _p_skill_provenance():
     return True, (f"{len(present)} 支全有來歷登記："
                   f"外部 {len(prov['外部'])}／自建 {len(prov['本地'])}"
                   f"／已移除留痕 {len(prov['已移除'])}{note}")
+
+
+def _junction_state(name: str) -> tuple[str, str]:
+    """一條 junction 的狀態。回 `(absent|linked|detached|error, 說明)`。"""
+    link = Path(os.path.expanduser("~")) / ".claude" / name
+    target = HARNESS / name
+    if not link.exists():
+        return "absent", f"{name} 未接"
+    try:
+        if os.path.samefile(link, target):
+            return "linked", f"{name} 已接"
+        real = os.path.realpath(link)
+        kind = ("是實體目錄（用複製不是連結 ⇒ 改了 harness 這邊不會生效）"
+                if real == str(link) else f"指向 {real}")
+        return "detached", f"{name} 存在但不是 harness 那份：{kind}"
+    except OSError as exc:
+        # 讀不到＝判斷不出來。不能讓它掉進 evaluate() 的全域 except 被印成
+        # 「probe 例外」——那跟「能力不存在」在畫面上長得一模一樣。
+        return "error", f"{name} 無法判定（{type(exc).__name__}）"
+
+
+def _p_junction_health():
+    r"""`~\.claude\{skills,agents}` 是否真的接到 harness。
+
+    這兩條 junction 是「skill 檔進 git、junction 接過去」那個設計的**承重點**：
+    斷掉的那天，8 支 skill 與 6 個角色從執行期消失，而 47 項檢查**一項都不會動**
+    （`config.py` 讓 eval 走 `__file__` 推路徑，斷了反而更綠）。
+
+    ## 分界訊號為什麼不是 `~\.claude\CLAUDE.md`
+
+    初版想用它區分「全新機器」與「被刪了」。但那個檔是承重牆——`_p_mode_routing`
+    與 `_p_no_auto_escalate` 的判準**只在它命中**，所以「它不存在」那條路徑
+    **只有在 harness 半殘的機器上才走得到**，等於那條綠燈不可達。
+    改用**跟 junction 同源**的證據：`<harness>\{skills,agents}` 裡有沒有東西要接。
+
+    ## 為什麼「兩條都沒接、但 harness 帶著 skill」判紅
+
+    那不是在罰可攜性，是在陳述事實：**檔案在 repo 裡，但 Claude Code 執行期讀不到。**
+    新機器 clone 完、還沒跑 `bootstrap.ps1` 就是這個狀態，紅得正確且可行動。
+    ⚠ 別跟 `config.py` 的可攜設計搞混：eval 走 `__file__` 推路徑是**另一件事**，
+    它能讀到不代表 Claude Code 載得到。這支量的是後者。
+    """
+    states = {n: _junction_state(n) for n in ("skills", "agents")}
+    kinds = [k for k, _ in states.values()]
+    detail = "；".join(d for _, d in states.values())
+
+    if all(k == "linked" for k in kinds):
+        return True, f"兩條 junction 都接到 harness（{detail}）"
+    if all(k == "absent" for k in kinds):
+        pending = [n for n in ("skills", "agents")
+                   if (HARNESS / n).is_dir() and any((HARNESS / n).iterdir())]
+        if not pending:
+            return True, "兩條都未接，而 harness 也沒有東西要接（乾淨的新環境）"
+        return False, (f"兩條都未接，但 harness 帶著 {'／'.join(pending)} 的內容"
+                       " —— 執行期讀不到，新機器請先跑 bootstrap.ps1")
+    return False, detail + " —— 兩條應同進退，不一致／指向別處／判不出來都是壞了"
 
 
 def _deny_core(entry: str) -> tuple[str, str] | None:
@@ -801,6 +881,7 @@ CATEGORIES = [
         "items": [
             ("agent_tools", "subagent 有 tools 能力邊界", "auto", _p_agent_tool_boundary),
             ("agent_gate", "agent-scoped hook 收窄工具", "auto", _p_agent_scoped_gate),
+            ("junction", "skill／角色的 junction 健康", "auto", _p_junction_health),
             ("main", "主 session 有隔離", "waived", _p_main_session_isolated),
             ("worktree", "worktree／容器隔離已使用", "waived", _p_worktree_isolation),
         ],
