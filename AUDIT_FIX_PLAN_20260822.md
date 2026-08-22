@@ -534,6 +534,28 @@ temp clone 仍在同一台機器、同一個 `%USERPROFILE%`，`Path.home()` 相
     → **紅**（零命中不算通過——安靜地什麼都沒檢查，跟檢查了全過在畫面上一模一樣）。
     復原後逐位元組相同。
   - 回歸 **939/948**（分子分母同步 +1 ＝新增那一項通過；另一 session 的 9 個紅不變）。
+- ✅ **N2 已完成（2026-08-22）——實作比計畫寫的設計好，而且是實測逼出來的。**
+  - **計畫原訂**：①`grep -c "LOCAL EDIT" == 7` ②自己算全樹 sha256、存 `state/`（後改 `skills/_meta/`）。
+  - **實作改成 `git rev-parse HEAD:skills/<name>`（子樹 SHA）**，三個理由都是實測：
+    ① 子樹裡任何檔案的新增／刪除／修改都會讓它變，不必自己走訪目錄
+    ② 它吃 **git 正規化後**的內容 ⇒ CRLF／LF 差異不造成假紅
+    （實測 8 支 SKILL.md 目前是 CRLF 而 `.gitattributes` 要求 LF，自己算 sha256 會綁機器）
+    ③ **它與 `npx skills` 的 `skillFolderHash` 是同一個東西**——實測 `domain-modeling`
+    的本地 tree SHA 與 lock 備份記的 upstream hash **逐字相同**。
+  - ⇒ 因此 manifest 順便算得出「**哪幾支我們在地改過**」：實測分歧的 4 支
+    （`prototype`／`research`／`to-tickets`／`wayfinder`）**正好就是有 LOCAL EDIT 標記的 4 支**，
+    而與 upstream 相同的 2 支正好零標記——**那兩支正是覆核 F2-7 說「計數法對它們的竄改完全無感」的**。
+    ⇒ tree SHA 這個做法**同時涵蓋並超越**計畫的兩個子檢查，計數子項不必單獨存在。
+  - **基準吃 HEAD 不吃工作區**（F3-11）：實測 8 支工作區內容**正規化後仍全部與 HEAD 不同**
+    （另一 session 未 commit 的 `display_name:`）。吃工作區會把那個暫態固化進 manifest ⇒
+    新 clone 必對不上 ⇒ 首跑必紅 ⇒ 逼人按 `--accept`，而那是唯一的逃生口。
+  - **逃生口吵鬧**（覆核 F-16）：`--accept` 先印逐支差異表再寫檔。
+  - **PROVENANCE 從此有消費者**：upstream SHA 由 `upstream_map()` 從 `PROVENANCE.md` 讀
+    ——沒有消費者的設定檔會爛掉（`feedback-fake-settings-ui-audit`）。
+  - **紅燈六態**：①現況綠 ②某支 tree 與基準不符→紅並點名 ③裝了新 skill 沒進基準→紅
+    ④某支從磁碟消失→紅 ⑤分歧但 LOCAL EDIT 標記被清掉→紅（「改了沒標」）
+    ⑥沒分歧卻標了→紅（「標了沒改」）⑦復原後 manifest 逐位元組相同。
+  - 項數 **50 → 51**，**44 / 51（實作面 44 / 44）**；回歸 939/948 不變。
 - ✅ **群 C 已完成（2026-08-22）——而它從頭到尾就沒有被卡住。**
   - **原本的判定是錯的**：我把「`harness-dashboard.html` 有 4600 行 diff」讀成「另一個 session 在手改它」。
     實測 **910 個 hunk 有 906 個落在產生器 marker 區內**，剩下 4 個（時間戳徽章、`lay-data` 的

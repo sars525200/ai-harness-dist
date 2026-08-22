@@ -371,6 +371,26 @@ def _p_reversibility():
                 + ("" if ok else f"　—— {'／'.join(bad)} 未達成，動作之後回不去"))
 
 
+def _p_skill_manifest():
+    """外部 skill 的**內容**沒有被換掉。
+
+    `_p_external_skills_pinned` 只驗「儲存形態」與「lock 射程」，**完全不碰內容** ——
+    而 `npx skills add`（相對於 `update`）沒有被 lock 擋住：重跑一次就會覆寫內容，
+    儲存形態與 lock 都不變 ⇒ 那條防線照樣綠。這一項補的是內容那一半。
+
+    判準本體在 `tools/skill_manifest.py`（單一真相，`--accept` 也用同一份邏輯）。
+    """
+    tools = str(HARNESS / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        import skill_manifest
+    except Exception as exc:  # noqa: BLE001
+        return False, (f"讀不到 tools/skill_manifest.py（{type(exc).__name__}）"
+                       " —— 判斷不出來，不當成通過")
+    return skill_manifest.check()
+
+
 def _deny_core(entry: str) -> tuple[str, str] | None:
     """`Bash(git push -f:*)` → `("Bash", "git push -f:*")`；不是這兩種工具就回 None。"""
     for tool in ("Bash", "PowerShell"):
@@ -954,6 +974,7 @@ CATEGORIES = [
             ("skills", "skill 清冊", "auto", _p_skills),
             ("extskills", "外部 skill 未被 update 掉包", "auto", _p_external_skills_pinned),
             ("provenance", "外部 skill 有來歷登記", "auto", _p_skill_provenance),
+            ("skill_manifest", "外部 skill 內容沒被換掉", "auto", _p_skill_manifest),
             ("model", "模型分級路由", "auto", _p_model_routing),
             ("agents", "自建角色", "auto", _p_agents),
             ("workflow", "多 agent workflow 編排", "waived", _p_workflow),

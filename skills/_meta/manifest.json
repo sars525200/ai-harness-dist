@@ -1,0 +1,57 @@
+{
+  "_why": [
+    "全域層 skill 的內容基準。值＝git 的子樹 SHA（HEAD 側）。",
+    "diverged 欄＝本地與 upstream 不同，也就是「我們在地改過這一支」。",
+    "改動是刻意的就跑 tools/skill_manifest.py --accept 更新基準。"
+  ],
+  "skills": {
+    "context-health": {
+      "tree": "f1be7538e0d21e0edcb4fff24d2c73fb7ccdcd37",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
+    "domain-modeling": {
+      "tree": "388c9822641805ca2dcd5038e68a1d5282437ee5",
+      "upstream": "388c9822641805ca2dcd5038e68a1d5282437ee5",
+      "diverged": false,
+      "local_edit_marks": 0
+    },
+    "grilling": {
+      "tree": "f0732035b8b1b60ae39454e4191caef32fa91903",
+      "upstream": "f0732035b8b1b60ae39454e4191caef32fa91903",
+      "diverged": false,
+      "local_edit_marks": 0
+    },
+    "prototype": {
+      "tree": "dba382863b6a97f0aeb1b534a151efee1d31311a",
+      "upstream": "e41d92e171f074a2b6887d8f6faca4a15c83d1ca",
+      "diverged": true,
+      "local_edit_marks": 3
+    },
+    "research": {
+      "tree": "70159d9ccbfd849aa54515c2f0fc69b2317f49e3",
+      "upstream": "0a6796c5667e95ed2301ba7381c123b4acb2ae1a",
+      "diverged": true,
+      "local_edit_marks": 1
+    },
+    "to-tickets": {
+      "tree": "b6659e0f3793e246b3b6027d6c135c96dc2ce63e",
+      "upstream": "b32c94e5a51c24ee9c41fcb7fe9ea9fff9af6369",
+      "diverged": true,
+      "local_edit_marks": 1
+    },
+    "visual-check": {
+      "tree": "620e1c2c0855b212d8057176ed7c7dcd48787808",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
+    "wayfinder": {
+      "tree": "fa5095fa5eb0cbdac2c482b15806ab358d57a516",
+      "upstream": "8ec0462658381bd1606d3f9db14ffc67df6a2a43",
+      "diverged": true,
+      "local_edit_marks": 2
+    }
+  }
+}
