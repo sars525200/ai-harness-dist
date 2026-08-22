@@ -174,8 +174,115 @@ def _c4():
     assert os.path.exists(note), "Stop 沒有落下便箋 —— 訊息就此消失，等於沒有這條規則"
     import json as _json
     with open(note, encoding="utf-8-sig") as fh:
-        assert "AWC-1 訊息" in _json.load(fh).get("message", "")
+        doc = _json.load(fh)
+    # 2026-08-22（E-8）：便箋從單槽 {"ts","message"} 改成 {"entries":[...]}。
+    # 斷言走 entries —— 讀舊格式的那條路另有 case 守（_c4g）。
+    msgs = [e.get("message", "") for e in doc.get("entries", [])]
+    assert any("AWC-1 訊息" in m for m in msgs), f"便箋裡沒有訊息：{doc}"
     os.remove(note)
+
+
+@case("E-8：連續兩次 Stop → 兩則 WARN 都要送到，後者不得覆寫前者")
+def _c4e():
+    """**這是 E-8 改動的核心斷言。**
+
+    2026-08-22 之前 `_queue_pending_warning` 是 `open(path,"w")` 單槽、鍵只有
+    session_id ⇒ 一個 session 內連續多次 Stop（背景通知喚醒、續跑、自動接續；
+    實測 111 段連發、最多 11 連），後寫的把前面整個蓋掉。
+    實測 86 筆非 shadow 的 Stop 級 WARN 裡 23 筆（27%）從沒到達任何人，
+    而 `report.py` 把它們全部算成 findings —— **規則的自我報告說成功，實際什麼都沒到**。
+    """
+    import glob
+    import os
+    sid = "warnchan-accum-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    for stale in glob.glob(note):
+        os.remove(stale)
+
+    _run("Stop", [warn("第一則 AWC-1")], shadow=False, session_id=sid)
+    _run("Stop", [warn("第二則 DISP-1")], shadow=False, session_id=sid)
+
+    rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    assert rc == 0, f"rc={rc}"
+    import json as _json
+    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    assert "第一則 AWC-1" in ctx, f"前一則被覆寫了 —— 這正是 E-8 要修的失效：{ctx!r}"
+    assert "第二則 DISP-1" in ctx, f"後一則沒送到：{ctx!r}"
+    assert not os.path.exists(note), "投遞後便箋沒清掉"
+
+
+@case("E-8：同一則訊息重複進來 → 去重並累計次數，不佔多個位置")
+def _c4f():
+    """Stop 每輪都跑，一條沒被處理的提醒會每輪重來。
+
+    不去重的話容量會被同一句話吃光，把**別的**規則的提醒擠掉 ——
+    修好覆寫卻換成排擠，等於沒修。
+    """
+    import glob
+    import os
+    sid = "warnchan-dedup-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    for stale in glob.glob(note):
+        os.remove(stale)
+
+    for _ in range(3):
+        _run("Stop", [warn("重複的提醒")], shadow=False, session_id=sid)
+
+    import json as _json
+    with open(note, encoding="utf-8-sig") as fh:
+        doc = _json.load(fh)
+    entries = doc.get("entries", [])
+    assert len(entries) == 1, f"同一則訊息佔了 {len(entries)} 個位置：{entries}"
+    assert entries[0].get("count") == 3, f"次數沒累計：{entries[0]}"
+
+    rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    assert "累計 3 次" in ctx, f"投遞時沒講出重複次數：{ctx!r}"
+
+
+@case("E-8：舊的單槽格式便箋仍讀得動（state/ 裡有 7 張化石）")
+def _c4g():
+    """讀不動舊格式就等於把它們靜靜丟掉 —— 而它們正是「便箋沒送到」的證據。"""
+    import json as _json
+    import os
+    sid = "warnchan-legacy-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    os.makedirs(os.path.dirname(note), exist_ok=True)
+    with open(note, "w", encoding="utf-8") as fh:
+        _json.dump({"ts": dispatch._now(), "message": "舊格式的訊息"}, fh, ensure_ascii=False)
+
+    rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    assert rc == 0, f"rc={rc}"
+    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    assert "舊格式的訊息" in ctx, f"舊格式便箋被丟掉了：{ctx!r}"
+
+
+@case("E-8：過期的便箋不投遞，但「丟了幾則」要講出來")
+def _c4h():
+    """**靜默截斷是這次改動要修的失效模式本身。**
+
+    「沒有提醒」與「有提醒但沒送到」在畫面上必須分得出來，否則這次改動
+    只是把靜默損失從 27% 降到某個未知的數字。
+    """
+    import json as _json
+    import os
+    sid = "warnchan-expire-0001"
+    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    os.makedirs(os.path.dirname(note), exist_ok=True)
+    old_ts = dispatch._minutes_ago(dispatch._PENDING_TTL_MIN + 30)
+    with open(note, "w", encoding="utf-8") as fh:
+        _json.dump({"entries": [
+            {"ts": old_ts, "message": "早就過期的提醒", "count": 1},
+            {"ts": dispatch._now(), "message": "還新鮮的提醒", "count": 1},
+        ], "dropped": 0}, fh, ensure_ascii=False)
+
+    rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
+    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    assert "還新鮮的提醒" in ctx, f"新鮮的那則沒送到：{ctx!r}"
+    assert "早就過期的提醒" not in ctx, "過期的不該投遞"
+    assert "1 則提醒沒能投遞" in ctx, (
+        f"丟掉了卻沒講 —— 那就分不出「沒有提醒」與「有提醒但沒送到」：{ctx!r}"
+    )
 
 
 @case("UserPromptSubmit → 投遞便箋走 additionalContext，且只投一次")

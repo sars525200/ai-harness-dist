@@ -47,6 +47,20 @@ import os
 import sys
 import time
 
+# **不寫 .pyc**（2026-08-21）。Python 的 timestamp-based pyc 用「來源 mtime（秒級）
+# ＋檔案大小」判有效 —— 改一個等長的常數、又剛好在同一秒內存檔，header 逐欄吻合，
+# **Python 不重編、跑的是舊 bytecode**。實際發生過：`r1_default_migration.py` 的
+# `_MAX_BLOCK_LINES` 從 800 改成 400（同長度、同一秒），執行中的規則跑的是 800，
+# 而 945 條契約測試全綠 —— 契約測試照不到這一類。
+#
+# ⚠ **這一行只擋「產生」，不擋「讀取」**：它讓 hook 這條最高頻的路徑不再製造
+#   新的 pyc，但**既有的 pyc 仍然會被讀**。真正的偵測是 `tests/test_pyc_freshness.py`
+#   （逐欄比對 code object，並附合成 stale pyc 的自檢）。兩者是「少製造」＋「查得到」，
+#   缺一都不夠 —— 別把這一行讀成「從此不可能跑到舊 bytecode」。
+#
+# 代價實測 +4.7ms／次（13.7→18.4ms，對照 Python 冷啟動 ~105ms）。
+sys.dont_write_bytecode = True
+
 # `traceback` 刻意不在頂層 import：`-X importtime` 實測它連同相依的 `_colorize`
 # 要 20.2 ms，佔 dispatch 整包 import 成本（34.5 ms）的六成，而它只在
 # `_log_error` 的例外路徑用得到 —— 正常路徑每次都白付。
@@ -157,6 +171,17 @@ REGISTRY = [
         # 同樣只掛 Stop。這條的理由比前面幾條更硬：規則本身就是「該把工作派出去」，
         # 對 subagent 講等於要求它再派下一層。規則內另外用 `agent_id` 再擋一次
         # （防的是哪天有人把它掛上 SubagentStop）。
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
+        # 2026-08-22（E-8 之後）：只掛 Stop，不掛 SubagentStop。
+        # SubagentStop 只看得到「自己那一個 agent」，沒有跨 invocation 的聚合狀態；
+        # 而 ESC-1 要判的是「主 session 這一輪收到的所有角色回報」。
+        # 掛 SubagentStop 還會讓 applies 被 41.7% 的內建型別（Plan／general-purpose／
+        # Explore）灌水 —— 分母越大，「零 findings」越像「大家都沒卡住」。
+        "id": "ESC-1",
+        "module": "esc1_unmet_need_logged",
         "events": {"Stop"},
         "tools": None,
     },
@@ -474,39 +499,123 @@ def _pending_path(session_id: str) -> str:
     return os.path.join(STATE_DIR, f"pending_warn.{session_id}.json")
 
 
+# 便箋容量上限。超過就丟最舊的 —— 但**丟掉的數目會被投遞出去**（見
+# `_take_pending_warning`）：靜默截斷會讓「都提醒過了」看起來成立，而那正是
+# 這次改動要修的失效模式本身。
+_PENDING_MAX_ENTRIES = 20
+_PENDING_MAX_CHARS = 20000
+
+
+def _read_pending(path: str) -> dict:
+    """讀便箋，回 `{"entries": [...], "dropped": n}`。讀不動就回空的。
+
+    **相容舊的單槽格式**：2026-08-22 之前是 `{"ts", "message"}`，
+    state/ 裡現存 7 張那種化石。讀不動舊格式就等於把它們靜靜丟掉，
+    而它們正是「便箋沒送到」的證據。
+    """
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except Exception:
+        return {"entries": [], "dropped": 0}
+    if isinstance(data, dict) and isinstance(data.get("entries"), list):
+        return {"entries": [e for e in data["entries"] if isinstance(e, dict)],
+                "dropped": int(data.get("dropped") or 0)}
+    if isinstance(data, dict) and data.get("message"):
+        return {"entries": [{"ts": data.get("ts") or "",
+                             "message": data["message"], "count": 1}], "dropped": 0}
+    return {"entries": [], "dropped": 0}
+
+
+def _write_pending(path: str, payload: dict) -> None:
+    """原子寫：先寫暫存檔再 `os.replace`。
+
+    單槽時代撕裂的寫入只損失一則；**累積之後撕裂會損失整份佇列**，
+    而 `_read_pending` 的 fail-open 會把壞檔讀成「沒有便箋」——
+    也就是靜默歸零。成本是一次 rename，值得。
+    """
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False)
+    os.replace(tmp, path)
+
+
 def _queue_pending_warning(session_id: str, message: str) -> None:
-    """把 Stop 事件的 WARN 存成便箋，等下一次 UserPromptSubmit 投遞。
+    """把 Stop 事件的 WARN **累積**進便箋，等下一次 UserPromptSubmit 投遞。
+
+    **2026-08-22 從單槽改成累積**（E-8 定案）。原本是 `open(path, "w")` 直接覆寫，
+    鍵只有 session_id —— 於是一個 session 內連續多次 Stop（背景通知喚醒、續跑、
+    自動接續；實測 111 段連發、最多 11 連）後寫的會把前面的整個蓋掉。
+    實測 86 筆非 shadow 的 Stop 級 WARN 裡：**11 筆被後續 WARN 覆寫、
+    11 筆 session 結束時仍未投遞、1 筆過 TTL ⇒ 23 筆（27%）從沒到達任何人**，
+    而 `report.py` 把它們全部算成 findings —— 規則的自我報告說成功，實際上什麼都沒到。
+
+    同一則訊息重複進來只累加次數、不重複佔位：Stop 每輪都跑，一條沒被處理的
+    提醒會每輪重來，不去重的話容量會被同一句話吃光。
 
     fail-open：寫不進去就算了。這條是提醒，不值得讓 hook 爆掉去擋住對話。
     """
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        with open(_pending_path(session_id), "w", encoding="utf-8") as fh:
-            json.dump({"ts": _now(), "message": message}, fh, ensure_ascii=False)
+        path = _pending_path(session_id)
+        data = _read_pending(path)
+        cutoff = _minutes_ago(_PENDING_TTL_MIN)
+        entries = [e for e in data["entries"] if (e.get("ts") or "") >= cutoff]
+        dropped = data["dropped"] + (len(data["entries"]) - len(entries))
+
+        for e in entries:
+            if e.get("message") == message:
+                e["ts"] = _now()
+                e["count"] = int(e.get("count") or 1) + 1
+                break
+        else:
+            entries.append({"ts": _now(), "message": message, "count": 1})
+
+        # 超量丟最舊的。留至少一則 —— 一則超長訊息不該把自己也丟掉。
+        while len(entries) > 1 and (
+                len(entries) > _PENDING_MAX_ENTRIES
+                or sum(len(e.get("message") or "") for e in entries) > _PENDING_MAX_CHARS):
+            entries.pop(0)
+            dropped += 1
+
+        _write_pending(path, {"entries": entries, "dropped": dropped})
     except Exception:
         pass
 
 
 def _take_pending_warning(session_id: str) -> str:
-    """取出並**刪除**便箋（只投一次）。
+    """取出並**刪除**便箋（只投一次），把累積的多則串起來。
 
     刪除發生在「即將送出」的當下：留著會在下一輪重送一次，而重複的提醒
     正是讓閘門變成噪音的方式。
 
     過期的便箋丟掉不送 —— 隔了幾小時才冒出來的提醒，模型與使用者都對不上是
-    哪一輪的事，那種訊息只會製造困惑。
+    哪一輪的事，那種訊息只會製造困惑。**但丟掉幾則會講出來**：
+    「沒有提醒」與「有提醒但沒送到」在畫面上必須分得出來，
+    否則這次改動只是把靜默損失從 27% 降到某個未知的數字。
     """
     path = _pending_path(session_id)
     try:
         if not os.path.exists(path):
             return ""
-        with open(path, encoding="utf-8-sig") as fh:
-            data = json.load(fh)
+        data = _read_pending(path)
         os.remove(path)
-        ts = data.get("ts") or ""
-        if ts and ts < _minutes_ago(_PENDING_TTL_MIN):
-            return ""
-        return data.get("message") or ""
+        cutoff = _minutes_ago(_PENDING_TTL_MIN)
+        fresh = [e for e in data["entries"] if (e.get("ts") or "") >= cutoff]
+        lost = data["dropped"] + (len(data["entries"]) - len(fresh))
+
+        parts = []
+        for e in fresh:
+            msg = e.get("message") or ""
+            if not msg:
+                continue
+            n = int(e.get("count") or 1)
+            parts.append(f"{msg}（同一則累計 {n} 次）" if n > 1 else msg)
+        if lost:
+            parts.append(
+                f"⚠ 另有 {lost} 則提醒沒能投遞（超過 {_PENDING_TTL_MIN} 分鐘、"
+                f"或超出便箋容量而被丟棄）。")
+        return "\n".join(parts)
     except Exception:
         try:
             os.remove(path)

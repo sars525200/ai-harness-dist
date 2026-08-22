@@ -18,6 +18,20 @@ import json
 import os
 import re
 from collections import Counter, defaultdict
+import sys
+
+# Windows 的 Python 預設用 cp950 寫 stdout —— 這支的輸出含 ⚠／✔／中文，
+# 在 cp950 下 `print` 直接拋 UnicodeEncodeError。**而且只在有死規則時才炸**：
+# ⚠ 只出現在「findings 恆 0」那一列（main() 的判讀欄），所以規則都健康時報表印得完，
+# 一旦真的出現死規則就當場崩在第 140 行——這支正是用來發現死規則的工具，
+# 它的失效條件與它要偵測的東西完全重合（2026-08-22 對抗式覆核抓到）。
+# 與 dispatch.py 的 `_force_utf8_output` 同一條紀律，只是那邊壞的是閘門訊息、
+# 這邊壞的是「你有沒有死規則」這個答案本身。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 STATE_DIR = r"D:\.ai-harness\state"
 
@@ -90,6 +104,56 @@ def _load_error_counts() -> dict[str, int]:
     return counts
 
 
+def _print_esc1_second_denominator() -> None:
+    """ESC-1 的第二分母：至今偵測到幾個角色喊過。
+
+    ## 為什麼只有這一條有
+
+    上面那張表的死規則判讀是 `f == 0` **嚴格相等**。ESC-1 的 `applies` 是每次主
+    session Stop（樣本期間 750 次），而它的 findings 會在「都通報過了」之後歸零
+    —— 於是 findings=1／applies=750 這種**健康**狀態不會印 ⚠，
+    而 findings 掉到 0 的**失效**狀態也不會印（因為 0 那條會印，但讀的人分不出
+    「沒有人喊」與「偵測壞了」）。
+
+    **不能改成比率門檻**（2026-08-22 第 3 輪覆核實測）：既有健康規則的比率是
+    UI-1 **0.39%**、BUDGET-1 **0.91%**、HTML-1 3.4%，而 ESC-1 的健康值約 5.0%。
+    任何低於 5% 的門檻都會把 UI-1 與 BUDGET-1 誤標成死規則，然後那個 ⚠ 就被訓練成
+    噪音 —— 而它正是唯一守著「第五條死規則」的東西。
+
+    所以走另一條路：**規則自己記一個第二分母**。`esc1_state.json` 的
+    `pending + done` 就是「至今偵測到幾個角色喊過」，與 findings 各自獨立：
+
+        findings 0 ＋ 第二分母 >0  → 偵測仍在動，只是都通報過了（健康）
+        findings 0 ＋ 第二分母 =0  → 偵測可能壞了（要查）
+
+    ⚠ 刻意**不做成通用框架**：目前只有這一條規則有第二分母，為 N=1 建抽象層
+    只會多一個沒人維護的介面。第二條出現時再抽。
+    """
+    path = os.path.join(STATE_DIR, "esc1_state.json")
+    if not os.path.isfile(path):
+        return
+    try:
+        with open(path, encoding="utf-8-sig") as fh:
+            st = json.load(fh)
+        pending = len(st.get("pending") or {})
+        done = len(st.get("done") or {})
+    except Exception:
+        print("\n  ⚠ ESC-1 的 state 檔讀不動 —— 第二分母算不出來，"
+              "此時 findings=0 不能當成「沒有人喊」。")
+        return
+    total = pending + done
+    print()
+    if total:
+        print(f"  ESC-1 第二分母：至今偵測到 {total} 個角色喊過"
+              f"（已確認送達 {done}、等待投遞 {pending}）。")
+        print("    findings 歸零時這個數字 >0 ＝ 偵測仍在動、只是都通報過了；"
+              "兩者同時為 0 才是判準壞了。")
+    else:
+        print("  ⚠ ESC-1 第二分母為 0 —— 至今沒有偵測到任何角色喊過。"
+              "實測 303 份角色回報裡有 37 筆真需求，所以長期為 0 是要查的訊號，"
+              "不是「大家都沒卡住」。")
+
+
 def main() -> None:
     events = _load_all_events()
     errors = _load_error_counts()
@@ -138,6 +202,9 @@ def main() -> None:
         else:
             note = ""
         print(f"  {rule_id:<10}{f:>10}{n:>10}   {note}")
+
+    _print_esc1_second_denominator()
+
     if dead:
         print()
         print(f"  ⚠ 上列 {len(dead)} 條（{'、'.join(dead)}）**分母有值、分子恆為 0**。")

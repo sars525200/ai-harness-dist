@@ -314,16 +314,23 @@ def main() -> int:
         import test_dashboard_server
         import test_decl1
         import test_disp1
+        import test_esc1
+        import test_warn_wording
         import test_progress_chart
         import test_todos
         import test_warn_channel
         import test_workflow_compliance
         import test_check_bloat
         import test_check_prose_blocks
+        import test_pyc_freshness
         import test_harness_config
         import test_context_health_skill
         import test_js_source_probe
         for run_fn, label in (
+            # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
+            # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
+            (test_pyc_freshness.selftest, "stale pyc 偵測器自檢"),
+            (test_pyc_freshness.run, "執行中 bytecode 與原始碼一致"),
             (test_check_bloat.run, "常駐層健檢（check_bloat）"),
             (test_check_prose_blocks.run, "散文塊偵測（check_prose_blocks）"),
             (test_harness_config.run, "harness 設定去專案化（P-12）"),
@@ -345,6 +352,9 @@ def main() -> int:
             (test_dashboard_server.run, "本機看板服務"),
             (test_decl1.run, "DECL-1 宣告欄位"),
             (test_disp1.run, "DISP-1 派工紀律"),
+            (test_esc1.run, "ESC-1 需求登記"),
+            (test_warn_wording.selftest, "WARN 措辭守門自檢"),
+            (test_warn_wording.run, "WARN 措辭跨規則守門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
         ):
             # 2026-08-15：**每一項各自隔離**。原本是裸呼叫 —— 其中一支 `SystemExit` 就會把

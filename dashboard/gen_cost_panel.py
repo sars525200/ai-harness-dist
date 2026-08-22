@@ -56,6 +56,9 @@ COST_STATE = DASHBOARD_DIR / "cost_state.json"
 
 IT_DEPT = Path(r"D:\IT-department")
 SKILLS_DIR = IT_DEPT / ".claude" / "skills"
+# 全域層 skill（跨專案共用）。與專案層是兩個不同的目錄，清冊要涵蓋兩邊 —— 
+# 見 roster() 的註解：只掃專案層會讓 8 支全域 skill 憑空從分母消失。
+GLOBAL_SKILLS_DIR = DASHBOARD_DIR.parent / "skills"
 # 角色 2026-08-05 搬到 harness repo（見 gen_roles_topology.AGENTS_DIR 的說明）。
 AGENTS_DIR = HARNESS_ROOT / "agents"
 # 平台把專案路徑轉成目錄名的規則：非字母數字一律換 `-`（`d:\IT-department` → `d--IT-department`）
@@ -336,9 +339,61 @@ def event_usage() -> dict:
     return {"skills": skills, "agents": agents, "since": since, "until": until}
 
 
+def _skill_display(path: Path) -> str:
+    """讀 SKILL.md frontmatter 的 `display_name:`（中文顯示名）。沒有就回空字串。
+
+    2026-08-22 新增。慣例與角色一致（`gen_roles_topology.py` 的 `display`）：
+    **識別字英文、畫面一律中文**。沒填就退回識別字，不留空。
+    只掃前 12 行 —— frontmatter 一定在最前面，掃全檔是白付 I/O。
+    """
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines()[:12]:
+            if line.startswith("display_name:"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return ""
+
+
+def skill_displays() -> dict:
+    """{識別字: 中文顯示名}。沒填 `display_name:` 就退回識別字，不留空。
+
+    ⚠ **刻意不併進 `roster()` 的回傳值**：既有呼叫端全部寫成
+    `build_html(..., *roster())`（位置展開），多回一個值會讓它悄悄落進
+    下一個位置參數 —— 2026-08-22 實際發生過：`skill_display` 掉進 `stage`
+    那一格，錯誤訊息是「expected 2, got 24」（那個 24 是 dict 的 key 數），
+    離真正的原因隔了三層。回傳值的形狀是呼叫端的契約，不是內部細節。
+    """
+    out = {}
+    for d in (d for d in (SKILLS_DIR, GLOBAL_SKILLS_DIR) if d and d.exists()):
+        for p in sorted(d.glob("*/SKILL.md")):
+            out.setdefault(p.parent.name, _skill_display(p) or p.parent.name)
+    return out
+
+
 def roster() -> "tuple[list, list]":
-    """本專案清冊：skill 與角色。用來算「建好沒人用」的分母。"""
-    sk = sorted(p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md")) if SKILLS_DIR.exists() else []
+    """全部 skill 清冊與角色清冊，＋ skill 的中文名對照。用來算「建好沒人用」的分母。
+
+    ⚠ **兩個目錄都要掃**（2026-08-22 修）：原本只掃 `SKILLS_DIR`（專案層 16 支），
+    全域層 `D:\\.ai-harness\\skills\\` 的 8 支（`context-health`／`visual-check`／
+    `research` 等）**完全不在分母裡** —— 而 event log 明明記得到它們的使用次數
+    （`visual-check` 18 次）。分子有、分母沒有 ⇒「建好沒人用」這個數字算的是
+    一個對不齊的集合，而且看不出來。
+    """
+    # ⚠ **拒跑守門綁專案層，不綁「兩層加總」**（U-2：設定缺漏要拒跑，不要猜）。
+    #   2026-08-22 把掃描擴到兩個目錄時一度讓這條守門失效：專案層指到空目錄、
+    #   全域層那 8 支仍讓它跑得下去 ⇒「這個專案的清冊斷了」變成靜默產空表。
+    #   `test_cost_panel`「資料源斷掉時拒絕產出」當場抓到。
+    proj = (sorted(p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md"))
+            if SKILLS_DIR.exists() else [])
+    if not proj:
+        raise SystemExit(f"數不到任何 skill（{SKILLS_DIR}）—— 零目標拒跑。")
+    found = {}
+    for d in (d for d in (SKILLS_DIR, GLOBAL_SKILLS_DIR) if d and d.exists()):
+        for p in sorted(d.glob("*/SKILL.md")):
+            # 同名時先掃到的優先（專案層蓋全域層，與 Claude Code 的解析順序一致）
+            found.setdefault(p.parent.name, _skill_display(p))
+    sk = sorted(found)
     ag = []
     if AGENTS_DIR.exists():
         for p in sorted(AGENTS_DIR.glob("*.md")):
@@ -348,8 +403,6 @@ def roster() -> "tuple[list, list]":
                     name = line.split(":", 1)[1].strip()
                     break
             ag.append(name)
-    if not sk:
-        raise SystemExit(f"數不到任何 skill（{SKILLS_DIR}）—— 零目標拒跑。")
     return sk, ag
 
 
@@ -635,7 +688,9 @@ def _stage_block(stage: "tuple[dict, dict] | None", cost: "dict | None" = None) 
 
 
 def build_html(by_day: dict, ev: dict, cost: "dict | None",
-               skills: list, agents: list, stage: "tuple[dict, dict] | None" = None) -> str:
+               skills: list, agents: list, stage: "tuple[dict, dict] | None" = None,
+               skill_display: "dict | None" = None) -> str:
+    skill_display = skill_display or skill_displays()
     days = sorted(by_day)[-DAYS_SHOWN:]
     rows = "\n".join(_mix_row(d, by_day[d]) for d in reversed(days))
 
@@ -691,7 +746,8 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
                          for m, v in cost["by_model"].items()]
     # 使用率也要能畫圖：skill／角色各自的觸發次數
     chart["usage"] = {
-        "skills": [{"name": s, "n": ev["skills"].get(s, {}).get("n", 0)} for s in skills],
+        "skills": [{"name": s, "label": skill_display.get(s) or s,
+                    "n": ev["skills"].get(s, {}).get("n", 0)} for s in skills],
         "agents": [{"name": a, "n": ev["agents"].get(a, {}).get("n", 0)} for a in agents],
     }
     chart_json = json.dumps(chart, ensure_ascii=False)
@@ -735,8 +791,15 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
 
     # 使用率
     used_sk = ev["skills"]
+    # 中文顯示名在前、英文識別字（要打的字）跟在後 —— 與角色卡同一個慣例，
+    # 連 class 都沿用 `.rt-id`（等寬 10px／faint／user-select:all，已存在於看板 CSS）。
+    # ⚠ 不要自己發明 class：看板 CSS 在 harness-dashboard.html 裡，那是產生器
+    #   寫不到的區域，新 class 會渲染成沒有樣式的裸文字。
+    # （`gen_roles_topology.py`：顯示中文正式名，識別字放小字副標，兩者都看得到）。
+    # 沒填 display_name 的退回識別字，不留空。
     sk_rows = "".join(
-        f'<tr><td><code>/{_esc(s)}</code></td>'
+        f'<tr><td><b>{_esc(skill_display.get(s) or s)}</b>'
+        f'<span class="rt-id">/{_esc(s)}</span></td>'
         f'<td class="num">{used_sk.get(s, {}).get("n", 0)}</td>'
         f'<td>{_esc(used_sk.get(s, {}).get("last", "")[:16]) or "—"}</td></tr>'
         for s in sorted(skills, key=lambda x: (-used_sk.get(x, {}).get("n", 0), x)))

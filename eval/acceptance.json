@@ -1,4 +1,10 @@
 {
+  "design-spec": {
+    "file_mtime": 1786082482.685371,
+    "note": "2026-08-22 M 級任務實跑（角色受阻升級協定）：步驟1判M→步驟2定落點HARNESS_ROLE_ARCH_PLAN.md §9（疊代不新建）→步驟3分岔E-1~E-6逐項AskUserQuestion→步驟4驗證表12項含變異紅燈條件→步驟5標待審核。步驟3的『討論中長出來的新分岔要補進表裡』實際觸發兩次：E-5/E-6（shadow與門檻數字），以及E-7（發現SubagentStop送不到訊息，補PostToolUse:Agent掛點）——靜態檢查照不到這條紀律，這輪證明它有效。",
+    "result": "pass",
+    "verified_at": "2026-08-22T00:59:00"
+  },
   "domain-modeling": {
     "file_mtime": 1787290294.7827032,
     "note": "2026-08-21 實跑：從 junction 正常載入；套用其紀律稽核剛建的 root CONTEXT.md，抓到兩個真缺陷——①違反「glossary and nothing else」(混入 DEV/PROD 路徑、?v= 流程、gate 點數、待補清單)②從未做 Cross-reference with code。對程式碼查證後 app.js:13209 確認 division=部門/department=課，且 app.js:2567 揭露 division 是由課反查補回的衍生值(詞彙表原本沒寫)。CONTEXT.md 已重寫為純詞彙表，待補清單搬進 SKILL_IMPORT_WAYFINDER_PLAN §13。",

@@ -48,7 +48,10 @@ MUTATIONS = [
     ),
     (
         "拿掉 skill 清冊零目標守門（把分母寫成 0）",
-        'if not sk:\n        raise SystemExit',
+        # 錨點 2026-08-22 更新：守門從 `if not sk:` 搬到 `if not proj:`
+        # （掃描擴到全域層之後，守門必須綁**專案層**才有意義，
+        #  否則全域層那 8 支會讓「專案清冊斷了」跑得下去）。
+        'if not proj:\n        raise SystemExit',
         "if False:\n        raise SystemExit",
     ),
     (

@@ -35,6 +35,9 @@
     },
     "UI-1": {
       "shadow": false
+    },
+    "ESC-1": {
+      "shadow": false
     }
   }
 }

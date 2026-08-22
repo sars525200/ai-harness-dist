@@ -1,5 +1,6 @@
 ---
 name: visual-check
+display_name: 截圖驗收
 description: 用 headless 截圖真的看一眼畫面，再宣稱 UI 改好了。改完 CSS／版面／新做一個面板或視窗、或 user 說「太醜」「歪掉」「看不見」「跑版」時使用。它產 probe 頁（正式 markup ＋ 正式 CSS ＋ 正式字型）→ 截淺色與深色兩張 → **逐張用 Read 打開看** → 才下判定。純視覺驗證，不改業務邏輯、不部署。
 ---
 

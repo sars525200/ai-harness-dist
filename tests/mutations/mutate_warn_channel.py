@@ -70,8 +70,11 @@ MUTATIONS = [
     ),
     (
         "便箋投遞後不清除（下一輪會重送 —— 重複提醒就是噪音）",
-        "        os.remove(path)\n        ts = data.get(\"ts\") or \"\"",
-        "        ts = data.get(\"ts\") or \"\"",
+        # 錨點 2026-08-22 更新：E-8 改寫 _take_pending_warning 之後，
+        # 原本綁的 `ts = data.get("ts")` 那一行已不存在 —— 本檔 docstring
+        # 警告過的錨點漂移，這次是被自己人改到的。改綁刪檔那一行本身。
+        "        os.remove(path)\n        cutoff = _minutes_ago(_PENDING_TTL_MIN)",
+        "        cutoff = _minutes_ago(_PENDING_TTL_MIN)",
     ),
     (
         "UserPromptSubmit 的投遞窗口移到 candidates 守門之後（永遠送不出去）",
@@ -88,8 +91,28 @@ MUTATIONS = [
         '            desc = str(ti.get("description") or "")[:60]',
         '            desc = str(ti.get("prompt") or "")[:60]',
     ),
+    # ── 2026-08-22（E-8）便箋從單槽改成可累積，補四個變異 ──────────────
+    (
+        "便箋退回單槽覆寫（＝E-8 改動被 revert，後一則蓋掉前一則）",
+        "        data = _read_pending(path)",
+        '        data = {"entries": [], "dropped": 0}',
+    ),
+    (
+        "同一則訊息不去重（容量會被同一句話吃光，把別人的提醒擠掉）",
+        '            if e.get("message") == message:',
+        "            if False:",
+    ),
+    (
+        "不讀舊的單槽格式（state/ 裡的化石便箋會被靜靜丟掉）",
+        '    if isinstance(data, dict) and data.get("message"):',
+        "    if False:",
+    ),
+    (
+        "丟棄了卻不講（「沒有提醒」與「有提醒但沒送到」變得分不出來）",
+        "        if lost:",
+        "        if False:",
+    ),
 ]
-
 all_red = True
 try:
     for i, (name, old, new) in enumerate(MUTATIONS, 1):

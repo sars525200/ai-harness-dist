@@ -59,7 +59,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "BUDGET-1", "PR-1", "ENC-1",
+ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "PR-1", "ENC-1",
          "HTML-1", "UI-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
@@ -108,6 +108,20 @@ DESC = {
                "p25 為 0，派工發生在大量翻檔<b>之前</b>，所以「查很多次卻沒派」不能區分該派與不該派。"
                "門檻 80 取自 41 個真實 session 的雙峰之間（20/30/50 觸發數完全相同）。"
                "這條會因為問題被解決而自己安靜下來。",
+    },
+    "ESC-1": {
+        "badge": "8/22 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "why": "角色在回報裡寫了「需要但沒有」，而那個需求還沒被登記進待辦表",
+        "tip": "V-E 機制的<b>角色端一直在運作，漏的是主 session 的抄錄那一步</b>："
+               "實測 303 份角色回報有 <b>37 筆真需求</b>，而「全域·需求」表只有 3 列。"
+               "判準前三版都被實測推翻過（見 HARNESS_ROLE_ARCH_PLAN §9.7），所以每一條都綁量法："
+               "資料源是主 transcript 的<b>兩個</b>位置（sync 的 toolUseResult.content ＋ "
+               "async 的 &lt;task-notification&gt; 的 &lt;result&gt;，後者佔 76% 的正樣本）；"
+               "比對要剝掉 markdown 包裹（實測 lstrip 買到 0 筆，真正掉召回的是 ## 與 **）；"
+               "「【需要但沒有】<b>無</b>」不算喊聲（母體 51 份裡有 10 份是這種，字串層與真喊聲一樣）。"
+               "回測召回 <b>37/37</b>、誤報 <b>0</b>。"
+               "去重刻意<b>等 event log 出現 deliver 才標記已通報</b>——實測 86 筆 Stop 級 WARN 有 "
+               "23 筆（27%）從沒到達模型，而「判定了」與「送達了」在 report.py 上分不出來。",
     },
     "BUDGET-1": {
         "badge": "7/31 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
