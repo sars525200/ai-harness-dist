@@ -280,6 +280,48 @@ def _case_desc_coverage(fails: list) -> None:
         fails.append(f"這些規則有事件卻沒有敘述：{missing}（表格會顯示「—」）")
 
 
+def _case_progress_doc_rule_count(fails: list) -> None:
+    """`HARNESS_PROGRESS.md` 寫的規則條數必須等於 `dispatch_config` 的實際條數。
+
+    為什麼需要這道守門（2026-08-22 稽核 F-18）：那份文件**不是任何產生器的輸出**
+    ——只有兩支 dashboard 腳本**讀**它，沒有寫入者 —— 所以它的數字必然是人手打的。
+    實測它在規則從 9 條長到 12 條之後掛了兩週，**五個地方全錯而沒有任何東西會叫**。
+    只修數字不加守門的話，下一次加規則它會再錯一遍。
+
+    判準綁「同一行同時有 `enforce` 和 `N 條`」，不綁某一段的字面位置：
+    位置會搬家，這個形狀不會。副作用是**歷史敘述若把數字擺在 `enforce` 旁邊也會被抓**
+    ——那是刻意的：要寫歷史就別把當年的數字擺在那個字旁邊。
+
+    零命中一律判失敗：判準綁錯層時會安靜地變成「什麼都沒檢查」，
+    而那跟「檢查了、全過」在畫面上長得一模一樣。
+    """
+    import re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfg_path = os.path.join(root, "hooks", "dispatch_config.json")
+    doc_path = os.path.join(root, "HARNESS_PROGRESS.md")
+    if not os.path.isfile(cfg_path) or not os.path.isfile(doc_path):
+        fails.append("找不到 dispatch_config.json 或 HARNESS_PROGRESS.md"
+                     " —— 判斷不出來，不當成通過")
+        return
+    with open(cfg_path, encoding="utf-8-sig") as fh:
+        actual = len(json.load(fh)["rules"])
+    with open(doc_path, encoding="utf-8") as fh:
+        doc = fh.read()
+    pat = re.compile(r"(\d+)\s*條")
+    checked = 0
+    for lineno, line in enumerate(doc.splitlines(), 1):
+        if "enforce" not in line:
+            continue
+        for mm in pat.finditer(line):
+            checked += 1
+            if int(mm.group(1)) != actual:
+                fails.append(f"HARNESS_PROGRESS.md:{lineno} 寫「{mm.group(1)} 條」，"
+                             f"實際 {actual} 條")
+    if not checked:
+        fails.append("整份文件找不到任何「N 條 … enforce」——"
+                     "判準可能綁錯了，零命中不算通過")
+
+
 def run() -> "tuple[int, list]":
     cases = [
         ("probe session 被排除", _case_probe_excluded),
@@ -292,6 +334,7 @@ def run() -> "tuple[int, list]":
         ("長條用 sqrt 尺度、0 不畫", _case_bar_scale),
         ("marker 守門與冪等", _case_marker_and_idempotent),
         ("有事件的規則都有敘述", _case_desc_coverage),
+        ("進度文件的規則條數沒漂（F-18 守門）", _case_progress_doc_rule_count),
     ]
     passed, failures = 0, []
     for name, fn in cases:

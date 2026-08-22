@@ -18,7 +18,7 @@
 | 2 | **Tools**（工具） | 🟡 | CLI 齊全；allow 187→**115**（2d 清死條目＋冗餘）、deny **12** 條（Bash／PowerShell 對稱）；2 個 MCP 未授權 |
 | 3 | **Sandbox**（沙盒） | 🔴 **未起步** | 無隔離，直接讀寫本機與 VM |
 | 4 | **Orchestration**（編排） | 🟡 | **10** skills＋5 任務模式＋模型路由；**2 個自建角色已上線實測**（Phase 2） |
-| 5 | **Hook**（掛鉤） | 🟢 **9 條全數 enforce（0 shadow）** | DB-1／R4 真閘門（BLOCK）；R1／R3／AWC-1／ENC-1／BUDGET-1／DECL-1 走 WARN（`additionalContext`）；**8/07 R4 與 PR-1 最後兩條解 shadow** |
+| 5 | **Hook**（掛鉤） | 🟢 **12 條全數 enforce（0 shadow）** | 條數與 shadow 狀態的單一真相是 `hooks/dispatch_config.json`，**這裡不重抄清單**（重抄過一次，規則從 9 加到 12 之後這一格掛了兩週沒人發現）。交付形態分三種：BLOCK→exit 2、WARN→`additionalContext`、Stop 落便箋→UserPromptSubmit 投遞 |
 | 6 | **Observability**（可觀測性） | 🟡 | 有 event log 與 decision log；無 traces／evals／成本儀表 |
 
 ---
@@ -33,7 +33,7 @@
 | always-loaded | `MEMORY.md` 索引 | session 啟動 | **18,315 bytes** |
 | always-loaded | 全域 `~/.claude/CLAUDE.md` | session 啟動 | 220 tokens |
 | always-loaded | **10** 個 skill 的 description | session 啟動 | ≈ 2.7k tokens |
-| always-loaded | **2 個角色檔的 description**（`.claude/agents/`） | session 啟動 | 少量 |
+| always-loaded | **6 個角色檔的 description**（實體在 `<harness>\agents\`，家目錄 `~\.claude\agents` 用 junction 接過去） | session 啟動 | 少量 |
 | **conditional** | `.claude/rules/` × 3（css-specificity／sql-db-symmetry／powershell-deploy-scripts） | **讀到符合 glob 的檔案時** | 平時 0 |
 | **on-demand** | `license-rules` skill＋**164** 個 memory topic 檔＋角色檔本體 | 被呼叫／被 Read 時 | 平時 0 |
 
@@ -106,7 +106,7 @@
 | **Skills（10 個）** | `codebase-health`(鎖手動)／`deploy-prod`／`diagnose-bug`／`dry-run-migrate`／`shougong`／`suggestion-inbox`／`license-rules`(參考型)／`data-incident`／`adversarial-review`／`verify-skill`（後三支 7/28 新增） |
 | **任務模式路由** | CLAUDE.md §2 五模式：ASK／VERIFY／DEV_DRY_RUN／DEPLOY／DEV，含升級安全閥 |
 | **模型路由** | §7：開室 Sonnet → 碰 [DB｜邏輯]／§8·§9 硬規則區／根因診斷／架構規劃切 Opus，目標 Opus:Sonnet ≈ 4:6 |
-| **Sub-agent／角色** | 🟢 **4 個自建角色**（檔案在 **project 層** `<repo>\.claude\agents\`）：`查詢員`（Read/Grep/Glob，無 hook——tools 白名單即邊界）／`雙改檢核員`／**`harness-auditor`**／**`project-auditor`**（後兩者 7/30 新建，唯讀稽核，Bash 被 `agent_readonly_gate.py` 收窄）。**放 `~\.claude\agents`（user 層）在 VSCode 環境永遠載不到**，那不是等重啟能解的。自建角色**會**載入 CLAUDE.md，內建 Explore／Plan 帶 `omitClaudeMd:true` **不會** |
+| **Sub-agent／角色** | 🟢 **6 個自建角色**（實體在 **harness 層** `<harness>\agents\`，家目錄 `~\.claude\agents` 用 **junction** 接過去——既是全域層又有版控）：`executor`／`harness-auditor`／`locator`／`project-auditor`／`sync-checker`／`visual-designer`。**7/30 之前放在專案層 `<repo>\.claude\agents`，2026-08-05 搬到 harness**（原註記「放 `~\.claude\agents`（user 層）在 VSCode 永遠載不到」講的是**直接放實體檔**的情況，junction 不受影響）。自建角色**會**載入 CLAUDE.md，內建 Explore／Plan 帶 `omitClaudeMd:true` **不會** |
 | **載入時機（7/30 實測·**已訂正**）** | 新增角色檔**有載入延遲但不必手動重啟**：建完立刻派回 `Agent type not found`，隔一段時間（同一個 session 內、未重啟）平台就自行通知新角色可用。**skill 更快**，`SKILL.md` 寫完當下就出現在可用清單。<br>⚠ 我第一版把它寫成「需重開 session」並據此 commit —— 那是**拿一次失敗就下機制結論**，錯在沒有等待與重試。正確的判準是：`not found` 只證明「此刻還沒載到」，不證明「要重啟才會載到」。（`hooks` 的 event key 才是真的需要重啟，那條有獨立實測。） |
 | **Workflow（多 agent 編排）** | 未使用 |
 
@@ -118,7 +118,7 @@
 
 ---
 
-## 5. Hook 🟢 → 6 條規則上線·**3 條 enforce**（DB-1 BLOCK ＋ R1／R3 WARN）·3 條 shadow
+## 5. Hook 🟢 → **12 條規則全數 enforce（0 shadow）**　·　條數的單一真相是 `hooks/dispatch_config.json`
 
 ### 已生效
 
@@ -132,7 +132,7 @@
 
 ### 規則現況（模式在 `hooks/dispatch_config.json`，per-rule）
 
-> ⚠ **實際 9 條，下表只列 6 條** —— `ENC-1`／`BUDGET-1`／`DECL-1` 是這張表寫成之後才加的，
+> ⚠ **實際 12 條，下表只列 6 條** —— `ENC-1`／`BUDGET-1`／`DECL-1` 是這張表寫成之後才加的，
 > 尚未補進來。判定它們狀態的單一真相是 `dispatch_config.json` ＋ `dispatch.py` 的 REGISTRY，
 > 不是這張表。
 
