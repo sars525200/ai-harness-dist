@@ -602,7 +602,7 @@ demo 把四種候選佈局蓋在**暫存目錄**、真的跑一次兩家的掃�
 | ✅ 已完成 | 票 08 稽核角色對象涵蓋決策票 | 紅燈＝植入漂移必須被回報 |
 | ✅ 已完成 | 票 09 遵循度軌跡 key 換工作單元 | shadow 已落地；key 待換 |
 | ✅ 已完成 | 票 05 驗證方式空著就擋 | /design-spec 步驟 4 的等價物 |
-| ⏳ 待做 | 票 10 PR-1 閘門 hardening | fail-open 留痕／併行雙 hash |
+| ✅ 已完成 | 票 10 PR-1 閘門 hardening | fail-open 留痕／併行雙 hash |
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
 ### v3 改版紀錄（user 決策 ＋ 我對覆核的一項反駁）
