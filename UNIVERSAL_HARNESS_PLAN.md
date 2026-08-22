@@ -44,9 +44,20 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 | | 全域層 | 核心層 | 專案層 |
 |---|---|---|---|
 | 放哪 | `~\.claude\`（Claude **自動載入**，跨所有專案） | `D:\.ai-harness\`（共用元件，被專案層用絕對路徑引用） | `<repo>\.claude\` |
-| 內容 | **角色**（能力＋工作方法）、未來的通用 skill | hook 分派機制、event log、看板產生器、eval、通用規則（AWC-1／ENC-1／PR-1／BUDGET-1） | 業務規則（DB-1／R1／R3／R4）、**`PROJECT_CONTEXT.md`**（角色的作用對象）、該專案的 settings |
+| 內容 | **角色**（能力＋工作方法）＋ **通用 skill**（2026-08-21 起實裝，原欄位寫「未來的」） | hook 分派機制、event log、看板產生器、eval、通用規則（AWC-1／ENC-1／PR-1／BUDGET-1） | 業務規則（DB-1／R1／R3／R4）、**`PROJECT_CONTEXT.md`**（角色的作用對象）、該專案的 settings |
 | 誰維護 | 我（跨部門共用） | 我（改動要想相容性） | 該部門自己 |
-| 現況 | 5 支（角色） | 28 支 | 4 支（規則）＋ `PROJECT_CONTEXT.md` |
+| 現況 | 角色 ＋ 通用 skill | hook／產生器／eval 等元件 | 規則 ＋ `PROJECT_CONTEXT.md` |
+
+> **這一列刻意不寫數字**（2026-08-22 改）。原本寫「5 支（角色）／28 支／4 支（規則）」，
+> 到 8/22 實測已經是 **6 角色 ＋ 8 skill ／ ── ／ 9 個規則**——三格全錯，而且**沒有任何守門會叫**。
+> 架構表要傳達的是「每一層放什麼形狀的東西」，數量是查得到的，寫進來只會爛掉。
+> **怎麼重數**（在 `D:\.ai-harness`）：
+> `ls agents/*.md | wc -l`（全域角色）／`ls -d skills/*/ | grep -v _meta | wc -l`（全域 skill）／
+> `ls <repo>/.claude/rules/*.md | wc -l`（專案規則）。
+>
+> ⚠ **全域層 skill 的 eval 涵蓋**：`config.py:SKILL_DIRS` 已含 `GLOBAL_SKILLS_DIR`，
+> 但 **`config.py` 到 8/22 仍是未追蹤檔**（`git status` 顯示 `??`）⇒ **新 clone 拿不到它**。
+> 這件事在別的 session 手上（本計畫的 A7／分岔②），此處只記錄，不動。
 
 **`PROJECT_CONTEXT.md` 是新部門導入時唯一必填的檔案**——角色一支都不用改。
 它回答的是「這個專案的雙目錄在哪、計畫書在哪、規則檔在哪、驗證慣例是什麼」。
