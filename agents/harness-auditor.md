@@ -63,7 +63,13 @@ hooks:
 | 看板與上次發布的差異 | `py -3 D:\.ai-harness\dashboard\check_freshness.py` | 主 session |
 
 被稽核對象（這些是「宣稱」，不是真相）：
-`HARNESS_PROGRESS.md`、`dashboard\harness-dashboard.html`、各 `*_PLAN.md`、`CLAUDE.md` §8。
+`HARNESS_PROGRESS.md`、`dashboard\harness-dashboard.html`、各 `*_PLAN.md`、`CLAUDE.md` §8，
+**以及進行中的決策票**——2026-08-22 起 M 級規劃層改走 wayfinder：
+`<repo>\.scratch\<effort>\map.md` 與同目錄 `issues\NN-*.md`（慣例見專案的
+`docs\agents\issue-tracker.md`）。**只稽核 `*_PLAN.md` 會漏掉改制後的新工作**，
+而那正是「稽核了一批凍結的檔然後回報無漂移」——不是沒查到問題，是查了不存在的東西。
+決策票特別容易漂的兩處：①票標 `resolved` 而宣稱做完的東西實際不存在
+②`map.md` 的 Decisions-so-far 與各票的 `Status:` 對不上（map 是索引、票是真相，以票為準）。
 
 ## 五個必查項
 
