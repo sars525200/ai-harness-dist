@@ -1,6 +1,8 @@
 # SKILL_WATCH_PLAN — 平台 skill 變動偵測與「可合併／可取代」提報
 
-> 2026-08-22 立案。**狀態：Design 完成（W-1～W-8 全定案）；Execute 進行中 2/5——詳見 §8。**
+> 2026-08-22 立案。**狀態：五階段全走完＋三輪對抗式覆核收斂（§9–§11）。**
+> **2026-08-23 設計變更：取消排程，改成純手動 `/skill-watch`（§12）** —— 讀本檔前先看 §12，
+> 前面各節寫的「每日排程」都是變更前的狀態。
 > 分層判準（`UNIVERSAL_HARNESS_PLAN.md:42`「換一個部門還成立嗎？」）：**成立 → 核心層**。
 > 任何部門用 Claude Code 都會遇到「平台加了新 skill、我的自建技能該不該退場」這個問題。
 
@@ -108,7 +110,8 @@ Claude Code **每一輪都把完整的 skill 清單（含描述）注入 context
 | `CronCreate`（session 內 cron） | ✅ | ❌ **session-only，Claude 一關就沒了；recurring 7 天自動過期** | 不可用 |
 | 雲端 routines（`/schedule`） | ❌ 雲端 session 看不到本機 | ✅ | 不可用 |
 | Windows 排程 → 直接跑 `.py` | ❌ 沒有 session | ✅ | 只能做「向外抓」那一半 |
-| **Windows 排程 → `claude -p`** | ✅ **是真正的 session** | ✅ | ✅ **採用** |
+| **Windows 排程 → `claude -p`** | ✅ **是真正的 session** | ✅ | ⚠ 一度採用，**2026-08-23 移除**（見 §12：綁 OS 綁機器，最不通用） |
+| **手動 `/skill-watch` → `claude -p`** | ✅ | ❌ 靠人記得 | ✅ **現行做法** |
 
 ⇒ **兩個資料源可以在同一個觸發點取得**，不必拆開跑。
 
@@ -126,7 +129,7 @@ Claude Code **每一輪都把完整的 skill 清單（含描述）注入 context
 | # | 分岔 | **決定** | 影響 |
 |---|---|---|---|
 | **W-1** | 資料源 | **兩者都做**：session 注入清單 ＋ 向外抓官方文件 | 注入清單當主源（平台內建 skill 只有這裡拿得到）；官方文件當交叉驗證。⚠ 這使「每輪跑」出局——網路請求塞不進 20–30ms 熱路徑 |
-| **W-2** | 觸發時機 | **全部排程跑** | 實作＝**Windows 工作排程器 → `claude -p`**（見 §3 表）。單一觸發點，兩個資料源同時取得 |
+| **W-2** | 觸發時機 | ~~全部排程跑~~ → **2026-08-23 改為純手動 `/skill-watch`**（見 §12） | 排程已移除 |
 | **W-3** | 通知管道 | ~~三者都接~~ → **2026-08-22 實作時降級為兩接：`TODOS.md` 落檔 ＋ 看板一格** | 見下方「便箋卡點」 |
 | **W-4** | 比對範圍 | **只比平台內建 skill** | 第一版範圍最小、驗證最好寫。做完再看要不要擴到 mattpocock 上游或專案層 |
 
@@ -436,3 +439,59 @@ Round 3 的原話是「處理完 ＋ 明天看到一次真正由排程觸發的�
 - **`eval/` 對全域 skill 的檢查現況有兩份衝突說法**：`UNIVERSAL_HARNESS_PLAN.md:29-34` 說「全域層 2 支從未被檢查」，`AUDIT_FIX_PLAN_20260822.md:114` 說已納入、掃描 18→24。**未實跑 eval 判定哪份是現況。**
 - **`HARNESS_PLAN.md` 的 hook 閘門 D1–D15 逐條內容未讀**（38KB）。已知風險：上游 skill `git-guardrails-claude-code`「會自己寫 hook settings，對撞 D1–D15，最危險」——本機制若日後擴到上游比對，這條要先讀。
 - **`~\.agents\.skill-lock.json` 的實際內容未打開驗**，只從四處交叉確認「已刻意清空」。
+
+---
+
+## 12. v5 設計變更 —— 取消排程，改成手動 skill（2026-08-23 user 定）
+
+**變更**：W-2 從「全部排程跑」改為 **純手動 `/skill-watch`**；不接 `/shougong`。
+
+| 項目 | 變更前 | 變更後 |
+|---|---|---|
+| 觸發 | Windows 工作排程器每日 23:17 | **打 `/skill-watch`**（或 `py -3 <harness>/skills/skill-watch/run.py`） |
+| 形態 | 只有腳本，使用者叫不動 | **全域 skill**（`<harness>/skills/skill-watch/`），已登記 `PROVENANCE.md` |
+| 心跳欄位 | `lastScheduledRunAt`（分辨排程 vs 手動） | **`lastSuccessAt`**（上次真的檢查成功是何時） |
+| 看板判準 | 「排程超過 48h 沒跑＝死了」 | **「超過 14 天沒查＝該跑一次」** |
+
+**user 的兩個理由，都成立**：
+
+1. **收工的步驟已經太多**，不再往 `/shougong` 疊東西。
+2. **要能沿用到各部門／各平台**——而 Windows 工作排程器是整套裡**最不通用**的一環
+   （綁 OS、綁這台機器，換部門要重設一次）。拿掉它，剩下的部分才真的可分發。
+
+**誠實記下代價**：手動觸發**沒有人會因為忘記而收到提醒**。補救是看板
+「平台能力近期有檢查過」那一格（`_p_skill_watch_alive`，超過 14 天轉紅）——
+但那一格也要有人去看。這個殘留風險是 user 在知情下選的，不是被忽略。
+
+### 實作時抓到的陷阱：`${CLAUDE_SKILL_DIR}` 指向 symlink 那一側
+
+`~/.claude/skills` 是指向 `<harness>/skills` 的 **symlink**，而 Claude Code 展開
+`${CLAUDE_SKILL_DIR}` 給的是 **symlink 側**路徑。於是 skill 裡寫
+`${CLAUDE_SKILL_DIR}/../../tools/xxx.py` 會被解析成 `~/.claude/tools/`（**不存在**）。
+
+**實測對照**（兩條都跑過）：
+
+```
+py -3 ".../.claude/skills/skill-watch/../../tools/skill_watch_run.py"
+  → can't open file '...\.claude\tools\skill_watch_run.py'   exit 2
+py -3 ".../.claude/skills/skill-watch/run.py"
+  → usage: run.py [-h] ...                                    exit 0
+```
+
+**修法**：skill 目錄放一支 `run.py`，用 `Path(__file__).resolve()`（會**跟隨 symlink**）
+往上三層找 harness 根。兩側呼叫都對，換機器換部門也不必改。
+⇒ **通用化的真正判準不是「有沒有用變數」，是「路徑由誰解析」**——
+讓被呼叫的一方自己解析，才不會被呼叫端的路徑形態影響。
+
+### 順帶驗到的一件事
+
+新增 `skill-watch` 這支自建 skill 之後，實跑輸出從「濾掉本機自建 **7** 支」變成 **8** 支，
+平台內建仍是 10 支、**沒有被報成「平台新增 1 支」**——覆核 N-2 的過濾修法在真實情境下生效。
+
+### 仍未做（等 user 指名）
+
+**監控 Claude Code 以外的 AI 工具**（Cursor、Copilot…）。user 要的通用範圍是「各種 AI 工具」，
+但目前只有 Claude Code 一個實作。**不預先搭多平台抽象層**——
+`UNIVERSAL_HARNESS_PLAN.md` §5 明文：「為了通用而通用：沒有第二個真的要用之前，
+不做抽象化重構。抽象層本身不會讓任何人少犯錯。」
+⇒ 等 user 指名實際要監控哪些工具，有第二個實作時再抽介面。

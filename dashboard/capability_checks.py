@@ -373,42 +373,40 @@ def _p_reversibility():
 
 
 def _p_skill_watch_alive():
-    """平台 skill 變動偵測的排程還活著嗎（`tools/skill_watch_run.py`）。
+    """平台能力偵測（`/skill-watch`）上次成功檢查是多久以前。
 
-    存在理由：那支每日無人看管跑，而它的失敗**沒有任何介面會變色**——
-    排程停掉／`claude` 掉出 PATH／設定檔壞掉，症狀都是「心跳檔停在某個日期」，
-    而 `state/` 在 `.gitignore` 裡，沒有人會主動去開它。
-    對抗式覆核（2026-08-22 R3-5）指出：F-2 宣稱的「讓機制死了看得見」
-    在沒有偵測器之前只成立於「有人主動去看那個檔」。
+    存在理由：平台會靜靜地加技能、改名、移除能力，而**沒有任何人在看**——
+    2026-08-22 實測，那份清單停在 7/28，期間平台把 `/review` 改成 `/code-review`、
+    新增 `design` 與 `artifact-diagramming`，還內建了 `/deep-research`。
 
-    判準看 `lastScheduledRunAt` 而**不是** `lastRunAt`：手動跑一次就會更新後者，
-    於是「排程其實早就沒在跑」會被一次手動執行掩蓋掉。
+    ⚠ **2026-08-23 起這支是純手動的**（user 定：不掛排程、不接收工流程）。
+    所以判準不是「排程死了沒」，是「**太久沒有人去檢查**」——這正是手動機制
+    的固有風險：沒有人會因為忘記而收到通知，除非有一格會變色。
+
+    看 `lastSuccessAt` 而不是 `lastRunAt`：失敗那次不該讓「上次真的檢查過」前進。
     """
+    stale_days = 14
     hb = HARNESS / "state" / "skill_watch_heartbeat.json"
     if not hb.exists():
-        return False, "沒有 state/skill_watch_heartbeat.json —— 這支從未成功跑過"
+        return False, "沒有心跳檔 —— `/skill-watch` 從未成功跑過"
     try:
         data = json.loads(hb.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
         return False, f"心跳檔讀不動（{type(exc).__name__}）—— 判斷不出來，不當成通過"
 
-    stamp = data.get("lastScheduledRunAt")
+    stamp = data.get("lastSuccessAt")
     if not stamp:
-        return False, ("心跳只有手動執行紀錄（lastScheduledRunAt 為空）"
-                       " —— 排程尚未成功跑過一次")
+        return False, "心跳沒有成功紀錄（lastSuccessAt 為空）—— 尚未成功檢查過一次"
     try:
         last = datetime.strptime(stamp, "%Y-%m-%dT%H:%M%z")
     except ValueError:
-        return False, f"lastScheduledRunAt 格式無法解析：{stamp!r}"
+        return False, f"lastSuccessAt 格式無法解析：{stamp!r}"
 
-    hours = (datetime.now().astimezone() - last).total_seconds() / 3600
-    if hours > 48:
-        return False, (f"排程上次成功是 {stamp}（約 {hours:.0f} 小時前）"
-                       "，每日排程超過 48 小時沒跑 = 已經死了")
-    ok_flag = data.get("ok")
-    if ok_flag is False:
-        return False, f"最近一次排程執行失敗：{str(data.get('detail'))[:120]}"
-    return True, f"排程 {hours:.0f} 小時前成功跑過（{stamp}）"
+    days = (datetime.now().astimezone() - last).total_seconds() / 86400
+    if days > stale_days:
+        return False, (f"上次成功檢查是 {stamp}（{days:.0f} 天前）"
+                       f"，超過 {stale_days} 天沒查 —— 打 `/skill-watch` 跑一次")
+    return True, f"{days:.0f} 天前檢查過平台能力（{stamp}）"
 
 
 def _p_skill_manifest():
@@ -1042,7 +1040,7 @@ CATEGORIES = [
             ("generated", "進度由來源產生，不手寫", "auto", _p_progress_generated),
             ("traces", "traces／span 級追蹤", "waived", _p_traces),
             ("cost", "成本儀表", "auto", _p_cost_dashboard),
-            ("skillwatch", "平台 skill 偵測排程還活著", "auto", _p_skill_watch_alive),
+            ("skillwatch", "平台能力近期有檢查過", "auto", _p_skill_watch_alive),
         ],
     },
     # ⑦⑧ 是 2026-07-30 外部標的校準後新增的兩類。三份標的（faros 五層／ETCLOVG 七層／

@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-r"""平台 skill 變動偵測 —— 排程入口。
+r"""平台 skill 變動偵測 —— 執行入口。
 
-**核心層**。由 Windows 工作排程器每日呼叫；起一個 `claude -p` 無頭 session 把當下的
-skill 清單問出來，與基準比對，有變動就寫進 `TODOS.md`「全域·需求」表。
+**核心層**。起一個 `claude -p` 無頭 session 把當下的 skill 清單問出來，
+與基準比對，有變動就寫進 `TODOS.md`「全域·需求」表。
+
+**觸發方式：純手動**（2026-08-23 user 定）。走 `/skill-watch` 這支 skill，
+或直接 `py -3 <harness>/skills/skill-watch/run.py`。
+⚠ **不掛排程、不接收工流程**——原本掛過 Windows 工作排程器，移除的理由有二：
+①收工的步驟已經太多，不再往 `/shougong` 疊東西 ②Windows 排程是整套裡**最不通用**
+的一環（綁 OS、綁這台機器，換部門要重設），與 harness 的分發目標相衝。
+代價誠實寫在這裡：**沒有人會因為忘記而收到提醒**，所以看板的
+「平台能力近期有檢查過」那一格（超過 14 天轉紅）是唯一的補救。
 
 設計見 `SKILL_WATCH_PLAN.md`。**v2（2026-08-22 對抗式覆核後重寫）**修掉九個發現，
 每一條都是「跑起來看似正常、其實錯了而沒有人會發現」那一類：
@@ -18,8 +26,8 @@ skill 清單問出來，與基準比對，有變動就寫進 `TODOS.md`「全域
 - **F-7 不寫絕對路徑進版控檔**，`cliVersion` 改實際查 `claude --version`。
 - **F-8 設定檔檢查涵蓋全域**（`~\\.claude\\settings.json` 也會被 `-p` 靜默忽略）。
 - **F-2 心跳**：每次跑完寫 `state\\skill_watch_heartbeat.json`，讓「機制死了」看得見。
-- **F-12 exit code**：0＝跑成功（不論有無變動）、2＝失敗。排程的 `LastTaskResult`
-  才有一致語意。要用 exit code 表達「有變動」請加 `--exit-on-change`。
+- **F-12 exit code**：0＝跑成功（不論有無變動）、2＝失敗。要用 exit code 表達
+  「有變動」請加 `--exit-on-change`（讓自動化呼叫端能分辨，而人看輸出就好）。
 """
 from __future__ import annotations
 
@@ -35,7 +43,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-# ⚠ 由排程以 `pythonw` 呼叫（無視窗）＝ `sys.stdout` 是 `None`，任何 print 都會
+# ⚠ 若以 `pythonw` 呼叫（無視窗·例如將來有人接自動化）＝ `sys.stdout` 是 `None`，任何 print 都會
 # AttributeError 而且**程序當場死掉、毫無徵兆**（`dashboard-generators.md` 記載踩過兩次）。
 # 在行程一開始換掉且**不還原**——用完還原的話，後面某次 import 又會拿到 None。
 if sys.stdout is None:
@@ -116,17 +124,16 @@ def _open_log():
 
 
 def _triggered_by() -> str:
-    """分辨這次是排程跑的還是人手動跑的（覆核 N-3）。
+    """這次是誰跑的。
 
-    沒有這一欄，心跳無法回答「排程到底有沒有在跑」——手動跑一次就會把
-    `lastRunAt` 更新成新的，讓人誤判「排程自動觸發已驗過」。
-    判準：排程以 pythonw 啟動、且環境不像互動式 shell。
-    ⚠ 這是啟發式，不是保證——只用來讓人判讀心跳，不拿來做控制流程。
+    ⚠ 2026-08-23 起**沒有排程**（user 定：不掛排程、不接收工流程，純手動 `/skill-watch`）。
+    這一欄因此從「分辨排程 vs 手動」降級成單純的執行環境紀錄——留著是因為
+    心跳要能回答「上次是誰在什麼環境下跑的」，而不是拿來做控制流程。
     """
     exe = Path(sys.executable).name.lower()
     interactive = bool(os.environ.get("TERM") or os.environ.get("SHELL"))
     if exe.startswith("pythonw") and not interactive:
-        return "scheduler-or-headless"
+        return "headless"
     return "manual"
 
 
@@ -152,10 +159,11 @@ def write_heartbeat(ok: bool, detail: str, changed: bool = False) -> None:
             "ok": ok,
             "changed": changed,
             "detail": detail[:400],
-            # 分開記「最後一次排程跑」——手動跑不該蓋掉這個時戳，
-            # 否則「排程到底還活著嗎」永遠答不出來（覆核 N-3）。
-            "lastScheduledRunAt": (_now() if who != "manual"
-                                   else prev.get("lastScheduledRunAt")),
+            # 分開記「最後一次**成功**跑完」——失敗那次不該蓋掉它，
+            # 否則「上次真的檢查過是什麼時候」永遠答不出來。
+            # （原本這欄叫 lastScheduledRunAt，用來分辨排程 vs 手動；
+            #   2026-08-23 取消排程後改成記「上次成功」，那才是人真正要問的事。）
+            "lastSuccessAt": _now() if ok else prev.get("lastSuccessAt"),
         }
         HEARTBEAT_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                                   encoding="utf-8", newline="")
@@ -222,12 +230,13 @@ def assert_neutral_cwd() -> None:
 
     `HARNESS_ROOT` 是 hook 與規則的開發現場。哪天為了測 hook 在這裡建了
     `.claude\\settings.json` 並掛上 `Stop`，F-9 的整個前提就無聲失效——
-    排程每晚在 harness repo 觸發那個 hook，而註解仍寫著「實查無 .claude＝中性」。
+    每次跑都會在 harness repo 觸發那個 hook，而註解仍寫著「實查無 .claude＝中性」。
+    （原始情境是排程每晚跑；改成手動後頻率降低，但踩到時的後果一樣。）
     """
     if (HARNESS_ROOT / ".claude").exists():
         raise RunError(
             f"{HARNESS_ROOT}\\.claude 出現了——F-9 的「中性目錄」前提失效。"
-            "這個目錄可能已掛上 hook，排程在此跑會觸發它。"
+            "這個目錄可能已掛上 hook，在此跑 claude -p 會觸發它。"
             "請改用其他中性目錄，或確認該設定不含 Stop hook 後調整本斷言。")
 
 
@@ -352,12 +361,12 @@ def append_todo(row_item: str, row_status: str, row_next: str, who: str = "待�
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="平台 skill 變動偵測（排程入口）")
+    ap = argparse.ArgumentParser(description="平台 skill 變動偵測（手動執行）")
     ap.add_argument("--budget", type=float, default=0.60, help="claude -p 的成本上限（USD）")
     ap.add_argument("--dry-run", action="store_true", help="只比對與印報告，不寫 TODOS、不更新基準")
     ap.add_argument("--no-log", action="store_true", help="不寫 log 檔（手動跑時用）")
     ap.add_argument("--exit-on-change", action="store_true",
-                    help="有變動時 exit 1。預設不這樣做——排程的 LastTaskResult 該只表達成敗")
+                    help="有變動時 exit 1。預設不這樣做——exit code 只表達成敗")
     ap.add_argument("--force", action="store_true", help="跳過擷取健全性檢查")
     args = ap.parse_args(argv)
 

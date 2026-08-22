@@ -21,12 +21,13 @@
 | `to-tickets` | mattpocock/skills（github） | 2026-08-21 | `b32c94e5a51c24ee9c41fcb7fe9ea9fff9af6369` |
 | `wayfinder` | mattpocock/skills（github） | 2026-08-21 | `8ec0462658381bd1606d3f9db14ffc67df6a2a43` |
 
-## 本地自建（2 支）
+## 本地自建（3 支）
 
 | skill | 說明 |
 |---|---|
 | `context-health` | 常駐層量測與瘦身（CLAUDE.md／MEMORY.md） |
 | `visual-check` | headless 截圖驗證 UI |
+| `skill-watch` | 平台能力偵測：平台加了／改名了／移除了哪些技能（純手動，不掛排程） |
 
 ## 已移除（留痕，不要重裝）
 
