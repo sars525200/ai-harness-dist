@@ -55,6 +55,10 @@ GLOBAL_CLAUDE_MD = Path.home() / ".claude" / "CLAUDE.md"
 # 這裡跟著搬 —— 留在舊路徑會靜默數到 0 支角色，能力分數跟著掉而不報錯。
 AGENTS_DIR = HARNESS / "agents"
 SKILLS_DIR = IT_DEPT / ".claude" / "skills"
+# **全域層 skill 也是 always-loaded**。2026-08-21 導入 6 支外部 skill 之後，
+# 這裡（以及 `check_freshness.skill_count`）只指專案層 ⇒ 那 6 支對任何偵測器都不存在：
+# `_p_skills` 印「16 支」而實際有 24 支，數清冊的那支自己數漏三分之一。
+GLOBAL_SKILLS_DIR = HARNESS / "skills"
 RULES_DIR = IT_DEPT / ".claude" / "rules"
 SETTINGS = IT_DEPT / ".claude" / "settings.json"
 SETTINGS_LOCAL = IT_DEPT / ".claude" / "settings.local.json"
@@ -86,6 +90,19 @@ def _count(pattern: str, root: Path) -> int:
         return len(list(root.glob(pattern)))
     except Exception:
         return 0
+
+
+def _find_skill(name: str) -> Path | None:
+    """在**兩層** skill 目錄找一支 skill。專案層優先（同名時它才是生效的那份）。
+
+    2026-08-22 稽核：三處「某支 skill 存在嗎」的檢查只看專案層 —— skill 搬到
+    全域層（或本來就裝在那裡）就會被讀成「不存在」，而它明明載得到。
+    """
+    for root in (SKILLS_DIR, GLOBAL_SKILLS_DIR):
+        p = root / name / "SKILL.md"
+        if p.exists():
+            return p
+    return None
 
 
 # ── ① Rule file ──────────────────────────────────────────────────────────
@@ -128,7 +145,7 @@ def _p_anti_bloat():
     pointers = []
     if "防膨脹" in _read(CLAUDE_MD):
         pointers.append("CLAUDE.md")
-    if "check_bloat" in _read(SKILLS_DIR / "shougong" / "SKILL.md"):
+    if "check_bloat" in _read(_find_skill("shougong") or Path("")):
         pointers.append("/shougong")
     ok = script.exists() and snapshot.exists() and bool(pointers)
     if not script.exists():
@@ -162,6 +179,12 @@ _SHELL_SPECIFIC_DENY = {
     "Remove-Item -Recurse -Force C:\\:*",
     "rm -Recurse -Force C:\\:*",
 }
+
+
+# `<harness>\skills` 的支數基準。**只在「少於」時判紅**——多出來是有人裝了新 skill
+# （那是好事，由 N4 的 provenance 對帳去管），少掉才是靜默失效。
+# 刻意寫死成一個要人手調的台帳：它變動時應該有人知道，而不是自動跟著現況走。
+_EXTERNAL_SKILLS_BASELINE = 8
 
 
 def _deny_core(entry: str) -> tuple[str, str] | None:
@@ -245,14 +268,17 @@ def _p_mode_routing():
     # ⚠ 判準字面值原本寫 `DEV_DRY_RUN`，而**兩個 CLAUDE.md 都沒有這個字串**
     # （全域 §2 寫的是 `DRY_RUN`）—— 就算把讀取層改對，綁錯字面值仍會永遠 ✘。
     # 2026-08-06 稽核抓到：這一項是「綁錯層」與「綁錯字面值」兩個病疊在一起。
-    has = any("ASK" in h and "DRY_RUN" in h and "DEPLOY" in h
-              for h in _rule_haystacks())
-    return has, "§2 五模式路由＋升級安全閥" if has else "無任務模式路由"
+    hits = _rule_hits(lambda h: "ASK" in h and "DRY_RUN" in h and "DEPLOY" in h)
+    return bool(hits), (("§2 五模式路由＋升級安全閥" + _src(hits)) if hits
+                        else "無任務模式路由")
 
 
 def _p_skills():
-    n = _count("*/SKILL.md", SKILLS_DIR)
-    return n > 0, f"{n} 支 skill（含流程執行器／唯讀報告／參考資料三型）"
+    proj = _count("*/SKILL.md", SKILLS_DIR)
+    glob_ = _count("*/SKILL.md", GLOBAL_SKILLS_DIR)
+    n = proj + glob_
+    return n > 0, (f"{n} 支 skill（專案層 {proj}／全域層 {glob_}；"
+                   "含流程執行器／唯讀報告／參考資料三型）")
 
 
 def _p_external_skills_pinned():
@@ -278,19 +304,34 @@ def _p_external_skills_pinned():
     if not gskills.is_dir():
         return False, f"找不到 {gskills}"
 
-    junctions = []
+    junctions, strays = [], []
     for d in sorted(gskills.iterdir()):
-        if not d.is_dir():
+        # `_` / `.` 開頭是這個目錄自己的中繼資料（manifest、provenance 等），不是 skill。
+        # 沒有這道例外的話，往 skills/ 放任何一個中繼檔都會被下面判成「不該存在的東西」。
+        if d.name.startswith(("_", ".")):
             continue
-        # junction／symlink 都算被掉包：實體資料夾兩者皆 False
+        if not d.is_dir():
+            # 2026-08-22 稽核：原本這裡是 `continue` —— **斷掉的 junction 對
+            # `is_dir()` 回 False**，於是「junction 指到不存在的目標」被靜默跳過、
+            # 不計不報。那正是這支 probe 最該抓的失效之一。
+            strays.append(d.name)
+            continue
+        # ⚠ 註解位置很重要：**抓到 junction 的不是下面這個 `is_symlink()`**。
+        # Windows 的 junction 是 `IO_REPARSE_TAG_MOUNT_POINT`，而 CPython 的
+        # `is_symlink()`／`os.path.islink()` 只認 `IO_REPARSE_TAG_SYMLINK`
+        # ⇒ 對**活著的 junction 兩者都回 False**（2026-08-22 兩次實測）。
+        # 真正抓到它的是再下面那段 `d.resolve() != d`。
+        # 這一段留著是為了涵蓋真 symlink；**把它當成主判準、或把 resolve 那段
+        # 當成冗餘刪掉，這支 probe 就破功了。**
         if d.is_symlink() or os.path.islink(str(d)):
             junctions.append(d.name)
             continue
         try:
             if d.resolve() != d:
                 junctions.append(d.name)
-        except OSError:
-            pass
+        except OSError as exc:
+            # 讀不到＝判斷不出來，不是「沒問題」。靜默 pass 會把「不知道」讀成「沒有」。
+            strays.append(f"{d.name}（無法解析：{type(exc).__name__}）")
 
     lock = Path(os.path.expanduser("~")) / ".agents" / ".skill-lock.json"
     tracked = []
@@ -298,10 +339,16 @@ def _p_external_skills_pinned():
         data = _json(lock) or {}
         tracked = sorted((data.get("skills") or {}).keys())
 
-    total = sum(1 for d in gskills.iterdir() if d.is_dir())
+    total = sum(1 for d in gskills.iterdir()
+                if d.is_dir() and not d.name.startswith(("_", ".")))
     problems = []
     if junctions:
         problems.append(f"{len(junctions)} 個已變成 junction（{'、'.join(junctions)}）")
+    if strays:
+        problems.append(f"{len(strays)} 個非目錄項或解析不到（{'、'.join(strays)}）")
+    if total < _EXTERNAL_SKILLS_BASELINE:
+        # 沒有基準的話，skill 被砍掉幾支照樣綠 —— 「少了東西」比「多了東西」難發現得多。
+        problems.append(f"只剩 {total} 支，少於基準 {_EXTERNAL_SKILLS_BASELINE}")
     if tracked:
         problems.append(f"lock 仍管轄 {len(tracked)} 支（{'、'.join(tracked)}）")
     if problems:
@@ -317,12 +364,10 @@ def _p_model_routing():
     #      模型選擇順移成 §4.2，全域已經一個 §7 都沒有；這一格還顯示 ✔ 純粹是
     #      專案檔碰巧也有個 §7 撐著——**證據字串已經錯了，畫面卻看不出來**。
     # 改綁**判準措辭**（機制會留下、章節號會搬家）＋掃規則三層。
-    has = any(
-        "Opus" in h and "Sonnet" in h and ("預設 Sonnet" in h or "升 Opus" in h)
-        for h in _rule_haystacks()
-    )
+    hits = _rule_hits(lambda h: "Opus" in h and "Sonnet" in h
+                      and ("預設 Sonnet" in h or "升 Opus" in h))
     label = "模型分級：預設 Sonnet／碰硬規則區升 Opus（目標 Opus:Sonnet ≈ 4:6）"
-    return has, label if has else "無模型路由"
+    return bool(hits), (label + _src(hits)) if hits else "無模型路由"
 
 
 def _p_agents():
@@ -519,7 +564,7 @@ def _p_mutation_tests():
 
 
 def _p_adversarial():
-    skill = (SKILLS_DIR / "adversarial-review" / "SKILL.md").exists()
+    skill = _find_skill("adversarial-review") is not None
     marker = "ADVERSARIAL_REVIEW_PASSED" in _read(HOOKS / "rules" / "pr1_plan_review_marker.py")
     ok = skill and marker
     return ok, (f"對抗式覆核 skill {'有' if skill else '無'}／"
@@ -528,7 +573,7 @@ def _p_adversarial():
 
 
 def _rule_haystacks() -> list:
-    """規則的**所有**落腳處。綁機制不綁字面值住在哪一層。
+    """規則的**所有**落腳處，回 `(來源標籤, 內容)`。綁機制不綁字面值住在哪一層。
 
     2026-07-30 同一個坑一天咬三次（綁 `wc -c`／綁「防膨脹」三個字／綁 §8），
     2026-08-06 又咬一次：通則搬到**全域** `CLAUDE.md` 後，只讀專案檔的 probe
@@ -536,12 +581,43 @@ def _rule_haystacks() -> list:
 
     抽成共用函式的理由：`_p_red_first` 已經為這件事加固過，但同檔 17 行後的
     `_p_selftest_discipline` 沒跟上 —— 加固寫在一支 probe 裡就只有那一支受益。
+
+    ## 2026-08-22：為什麼**回標籤**，而不是把 skill 層砍掉
+
+    覆核提過一個處方：拆成 `_rule_sources()`（兩個 `CLAUDE.md` ＋ `rules/`）與
+    `_rule_mentions()`，「規則還在不在」用前者。**實測那會讓 `_p_red_first` 綠變紅**
+    —— `tight loop`／`沒紅訊號` 在兩個 `CLAUDE.md` 與 `rules/` 是**零命中**，
+    只活在 4 支專案層 skill 裡。砍層就是本函式 docstring 上面那句話的第五次發作。
+
+    真正的問題是**看不見命中在哪一層**：`_p_choices_gate` 只要有任何一份檔含「選擇題」
+    就綠，所以把兩個 `CLAUDE.md` 的硬規則整條刪掉它照樣綠。
+    ⇒ 不砍層、**讓假綠看得見**：evidence 印出命中的來源，人一眼就看得出
+    「這條規則只剩 skill 的自述文字撐著」。砍層會誤殺真的搬過家的能力，印來源不會。
     """
-    out = [_read(CLAUDE_MD), _read(GLOBAL_CLAUDE_MD)]
-    for root, pattern in ((SKILLS_DIR, "*/SKILL.md"), (RULES_DIR, "*.md")):
+    out = [("專案 CLAUDE.md", _read(CLAUDE_MD)),
+           ("全域 CLAUDE.md", _read(GLOBAL_CLAUDE_MD))]
+    for root, pattern, tag in ((RULES_DIR, "*.md", "rules"),
+                               (SKILLS_DIR, "*/SKILL.md", "skill"),
+                               (GLOBAL_SKILLS_DIR, "*/SKILL.md", "全域 skill")):
         if root.exists():
-            out += [_read(p) for p in sorted(root.glob(pattern))]
+            for p in sorted(root.glob(pattern)):
+                name = p.parent.name if p.name == "SKILL.md" else p.stem
+                out.append((f"{tag}:{name}", _read(p)))
     return out
+
+
+def _rule_hits(pred) -> list:
+    """回**命中的來源標籤**清單（空 list ＝ 沒命中）。"""
+    return [label for label, text in _rule_haystacks() if pred(text)]
+
+
+def _src(hits: list, limit: int = 3) -> str:
+    """把命中來源接成一句話。規則只剩非 always-loaded 的那幾層撐著時要看得出來。"""
+    if not hits:
+        return ""
+    shown = "、".join(hits[:limit]) + (f" 等 {len(hits)} 處" if len(hits) > limit else "")
+    weak = not any(h.endswith("CLAUDE.md") for h in hits)
+    return f"（命中：{shown}{'⚠ 兩個 CLAUDE.md 都沒有，只剩下層撐著' if weak else ''}）"
 
 
 def _p_red_first():
@@ -551,11 +627,10 @@ def _p_red_first():
     這次是綁 §8 —— 規則搬進 `/verify-rules` 參考型 skill 後 probe 判 False，
     但那條紀律一個字都沒少。**能力在不在，跟它住在哪一層無關。**
     """
-    haystacks = _rule_haystacks()
-    hit = next((h for h in haystacks
-                if "會紅" in h and ("tight loop" in h or "沒紅訊號" in h)), None)
-    return bool(hit), ("硬規則：先建會紅的 tight loop，沒紅訊號不准進 hypothesis"
-                       if hit else "無「先證明測試會紅」的紀律")
+    hits = _rule_hits(lambda h: "會紅" in h
+                      and ("tight loop" in h or "沒紅訊號" in h))
+    return bool(hits), (("硬規則：先建會紅的 tight loop，沒紅訊號不准進 hypothesis"
+                         + _src(hits)) if hits else "無「先證明測試會紅」的紀律")
 
 
 def _p_selftest_discipline():
@@ -584,25 +659,27 @@ def _p_contract_tests():
 def _p_choices_gate():
     # ⚠ 原本綁工具名 `AskUserQuestion`，而**規則的措辭是「問題一律用選擇題」**
     # ——兩個 CLAUDE.md 都沒有那個工具名。綁工具名會漏掉規則本體（2026-08-06 稽核）。
-    rule = any("選擇題" in h for h in _rule_haystacks())
+    hits = _rule_hits(lambda h: "選擇題" in h)
+    rule = bool(hits)
     gate = (HOOKS / "rules" / "awc1_choices_check.py").exists()
     # 狀態**讀設定檔不寫死**：原本這裡寫「（目前 shadow）」，而 AWC-1 7/31 就轉
     # enforce 了，敘述在畫面上掛了一整週。同檔 `_shadow_cfg()` 一直讀得到真值。
     shadow = bool((_shadow_cfg().get("AWC-1") or {}).get("shadow"))
     state = "shadow" if shadow else "enforce"
     return rule and gate, ("需 user 決定一律走選擇題（全域 §1 硬規則）"
-                           + (f"＋AWC-1 閘門在守（目前 {state}）" if gate else "，但無閘門"))
+                           + (f"＋AWC-1 閘門在守（目前 {state}）" if gate else "，但無閘門")
+                           + _src(hits))
 
 
 def _p_no_auto_escalate():
     # 這條規則 2026-08-05 搬到全域 §2，專案檔只留「通則全部在全域」指標句。
-    has = any("禁自動升級" in h or "不可自動升級" in h for h in _rule_haystacks())
-    return has, ("模式升級安全閥：ASK/VERIFY→DEV、DEV→DEPLOY 禁自動，須 user 明確說"
-                 if has else "無升級安全閥")
+    hits = _rule_hits(lambda h: "禁自動升級" in h or "不可自動升級" in h)
+    return bool(hits), (("模式升級安全閥：ASK/VERIFY→DEV、DEV→DEPLOY 禁自動，須 user 明確說"
+                         + _src(hits)) if hits else "無升級安全閥")
 
 
 def _p_dry_run_gate():
-    p = SKILLS_DIR / "dry-run-migrate" / "SKILL.md"
+    p = _find_skill("dry-run-migrate") or Path("")
     return p.exists(), ("資料遷移閘門：先出 dry-run，user 沒點頭不寫 PROD"
                         if p.exists() else "無 dry-run 閘門")
 

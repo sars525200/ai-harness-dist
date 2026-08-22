@@ -18,8 +18,12 @@ exit code：0 = 無需更新　1 = 建議更新（stdout 印出具體差異，�
     2. would_block[*]  —— 任一規則的非 ALLOW 判定次數（有新的真實命中，值得寫新
                           verdict-card，就像 7/28 DB-1 首次真陽性、R4/AWC-1 接線
                           缺口那兩則故事）
-    3. skill_count     —— .claude/skills/*/SKILL.md 數量（原始檔案數，不等於看板
-                          「Skill 清冊」分頁的顯示列數——那是人工分組過的呈現）
+    3. skill_count     —— **兩層** skill 的 SKILL.md 總數（專案層 .claude/skills/ ＋
+                          全域層 <harness>/skills/）。原始檔案數，不等於看板「Skill
+                          清冊」分頁的顯示列數——那是人工分組過的呈現。
+                          ⚠ 2026-08-22 前只數專案層 ⇒ 該日導入的 6 支全域 skill
+                          **對新鮮度貢獻 0**：四個訊號全部靜止，腳本回報「無需更新」。
+                          同一種病本檔下面的註解已經記過一次（DB-1 轉 enforce 那天）。
     4. tool_raw_count  —— ops/ 與 hooks/ 底下 .py/.sh/.js 檔案數（原始檔案數，同上
                           不等於看板「維運腳本」分頁的顯示列數）
 
@@ -62,9 +66,10 @@ def gather_current() -> dict:
     for rid in rule_ids:
         would_block.setdefault(rid, 0)
 
+    _skill_dirs = [IT_DEPT_SKILLS_DIR, HARNESS_ROOT / "skills"]
     skill_count = (
-        len(list(IT_DEPT_SKILLS_DIR.glob("*/SKILL.md")))
-        if IT_DEPT_SKILLS_DIR.exists() else None
+        sum(len(list(d.glob("*/SKILL.md"))) for d in _skill_dirs if d.exists())
+        if any(d.exists() for d in _skill_dirs) else None
     )
 
     tool_raw_count = 0

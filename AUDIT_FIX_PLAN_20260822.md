@@ -432,6 +432,31 @@ temp clone 仍在同一台機器、同一個 `%USERPROFILE%`，`Path.home()` 相
   - 回歸：分母仍 **947**，通過 939。**8 個失敗全在「成本／mix 產生器」一組**，
     該組對 `capability_checks` 引用數為 0，而 `gen_cost_panel.py` 是另一 session 的 `M`
     （+52／−9·mtime 01:47，晚於本 session 稍早那次 947/947 全過）⇒ **非本次改動所致**。
+- ✅ **批 1a 已完成（2026-08-22）**，五項都先證明會紅才信綠。**動工前當場重算過座標**
+  （§11.3 紀律）：`SKILLS_DIR` 實測 6 個使用點、`_rule_haystacks()` 5 個消費者，與計畫書一致。
+  - **A2b**：`_rule_haystacks()` 改回 `(來源標籤, 內容)`，新增 `_rule_hits()`／`_src()`；
+    5 個消費者全部改成印命中來源。**不砍層**（覆核 F2-1：砍層會誤殺 `_p_red_first`）。
+    效果當場可見：`_p_red_first` 現在印「命中：skill:data-incident、skill:deploy-prod、
+    skill:diagnose-bug 等 4 處 **⚠ 兩個 CLAUDE.md 都沒有，只剩下層撐著**」
+    ——**假綠變成看得見**，同時也是「拆分處方會誤殺它」的現場證據。
+  - **A2**：`GLOBAL_SKILLS_DIR` 常數 ＋ `_find_skill()`（兩層都找）。6 個使用點全處理：
+    `_p_skills` 從「16 支」變 **「24 支（專案層 16／全域層 8）」**；三處「某支 skill 在不在」
+    改走 `_find_skill`；`_rule_haystacks` 納入全域層。`check_freshness.skill_count` 同步，
+    實測差異從「15 → 16」變成 **「15 → 24」**。**未新增任何 `IT-department` 字面值**
+    （U-1 台帳「既有檔案沒有新增字面值」該項 ok）。
+  - **A4**：斷掉的 junction 不再 `continue` 掉；`resolve()` 的 `OSError` 從靜默 `pass`
+    改成列為問題（「讀不到＝判斷不出來，不是沒問題」）。
+  - **A5**：`_EXTERNAL_SKILLS_BASELINE = 8`，**只在「少於」時判紅**（多出來是好事，
+    由 N4 的 provenance 對帳去管）。
+  - **A6**：註解歸因改到 `d.resolve() != d`，並明寫「把 `is_symlink()` 當主判準、
+    或把 resolve 那段當冗餘刪掉，這支 probe 就破功」。
+  - **`_meta/` 例外**（覆核 F3-5 逼出來的）：`_`／`.` 開頭的項目不算 skill 也不算異物，
+    否則 N4／N2 之後往 `skills/` 放中繼檔會被 A4 判紅——兩項自己打自己。
+  - **紅燈證明**（temp 樹＋monkeypatch，全程不碰真的 `skills/`）：全域層指空 → 24 掉到 16；
+    放一個非目錄項 → 紅；砍一支剩 7 → 紅（少於基準）；加 `_meta/` → **仍綠**；復原 → 綠。
+  - 回歸：分母仍 **947**，通過 **938**。9 個失敗＝8 個成本／mix（同上）＋1 個
+    「沒有新檔案引入 U-1 債」，後者抓的是 `tools/esc1_backtest.py`／`esc1_corpus.py`
+    ——**另一 session 於 mtime 10:10 剛建的 `??` 檔**，不是我的。
 - ~~**執行順序（v2）**：批 1＝A2–A6 → 批 2＝A1＋A7＋A8 → 批 3＝N1–N5 → …~~
   **v4 作廢（覆核 F2-3）**：v3 加了三個結構改動（新增 A2b／R2 拆 2a-2b／A3 相依 N4）
   但 §8 這三行一個字都沒同步 ⇒ **A3 被排在自己的前置 N4 之前、N3 被批 7 的前置卡住、
