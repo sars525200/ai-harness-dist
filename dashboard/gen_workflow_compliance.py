@@ -686,6 +686,13 @@ def track_flags(seq: list, truncated: bool = False,
     out = []
     if truncated:
         out.append(("序列開頭被分母起算日切掉", "shadow"))
+    # 2026-08-22（第二階段票 09）：下面三條判準**全部**掛在「序列裡有 Execute」的前提下，
+    # 沒有 Execute 的軌跡會零旗標＝畫面上與「合規」同一顆綠 chip。但「沒動手」不是「合規」，
+    # 是**判準不適用**——wayfinder 改制後決策票 session 多數不含 Execute（實測把 72 條軌跡
+    # 各截到 1 段，「相符」率 35%→99%），沉默的綠會把遵循度翻成一片假綠。
+    # 量測：tools/probe_trajectory_key.py。
+    if "Execute" not in seq:
+        out.append(("軌跡沒有動手階段，順序判準不適用", "shadow"))
     if "Execute" in seq:
         i = seq.index("Execute")
         if not truncated:

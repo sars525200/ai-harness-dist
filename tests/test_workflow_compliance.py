@@ -180,6 +180,19 @@ def run(verbose: bool = False) -> "tuple[int, list]":
        "序列被起算日截斷時，不得把「前面沒有 Research」當違規")
     ok(any("切掉" in t for t, _ in tf_trunc), "截斷本身要在畫面上講出來")
 
+    # 2026-08-22（第二階段票 09）：三條判準全掛在「序列裡有 Execute」的前提下，
+    # 沒有 Execute 的軌跡零旗標＝畫面上跟「合規」同一顆綠 chip。wayfinder 改制後
+    # 決策票 session 多數不會走到 Execute，這會讓遵循度翻成一片假綠（實測 35%→99%）。
+    # 「沒動手」與「合規」必須分得開——前者掛 shadow 級「判準不適用」。
+    tf_noexec = m.track_flags(["Research", "Design"])
+    ok(any(tone == "shadow" for _, tone in tf_noexec),
+       "沒有 Execute 的軌跡要掛 shadow 旗標，不得沉默地算進「相符」")
+    ok(not any(tone in ("warn", "block") for _, tone in tf_noexec),
+       "沒動手不是違規——shadow 以外不得產生任何 warn/block")
+    ok(sum(1 for _, tone in m.track_flags(["Research"], truncated=True)
+           if tone == "shadow") == 2,
+       "截斷的無 Execute 軌跡要有兩個 shadow（截斷＋判準不適用）——any() 分不出這兩件事")
+
     # ── 3. 暫存檔口徑（變異點：拿掉排除會製造假違規）
     ok(m._is_tmp(r"C:\Users\x\AppData\Local\Temp\claude\d--IT\scratchpad\probe.py"),
        "scratchpad 路徑要被認成暫存")

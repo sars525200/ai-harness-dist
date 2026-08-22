@@ -59,7 +59,16 @@ TICKET_SHAPES = [
 
 def tone_of(flags: list) -> str:
     t = [x for _, x in flags]
-    return "block" if "block" in t else ("warn" if "warn" in t else "ok")
+    if "block" in t:
+        return "block"
+    if "warn" in t:
+        return "warn"
+    # shadow（判準不適用／截斷）不得算進「相符」——把它算進 ok 正是這支要抓的那種假綠。
+    # track_flags 掛上「沒有動手階段」的 shadow 之後，k=1 的 ok 率會從 99% 掉到 ~1%，
+    # 這支因此轉綠：**指標不再說謊**（改說「不適用」）。key 換工作單元是後續另一件事。
+    if "shadow" in t:
+        return "shadow"
+    return "ok"
 
 
 def main() -> int:
@@ -84,8 +93,8 @@ def main() -> int:
 
     print("")
     print("=== 截斷模擬：各截到前 k 段，模擬「一 session 一票」 ===")
-    print("  %3s | %6s %6s %6s | 含 Execute" % ("k", "相符", "warn", "block"))
-    print("  " + "-" * 52)
+    print("  %3s | %6s %6s %6s %6s | 含 Execute" % ("k", "相符", "不適用", "warn", "block"))
+    print("  " + "-" * 60)
     ok1 = None
     for k in (1, 2, 3, 4, 6, 10 ** 6):
         c = collections.Counter()
@@ -99,8 +108,9 @@ def main() -> int:
         if k == 1:
             ok1 = c["ok"] / n * 100
         label = "現況" if k > 1000 else ""
-        print("  %3s | %5d條 %5d條 %5d條 | %4d/%d %3.0f%% %s"
-              % ("∞" if k > 1000 else k, c["ok"], c["warn"], c["block"], e, n, e / n * 100, label))
+        print("  %3s | %5d條 %5d條 %5d條 %5d條 | %4d/%d %3.0f%% %s"
+              % ("∞" if k > 1000 else k, c["ok"], c["shadow"], c["warn"], c["block"],
+                 e, n, e / n * 100, label))
 
     print("")
     print("=== wayfinder 四種 ticket type 的典型序列會被判成什麼 ===")
