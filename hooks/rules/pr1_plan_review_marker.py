@@ -196,6 +196,12 @@ def _is_wayfinder_map(path: str) -> bool:
 _PASSED = re.compile(
     r"<!--\s*ADVERSARIAL_REVIEW_PASSED\s+sha256=([0-9a-fA-F]{64})[^>]*-->"
 )
+# 可選的第二個 hash：**覆核當下**審查者讀到的內容（票 10-3 / 覆核 R1-M13）。
+# `sha256=` 是蓋章當下對現況算的；兩者不同代表覆核期間有人動過審查範圍，
+# 那個改動會跟著憑證一起被洗成「已審」。舊 marker 沒有這一欄 ⇒ 向後相容、照舊有效。
+_REVIEWED = re.compile(
+    r"<!--\s*ADVERSARIAL_REVIEW_PASSED\s[^>]*?reviewed=([0-9a-fA-F]{64})[^>]*-->"
+)
 # SKIP 也綁 hash：不綁的話一次 SKIP 就永久關閉該檔的檢查。
 _SKIP = re.compile(
     r"<!--\s*ADVERSARIAL_REVIEW_SKIP\s+sha256=([0-9a-fA-F]{64})\s*:?\s*([^>]*?)-->"
@@ -377,6 +383,15 @@ def check(ctx):
                 f"若這次不需要審查，改用逃生口："
                 f"<!-- ADVERSARIAL_REVIEW_SKIP sha256=<自己算>: <理由> -->；"
                 f"或把狀態改回「> 狀態：草稿」。"
+            )
+
+        rev = _REVIEWED.search(probe)
+        if rev and rev.group(1).lower() != passed.group(1).lower():
+            return block(
+                f"{name} 的 marker 兩個 hash 對不上：`reviewed=` 記的是覆核當下審查者"
+                f"讀到的內容，`sha256=` 是蓋章當下的現況——**代表覆核期間審查範圍被改過**"
+                f"（多半是另一個 session）。那個改動沒有被審過，卻會跟著憑證一起被當成已審。\n"
+                f"處置：確認那段改動是什麼；要嘛把它退掉、要嘛重跑一輪覆核並讓兩個 hash 一致。"
             )
 
         # marker 有效之後才查驗證方式：先擋「沒被審」再擋「沒寫怎麼驗」，

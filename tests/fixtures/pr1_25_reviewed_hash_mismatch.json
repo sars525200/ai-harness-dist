@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 marker 帶 reviewed= 且與蓋章當下的 hash 不同 → BLOCK",
+ "why": "覆核 R1-M13（實測可重現）：hash 是**蓋章當下對現況**算的，不是對審查者讀過的那份算的。A 跑覆核期間 B 改了 Destination，A 蓋章時算進了 B 的改動 ⇒ marker 有效 ⇒ 沒審過的改動拿到「已審」憑證，PR-1 完全偵測不到。加一個 reviewed=<覆核當下 hash>，兩者不同就擋。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n別人趁覆核期間改掉的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=617ff5235f58832a7a17d976278b85ae8b6399eb69187a173c60cc3269c34325 reviewed=dd0ad111658e63d077822e32dd974a40825e3d040a177f0be3bbee1d1d0b705a rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-rev",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "覆核期間"
+ },
+ "rule": "pr1_plan_review_marker"
+}

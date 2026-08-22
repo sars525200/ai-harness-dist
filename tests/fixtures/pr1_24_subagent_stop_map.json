@@ -1,0 +1,70 @@
+{
+ "name": "PR-1 SubagentStop：subagent 寫的是 wayfinder map（無 marker）→ BLOCK",
+ "why": "票 10-4：fixture 12／13 蓋的是「subagent 寫計畫書」，而 map 走的是另一條判準（存在即待審、不看狀態行）。「派 subagent 去開規劃圖」是很自然的用法，那條路徑原本零覆蓋——而 PR-1 掛 SubagentStop 的理由正是「外包出去就免疫」。",
+ "workspace": {
+  "files": {
+   ".scratch/sub-effort/map.md": "# sub effort 的規劃圖\n\n## Destination\n\nX\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必須轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "幫我開個角色去寫計畫書"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Agent",
+       "input": {
+        "subagent_type": "查詢員",
+        "prompt": "寫一份計畫書"
+       }
+      }
+     ]
+    }
+   }
+  ],
+  "agent_transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "寫一份計畫書"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Write",
+       "input": {
+        "file_path": "<DIR>/.scratch/sub-effort/map.md",
+        "content": "..."
+       }
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "SubagentStop",
+  "session_id": "fx-pr1-submap",
+  "transcript_path": "<TRANSCRIPT>",
+  "agent_transcript_path": "<AGENT_TRANSCRIPT>",
+  "agent_id": "fx-agent-1",
+  "agent_type": "查詢員",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "規劃圖"
+ },
+ "rule": "pr1_plan_review_marker"
+}

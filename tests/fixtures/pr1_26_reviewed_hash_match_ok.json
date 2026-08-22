@@ -1,0 +1,55 @@
+{
+ "name": "PR-1 marker 的 reviewed= 與現況一致 → ALLOW",
+ "why": "另一半：兩個 hash 相同代表覆核期間沒有人動過審查範圍，該放行。與 25 成對。也順帶釘住「沒有 reviewed= 的舊 marker 照舊有效」不在本 fixture、由既有 17／20 保證。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n審查者看到的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=dd0ad111658e63d077822e32dd974a40825e3d040a177f0be3bbee1d1d0b705a reviewed=dd0ad111658e63d077822e32dd974a40825e3d040a177f0be3bbee1d1d0b705a rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-rev",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "ALLOW"
+ },
+ "rule": "pr1_plan_review_marker"
+}
