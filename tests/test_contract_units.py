@@ -397,6 +397,25 @@ def _run_pr1_failopen_cases() -> tuple[int, list[str]]:
                              "state", "failopen.ndjson")
         ok(os.path.abspath(stray) == os.path.abspath(target) or not os.path.exists(stray),
            f"不得在 {os.path.dirname(stray)} 留下第二份 failopen.ndjson（少爬一層的症狀）")
+
+    # 票 10-2：Bash/PowerShell 寫 .md 完全不觸發 PR-1。
+    # 實測 181 份 transcript：162 次真的用 shell 寫 .md，其中 50 次目標像計畫書／map
+    # ——包含本 effort 自己的母計畫書。這不是理論漏洞，是每天在發生的繞過路徑。
+    ok(hasattr(pr1, "md_write_targets"),
+       "應有 md_write_targets(cmd)：從 shell 指令抽出被寫入的 .md 路徑")
+    if hasattr(pr1, "md_write_targets"):
+        cases = [
+            ('cat >> "d:/x/FOO_PLAN.md" << \'EOF\'', ["d:/x/FOO_PLAN.md"], "heredoc append"),
+            ("echo hi > notes.md", ["notes.md"], "重導向"),
+            ("tee -a d:/a/map.md", ["d:/a/map.md"], "tee -a"),
+            ('Set-Content -Path "x/B_PLAN.md" -Value $t', ["x/B_PLAN.md"], "PowerShell"),
+            ('git show HEAD:"A_PLAN.md" > /tmp/o.txt', [], "唯讀指令不得誤報"),
+            ("grep -n foo A_PLAN.md", [], "grep 不是寫入"),
+            ("py -3 gen.py", [], "沒碰 .md"),
+        ]
+        for cmd, want, why in cases:
+            got = pr1.md_write_targets(cmd)
+            ok(got == want, f"md_write_targets({cmd[:40]!r}) = {got}，期望 {want} —— {why}")
     return passed, failures
 
 

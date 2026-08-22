@@ -35,6 +35,10 @@ except Exception:
 HOOKS_DIR = r"D:\.ai-harness\hooks"
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
+# fixture 的 expect 支援的鍵。多一個打錯的鍵會被靜默忽略 → 那條斷言等於沒寫，
+# 所以在 run_one 裡把未知鍵當失敗（票 10-5，2026-08-22 實踩過一次）。
+_EXPECT_KEYS = {"decision", "message_contains", "bypassed"}
+
 sys.path.insert(0, HOOKS_DIR)
 
 from contract import GitContext, HookContext  # noqa: E402
@@ -215,6 +219,13 @@ def _run_with(fx: dict, module, payload: dict) -> tuple[bool, str]:
         return False, f"規則執行爆炸：{type(exc).__name__}: {exc}"
 
     exp = fx["expect"]
+    # 未知的 expect 鍵一律當失敗（票 10-5）。2026-08-22 實踩：把 `message_contains`
+    # 寫成 `stderr_contains`，三個 fixture 的訊息斷言**全被靜默忽略**、其中一個因此假綠。
+    # 「打錯的斷言＝不存在的斷言」是測試框架最貴的一種沉默——它讓人以為驗過了。
+    unknown = set(exp) - _EXPECT_KEYS
+    if unknown:
+        return False, (f"expect 有未知的鍵 {sorted(unknown)}——支援的是 {sorted(_EXPECT_KEYS)}。"
+                       f"打錯的鍵會被忽略，那條斷言等於沒寫。")
     if verdict.decision != exp["decision"]:
         return False, f"decision 期望 {exp['decision']}、實得 {verdict.decision}（{verdict.message}）"
 

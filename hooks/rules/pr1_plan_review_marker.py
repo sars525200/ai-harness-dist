@@ -105,6 +105,11 @@ RULE_ID = "PR-1"
 # 少收一個就是一條靜默繞過的路。
 _FILE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 
+# shell 也寫得了計畫書（票 10-2）。判準見 `md_write_targets`：只認明確的寫入動作，
+# 相對路徑無從還原成絕對路徑 ⇒ 那種只會讓 `_read_text` 讀不到而靜靜跳過，
+# 不會誤擋——保守的失敗方向是對的。
+_SHELL_TOOLS = {"Bash", "PowerShell"}
+
 _MD_SUFFIX = ".md"
 
 # 規則自己的測試資料（刻意標待審核、刻意無 marker）不能觸發規則本身，
@@ -225,6 +230,39 @@ _RECOMPUTE_HINT = (
     # 訊息卻一直說「內容又被改了」——把人推向逃生口的假訊息。兩邊必須同一種讀法。
     "print(p.content_hash(open(r'{path}',encoding='utf-8-sig').read()))\"`"
 )
+
+
+# shell 指令裡「寫入某個 .md」的形狀。**只認真正的寫入動作**，不認「指令裡出現 .md」。
+_MD_WRITE = re.compile(
+    # PowerShell 的目標常隔一個具名參數：`Set-Content -Path "x.md"`、`Out-File -FilePath …`
+    r"(?:>>?|(?<!\w)tee(?:\s+-a)?|Out-File|Set-Content|Add-Content)"
+    r"(?:\s+-(?:Path|FilePath|LiteralPath))?\s+"
+    r"[\"']?([^\s\"'|;&<>]+\.md)\b", re.IGNORECASE)
+# 這些是唯讀指令，`.md` 只是它的引數。前 120 字元內出現就不算寫入
+# （`git show HEAD:"A_PLAN.md" > out.txt` 的 `>` 目標是 out.txt，抓不到；
+#  但 `git diff a.md > b.md` 這種要靠這條擋掉左半邊的誤判）。
+_MD_READONLY = re.compile(r"\b(?:git\s+(?:show|diff|log|cat-file)|grep|rg|head|tail)\b", re.I)
+
+
+def md_write_targets(command: str) -> list:
+    """從一條 shell 指令抽出「被寫入的 `.md`」路徑（票 10-2 / 覆核 R1-M14 附帶）。
+
+    **為什麼要有**：`_FILE_TOOLS` 只認 Write／Edit／MultiEdit／NotebookEdit，
+    用 `cat >> plan.md << EOF` 或 `Set-Content` 寫計畫書**完全不觸發 PR-1**。
+    這不是理論漏洞——實測 181 份 transcript：**162 次真的用 shell 寫 `.md`，
+    其中 50 次目標像計畫書／map**，包含本 effort 自己的母計畫書。
+
+    判準刻意保守（寧可漏抓不要誤抓）：只認重導向／tee／Out-File／Set-Content／
+    Add-Content 這幾個明確的寫入動作，且前文出現唯讀指令就跳過。
+    誤抓的代價是「擋住一個根本沒改計畫書的 session」，那比漏抓貴得多。
+    """
+    out = []
+    text = str(command or "")
+    for m in _MD_WRITE.finditer(text):
+        if _MD_READONLY.search(text[max(0, m.start() - 120):m.start()]):
+            continue
+        out.append(m.group(1))
+    return out
 
 
 def note_failopen(reason: str, transcript_path: str = "") -> None:
@@ -429,15 +467,23 @@ def _touched_plan_files(transcript_path: str) -> list[str]:
 
     out = set()
     for b in blocks:
-        if b.get("name") not in _FILE_TOOLS:
+        name = b.get("name")
+        inp = b.get("input") or {}
+        if name in _FILE_TOOLS:
+            cands = [(inp.get("file_path") or "").strip()]
+        elif name in _SHELL_TOOLS:
+            # 票 10-2：用 `cat >> plan.md << EOF`／`Set-Content` 寫計畫書原本完全不觸發。
+            # 實測 181 份 transcript 有 162 次 shell 寫 .md、其中 50 次目標像計畫書／map。
+            cands = md_write_targets(inp.get("command") or "")
+        else:
             continue
-        path = ((b.get("input") or {}).get("file_path") or "").strip()
-        if not path.lower().endswith(_MD_SUFFIX):
-            continue
-        probe = path.replace("\\", "/").lower()
-        if any(part.replace("\\", "/") in probe for part in _EXCLUDED_DIR_PARTS):
-            continue
-        out.add(path)
+        for path in cands:
+            if not path or not path.lower().endswith(_MD_SUFFIX):
+                continue
+            probe = path.replace("\\", "/").lower()
+            if any(part.replace("\\", "/") in probe for part in _EXCLUDED_DIR_PARTS):
+                continue
+            out.add(path)
     return sorted(out)
 
 
