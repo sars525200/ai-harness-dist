@@ -1,0 +1,55 @@
+{
+ "name": "PR-1 map 的「驗證方式」只有標題、底下是空的 → BLOCK",
+ "why": "只檢查標題存在＝貼個標題一秒就繞過，那種守門自己就是假綠燈。判準要看標題到下一個 ## 之間有沒有實質內容。同樣蓋了有效 marker 以隔離出這一條判準。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\nX\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=a594368ada7c4174c3a3a89e53af6b0952b88211ac8ff46097c3dc615d961788 rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "開規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Write",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "content": "..."
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-v",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "驗證方式"
+ },
+ "rule": "pr1_plan_review_marker"
+}

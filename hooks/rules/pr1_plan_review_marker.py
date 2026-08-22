@@ -140,6 +140,47 @@ def _detectable(text: str) -> str:
     return _CODE_FENCE.sub("", text)
 
 
+# map 的「驗證方式」一節：標題到下一個 `##` 之間。
+# **只檢查標題存在等於沒檢查**——貼一行標題一秒就繞過，那種守門自己就是假綠燈。
+_VERIFY_SECTION = re.compile(
+    r"^[ \t]{0,3}#{2,3}[ \t]*驗證方式[^\n]*\n(.*?)(?=^[ \t]{0,3}#{2,3}[ \t]|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+# 佔位詞：整節只有這些字就等於沒寫。**不用長度當判準**——2026-08-22 第一版設 30 字，
+# 誤殺了一句 22 字的真判準（「每張票關閉前要答得出『怎麼證明它會紅』」），
+# 而 12 字的「待補完整驗證方式」照樣過關。長度量的是篇幅，這裡要問的是「有沒有東西」。
+_VERIFY_PLACEHOLDER = re.compile(
+    r"^(待補|待寫|待定|待填|TBD|tbd|N/A|n/a|無|—|-|\.{3}|…|\?+|？+)[。.\s]*$")
+_VERIFY_MIN_CHARS = 12    # 只擋一兩個字的殘渣；真正的守門是上面那條佔位詞
+#
+# ⚠ **這道守門查得到什麼、查不到什麼**（別讓它的綠燈被讀成更強的保證）：
+#   查得到＝「這一節是空的／只有佔位詞」。
+#   查不到＝「寫的內容是不是真的答得出『怎麼證明它會紅』」——那要人看。
+# 機制只能擋住「完全沒寫」，擋不住「寫了但沒用」。後者靠對抗式覆核，這也是為什麼
+# 這一節被刻意留在 hash 範圍內（改它就要重審）。
+
+
+def _verification_gap(text: str) -> "str | None":
+    """回傳「驗證方式」這一節缺什麼；沒問題回 None。
+
+    這是 `/design-spec` 步驟 4 那道守門的等價物（票 05）：**驗證方式沒寫完不得開工，
+    每一項要答得出「怎麼證明它會紅」**。map 模板有這個標題，但在這道守門之前，
+    沒填也沒有任何東西會叫——缺的不是欄位，是守門。
+
+    這一條比握手（K1）更根本：K1 是「計畫沒被審」，這個是**「計畫可以完全不寫怎麼驗
+    就開工」**。
+    """
+    m = _VERIFY_SECTION.search(text)
+    if not m:
+        return "整節不存在"
+    body = re.sub(r"<!--.*?-->", "", m.group(1), flags=re.DOTALL).strip()
+    if not body:
+        return "只有標題、底下是空的"
+    if _VERIFY_PLACEHOLDER.match(body) or len(body) < _VERIFY_MIN_CHARS:
+        return f"底下只有佔位（{body[:20]}）"
+    return None
+
+
 def _is_wayfinder_map(path: str) -> bool:
     """wayfinder 規劃圖＝`.scratch/<effort>/map.md`。它**存在即待審**（分岔 1 選項 C）：
     map 沒有狀態行可標，路徑形狀就是握手。判準收緊到「.scratch 底下、檔名恰為
@@ -270,6 +311,19 @@ def check(ctx):
                 f"<!-- ADVERSARIAL_REVIEW_SKIP sha256=<自己算>: <理由> -->；"
                 f"或把狀態改回「> 狀態：草稿」。"
             )
+
+        # marker 有效之後才查驗證方式：先擋「沒被審」再擋「沒寫怎麼驗」，
+        # 一次只給一件事做，否則 BLOCK 訊息會同時要人做兩件不相干的事。
+        if is_map and passed.group(1).lower() == actual:
+            gap = _verification_gap(probe)
+            if gap:
+                return block(
+                    f"{name} 的「## 驗證方式」{gap}——**規劃圖不得在沒寫怎麼驗之前推進**。\n"
+                    f"這是 `/design-spec` 步驟 4 那道守門的等價物：每一項要答得出"
+                    f"**「怎麼證明它會紅」**，不是寫「會測試」。\n"
+                    f"寫完之後 hash 會變，記得重簽 marker：\n"
+                    + _RECOMPUTE_HINT.format(path=path)
+                )
 
         if passed.group(1).lower() != actual:
             return block(

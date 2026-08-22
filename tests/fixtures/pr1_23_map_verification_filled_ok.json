@@ -1,0 +1,54 @@
+{
+ "name": "PR-1 map 的「驗證方式」有實質內容 → ALLOW",
+ "why": "守門的另一半：填了就要放行，否則是永久擋。與 21／22 成對，三支合起來才證明判準抓的是「內容」不是「標題」。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\nX\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝把守門那行刪掉必須轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=329f9906f56b28df837e22acc22efcaf1b76d7a92c78731175d25a4f61bbb572 rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "開規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Write",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "content": "..."
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-v",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "ALLOW"
+ },
+ "rule": "pr1_plan_review_marker"
+}

@@ -1,0 +1,55 @@
+{
+ "name": "PR-1 map 有有效 marker 但沒有「驗證方式」一節 → BLOCK",
+ "why": "票 05：/design-spec 步驟 4 那道守門的等價物。map 模板有這個標題，但沒填也沒有任何東西會叫——缺的不是欄位是守門。⚠ 這個 fixture 刻意蓋了**有效的 PASSED marker**：第一版沒蓋，於是它因為「缺 marker」而 BLOCK、看起來綠了，根本沒測到驗證方式。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\nX\n\n## Notes\n\n領域：測試。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=fcebd468958512def8818d30bc81cae2bd917337381ed882f9f9f7ea1e219158 rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "開規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Write",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "content": "..."
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-v",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "驗證方式"
+ },
+ "rule": "pr1_plan_review_marker"
+}
