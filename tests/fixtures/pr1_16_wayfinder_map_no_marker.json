@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 wayfinder map 存在即待審：沒有 marker → BLOCK",
+  "why": "第二階段票 02 定案 C：決策票的規劃圖（.scratch/<effort>/map.md）沒有『> 狀態：待審核』狀態行——那一行的唯一產生源是 /design-spec，而 map 不走 /design-spec。若 PR-1 只認狀態行，map 會走到靜默放行（K1）。C 的做法＝map 這個檔名形狀本身就是握手：這輪動過它、又沒有審查 marker，就該擋。",
+  "workspace": {
+    "files": {
+      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n把 X 改成 Y，交付一份可執行的規格。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n\n## Not yet specified\n\n（霧區）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "幫我開一張規劃圖"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/.scratch/test-effort/map.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-map",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "stderr_contains": "map"
+  },
+  "rule": "pr1_plan_review_marker"
+}

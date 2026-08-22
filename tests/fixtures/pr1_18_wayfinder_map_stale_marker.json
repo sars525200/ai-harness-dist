@@ -1,0 +1,56 @@
+{
+  "name": "PR-1 wayfinder map 審過之後 Destination 被改（hash 對不上）→ BLOCK",
+  "why": "C＋D 的安全邊界：Decisions so far 在 IGNORE 區內、追加不失效（17 證），但審查範圍內的實質內容（Destination／Notes／驗證方式／Out of scope）被改就必須重新失效——重畫目的地正是最需要重審的動作。marker 記的 hash 與現內容不符時要擋。",
+  "workspace": {
+    "files": {
+      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n目的地被改掉了——審查時不是這一句。\n\n## Notes\n\n領域：測試。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n- [某票](01-x.md)：某個決定\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rounds=2 at=2026-08-22T12:00:00Z -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "改一下目的地"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/.scratch/test-effort/map.md",
+                "old_string": "x",
+                "new_string": "y"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "edited"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-map3",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "stderr_contains": "對不上"
+  },
+  "rule": "pr1_plan_review_marker"
+}

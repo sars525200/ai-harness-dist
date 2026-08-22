@@ -69,6 +69,26 @@ subagent 寫計畫書」的路徑天然免疫。掛上 `SubagentStop` 才補得�
 subagent 與主 session 共用 `session_id`，只有 `agent_transcript_path`
 分得出來。
 
+────────────────────────────────────────────────────────────────────────
+2026-08-22（第二階段票 02／04，分岔 1 定案 C＋D）：wayfinder map 存在即待審。
+
+規劃層改制後，M 級任務的計畫書換成 wayfinder 規劃圖（`.scratch/<effort>/map.md`）。
+map 沒有「> 狀態：待審核」那一行——那一行的唯一產生源是 `/design-spec` 步驟 5，
+而 map 不走 `/design-spec` ⇒ 只認狀態行的話，map 會走到靜默放行（K1）。
+
+**C**：map 這個路徑形狀本身就是握手——這輪動過 `.scratch/**/map.md` 又沒有
+有效 marker，就擋。不是每輪都擋：第一次收工被擋 → 跑覆核 → 蓋 marker →
+之後靠 hash 放行（fixture 17）。這避開了 A/B 選項撞到的「建檔就標＝每輪 Stop
+都被擋」反模式——map 不必標任何東西，閘門認的是路徑不是狀態行。
+
+**D**：map 模板把 `## Decisions so far`／`## Not yet specified` 包進
+`REVIEW_SCOPE_IGNORE`（每解一票就 append 的欄位，不包＝開 6 票跑 6 輪覆核）；
+Destination／Notes／驗證方式／Out of scope 留在 hash 內——**重畫目的地或改
+驗證方式正是最該重審的動作**（fixture 18）。模板慣例在
+`<repo>/docs/agents/issue-tracker.md`。
+
+範圍仍是「這輪動過的檔」不掃 repo（理由同 0c-2），`tests/` 排除照舊生效。
+
 【核心層】大型工作先寫計畫書、討論過才執行，是流程紀律不是業務規則。
 """
 from __future__ import annotations
@@ -118,6 +138,14 @@ _CODE_FENCE = re.compile(
 def _detectable(text: str) -> str:
     """把 markdown 的「示範區」拿掉，剩下的才是這份文件真正在宣告的東西。"""
     return _CODE_FENCE.sub("", text)
+
+
+def _is_wayfinder_map(path: str) -> bool:
+    """wayfinder 規劃圖＝`.scratch/<effort>/map.md`。它**存在即待審**（分岔 1 選項 C）：
+    map 沒有狀態行可標，路徑形狀就是握手。判準收緊到「.scratch 底下、檔名恰為
+    map.md」——別的地方的 map.md（文件、範例）不歸這條管。"""
+    probe = path.replace("\\", "/").lower()
+    return "/.scratch/" in probe and probe.rsplit("/", 1)[-1] == "map.md"
 
 _PASSED = re.compile(
     r"<!--\s*ADVERSARIAL_REVIEW_PASSED\s+sha256=([0-9a-fA-F]{64})[^>]*-->"
@@ -173,8 +201,9 @@ def check(ctx):
         # 偵測一律看剝掉程式碼區塊之後的版本；hash 仍用原文（見 _CODE_FENCE 上方註解）。
         probe = _detectable(text)
 
-        if not _STATUS_PENDING.search(probe):
-            continue  # 草稿或沒標記 → 機制保持被動（B1）
+        is_map = _is_wayfinder_map(path)
+        if not is_map and not _STATUS_PENDING.search(probe):
+            continue  # 草稿或沒標記 → 機制保持被動（B1）；map 例外：存在即待審
 
         name = os.path.basename(path)
         actual = content_hash(text)
@@ -202,6 +231,20 @@ def check(ctx):
 
         passed = _PASSED.search(probe)
         if not passed:
+            if is_map:
+                return block(
+                    f"{name} 是 wayfinder 規劃圖（.scratch 底下的 map.md）——**存在即待審**，"
+                    f"沒有狀態行可改。檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker。"
+                    f"請先跑 /adversarial-review（map 是合法的審查對象，見 "
+                    f"docs/agents/issue-tracker.md 的 map 慣例），審完在檔尾補上：\n"
+                    f"    <!-- ADVERSARIAL_REVIEW_PASSED sha256=<自己算> rounds=<N> at=<ISO時間> -->\n"
+                    f"{_RECOMPUTE_HINT.format(path=path)}\n"
+                    f"審查範圍＝Destination／Notes／驗證方式／Out of scope；"
+                    f"Decisions so far 與 Not yet specified 應包在 REVIEW_SCOPE_IGNORE 區內"
+                    f"（每解一票的 append 才不會讓 marker 失效）。"
+                    f"若這次不需要審查，改用逃生口："
+                    f"<!-- ADVERSARIAL_REVIEW_SKIP sha256=<自己算>: <理由> -->。"
+                )
             return block(
                 f"{name} 標記為「待審核」，但檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker。"
                 f"請先跑 /adversarial-review，審完在檔尾補上：\n"

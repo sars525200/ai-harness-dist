@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 wayfinder map 有效 PASSED marker → ALLOW",
+  "why": "C 的另一半：map 審過一次、蓋了 hash 相符的 marker 之後，後續輪次不得再擋——否則就是分岔 1 A/B 選項被否決的那個「每一輪 Stop 都被擋」。",
+  "workspace": {
+    "files": {
+      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n把 X 改成 Y，交付一份可執行的規格。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=<HASH> rounds=2 at=2026-08-22T12:00:00Z -->\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "繼續解票"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/.scratch/test-effort/map.md",
+                "old_string": "x",
+                "new_string": "y"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "edited"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-map2",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}
