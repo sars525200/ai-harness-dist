@@ -34,6 +34,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 import os
 import sys
 from pathlib import Path
@@ -369,6 +370,45 @@ def _p_reversibility():
     ok = not bad
     return ok, ("；".join(parts)
                 + ("" if ok else f"　—— {'／'.join(bad)} 未達成，動作之後回不去"))
+
+
+def _p_skill_watch_alive():
+    """平台 skill 變動偵測的排程還活著嗎（`tools/skill_watch_run.py`）。
+
+    存在理由：那支每日無人看管跑，而它的失敗**沒有任何介面會變色**——
+    排程停掉／`claude` 掉出 PATH／設定檔壞掉，症狀都是「心跳檔停在某個日期」，
+    而 `state/` 在 `.gitignore` 裡，沒有人會主動去開它。
+    對抗式覆核（2026-08-22 R3-5）指出：F-2 宣稱的「讓機制死了看得見」
+    在沒有偵測器之前只成立於「有人主動去看那個檔」。
+
+    判準看 `lastScheduledRunAt` 而**不是** `lastRunAt`：手動跑一次就會更新後者，
+    於是「排程其實早就沒在跑」會被一次手動執行掩蓋掉。
+    """
+    hb = HARNESS / "state" / "skill_watch_heartbeat.json"
+    if not hb.exists():
+        return False, "沒有 state/skill_watch_heartbeat.json —— 這支從未成功跑過"
+    try:
+        data = json.loads(hb.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return False, f"心跳檔讀不動（{type(exc).__name__}）—— 判斷不出來，不當成通過"
+
+    stamp = data.get("lastScheduledRunAt")
+    if not stamp:
+        return False, ("心跳只有手動執行紀錄（lastScheduledRunAt 為空）"
+                       " —— 排程尚未成功跑過一次")
+    try:
+        last = datetime.strptime(stamp, "%Y-%m-%dT%H:%M%z")
+    except ValueError:
+        return False, f"lastScheduledRunAt 格式無法解析：{stamp!r}"
+
+    hours = (datetime.now().astimezone() - last).total_seconds() / 3600
+    if hours > 48:
+        return False, (f"排程上次成功是 {stamp}（約 {hours:.0f} 小時前）"
+                       "，每日排程超過 48 小時沒跑 = 已經死了")
+    ok_flag = data.get("ok")
+    if ok_flag is False:
+        return False, f"最近一次排程執行失敗：{str(data.get('detail'))[:120]}"
+    return True, f"排程 {hours:.0f} 小時前成功跑過（{stamp}）"
 
 
 def _p_skill_manifest():
@@ -1002,6 +1042,7 @@ CATEGORIES = [
             ("generated", "進度由來源產生，不手寫", "auto", _p_progress_generated),
             ("traces", "traces／span 級追蹤", "waived", _p_traces),
             ("cost", "成本儀表", "auto", _p_cost_dashboard),
+            ("skillwatch", "平台 skill 偵測排程還活著", "auto", _p_skill_watch_alive),
         ],
     },
     # ⑦⑧ 是 2026-07-30 外部標的校準後新增的兩類。三份標的（faros 五層／ETCLOVG 七層／

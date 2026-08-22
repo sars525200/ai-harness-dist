@@ -6,8 +6,10 @@
 
   資料來源：
     - 專案本地：即時掃描 <ProjectPath>\.claude\skills\*\SKILL.md 的 frontmatter（name/description）。
-    - 平台通用：讀同目錄 platform_skills.json（手動維護——這類 skill 沒有檔案來源可掃，
-      清單是某次 session 看到的快照，之後要新增/修改/刪除，直接編輯這個 JSON 即可，不用碰這支 .ps1）。
+    - 平台通用：讀同目錄 platform_skills.json 裡 origin=platform 的項目。
+      ⚠ 2026-08-22 起這個 JSON **由 tools\skill_inventory.py 產生，請勿手動編輯**
+      （下次產生會整批覆蓋）。要改內容請改產生器或它的來源；變動偵測的基準
+      （baselines 區塊）由 tools\skill_watch_run.py 每日維護。
 
   用法：雙擊 Launch-SkillViewer.bat（雙擊 .ps1 只會用記事本開啟）。
   可選參數：-ProjectPath 指到別的專案（預設 D:\IT-department）。
@@ -117,7 +119,15 @@ function Get-PlatformSkills([string]$jsonPath) {
   if (-not (Test-Path -LiteralPath $jsonPath)) { return @() }
   try {
     $data = Get-Content -LiteralPath $jsonPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    $out = @($data.skills | ForEach-Object { [pscustomobject]@{ Name = $_.name; Description = $_.description; Category = $_.category } })
+    # 這個 JSON 自 2026-08-22 起由 tools\skill_inventory.py 產生，skills[] 裝三種
+    # origin（platform / global / project）。這個面板叫「平台通用」，只該顯示 platform——
+    # 不過濾的話專案 skill 會同時出現在兩個面板（實測 16 支重複），
+    # 而狀態列會把 49 報成「平台通用」筆數（實際只有 24）。
+    # 沒有 origin 欄的是升級前的舊格式，一律顯示以維持相容。
+    $items = @($data.skills | Where-Object {
+      (-not $_.PSObject.Properties['origin']) -or ($_.origin -eq 'platform')
+    })
+    $out = @($items | ForEach-Object { [pscustomobject]@{ Name = $_.name; Description = $_.description; Category = $_.category } })
     return , ($out | Sort-Object Category, Name)
   } catch { return @() }
 }

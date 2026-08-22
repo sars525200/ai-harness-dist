@@ -1,27 +1,558 @@
 {
-  "updatedAt": "2026-07-28",
-  "note": "平台通用 skills 手動維護清單（Claude Code 內建/外掛，非本專案自動掃描得出）。此清單是某次 session 看到的快照，實際可用項目請以當下 Claude Code 內打「/」看到的為準；若發現有落差，直接編輯這個檔案補上/刪除/改描述即可，不用碰 SkillViewer.ps1。",
+  "updatedAt": "2026-08-22",
+  "note": "本檔由 tools/skill_inventory.py 產生，**請勿手動編輯**（下次產生會整批覆蓋）。skills[] 是顯示用清冊、baselines 是變動偵測基準（由 tools/skill_watch_run.py 維護）。要改內容請改產生器或其來源：<harness>/skills、<project>/.claude/skills、官方 commands 文件。",
   "skills": [
-    { "name": "shougong", "category": "收工/部署", "description": "收工封存 SOP 執行器。user 說「收工」「先到這」「封存」，或要求補規範/寫日誌/封存今天的工作時使用。" },
-    { "name": "deploy-prod", "category": "收工/部署", "description": "正式站修復部署主流程執行器（CLAUDE.md §9 八步）。任務是修 PROD 問題並部署、user 說「推正式」「上線」「push vm」或修完要驗證部署時使用。" },
-    { "name": "diagnose-bug", "category": "診斷/除錯", "description": "難 bug 診斷迴圈執行器。bug 症狀怪/跨層/改了沒好/效能退化，或 user 說「診斷」「查根因」「又出現了」時使用；一般一眼可見的小修不用。" },
-    { "name": "dry-run-migrate", "category": "診斷/除錯", "description": "資料遷移閘門執行器。任務要用腳本改正式資料——批次回補/遷移/清理/DELETE/外部文件(Excel/報價單)匯入——時使用；對應 DEV_DRY_RUN 模式。" },
-    { "name": "codebase-health", "category": "診斷/除錯", "description": "架構健檢，唯讀掃描整個專案並輸出 Artifact 報告。" },
-    { "name": "suggestion-inbox", "category": "工作追蹤", "description": "讀取「建議信箱→管理」待完成清單並逐項處理。user 說「讀建議信箱」「處理建議」「來看 SG-XXX」，或要清理內部待辦建議時使用。" },
-    { "name": "deep-research", "category": "研究/內容", "description": "深度研究執行器——fan-out 網路搜尋、抓取來源、交叉驗證、產出附引用的報告。需要多來源、事實查核的研究報告時使用。" },
-    { "name": "dataviz", "category": "研究/內容", "description": "任何圖表/圖形/儀表板前必讀。提供配色公式、圖形選型 heuristic、互動規則，確保視覺化在明暗主題下一致且可及。" },
-    { "name": "artifact-design", "category": "研究/內容", "description": "Artifact 頁面的設計指引與基礎規範。" },
-    { "name": "artifact-capabilities", "category": "研究/內容", "description": "已發布 Artifact 頁面可申請的進階執行期能力（即時/連動資料、跨使用者共享狀態、自我更新）。需要這類功能時載入。" },
-    { "name": "run", "category": "開發輔助", "description": "啟動並操作目前專案的 app，實際驗證一項改動是否真的生效（非只跑測試）。" },
-    { "name": "init", "category": "開發輔助", "description": "為新專案初始化一份包含程式庫文件的 CLAUDE.md。" },
-    { "name": "review", "category": "開發輔助", "description": "審查一個 GitHub Pull Request；審查自己本機尚未送出的 diff 改用 /code-review。" },
-    { "name": "security-review", "category": "開發輔助", "description": "對目前分支尚未提交的變更做一次完整資安審查。" },
-    { "name": "simplify", "category": "開發輔助", "description": "審查已變更的程式碼、抓重複/可簡化/低效率之處並直接套用修正；只管品質、不找 bug（找 bug 用 /code-review）。" },
-    { "name": "fewer-permission-prompts", "category": "開發輔助", "description": "掃描近期常見的唯讀 Bash/MCP 呼叫，產出白名單加進專案設定，減少之後的權限詢問彈窗。" },
-    { "name": "claude-api", "category": "開發輔助", "description": "Claude API / Anthropic SDK 用法查詢：model id、定價、參數、串流、tool use、MCP、快取、token 計算、模型遷移。任何提到 Claude/Anthropic 或 LLM 整合的任務先讀這個。" },
-    { "name": "update-config", "category": "環境設定", "description": "設定 Claude Code harness（settings.json）：權限白名單、hooks、環境變數。「允許 X 指令」「加權限」「設定 hook」這類要求用這個。" },
-    { "name": "keybindings-help", "category": "環境設定", "description": "自訂鍵盤快捷鍵、改綁按鍵、加組合鍵。" },
-    { "name": "loop", "category": "環境設定", "description": "讓一個 prompt 或 slash command 依固定間隔重複執行；不給間隔則自行抓節奏。設定定期輪詢/重複任務時使用。" },
-    { "name": "schedule", "category": "環境設定", "description": "建立/更新/列出/執行排程雲端 agent（依 cron 排程執行的自動化任務）。也用於單次定時任務（例如「明天下午三點提醒我」）。" }
-  ]
+    {
+      "name": "adversarial-review",
+      "description": "對抗式方案覆核。找一個不共用推理脈絡的獨立審查者針對計畫書逐輪挑錯，直到收斂。審查者由 D:\\.ai-harness\\reviewer\\reviewer_config.json 決定（預設 Claude Code + Opus 5 + high，可改 Codex CLI），設定改法見 skill 步驟 1。當 user 說「跟另一個 AI 討論」「adversarial review」「互審」「找人挑錯」，或任務屬 [DB｜邏輯] 類大型計畫（CLAUDE.md §2）需要逐項討論時使用。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "artifact-capabilities",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "artifact-design",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "artifact-diagramming",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "asset-data-rules",
+      "description": "設備／進出庫資料一致性硬規則參考。當任務動到 workflow_status 派生、單據完成聯動、dump／autosave 覆蓋、/api/inout/sync、設備或配件草稿同步、保管人與 BOM 寫入時使用；症狀端觸發＝資料跑回舊值／存了又消失／完成沒效果／同步振盪／列表看得到但下拉選不到。純參考資料，唯讀不執行流程。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "audit",
+      "description": "進度與一致性稽核執行器。當 user 說「稽核」「查進度」「評估現況」「文件跟實際對得上嗎」「harness 做到哪」，或要在更新看板／計畫書之前確認現況時使用。稽核對象二選一：harness（閘門、規則、看板、計畫書進度）或 project（IT 資產平台的文件漂移）。純稽核不修東西——出差異清單與建議，改不改由 user 決定。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "batch",
+      "description": "Orchestrate large-scale changes across a codebase in parallel. Researches the codebase, decomposes the work into 5 to 30 independent units, and presents a plan. Once approved, spawns one background subagent per unit in an isolated git worktree. Each subagent implements its unit, runs tests, and opens a pull request. Requires a git repository. Example: `/batch migrate src/ from Solid to React`",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "claude-api",
+      "description": "Load Claude API and Managed Agents reference material for your project's language. Also activates automatically when your code imports `anthropic` or `@anthropic-ai/sdk`. Run `migrate` to upgrade existing Claude API code to a newer model, `managed-agents-onboard` for a walkthrough that creates a new Managed Agent, or `prompt-audit` to flag instructions written for older models in your prompts, skills, and tool descriptions and propose fixes as a diff. The `prompt-audit` subcommand requires Claude Code v2.1.221 or later",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "開發輔助",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "code-review",
+      "description": "Review the current diff, or a PR number, branch, or path you pass, for correctness bugs and cleanup opportunities. Pass `--fix` to apply findings, `--comment` to post them as inline GitHub PR comments, or `ultra` to run a deep cloud review. With `ultra` on a `github.com` PR target, `--post` preselects posting the finished findings to the PR in the launch dialog. See Review a diff locally for the effort levels, targeting, and how it relates to `/simplify`. Alias: `/review`",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "codebase-health",
+      "description": "平台架構健檢——唯讀掃描找架構摩擦與淺模組熱點，出自包視覺化報告；只報告、不動手改。",
+      "origin": "project",
+      "userOnly": true,
+      "category": "診斷/除錯",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "context-health",
+      "description": "量測並瘦身「每則對話都付」的常駐層檔案（CLAUDE.md／MEMORY.md）。當 user 說「常駐層太肥」「CLAUDE.md 太長」「記憶檔要瘦身」「context 成本太高」「規則太多找不到」，或收工要盤點常駐層時使用。它先量（兩支唯讀工具）→ 出候選 → **逐項讓人決定** → 才動檔 → 再驗證沒有東西失聯。跨專案通用，不綁特定專案。",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "data-incident",
+      "description": "資料事故鑑識流程。當「資料不見了／被覆寫／數字對不上／設定跑回舊值」，且事件**已經發生在過去、無法重現**時使用。可重現的 code bug 走 /diagnose-bug。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "dataviz",
+      "description": "Design guidance for charts, graphs, and dashboards. Claude picks the chart form for the data, assigns color by role, validates the palette for colorblind safety and contrast with a bundled script, and applies mark, interaction, and accessibility rules. Uses a brand-neutral placeholder palette that you replace with your own. Requires Claude Code v2.1.198 or later",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "研究/內容",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "debug",
+      "description": "Enable debug logging for the current session and troubleshoot issues by reading the session debug log. Debug logging is off by default unless you started with `claude --debug`, so running `/debug` mid-session starts capturing logs from that point forward. Optionally describe the issue to focus the analysis",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "deep-research",
+      "description": "Fan out web searches on a question, fetch and cross-check sources, and synthesize a cited report",
+      "origin": "platform",
+      "kind": "workflow",
+      "userOnly": false,
+      "category": "研究/內容",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "deploy-prod",
+      "description": "正式站修復部署主流程執行器（§9 八步）。當任務是修 PROD 問題並部署、user 說「推正式」「上線」「push vm」或修完要驗證部署時使用。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "收工/部署",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "design",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "design-spec",
+      "description": "Design 階段執行器——把「要做什麼」寫成別人能接手的工作規格。⚠ 2026-08-22 改制：任務明確命中 M 級（資料遷移/DELETE、動角色·規則·hook、跨 repo、預估跨 session）時規劃層改開 wayfinder map（模型叫不動 /wayfinder，提醒 user 打；慣例見 docs/agents/issue-tracker.md），不再用本 skill 起計畫書。本 skill 服務：規模待定或判不出來的（安全預設走舊制）、user 明說要傳統計畫書的、以及既有 *_PLAN.md 的疊代。完成判準不變：「每個分岔都有 user 的決定」＋「驗證方式在動工前就寫好」。單點小改（L 級）不用這支。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "design-sync",
+      "description": "Convert your repo's React design system and upload it to Claude Design, so designs it produces use your real components. Optionally name the design system, for example `/design-sync Acme DS`. A first-time sync verifies every component and can take a few hours on a large repo. Available on the Anthropic API; on Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry, and Claude Platform on AWS the underlying tool can't reach claude.ai, so the command is unavailable",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "diagnose-bug",
+      "description": "難 bug 診斷迴圈執行器。當 bug 症狀怪/跨層/改了沒好/效能退化，或 user 說「診斷」「查根因」「又出現了」時使用；一般一眼可見的小修不用。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "診斷/除錯",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "doctor",
+      "description": "Run a setup checkup that diagnoses issues and can fix them. Checks installation health, including duplicate or leftover installs, `PATH` problems, and unparseable settings files. Finds unused skills, MCP servers, and plugins versus their context cost, flags slow hooks, and checks for a newer version on your release channel. Deduplicates local `CLAUDE.md` files against checked-in ones, trims checked-in `CLAUDE.md` files by cutting content Claude could derive from the codebase, and migrates the always-loaded guidance that remains into skills and nested `CLAUDE.md` files that load on demand. Also offers to make auto mode your default and to pre-approve frequently denied read-only commands. Reports findings first and asks for confirmation before changing anything. From the terminal, `claude doctor` prints read-only installation diagnostics without starting a session. Alias: `/checkup`. The `CLAUDE.md` trim check requires Claude Code v2.1.206 or later. Before v2.1.205, `/doctor` opened a read-only diagnostics screen and pressing `f` sent the report to Claude",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "domain-modeling",
+      "description": "Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a CONTEXT.md, or recording or editing an ADR.",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "dry-run-migrate",
+      "description": "資料遷移閘門執行器。當任務要用腳本改正式資料——批次回補/遷移/清理/DELETE/外部文件(Excel/報價單)匯入——時使用；對應 DEV_DRY_RUN 模式。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "診斷/除錯",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "escalate",
+      "description": "派工受阻、或做得下去但成本明顯超過價值時，把它變成一次請示而不是一段沉默的硬撐。當角色回報裡出現「【需要但沒有】」「【受阻】」、當你自己重試同一條路徑卡住、當你正打算「算了我繞過去」時使用。它規定的是收到卡點之後不得默默繞過去，並把選項與成本估計帶回去讓人決定。",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "fewer-permission-prompts",
+      "description": "Scan your transcripts for common read-only Bash and MCP tool calls, then add a prioritized allowlist to project `.claude/settings.json` to reduce permission prompts",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "開發輔助",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "grilling",
+      "description": "Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "init",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "keybindings-help",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "license-rules",
+      "description": "軟體授權/Win 序號硬規則參考。當任務動到序號匯入、續約邏輯（_swRenewalArranged）、授權/series 刪除、帳單自動出帳、SW 類型自動分類時使用；純參考資料，唯讀不執行流程。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "loop",
+      "description": "Run a prompt repeatedly while the session stays open. Omit the interval and, where available, Claude self-paces between iterations. Omit the prompt and, where available, Claude runs an autonomous maintenance check or the prompt in `.claude/loop.md`. Example: `/loop 5m check if the deploy finished`. See Run prompts on a schedule. Alias: `/proactive`",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "環境設定",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "platform-resource-rules",
+      "description": "平台資源 key／app_settings 存檔硬規則參考。當任務動到 /api/platform-resources/save、ALLOWED_KEYS、DEFAULT_* 預設值、外部 JS lib 引入、腳本直改平台資源 key、或 server→client 清單同步時使用；症狀端觸發＝改了預設值沒生效／dump 留舊值／選項越積越多／陣列型資料被整批覆寫變短。純參考資料，唯讀不執行流程。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "prototype",
+      "description": "Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "research",
+      "description": "Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "review",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "run",
+      "description": "Launch and drive your project's app to see a change working, not only passing tests. See Run and verify your app",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "開發輔助",
+      "modes": [
+        "interactive"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "run-skill-generator",
+      "description": "Teach `/run` and `/verify` how to build, launch, and drive your project's app from a clean environment by writing a per-project skill",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "schedule",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "security-review",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "shougong",
+      "description": "收工封存 SOP 執行器，**收工規則本體在此**（清暫存→補規範分流→防膨脹量測→看板新鮮度→未驗項落檔→三個 repo commit→PROD 版號的完整流程與各步完成判準）。當 user 說「收工」「先到這」「封存」，或要求「封存今天的工作、把今天的東西補進規範與日誌」時使用。**單點寫一條規則進記憶檔、單獨 commit 某個檔案，不要用這支**——那不需要走完整收工流程。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "收工/部署",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "simplify",
+      "description": "Review the changed code for cleanup opportunities and apply the fixes. Four review agents run in parallel, covering reuse of existing helpers, simplification, efficiency, and whether the change is at the right level of abstraction. From v2.1.154, the review doesn't look for correctness bugs. Use `/code-review` to find bugs. On earlier versions, `/simplify` is equivalent to `/code-review --fix`. Pass a path or PR reference to review a specific target",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "開發輔助",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "suggestion-inbox",
+      "description": "讀取「建議信箱→管理」待完成清單並逐項處理。當 user 說「讀建議信箱」「處理建議」「來看 SG-XXX」，或要清理內部待辦建議時使用；員工前台建議（另一個分頁）不在此範圍。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "工作追蹤",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "to-tickets",
+      "description": "Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).",
+      "origin": "global",
+      "userOnly": true,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "ui-rules",
+      "description": "平台前端視覺／版面硬規則查表——「我要做這個，先看哪一條」。動 styles.css／index.html／app.js 渲染層，或做浮層、下拉、日期選擇器、深色模式、動畫、按鈕、表格捲軸、狀態徽章時使用；症狀端觸發＝浮層被裁一半／改了顏色沒生效／深色某塊看不見／列高被撐開／重複顯示同一件事／截圖看起來對但使用者說不對。純參考資料，唯讀不執行流程；要真的截圖驗收請用 /visual-check。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "update-config",
+      "description": "（由基準推論；官方文件未列出此項）",
+      "origin": "platform",
+      "inferredFrom": "baseline",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [
+        "interactive",
+        "headless"
+      ],
+      "presentLocally": true
+    },
+    {
+      "name": "verify",
+      "description": "Confirm a code change does what it should by building your project's app, running it, and observing the result, rather than relying on tests or type checks. See Run and verify your app",
+      "origin": "platform",
+      "kind": "skill",
+      "userOnly": false,
+      "category": "平台內建",
+      "modes": [],
+      "presentLocally": false
+    },
+    {
+      "name": "verify-rules",
+      "description": "驗證紀律硬規則參考——「怎麼證明它真的好了」。交付前自檢、寫或改測試、跑變異測試、對帳外部報表、驗新 UI 欄位有沒有真的渲染、判讀 exit code 時使用；症狀端觸發＝測試全綠但使用者說沒好／改完不確定有沒有效／變異測試沒紅／一致率很高但心裡不踏實。純參考資料，唯讀不執行流程；要跑診斷迴圈請用 /diagnose-bug。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "verify-skill",
+      "description": "驗證一個新寫的 Skill 是否真的能用，不是只看 frontmatter 對不對。當 user 說「驗證這個 skill」「這個 skill 能用嗎」「測一下這支 skill」，或剛寫完一個會 spawn agent／多輪流程的 skill 準備投入使用前使用。",
+      "origin": "project",
+      "userOnly": false,
+      "category": "專案自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "visual-check",
+      "description": "用 headless 截圖真的看一眼畫面，再宣稱 UI 改好了。改完 CSS／版面／新做一個面板或視窗、或 user 說「太醜」「歪掉」「看不見」「跑版」時使用。它產 probe 頁（正式 markup ＋ 正式 CSS ＋ 正式字型）→ 截淺色與深色兩張 → **逐張用 Read 打開看** → 才下判定。純視覺驗證，不改業務邏輯、不部署。",
+      "origin": "global",
+      "userOnly": false,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    },
+    {
+      "name": "wayfinder",
+      "description": "Plan a huge chunk of work (more than one agent session can hold) as a shared map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.",
+      "origin": "global",
+      "userOnly": true,
+      "category": "全域自建",
+      "modes": null,
+      "presentLocally": true
+    }
+  ],
+  "schemaVersion": 2,
+  "baselines": {
+    "headless": {
+      "capturedAt": "2026-08-22T23:39+0800",
+      "names": [
+        "update-config",
+        "keybindings-help",
+        "simplify",
+        "fewer-permission-prompts",
+        "loop",
+        "schedule",
+        "claude-api",
+        "init",
+        "review",
+        "security-review"
+      ],
+      "cliVersion": "2.1.143",
+      "cwdKind": "neutral"
+    },
+    "interactive": {
+      "capturedAt": "2026-08-22T23:39+0800",
+      "names": [
+        "design",
+        "dataviz",
+        "artifact-design",
+        "artifact-diagramming",
+        "artifact-capabilities",
+        "update-config",
+        "keybindings-help",
+        "code-review",
+        "simplify",
+        "fewer-permission-prompts",
+        "loop",
+        "schedule",
+        "claude-api",
+        "run",
+        "init",
+        "security-review"
+      ],
+      "cliVersion": "2.1.143",
+      "cwdKind": "project"
+    }
+  },
+  "generatedBy": "tools/skill_inventory.py"
 }
