@@ -227,6 +227,35 @@ _RECOMPUTE_HINT = (
 )
 
 
+def note_failopen(reason: str, transcript_path: str = "") -> None:
+    """fail-open 時留一筆痕（票 10 / 覆核 R1-M14）。
+
+    **為什麼非留不可**：`applies()` 回 False 的規則**根本不進 dispatch 的迴圈**，
+    所以「閘門這輪是瞎的」與「這輪沒有計畫書要看」在事件資料上長得一模一樣。
+    這條規則是唯一會擋住對話結束的閘門，它瞎掉時至少要有人數得出來。
+
+    寫失敗一律吞掉——留痕是附加價值，不該讓一個 log 問題把 hook 弄掛
+    （與 `dispatch._log_event` 同一個立場）。
+    """
+    try:
+        import json as _json
+        import time as _time
+        # 向 dispatch 借 STATE_DIR，**不要自己從 __file__ 爬**：第一版寫成
+        # `dirname(dirname(__file__))/state` 少爬一層，落在 `hooks\state\`，
+        # 而 `makedirs` 順手把那個目錄建了出來 ⇒ 檔案有寫、位置錯、完全無聲。
+        # 單一真相在 dispatch，這裡跟著它走就不會再漂。
+        from dispatch import STATE_DIR as _state
+        os.makedirs(_state, exist_ok=True)
+        with open(os.path.join(_state, "failopen.ndjson"), "a", encoding="utf-8") as fh:
+            fh.write(_json.dumps({
+                "ts": _time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "rule_id": RULE_ID, "reason": reason,
+                "transcript": os.path.basename(str(transcript_path or "")),
+            }, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def applies(ctx) -> bool:
     return bool(_touched_plan_files(ctx.turn_transcript_path))
 
@@ -388,8 +417,14 @@ def _touched_plan_files(transcript_path: str) -> list[str]:
     範圍**必須**是「這輪動過的檔」而非掃 repo：掃 repo 會永久命中規則自己的
     e2e fixture，把每一輪 Stop 都擋住。
     """
+    if not transcript_path:
+        note_failopen("transcript_path 是空的", transcript_path)
+        return []
     blocks = iter_turn_tool_uses(transcript_path)
     if blocks is None:
+        # 讀不到／2MB 尾窗內找不到輪次起點。**這一支是唯一會擋住對話結束的閘門**，
+        # 它瞎掉時至少要有人數得出來——不留痕的話，這裡與「這輪沒有計畫書」無從分辨。
+        note_failopen("讀不到 transcript 或找不到輪次起點（尾窗 2MB）", transcript_path)
         return []
 
     out = set()

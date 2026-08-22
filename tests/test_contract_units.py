@@ -14,6 +14,7 @@
 """
 import os
 import sys
+import tempfile
 
 sys.stdout.reconfigure(encoding="utf-8")  # 避免 cp950 在印 ✔/中文時炸出假紅燈
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hooks"))
@@ -339,6 +340,66 @@ def _run_turn_user_text_cases() -> "tuple[int, list[str]]":
     return passed, failures
 
 
+def _run_pr1_failopen_cases() -> tuple[int, list[str]]:
+    """PR-1 的 fail-open 必須留痕（票 10 / 覆核 R1-M14）。
+
+    `_touched_plan_files` 判斷不出來（transcript 讀不到、2MB 尾窗內找不到輪次起點）時
+    回空 list ⇒ `applies()` False ⇒ 規則**根本不進 dispatch 的迴圈**，連一筆 event 都沒有。
+    後果是「閘門這輪是瞎的」與「這輪沒有計畫書要看」在資料上完全一樣，
+    而 M 級 wayfinder session 正是製造超長輪次的那種（實測有一輪達門檻的 83%）。
+    """
+    import importlib
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "hooks"))
+    pr1 = importlib.import_module("rules.pr1_plan_review_marker")
+    passed, failures = 0, []
+
+    def ok(cond, why):
+        nonlocal passed
+        if cond:
+            passed += 1
+        else:
+            failures.append(why)
+
+    ok(hasattr(pr1, "note_failopen"),
+       "PR-1 應有 note_failopen()：fail-open 時寫一筆 event，讓 report.py 統計得到")
+    ok(hasattr(pr1, "_touched_plan_files"), "內部函式應存在")
+    if hasattr(pr1, "note_failopen"):
+        calls = []
+        orig = pr1.note_failopen
+        pr1.note_failopen = lambda *a, **k: calls.append((a, k))
+        try:
+            # 給一個不存在的 transcript：判斷不出來 → 必須留痕
+            pr1._touched_plan_files(os.path.join(tempfile.gettempdir(), "no-such-transcript.jsonl"))
+            ok(len(calls) == 1, f"transcript 讀不到要寫一筆 fail-open，實得 {len(calls)} 筆")
+            calls.clear()
+            # 空路徑同樣是判斷不出來
+            pr1._touched_plan_files("")
+            ok(len(calls) == 1, f"空 transcript_path 同樣要留痕，實得 {len(calls)} 筆")
+        finally:
+            pr1.note_failopen = orig
+
+        # ⚠ 上面用 monkeypatch 攔截 → **照不到真正的寫檔路徑**。第一版就是這樣假綠的：
+        # 單元全過，而檔案其實被寫到 `hooks\state\`（少爬一層，makedirs 順手建了目錄
+        # ⇒ 有寫、位置錯、完全無聲）。所以這裡真的呼叫一次並確認落點。
+        import importlib as _il
+        dispatch = _il.import_module("dispatch")
+        want_dir = dispatch.STATE_DIR
+        target = os.path.join(want_dir, "failopen.ndjson")
+        before = os.path.getsize(target) if os.path.exists(target) else 0
+        pr1.note_failopen("單元測試自檢", "unit-test.jsonl")
+        after = os.path.getsize(target) if os.path.exists(target) else 0
+        ok(after > before,
+           f"note_failopen 必須真的寫進 {want_dir}——monkeypatch 照不到落點，"
+           f"寫錯目錄時 makedirs 會靜默把它建出來")
+        stray = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(pr1.__file__))),
+                             "state", "failopen.ndjson")
+        ok(os.path.abspath(stray) == os.path.abspath(target) or not os.path.exists(stray),
+           f"不得在 {os.path.dirname(stray)} 留下第二份 failopen.ndjson（少爬一層的症狀）")
+    return passed, failures
+
+
 def run() -> tuple[int, list[str]]:
     """回傳 (通過數, 失敗描述清單)。供 run_hook_tests.py 併入總計。"""
     passed, failures = 0, []
@@ -354,9 +415,10 @@ def run() -> tuple[int, list[str]]:
     dev_passed, dev_failures = _run_dev_matches_cases()
     hash_passed, hash_failures = _run_content_hash_cases()
     turn_passed, turn_failures = _run_turn_user_text_cases()
+    fo_passed, fo_failures = _run_pr1_failopen_cases()
     return (
-        passed + dev_passed + hash_passed + turn_passed,
-        failures + dev_failures + hash_failures + turn_failures,
+        passed + dev_passed + hash_passed + turn_passed + fo_passed,
+        failures + dev_failures + hash_failures + turn_failures + fo_failures,
     )
 
 
