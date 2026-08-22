@@ -179,7 +179,10 @@ _RECOMPUTE_HINT = (
     "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\.ai-harness\\hooks');"
     "sys.path.insert(0,r'D:\\.ai-harness\\hooks\\rules');"
     "import pr1_plan_review_marker as p;"
-    "print(p.content_hash(open(r'{path}',encoding='utf-8').read()))\"`"
+    # 覆核 R1-L16：這裡曾是 encoding='utf-8'，而規則本體 _read_text 用 utf-8-sig
+    # ⇒ 檔案帶 BOM 時照官方指令算出的 marker 從寫下那刻就無效（實測兩 hash 不同），
+    # 訊息卻一直說「內容又被改了」——把人推向逃生口的假訊息。兩邊必須同一種讀法。
+    "print(p.content_hash(open(r'{path}',encoding='utf-8-sig').read()))\"`"
 )
 
 
@@ -226,6 +229,19 @@ def check(ctx):
                 f"{name} 用的是舊版 ADVERSARIAL_REVIEW_SKIP 格式（沒有綁 hash）。"
                 f"不綁 hash 的逃生口會永久關閉這個檔的檢查，之後任何改動都不會再被看到。"
                 f"請改成：<!-- ADVERSARIAL_REVIEW_SKIP sha256=<hash>: {legacy.group(1).strip()} -->\n"
+                + _RECOMPUTE_HINT.format(path=path)
+            )
+
+        # 覆核 R1-M5（2026-08-22 實測死結）：多個 PASSED marker 時 .search 取第一個＝
+        # 最舊的 → hash 必不符 → BLOCK 訊息又教人「補上」marker → 越補越出不去，
+        # 唯一的門變成逃生口。map 存在即待審、每次改 hash 範圍都要重簽，
+        # 這情境的發生率遠高於計畫書。多於一個 → 直接擋、教人收斂成一個。
+        all_passed = _PASSED.findall(probe)
+        if len(all_passed) > 1:
+            return block(
+                f"{name} 有 {len(all_passed)} 個 ADVERSARIAL_REVIEW_PASSED marker——"
+                f"規則只認得一個，而且會拿到最舊的那個，補新 marker 永遠出不去。"
+                f"請**刪掉舊的、收斂成一個**（保留最新一次審查的），再重算 hash 確認相符。\n"
                 + _RECOMPUTE_HINT.format(path=path)
             )
 

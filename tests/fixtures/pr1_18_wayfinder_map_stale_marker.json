@@ -1,56 +1,56 @@
 {
-  "name": "PR-1 wayfinder map 審過之後 Destination 被改（hash 對不上）→ BLOCK",
-  "why": "C＋D 的安全邊界：Decisions so far 在 IGNORE 區內、追加不失效（17 證），但審查範圍內的實質內容（Destination／Notes／驗證方式／Out of scope）被改就必須重新失效——重畫目的地正是最需要重審的動作。marker 記的 hash 與現內容不符時要擋。",
-  "workspace": {
-    "files": {
-      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n目的地被改掉了——審查時不是這一句。\n\n## Notes\n\n領域：測試。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n- [某票](01-x.md)：某個決定\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa rounds=2 at=2026-08-22T12:00:00Z -->\n"
-    },
-    "transcript": [
+ "name": "PR-1 wayfinder map 審過之後 Destination 被改（真基準 hash）→ BLOCK",
+ "why": "覆核 R1-M7：原版用 64 個 a 當 hash，任何內容都紅＝紅得沒有鑑別力。改用真基準 hash：同一個 hash 在 fixture 20（只動 IGNORE 區）是綠的，兩支合起來才把「Destination 在 hash 內、Decisions 在 hash 外」這條 D 邊界釘住。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n目的地被改掉了——審查時不是這一句。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=07765971d7f412218138b61a0374e6e2cd5df3c42636dbaf559b841b5b184a2f rounds=1 at=2026-08-22T21:00:00Z -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
       {
-        "type": "user",
-        "message": {
-          "content": "改一下目的地"
-        }
-      },
-      {
-        "type": "assistant",
-        "message": {
-          "content": [
-            {
-              "type": "tool_use",
-              "name": "Edit",
-              "input": {
-                "file_path": "<DIR>/.scratch/test-effort/map.md",
-                "old_string": "x",
-                "new_string": "y"
-              }
-            }
-          ]
-        }
-      },
-      {
-        "type": "user",
-        "message": {
-          "content": [
-            {
-              "type": "tool_result",
-              "content": "edited"
-            }
-          ]
-        }
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
       }
-    ]
-  },
-  "payload": {
-    "hook_event_name": "Stop",
-    "session_id": "fx-pr1-map3",
-    "transcript_path": "<TRANSCRIPT>",
-    "cwd": "<DIR>",
-    "stop_hook_active": false
-  },
-  "expect": {
-    "decision": "BLOCK",
-    "stderr_contains": "對不上"
-  },
-  "rule": "pr1_plan_review_marker"
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "edited"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-map",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "對不上"
+ },
+ "rule": "pr1_plan_review_marker"
 }

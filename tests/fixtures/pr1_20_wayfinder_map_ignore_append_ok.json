@@ -1,0 +1,55 @@
+{
+ "name": "PR-1 wayfinder map 審後只在 IGNORE 區 append 決議 → ALLOW（marker 不失效）",
+ "why": "分岔 1 選項 D 的正面釘子：marker 的 hash 是對「不含這行 append」的基準算的（寫死在 fixture 裡、與 18 同一個值），檔案內容多了一行 Decisions——IGNORE 區內的例行 append 不得逼人重簽。與 18 成對。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n原始目的地——審查通過時是這一句。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n- [某票](issues/01-x.md)：解掉了，append 這一行不得讓 marker 失效\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=07765971d7f412218138b61a0374e6e2cd5df3c42636dbaf559b841b5b184a2f rounds=1 at=2026-08-22T21:00:00Z -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "edited"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-map",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "ALLOW"
+ },
+ "rule": "pr1_plan_review_marker"
+}
