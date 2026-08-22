@@ -342,7 +342,7 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| **`eval` L2 剩 1 項紅**：`domain-modeling` 引用的 `CONTEXT-MAP.md` | single-context 下永遠不存在，不能建檔解。⚠ **原本寫的「`eval/` 底下 12 檔正被另一 session 修改」2026-08-22 已證實是錯的**——那批 mtime 停在 2026-08-16，擱置 6 天不是進行中；當時只看了 `git status` 的 `M` 沒查 mtime | 處置已在 `AUDIT_FIX_PLAN_20260822.md` **分岔② 定案＝資料驅動 allowlist**（`(skill, 檔名)` 二元組＋`reason` 欄）。四欄全文見該檔 §5 | 我（未做） |
+| ✅ **`eval` L2 剩 1 項紅 —— 已修（2026-08-22）** | ~~single-context 下永遠不存在~~ | 建 `eval/contract_allowlist.json`（`(skill, 引用值)` **二元組**＋`reason`），`check_contracts` 把命中者降級成 **WAIVED**、報表獨立列出、不計入缺失。實測 `run_all.py` **exit 0，六層全 PASS**（L2 從 FAIL 變 PASS）。細節見 §7.3 | 已完成 |
 | ✅ **`/to-tickets`、`/wayfinder` 已實跑（2026-08-22·user 親自打）** | ~~兩支帶 `disable-model-invocation: true`，模型叫不動~~ | **兩支都綠**：各自照 LOCAL EDIT 讀到 `docs/agents/*`，**沒有出現指向已移除的 `/setup-matt-pocock-skills` 的死循環**（V-1 的修有效）。細節見 §7.2 | 已完成 |
 | **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
 | **`prototype` 從未實跑** | 刻意不跑：原本會自行 commit 到分支，雖已加 `LOCAL EDIT` 約束但**約束本身未實測** | 真的用它做一次原型，確認它**沒有**建分支／commit：`git -C d:/IT-department branch --list` 前後一致 | 我或 user（未做） |
@@ -388,6 +388,31 @@ provided to you」，沒被 provide 就會叫人跑**已被移除的** `/setup-m
 
 **這條要在第二階段的計畫書裡開成 K16**（本檔 §0 的 K 表不在 `REVIEW_SCOPE_IGNORE` 內，
 在這裡補會讓覆核 marker 再次失效，而這是設計發現不是狀態更新，不該用逃生口帶過）。
+
+### §7.3 `eval` L2 的處置紀錄（2026-08-22）
+
+照 `AUDIT_FIX_PLAN_20260822.md` 分岔② 的定案做：`eval/contract_allowlist.json`，
+每筆是 **`(skill, 引用值)` 二元組**＋必填 `reason`。命中者從 MISSING 降級成 **WAIVED**，
+**報表獨立列出（含理由）**、不計入缺失、不影響 exit code。
+
+**唯一那筆的 `reason` 是實跑 `/to-tickets` 時撿到的**：`docs/agents/domain.md` 明文寫
+「沒有 `CONTEXT-MAP.md`，也不會有…看到 skill 提它一律當它不存在，**不要建、也不要回報缺少它**」。
+而 skill 那邊的原句是條件式引用（`If a CONTEXT-MAP.md exists at the root...`），**不是契約**。
+
+**紅燈證明四態**：①現況→綠且列出豁免 ②清空 entries→**回到缺失 1、exit 1**
+③檔案壞掉→**回到全部檢查**（不是全部放行——豁免清單壞掉時 fail-open 等於把閘門關掉）
+④同檔名掛錯 skill→**不生效**（證明二元組真的有效；用裸檔名會全域豁免，
+`SKILL.md` 一旦進清單，往後任何 skill 指向不存在的 `SKILL.md` 都不會紅）。
+
+⚠ **兩個誠實標示**：
+
+1. **`_HERE` 的教訓**：初版 `_load_allowlist` 借用了檔頭的 `_HERE` 常數，而那個常數屬於
+   **另一批未 commit 的改動** ⇒ 只 commit 自己的 hunk 會產出一個 `NameError` 的檔。
+   **hunk 分得開不代表語意上獨立**——已改成自己算目錄，並實際把 staged 版本跑起來驗過。
+2. **這個修在 HEAD 上不會生效**：staged 版本實跑印「缺失 0 項」但**沒有印「已豁免 1 項」**，
+   因為 HEAD 還沒有那批「兩層 skill 索引」的改動、掃不到全域層的 `domain-modeling`。
+   ⇒ **L2 那個永久紅本身就是 `config.py` 造成的**（覆核 R2b 的判斷成立）。
+   我的改動在 HEAD 上無害，等對方 commit 之後才真正發揮作用。
 
 #### 為什麼 `/wayfinder` 沒有真的開 map
 

@@ -207,6 +207,35 @@ def self_test() -> int:
     return fails
 
 
+def _load_allowlist() -> dict:
+    """L2 契約的豁免清單，key ＝ `(skill, 引用值)` **二元組**。
+
+    為什麼是二元組不是裸檔名：裸檔名會**全域豁免**。把 `SKILL.md` 加進來，
+    往後任何 skill 指向一個真的不存在的 `SKILL.md` 都不會紅 ——
+    L2 對「skill 指向不存在的 skill」這個最常見的失效就永久失明了。
+
+    ⚠ **豁免只消音、不修根因**：目前唯一一筆的成因是抽取器把
+    `If a CONTEXT-MAP.md exists...` 這種**條件句**當成必要檔案。
+    下一支寫條件句的外部 skill 會再中一次，然後這張表再長一行。
+    根因（讓抽取器認得條件句）已登記在清單的 `_todo` 欄。
+
+    讀不到就回空 dict —— 豁免清單壞掉時應該**恢復成全部都檢查**，
+    不是全部都放行；fail-open 在這裡等於把閘門關掉。
+    """
+    try:
+        # 自己算目錄，**不借用檔頭的 `_HERE`**：那個常數屬於另一批未 commit 的改動，
+        # 借了會讓「只 commit 自己的 hunk」產出一個 NameError 的檔。
+        # hunk 分得開不代表語意上獨立 —— 這一條是 2026-08-22 實際踩到才發現的。
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "contract_allowlist.json"),
+                  encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        return {(e["skill"], e["value"]): e.get("reason", "（未寫理由）")
+                for e in data.get("entries", [])}
+    except Exception:
+        return {}
+
+
 def main() -> int:
     if "--self-test" in sys.argv:
         return 1 if self_test() else 0
@@ -216,6 +245,7 @@ def main() -> int:
         print("❌ 找不到任何 skill —— 設定錯誤，不是「全部通過」。")
         return 1
 
+    allowlist = _load_allowlist()
     report, missing_total, manual_total = [], 0, 0
     fixture_errors = []
 
@@ -232,9 +262,14 @@ def main() -> int:
                 c["source"] = "fixture"
                 contracts.append(c)
 
-        rows = []
+        rows, waived = [], []
         for c in contracts:
             st, detail = verify(c)
+            if st == "MISSING" and (sk["name"], c["value"]) in allowlist:
+                # 降級成 WAIVED 而不是直接不算：**報表要獨立列出**。
+                # 靜默吞掉的話，「這一項被豁免了」跟「這一項通過了」在畫面上長得一樣。
+                st = "WAIVED"
+                waived.append((c["value"], allowlist[(sk["name"], c["value"])]))
             rows.append({**c, "status": st, "detail": detail})
             if st == "MISSING":
                 missing_total += 1
@@ -243,7 +278,8 @@ def main() -> int:
         report.append({"skill": sk["name"], "mtime": sk["mtime"],
                        "has_fixture": bool(fx), "contracts": rows,
                        "unresolved_refs": sk.get("_unresolved_refs", []),
-                       "skipped": sk.get("_skipped", [])})
+                       "skipped": sk.get("_skipped", []),
+                       "waived": waived})
 
     if "--json" in sys.argv:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -275,6 +311,13 @@ def main() -> int:
         print("    · 疑似 skill 引用但查無此 skill（也可能是 API 路徑／內建命令，人工看一眼）：")
         for name, refs in unres:
             print(f"        {name}: {'、'.join('/' + x for x in sorted(set(refs)))}")
+    waived = [(r["skill"], r["waived"]) for r in report if r.get("waived")]
+    if waived:
+        print("    · **已豁免**（在 contract_allowlist.json 裡，不計入缺失）：")
+        for name, items in waived:
+            for value, reason in items:
+                print(f"        {name}: {value}")
+                print(f"          理由：{reason}")
     skipped = [(r["skill"], r["skipped"]) for r in report if r["skipped"]]
     if skipped:
         print("    · 範本佔位字串，未驗：")
@@ -288,8 +331,10 @@ def main() -> int:
 
     print()
     print("-" * 74)
+    n_waived = sum(len(w) for _, w in waived)
     print(f"  結果：缺失 {missing_total} 項　人工待確認 {manual_total} 項　"
-          f"fixture 問題 {len(fixture_errors)} 項")
+          f"fixture 問題 {len(fixture_errors)} 項"
+          + (f"　已豁免 {n_waived} 項" if n_waived else ""))
     return 1 if (missing_total or fixture_errors) else 0
 
 

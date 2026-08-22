@@ -1,0 +1,24 @@
+{
+  "_why": [
+    "L2 契約檢查的豁免清單。每一筆是 (skill, 引用值) 二元組——不是裸檔名。",
+    "用裸檔名會全域豁免：例如把 SKILL.md 加進來，往後任何 skill 指向一個真的不存在的",
+    "SKILL.md 都不會紅，L2 對「skill 指向不存在的 skill」這個最常見的失效永久失明。",
+    "每一筆必須有 reason，而且 reason 要說出「為什麼它永遠不會存在」，",
+    "不是「它現在不存在」——後者是待修，前者才是豁免。",
+    "被豁免的項目在報表獨立列出，不靜默吞掉；exit code 不受影響。"
+  ],
+  "entries": [
+    {
+      "skill": "domain-modeling",
+      "value": "CONTEXT-MAP.md",
+      "reason": "來源是**條件式引用**不是契約：SKILL.md 與 CONTEXT-FORMAT.md 都寫 'If a CONTEXT-MAP.md exists at the root, the repo has multiple contexts'。本 repo 是 single-context（無 pnpm-workspace.yaml／package.json／packages/*），而 docs/agents/domain.md 明文寫「沒有 CONTEXT-MAP.md，也不會有…看到 skill 提 CONTEXT-MAP.md 一律當它不存在，不要建、也不要回報缺少它」。",
+      "decided_on": "2026-08-22",
+      "source": "SKILL_IMPORT_WAYFINDER_PLAN.md §7 / AUDIT_FIX_PLAN_20260822.md 分岔②"
+    }
+  ],
+  "_todo": [
+    "抽取器把 'If X exists' 這種條件句當成必要檔案，是根因；allowlist 只是消音。",
+    "下一支寫條件句的外部 skill 會再中一次，然後這張表再長一行。",
+    "已登記：讓抽取器認得條件句、把它歸進 NOT COVERED 區而非 MISSING。"
+  ]
+}
