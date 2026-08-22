@@ -176,6 +176,10 @@ def main() -> None:
     if any("would-block" in r or "規則" in r for r in reasons):
         print("  ① 規則計數差異 → 跑產生器，**不要手動改表格**：")
         print("     py -3 D:\\.ai-harness\\dashboard\\gen_hook_rules.py")
+        # 任務動線畫的是同一批東西（規則掛哪個事件、哪幾條會擋）＋派工次數，
+        # 上游同樣是 event log。少列這一行的話，規則表更新了而動線圖沒有，
+        # 同一頁看板上兩個數字會互相打臉。
+        print("     py -3 D:\\.ai-harness\\dashboard\\gen_task_flow.py")
     print("  ② 其餘差異（skill／tool 原始檔案數等）→ 讀 dashboard/harness-dashboard.html")
     print("     編輯對應分頁（那些還是手寫的）。")
     print("  ③ 確認本機服務已重載（http://127.0.0.1:8099/ 會自動重讀），然後跑：")

@@ -6,10 +6,13 @@
     "DECL-1",
     "DISP-1",
     "ENC-1",
+    "ESC-1",
+    "HTML-1",
     "PR-1",
     "R1",
     "R3",
-    "R4"
+    "R4",
+    "UI-1"
   ],
   "enforced_rule_ids": [
     "AWC-1",
@@ -18,23 +21,29 @@
     "DECL-1",
     "DISP-1",
     "ENC-1",
+    "ESC-1",
+    "HTML-1",
     "PR-1",
     "R1",
     "R3",
-    "R4"
+    "R4",
+    "UI-1"
   ],
   "would_block": {
-    "AWC-1": 19,
-    "DECL-1": 4,
+    "DB-1": 55,
+    "ENC-1": 64,
+    "AWC-1": 60,
+    "PR-1": 11,
+    "DISP-1": 23,
+    "DECL-1": 15,
     "BUDGET-1": 2,
-    "DB-1": 24,
-    "ENC-1": 48,
-    "PR-1": 1,
-    "R4": 3,
-    "DISP-1": 5,
+    "R4": 6,
+    "UI-1": 1,
+    "ESC-1": 2,
+    "HTML-1": 8,
     "R1": 0,
     "R3": 0
   },
-  "skill_count": 15,
-  "tool_raw_count": 40
+  "skill_count": 26,
+  "tool_raw_count": 85
 }
