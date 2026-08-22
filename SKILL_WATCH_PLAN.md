@@ -495,3 +495,80 @@ py -3 ".../.claude/skills/skill-watch/run.py"
 `UNIVERSAL_HARNESS_PLAN.md` §5 明文：「為了通用而通用：沒有第二個真的要用之前，
 不做抽象化重構。抽象層本身不會讓任何人少犯錯。」
 ⇒ 等 user 指名實際要監控哪些工具，有第二個實作時再抽介面。
+
+---
+
+## 13. 交接文（2026-08-23 凌晨·對話將滿，未完成項在此）
+
+### 13.1 現況：可以用了
+
+`/skill-watch` **已上線可用**，純手動。跑一次的效果：起無頭 session 問清單 → 濾掉本機自建 →
+與基準比對 → 抓官方文件交叉驗證 → 有變動寫 `TODOS.md`「全域·需求」表（看板自動收）。
+
+| 產出 | 位置 | 狀態 |
+|---|---|---|
+| skill 本體 | `<harness>/skills/skill-watch/SKILL.md` | ✅ 已登記 `PROVENANCE.md` |
+| 入口（解 symlink） | `<harness>/skills/skill-watch/run.py` | ✅ 兩側路徑實測 |
+| 比對引擎 | `<harness>/tools/skill_watch.py` | ✅ |
+| 執行主流程 | `<harness>/tools/skill_watch_run.py` | ✅ |
+| 清冊產生器 | `<harness>/tools/skill_inventory.py` | ✅ |
+| 基準＋清冊 | `<harness>/SkillViewer/platform_skills.json` | ✅ headless 10／interactive 16 |
+| 看板一格 | `capability_checks._p_skill_watch_alive` | ✅ 14 天沒查轉紅 |
+| Windows 排程 | — | ✅ **已移除** |
+
+### 13.2 未完成 A：平台清單要可設定，不要寫死（**user 2026-08-23 提出**）
+
+user 原話：「**這個技能可以打開編輯 自己勾選要查詢的 AI 模型不要寫死**」。
+
+**現況是寫死的**：`skill_watch_run.py` 的 `DOCS_URL` 直接指向 Claude Code 官方 commands 文件，
+`capture_headless()` 直接跑 `claude -p`。換一個工具要改程式碼。
+
+**方向**（尚未實作，動工前請先與 user 逐項確認）：
+
+- 設定檔落在 `<harness>/skills/skill-watch/platforms.json`（**跟著 skill 走**，
+  這樣複製 skill 資料夾給別部門時設定一起過去）。
+- 每個平台一筆：`{ "id": "claude-code", "enabled": true, "displayName": "…",
+  "docsUrl": "…", "probe": "injected-list" | "docs-only" }`。
+- **「勾選」的介面**：本專案的看板是唯讀的（`dashboard-generators.md` 明文「artifact 讀不到本機檔」），
+  所以「打開編輯」最省事的形態是**讓 skill 自己把設定印出來、問 user 要開哪幾個、再寫回 JSON**
+  （比照 `reviewer/Launch-Reviewer.bat` 那種本機設定頁的既有作法）。⚠ 這是我的推論，**未與 user 確認**。
+- ⚠ **`enabled: false` 的平台要不要從基準裡移除**？移除會在重新啟用時報一堆「新增」；
+  不移除則清單會混著沒在監控的東西。**這是個真的分岔，動工前要問。**
+
+### 13.3 未完成 B：加 Cursor（**user 已指名，抽象化的觸發條件已成立**）
+
+user 選了「暫時只有 Claude Code」＋「**Cursor**」。⇒ 現在有第二個實際要用的實作，
+`UNIVERSAL_HARNESS_PLAN.md` §5「沒有第二個真的要用之前不做抽象化」的**擋箭牌已經解除**，
+可以抽介面了。
+
+**抽介面的最小形狀**（一個平台要提供兩件事）：
+
+1. `fetch_capabilities() -> list[dict]`：那個平台現在有哪些能力（名稱＋描述＋類型）。
+2. `local_names() -> set[str]`：本機自建、應該被濾掉的那些（Cursor 可能沒有這個概念 → 回空集合）。
+
+**Claude Code 的實作已經在了**（`capture_headless` ＋ `fetch_official`），只要搬進 adapter。
+
+**Cursor 的實作要先查證這幾件事**（我沒查，這是給下一棒的研究清單）：
+- Cursor 有沒有「技能／指令」清單的機器可讀來源？（官方 docs 站？changelog？）
+- 它的 CLI 有沒有等價於 `claude -p` 的無頭查詢能力？沒有的話就只剩「抓文件」那一半。
+- 版面改動的頻率——這決定解析器要多寬容（我們的 Claude Code 解析器已經踩過一次
+  「官方只標 13/24 支 `[Skill]`」的 undertag 問題）。
+
+### 13.4 這一輪沒做完就停下的（誠實登記）
+
+- **`/shougong` 步驟 3 的拆分**：已改完（步驟 3 換成「已拆出、改手動 `/context-health`」的指標段），
+  **但尚未 commit**（user 在此時要求先寫交接文）。改動只碰步驟 3 那一段，
+  與另一條 session 在步驟 3.5 的改動（新增 `gen_task_flow`）不同區塊、不衝突。
+- **`manifest` 閘門仍紅**：8 支內容與基準不符（別條線改過的）＋`skill-watch` 不在基準。
+  **我刻意沒跑 `skill_manifest.py --accept`**——那會把別條線未經確認的改動一併寫成新基準。
+  要處理請那條線自己跑，或先確認那 8 支的差異是預期的。
+- **`provenance` 閘門仍紅**：`escalate` 未登記（別條線今天新建）。我只登記了自己的 `skill-watch`。
+
+### 13.5 給下一棒的三個提醒
+
+1. **`${CLAUDE_SKILL_DIR}` 展開的是 symlink 側**（見 §12）。skill 裡任何要跳出 skill 目錄的
+   相對路徑都會壞，一律透過 `run.py` 這種「自己 resolve」的入口。
+2. **基準只存平台內建**（覆核 N-2）。任何往基準寫東西的路徑都要先過 `local_skill_names()` 過濾，
+   否則自己寫一支 skill 當晚就被報成「平台新增」。
+3. **驗證要造假在擷取側**（覆核 F-10／N-1）。把假資料塞進基準只證明減法會動；
+   真正脆弱的是 LLM 自由文字那一段，而它有兩條解析路徑（標記／無標記），**兩條都要造假驗過**。
