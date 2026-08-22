@@ -539,18 +539,15 @@ def collect() -> dict:
                                "mode": got["mode"], "cls": got["cls"],
                                "stage": got["stage"], "files_raw": got["files"],
                                "scale": got["scale"],
-                               "written": set(), "tmp_written": set(),
+                               "written": set(), "tmp_written": set(), "efforts": set(),
                                "agents": []}
                         segments.append(cur)
                         per_proj[proj["name"]]["n"] += 1
-                        # 軌跡的 key 帶專案：不同專案的 session hash 前 8 字有機會撞，
-                        # 撞了會把兩個工作區的階段序列接成一條假軌跡
-                        tr = tracks.setdefault((proj["name"], sess),
-                                               {"proj": proj["name"], "seq": [],
-                                                "scales": []})
-                        tr["seq"].append(got["stage"])
-                        # 與 seq 等長 —— `track_flags` 靠 index 對位取規模欄。
-                        tr.setdefault("scales", []).append(got["scale"])
+                        # 軌跡改由 build_tracks() 在收工後二次建（票 09）：宣告出現在
+                        # 一段工作的**開頭**，那時還不知道它會寫哪些檔、屬於哪個 effort，
+                        # 所以在這裡建只能用 session 當 key —— 而那正是要修掉的東西。
+                        # key 仍帶專案：不同專案的 session hash 前 8 字有機會撞，
+                        # 撞了會把兩個工作區的階段序列接成一條假軌跡。
                         break        # 一則訊息只認第一個宣告
                 elif blk.get("type") == "tool_use":
                     name = blk.get("name") or ""
@@ -560,6 +557,11 @@ def collect() -> dict:
                         if p:
                             bucket = "tmp_written" if _is_tmp(p) else "written"
                             cur[bucket].add(Path(str(p).replace("\\", "/")).name)
+                            # `written` 只留 basename（目錄資訊在那裡就丟了），
+                            # 而 effort 正是目錄名 —— 所以在這裡另外記一份。
+                            _eff = effort_of_path(p)
+                            if _eff:
+                                cur["efforts"].add(_eff)
                     elif name == "Agent":
                         at = inp.get("subagent_type") or "(未指定)"
                         agent_calls[blk.get("id")] = {
@@ -582,6 +584,8 @@ def collect() -> dict:
     for tid, rec in notif_reports.items():
         if tid not in seen_ids:
             handoff.append(rec)
+
+    tracks = build_tracks(segments, pre_cutoff)
 
     return {"segments": segments, "tracks": tracks, "handoff": handoff,
             "agent_calls": agent_calls, "cutoff": cutoff,
@@ -668,6 +672,56 @@ def judge(seg: dict, scut: "str | None" = None) -> list:
             if seg.get("agents"):
                 flags.append((f"宣告 L 但派了 {len(seg['agents'])} 次 subagent（＝S）", "warn"))
     return flags
+
+
+_EFFORT_RE = re.compile(r"[/\\]\.scratch[/\\]([^/\\]+)[/\\]")
+
+
+def effort_of_path(path: str) -> "str | None":
+    """從寫檔路徑推出它屬於哪個 wayfinder effort（`.scratch/<effort>/…`）。
+
+    **為什麼用路徑推而不是加一個宣告欄位**：宣告行的格式在全域 `CLAUDE.md` §2，
+    改它影響所有專案，而 effort 這件事只有走 wayfinder 的專案才有。路徑已經帶著
+    這個資訊，推得出來就不必要求每個人多打一欄——**能推導的就不要要求人輸入**。
+    推不出來回 None（不是 effort 的檔），呼叫端據此退回用 session 當 key。
+    """
+    m = _EFFORT_RE.search(str(path or "").replace("\\", "/").replace("//", "/"))
+    return m.group(1) if m else None
+
+
+def build_tracks(segments: list, pre_cutoff: "set | None" = None) -> dict:
+    """由 segments 二次建軌跡。key＝(專案, 工作單元)。
+
+    **為什麼是二次建而不是宣告當下就建**：宣告出現在一段工作的**開頭**，那時還不知道
+    這一段會寫哪些檔，也就還不知道它屬於哪個 effort。原本的寫法在宣告當下就
+    `tracks.setdefault((proj, sess))`，所以 key 只能是 session。
+
+    **為什麼要換掉 session**（票 09）：wayfinder 硬性規定一個 session 只解一票，
+    於是同一個 effort 的五個階段被切成五條各一段的軌跡，而 `track_flags` 的判準
+    （Execute 之前有沒有 Research、之後有沒有 Review）是對**一整條**序列問的
+    ——切碎之後每一條都答不出來。實測：把現有軌跡各截到 1 段，相符率 35%→99%。
+
+    沒有 effort 的段落**維持用 session 當 key**，行為不變（非 wayfinder 的工作本來就
+    以 session 為單位）。跨 session 併起來的序列**按 ts 排序**——順序錯了先後判準全錯。
+    """
+    pre = pre_cutoff or set()
+    tracks: dict = {}
+    for seg in sorted(segments, key=lambda s: str(s.get("ts") or "")):
+        efforts = seg.get("efforts") or set()
+        # 一段同時碰多個 effort 時不猜是哪一個 —— 退回 session，寧可少併不要亂併
+        unit = next(iter(efforts)) if len(efforts) == 1 else None
+        key = (seg["proj"], "effort:" + unit) if unit else (seg["proj"], seg["sess"])
+        tr = tracks.setdefault(key, {"proj": seg["proj"], "seq": [], "scales": [],
+                                     "effort": unit, "truncated": False})
+        tr["seq"].append(seg.get("stage"))
+        tr["scales"].append(seg.get("scale"))
+        # 截斷訊號要跟著搬。`pre_cutoff` 記的是 (專案, session)，而 effort 軌跡的 key
+        # 不是 session ⇒ 原本 `key in pre_cutoff` 的寫法對 effort 軌跡**永遠是 False**，
+        # 開頭被起算日切掉的段落會被誤判成違規。改成「任一段來自 pre-cutoff session
+        # 就算截斷」，並存進軌跡本身，呼叫端不再自己查表。
+        if (seg["proj"], seg["sess"]) in pre:
+            tr["truncated"] = True
+    return tracks
 
 
 def track_flags(seq: list, truncated: bool = False,
@@ -854,7 +908,7 @@ def build_html(data: dict) -> str:
     for key, tr in sorted(data["tracks"].items(),
                           key=lambda kv: -len(kv[1]["seq"])):
         seq = tr["seq"]
-        tf = track_flags(seq, key in data["pre_cutoff"], tr.get("scales"))
+        tf = track_flags(seq, tr.get("truncated", False), tr.get("scales"))
         chain = " → ".join(f'<span class="path">{_esc(s)}</span>' for s in seq)
         trows += (f'              <tr>\n'
                   f'                <td class="path">{_esc(key[1])}'
@@ -1031,7 +1085,7 @@ def main() -> None:
         print("\n【階段軌跡】")
         for key, tr in sorted(data["tracks"].items(), key=lambda kv: -len(kv[1]["seq"])):
             tf = ("、".join(t for t, _ in
-                            track_flags(tr["seq"], key in data["pre_cutoff"],
+                            track_flags(tr["seq"], tr.get("truncated", False),
                                         tr.get("scales")))
                   or "無旗標")
             print(f"  [{tr['proj']}] {key[1]}: {' → '.join(tr['seq'])}   [{tf}]")

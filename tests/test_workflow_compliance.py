@@ -193,6 +193,46 @@ def run(verbose: bool = False) -> "tuple[int, list]":
            if tone == "shadow") == 2,
        "截斷的無 Execute 軌跡要有兩個 shadow（截斷＋判準不適用）——any() 分不出這兩件事")
 
+    # 2026-08-22（票 09 收尾）：軌跡 key 從 session 換成「工作單元」。
+    # wayfinder 規定一 session 一票 ⇒ 同一個 effort 的階段被切成好幾條一段的軌跡，
+    # 「該走完五階段的那個東西」再也對不上一條軌跡。effort 可由寫檔路徑推得
+    # （`.scratch/<effort>/…`），不必改自我宣告格式。
+    ok(hasattr(m, "effort_of_path"),
+       "應有 effort_of_path()：從寫檔路徑推 effort，宣告行沒有這個欄位")
+    ok(m.effort_of_path(r"D:\repo\.scratch\my-effort\issues\03-x.md") == "my-effort",
+       "決策票路徑要推得出 effort")
+    ok(m.effort_of_path(r"D:\repo\.scratch\my-effort\map.md") == "my-effort",
+       "map 路徑同樣推得出 effort")
+    ok(m.effort_of_path(r"D:\repo\dashboard\gen_x.py") is None,
+       "非 .scratch 路徑不得硬湊出 effort")
+    ok(hasattr(m, "build_tracks"),
+       "應有 build_tracks(segments)：由 segments 二次建軌跡（宣告當下還不知道會寫哪些檔）")
+    segs = [
+        {"ts": "2026-08-01T01:00:00Z", "sess": "s1", "proj": "P", "stage": "Research",
+         "scale": "M", "efforts": {"E"}},
+        {"ts": "2026-08-02T01:00:00Z", "sess": "s2", "proj": "P", "stage": "Execute",
+         "scale": "M", "efforts": {"E"}},
+        {"ts": "2026-08-03T01:00:00Z", "sess": "s3", "proj": "P", "stage": "Review",
+         "scale": "M", "efforts": {"E"}},
+        {"ts": "2026-08-04T01:00:00Z", "sess": "s4", "proj": "P", "stage": "Execute",
+         "scale": "S", "efforts": set()},
+    ]
+    tr = m.build_tracks(segs)
+    ok(len(tr) == 2,
+       f"三段同 effort 跨三個 session 要併成 1 條，加上無 effort 的 1 條＝2 條（實得 {len(tr)}）")
+    eff = [v for k, v in tr.items() if "E" in str(k)]
+    ok(len(eff) == 1 and eff[0]["seq"] == ["Research", "Execute", "Review"],
+       "effort 軌跡的階段序列要按時間排好，否則 track_flags 的先後判準全錯")
+    # 併起來要消掉的是**切碎造成的**兩種假訊號，不是所有旗標：
+    # 這條合成序列真的缺 Design，那條 warn 是真的該留（測試不該把它一起抹掉）。
+    merged = m.track_flags(eff[0]["seq"], scales=eff[0]["scales"])
+    ok(not any(tone == "block" for _, tone in merged),
+       "併起來之後 Review 落在最後一次 Execute 之後，block 級假紅要消失")
+    ok(not any(tone == "shadow" for _, tone in merged),
+       "併起來之後這條軌跡含 Execute，不該再是「判準不適用」")
+    ok(any("Design" in t for t, _ in merged),
+       "但真的缺 Design 那條 warn 要留著——併軌跡是修分母，不是把判準關掉")
+
     # ── 3. 暫存檔口徑（變異點：拿掉排除會製造假違規）
     ok(m._is_tmp(r"C:\Users\x\AppData\Local\Temp\claude\d--IT\scratchpad\probe.py"),
        "scratchpad 路徑要被認成暫存")
