@@ -615,6 +615,60 @@ N3   ：待分岔 ⑧ 定案後才排（不預留批次）
 - **前置條件（v3 更新）**：①群 C 與 snapshot 回寫等另一 session 釋出 `harness-dashboard.html`
   ②**批 2b 等另一 session commit `config.py` ＋ `eval/`**（硬前置，不是備案）
   ③N3 的前置是 §4.5.1 的字面值處置 ④A3 的前置是 N4。
+
+- ✅ **群 D 全 11 列完成（2026-08-22）—— 批 4／批 5／批 6 合併執行，已部署 `?v=2497`。**
+  貫穿 11 列的判準只有一條：**文件裡凡是會漂的東西一律拿掉，換成「重新量的指令」。**
+  這個 repo 有多個 session 同時在改，實測 `_getSeatLocationForCustodian` 幾小時內從
+  36253 移到 36292、`.wifi-cred-sortable` 從 25715 移到 25858 ⇒ 寫行號等於保證誤導下一個人。
+
+  **稽核自己也不準，四項都是動手量才發現的**：
+  - **D8 說 2 處行號失效，實際掃出 12 處、其中 10 處已失效（83%）。** 全部改成可 grep 的符號名。
+    改完 `.claude/` ＋ `CLAUDE.md` 的寫死行號歸零，三個前端檔的自我引用也歸零。
+  - **D3 比稽核寫的更嚴重**：設備身上只有**一個** `location` 欄、存的是倉位，但 UI 標成「位置」
+    （`{k:"location", label:"位置"}`／`assetBatchLocation`）；而詞彙表意義的「位置」根本不是欄位，
+    是 `holder`＋`slot` 在 `floorLayout.nodes` 上算的。原文只說「兩個獨立概念」卻兩個都沒給欄位名。
+  - **D4 稽核少算一個值**：`usage_scenario` 有 **三個**值（`assign` 預設／`lend`／`consume`），不是兩個；
+    而且 `consume` 的 UI 標籤是「**使用**」不是「領用」。
+  - **D10 的結論被這個 session 自己推翻**：「triage 標籤零票使用」在我用 `/to-tickets` 開出 9 張票之後
+    就不成立了。改成記錄現況＋重數指令，並點出 `needs-triage`／`needs-info` **至今仍零使用**。
+  - **D11 的分類加不到總數**：文件寫「兩類、4 個檔 5 處」，實際是**三類**——漏掉的第三類
+    （禁指向已移除的 setup skill，2 處）整類沒記。總數 7 是對的，分類卻只有兩類。
+    ⇒ **分類與總數要能自己對帳，對不上就是漏了一整類。**
+
+  **D5（零出處）的處置**：`CONTEXT.md` 原本 68 行、grep `app.js`／`server.py`／`index.html`
+  **零命中** ⇒ 沒有人能重新驗證它。現在每個詞都附「出處」＝可 grep 的字串，**刻意不寫行號**；
+  16 個錨逐一實測全部命中，並先塞一個不存在的錨證明這個檢查會紅再信它的綠。
+
+  **D1 取 12 份不取分岔③字面的 6 份**（user 裁定）。實況比稽核描述的更糟：
+  `.tk-lh` 亮暗都吃變數（唯一完整收斂）、`th[data-sort-key]` 與 `.swv2-th-sort` 只有深色吃、
+  `.wifi-cred-sortable` 一次都沒吃 ⇒ **12 份自貼副本**，改變數只換得動 `.tk-lh` 加另兩組的深色。
+  只換 wifi 那 6 份的話規則檔還是得掛一句「另兩組的亮色仍自貼」＝承認單一真相沒做到。
+
+  **零視覺變化是證明的不是推論的，兩層**：
+  ①**字串層**——12 份 data URI 與變數值**逐字完全相同**（含 viewBox／rect 座標／path／顏色 token）。
+  字串相同證的是「值就是同一個值」；截圖只證「這個縮放這個瀏覽器看起來一樣」。
+  ②**執行期**——headless Edge 載入新舊兩版正式 `styles.css`，量 4 組 × 三態 × 亮暗＝**24 組**
+  `getComputedStyle(el,"::after")` 的 backgroundImage＋opacity，新舊逐字相同。這正是
+  `css-specificity.md` 自己訂的驗收判準（肉眼看不出圖示換沒換版，也分不出 opacity .4 與 1）。
+
+  ⚠ **A/B 腳本的第一版是假綠燈，值得記住的形狀**：heredoc 把 `res.join("\n")` 的跳脫序列
+  **多吃一層**變成真的換行 → JS 字串沒收尾 → 整段 script 炸掉 → 兩邊都量不到 RESULT →
+  `diff` 於是說「相同」。**兩個失敗湊成一個綠燈。** 修法有三：量不到 24 組一律當失敗（exit 2）、
+  JS 裡改用 `String.fromCharCode(10)` 一個反斜線都不用、以及**先做變異證明它會紅**
+  （把亮色 idle 的灰 `#64748b` 改成紅 → 正好 4 組轉紅，同時證明四組真的共用同一個變數了）。
+
+  **規則檔的沿革同步改寫，重點不是「8/19 那次沒做完」而是「規則檔讀起來像做完了」**：
+  一句總結式的完成宣告會蓋住半成品，而且沒有任何守門會叫，靜靜活了三天。
+  新增完成判準：四組 `::after` 規則裡的自貼份數必須是 0，可直接 grep 驗。
+
+  **部署驗證**：served `?v=2497`、`systemctl is-active` = active、VM 上實測四組自貼 0。
+  ⚠ `app.js`／`styles.css` 本體被另一 session 的 Stop hook auto-commit
+  （`chore: auto work session 21:18`）掃走，兩個 repo 的 HEAD 都已驗過內容完整才 push。
+  未驗項（真站四個模組的表頭、淺深各一次）已四欄寫進 `PENDING_VERIFY.md`。
+
+  **順帶量到、未修**：`CLAUDE.md §8` 與 `feedback-python-write-crlf-preserve` 都說「三個前端檔是
+  CRLF」，實測 `index.html` 工作區是**純 LF**——7/28 加的 `.gitattributes eol=crlf` 只涵蓋 PROD 側，
+  blob 一律正規化成 LF ⇒ 那條記憶檔的補救措施已被根治了一半但檔內沒說。已落 `PENDING_VERIFY.md`。
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
 ---
