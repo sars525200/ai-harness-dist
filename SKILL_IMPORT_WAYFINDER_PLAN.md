@@ -345,7 +345,7 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 | ✅ **`eval` L2 剩 1 項紅 —— 已修（2026-08-22）** | ~~single-context 下永遠不存在~~ | 建 `eval/contract_allowlist.json`（`(skill, 引用值)` **二元組**＋`reason`），`check_contracts` 把命中者降級成 **WAIVED**、報表獨立列出、不計入缺失。實測 `run_all.py` **exit 0，六層全 PASS**（L2 從 FAIL 變 PASS）。細節見 §7.3 | 已完成 |
 | ✅ **`/to-tickets`、`/wayfinder` 已實跑（2026-08-22·user 親自打）** | ~~兩支帶 `disable-model-invocation: true`，模型叫不動~~ | **兩支都綠**：各自照 LOCAL EDIT 讀到 `docs/agents/*`，**沒有出現指向已移除的 `/setup-matt-pocock-skills` 的死循環**（V-1 的修有效）。細節見 §7.2 | 已完成 |
 | **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
-| **`prototype` 從未實跑** | 刻意不跑：原本會自行 commit 到分支，雖已加 `LOCAL EDIT` 約束但**約束本身未實測** | 真的用它做一次原型，確認它**沒有**建分支／commit：`git -C d:/IT-department branch --list` 前後一致 | 我或 user（未做） |
+| ✅ **`prototype` 已實跑（2026-08-22）** | ~~刻意不跑：約束本身未實測~~ | **約束成立**：兩個 repo 的分支／HEAD／stash 前後**完全一致**，只多一個未追蹤目錄。細節見 §7.4 | 已完成 |
 | ✅ **`/audit` 已跑（2026-08-22）** | ~~明著跳過~~ | 已跑 `harness` ＋ `project` 兩側。**產出 28 處不一致**（高 3／中 13／低 12），另排除 3 項假發現 | 已完成 |
 
 ### §7.1 `/audit` 的結果與本任務的關係（2026-08-22·**誠實標示範圍**）
@@ -413,6 +413,49 @@ provided to you」，沒被 provide 就會叫人跑**已被移除的** `/setup-m
    因為 HEAD 還沒有那批「兩層 skill 索引」的改動、掃不到全域層的 `domain-modeling`。
    ⇒ **L2 那個永久紅本身就是 `config.py` 造成的**（覆核 R2b 的判斷成立）。
    我的改動在 HEAD 上無害，等對方 commit 之後才真正發揮作用。
+
+### §7.4 `prototype` 實跑紀錄（2026-08-22）
+
+**要驗的是約束不是功能**：上游版本會把原型 commit 到 throwaway 分支，本地加了
+`LOCAL EDIT`（K9）禁止它建分支／commit，理由是本 repo 多 session 併行＋外部程序定期
+`git add -A` ⇒ skill 起的 commit 會蓋在別人 staged 的東西上。**那個約束從沒被實測過。**
+
+**做法**：動工前把兩個 repo 的 `branch --list`／`rev-parse HEAD`／`stash list`／
+`status --porcelain` 行數存檔，跑完再逐項對照。
+
+| repo | 結果 |
+|---|---|
+| `D:\.ai-harness` | **四項完全一致** ✓ |
+| `d:\IT-department` | 分支／HEAD／stash **完全一致**；status 行數 17→19 |
+
+那 +2 逐一對過：**只有 1 個是我的**（`?? .scratch/PROTOTYPE-ticket-namespacing/`），
+另一個是 `.aimemory/feedback-atomic-commands-permission-prompts.md`——**另一個 session 改的**，
+同時它們把先前那個 `??` 測試檔 commit 掉了。⇒ **約束成立，prototype 沒有建任何分支或 commit。**
+
+#### 原型本身的產出（題目＝§7.2 撿到的 K16）
+
+`d:\IT-department\.scratch\PROTOTYPE-ticket-namespacing\`（README ＋ `demo_scan.py`）。
+demo 把四種候選佈局蓋在**暫存目錄**、真的跑一次兩家的掃描判準，印對照表。
+
+**它推翻了我自己寫的第一版判斷**，並揭露這題有**兩個維度**而不是一個：
+
+| 佈局 | 掃到別人的票 | 編號空間 |
+|---|---|---|
+| 現況 | ❌ 2 個 | 共用（會撞） |
+| A 分子目錄（`decisions/` vs `issues/`） | ✓ 無 | **分開** |
+| B 分 slug | ✓ 無 | **分開** |
+| C 檔名前綴（`T01`／`D01`） | ✓ 無 | 共用（靠前綴不真的撞名） |
+| D 掃描認票種（佈局完全不動） | ✓ 無 | **共用（會撞）** |
+
+⇒ **D 最便宜但只解一半**：它讓 wayfinder 不再掃到別人的票，但兩家仍然都從 `01` 起、
+寫在同一個 `issues/`，「下一張票該編幾號」照撞。
+
+**demo 自己被修過兩次，兩次都是同一種模型錯誤**（把「掃某一個 effort」寫成「glob 全部
+`*/issues/*.md`」），害 B 與 C 印出假的失敗。**用文字斷言的話，那兩個錯會直接變成結論**
+——這正是原型要蓋出來跑一次的理由。
+
+⚠ 照 `LOCAL EDIT`，**原型檔的去留（branch／commit／刪掉）是主 session 與 user 的決定**，
+不是 skill 的。目前**原樣留在工作區、未 commit**。
 
 #### 為什麼 `/wayfinder` 沒有真的開 map
 
