@@ -343,7 +343,7 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
 | **`eval` L2 剩 1 項紅**：`domain-modeling` 引用的 `CONTEXT-MAP.md` | single-context 下永遠不存在，不能建檔解。⚠ **原本寫的「`eval/` 底下 12 檔正被另一 session 修改」2026-08-22 已證實是錯的**——那批 mtime 停在 2026-08-16，擱置 6 天不是進行中；當時只看了 `git status` 的 `M` 沒查 mtime | 處置已在 `AUDIT_FIX_PLAN_20260822.md` **分岔② 定案＝資料驅動 allowlist**（`(skill, 檔名)` 二元組＋`reason` 欄）。四欄全文見該檔 §5 | 我（未做） |
-| **`/to-tickets`、`/wayfinder` 從未實跑** | 兩支帶 `disable-model-invocation: true`，**模型被硬性禁止呼叫**，連繞路模擬都被明文擋下 | user 自己打 `/to-tickets`、`/wayfinder` 各一次，觀察是否讀到 `docs/agents/*`、是否踩 K13（`.scratch` 不在 `TMP_HINTS`） | **user**（未做） |
+| ✅ **`/to-tickets`、`/wayfinder` 已實跑（2026-08-22·user 親自打）** | ~~兩支帶 `disable-model-invocation: true`，模型叫不動~~ | **兩支都綠**：各自照 LOCAL EDIT 讀到 `docs/agents/*`，**沒有出現指向已移除的 `/setup-matt-pocock-skills` 的死循環**（V-1 的修有效）。細節見 §7.2 | 已完成 |
 | **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
 | **`prototype` 從未實跑** | 刻意不跑：原本會自行 commit 到分支，雖已加 `LOCAL EDIT` 約束但**約束本身未實測** | 真的用它做一次原型，確認它**沒有**建分支／commit：`git -C d:/IT-department branch --list` 前後一致 | 我或 user（未做） |
 | ✅ **`/audit` 已跑（2026-08-22）** | ~~明著跳過~~ | 已跑 `harness` ＋ `project` 兩側。**產出 28 處不一致**（高 3／中 13／低 12），另排除 3 項假發現 | 已完成 |
@@ -359,6 +359,43 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 
 ⚠ **這正是本計畫 §4 記過的「鎖鏈無停止條件」在上一層復發**（原記錄：原訂 4 批、實際做了 8 批）。
 本任務的實際進度是：第一階段完成、**§7 五列只關掉一列**、第二階段一步沒走。
+
+### §7.2 `/to-tickets` 與 `/wayfinder` 實跑紀錄（2026-08-22·**user 親自打，模型叫不動**）
+
+**兩支都通過守門句那一關**——這是 §13.1 的 V-1 要修的東西（skill 的守門句是「should have been
+provided to you」，沒被 provide 就會叫人跑**已被移除的** `/setup-matt-pocock-skills` ⇒ 死循環）：
+
+| skill | 讀到什麼 | 判定 |
+|---|---|---|
+| `/to-tickets` | `docs/agents/issue-tracker.md` ＋ `triage-labels.md`（守門句是 **AND**，缺後者會卡在第一步） | ✅ 綠 |
+| `/wayfinder` | `docs/agents/issue-tracker.md` 的「Wayfinding operations」節 | ✅ 綠 |
+
+`/to-tickets` 實際產出：第二階段拆成 **9 張 tracer bullet 票**，落在
+`d:\IT-department\.scratch\wayfinder-planning-layer\issues\`（commit `b55c6421`）。
+`/wayfinder` **刻意沒開 map**（理由見下）。
+
+#### ⚠ 實跑撿到一個 K 表沒有的對撞（靜態檢查照不到）
+
+**兩支 skill 的票落點形狀完全一樣，而票的內部詞彙不相容。**
+
+- `/to-tickets`：`.scratch/<feature-slug>/issues/<NN>-<slug>.md`，`Status: ready-for-agent`／`ready-for-human`
+- `/wayfinder`：`.scratch/<effort>/issues/NN-<slug>.md`，`Type:` 行 ＋ `Status: claimed`／`resolved`
+
+`triage-labels.md` 逐字寫著這兩套 `Status` 詞彙「**與上表無關，不要混用**」，但**沒有人管路徑**。
+⇒ 用同一個 slug 開 map 時，wayfinder 的 frontier 掃描（「掃 `.scratch/<effort>/issues/`，
+找 open ＋ unblocked ＋ unclaimed」）**會掃到 to-tickets 產的檔**，而它們沒有 `Type:` 行、
+`Status` 也是另一套。
+
+**這條要在第二階段的計畫書裡開成 K16**（本檔 §0 的 K 表不在 `REVIEW_SCOPE_IGNORE` 內，
+在這裡補會讓覆核 marker 再次失效，而這是設計發現不是狀態更新，不該用逃生口帶過）。
+
+#### 為什麼 `/wayfinder` 沒有真的開 map
+
+`docs/agents/issue-tracker.md` 限制 #2 明寫：**規劃層目前仍走 `/design-spec` ＋ `*_PLAN.md`，
+`/wayfinder` 與 `/to-tickets` 現階段是工具、不是流程的一部分。** 真的開一張 map 承載第二階段，
+會同時做三件不該做的事：①在同一個目錄放兩套不相容的票 ②讓決策票變成規劃層（那正是第二階段
+要先決定的事）③charting 第一步要 `grilling`（HITL），需要 user 給一個真的還在霧裡的題目。
+⇒ **驗到守門句這一關為止**，這也正是 §7 那一列要驗的東西。
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
 ---
