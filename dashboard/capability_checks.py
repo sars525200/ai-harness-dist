@@ -310,6 +310,67 @@ def _p_junction_health():
     return False, detail + " —— 兩條應同進退，不一致／指向別處／判不出來都是壞了"
 
 
+def _p_reversibility():
+    r"""動作**之後**回得去嗎。⑧ 現有的 dry-run 是動作**之前**的閘門，沒有這一半。
+
+    三個子項**全綠才綠**（合成規則必須明寫：AND 會恆紅、OR 會恆綠，
+    取決於實作者當天怎麼寫，而那種「看你怎麼寫」本身就是缺陷）：
+
+      ① 兩個 repo 有版控          —— 改壞了回得去
+      ② 全域 `settings.json` 有近期離線副本 —— **它不在任何 repo 裡**
+      ③ PROD 側有還原腳本          —— 資料層回得去
+
+    ## ② 為什麼綁「有沒有副本」而不是「在不在 git repo 裡」
+
+    綁 repo 是**綁機制**：日後若改成收工複製到 `state/`，能力達成了 probe 還是紅。
+    綁「有一份近期副本」才是綁能力。但**位置不限**同樣不可實作——實測
+    `~\.claude\backups\` 底下有 5 個 7 天內的 `.claude.json.backup.*`，
+    那是 **`.claude.json` 不是 `settings.json`**，任何寬鬆 glob 都會踩中它假綠。
+    ⇒ 指定路徑清單 ＋ **內容驗證**（解析得動且含 `permissions` 鍵）。
+
+    ## 為什麼掛 `waived`
+
+    ② 現況必紅（實測無任何副本），掛 `auto` 就是「構造上恆紅的 probe 掛 auto」那個形狀。
+    等 ② 有解（收工流程開始備份）再改回 `auto`——`main()` 會在 waived 項變綠時主動提醒。
+    """
+    import time
+    home = Path(os.path.expanduser("~"))
+    parts, bad = [], []
+
+    repos = [("harness", HARNESS), ("專案", IT_DEPT)]
+    missing = [n for n, p in repos if not (p / ".git").exists()]
+    parts.append("①版控 " + ("兩個 repo 都有" if not missing
+                            else f"缺 {'／'.join(missing)}"))
+    if missing:
+        bad.append("①")
+
+    # 只認明確指定的落點，且檔名必須真的是 settings.json 的副本
+    cands = (list((home / ".claude" / "backups").glob("settings.json*"))
+             + list((HARNESS / "state" / "settings_backup").glob("settings.json*")))
+    fresh = []
+    for p in cands:
+        try:
+            age_d = (time.time() - p.stat().st_mtime) / 86400
+        except OSError:
+            continue
+        data = _json(p)
+        if age_d <= 7 and isinstance(data, dict) and "permissions" in data:
+            fresh.append((p.name, round(age_d, 1)))
+    parts.append("②全域 settings 副本 " + (f"{len(fresh)} 份 7 天內" if fresh
+                                           else "**無**（它不在任何 repo 裡）"))
+    if not fresh:
+        bad.append("②")
+
+    restore = IT_DEPT / "SOP_PROD" / "05_UI_Demo" / "ops" / "restore_from_gpg.sh"
+    parts.append("③PROD 還原腳本 " + ("在" if restore.exists() else "**不在**"))
+    if not restore.exists():
+        bad.append("③")
+
+    ok = not bad
+    return ok, ("；".join(parts)
+                + ("" if ok else f"　—— {'／'.join(bad)} 未達成，動作之後回不去"))
+
+
 def _deny_core(entry: str) -> tuple[str, str] | None:
     """`Bash(git push -f:*)` → `("Bash", "git push -f:*")`；不是這兩種工具就回 None。"""
     for tool in ("Bash", "PowerShell"):
@@ -947,6 +1008,7 @@ CATEGORIES = [
             ("dryrun", "改正式資料先出 dry-run", "auto", _p_dry_run_gate),
             ("plan_first", "大型工作計畫先行＋逐項討論", "auto", _p_plan_first),
             ("bypass", "BLOCK 有吵鬧的逃生口", "auto", _p_bypass_escape),
+            ("reversible", "動作之後回得去（可回滾）", "waived", _p_reversibility),
             ("wording", "閘門訊息措辭紀律", "auto", _p_message_wording),
         ],
     },
@@ -975,6 +1037,8 @@ _WAIVED_META = {
     # 決定與理由在 HARNESS_PROGRESS.md:211-213（2 輪對抗式覆核用實測重算），但沒記日期
     "non_tool": {"decided_on": None,
                  "reopen_when": "人手在終端機 push 或 VM post-receive 造成第 1 次事故"},
+    "reversible": {"decided_on": "2026-08-22",
+                   "reopen_when": "全域 settings.json 有了任何自動備份機制（收工流程複製到 state/ 就算）"},
     "traces": {"decided_on": None,
                "reopen_when": "要歸因單一 hook 的延遲，或多 session 互相干擾到查不出是誰"},
 }
