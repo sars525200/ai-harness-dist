@@ -131,7 +131,64 @@ def parse_plan(md: str) -> list:
     return phases
 
 
-def build_html(phases: list) -> str:
+def load_source(path: "Path | None" = None) -> str:
+    """讀來源計畫書。缺檔要說人話，不要丟 traceback（票 07）。
+
+    這支圖綁死單一檔名。那個檔被改名／搬走時，原本會是一坨 `FileNotFoundError`
+    ——看起來像工具壞了，不像來源沒了，而後者才是實際發生的事。
+    """
+    p = Path(path) if path else PLAN_PATH
+    try:
+        return p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise SystemExit(
+            f"找不到進度圖的來源計畫書 {p} —— 拒絕產出。\n"
+            f"這支圖的單一真相綁死這一份檔（見模組 docstring）。"
+            f"若它被改名或搬走，改 PLAN_PATH；若規劃層已改用 wayfinder map，"
+            f"依 `docs/agents/issue-tracker.md` 的回寫慣例往 §3 補 Phase 條目。"
+        ) from None
+
+
+def source_age_days(path: "Path | None" = None) -> "int | None":
+    """來源檔距今幾天沒被更新（用 git 最後一次 commit 的時間，不用 mtime）。
+
+    **不用 mtime 的理由**：`git checkout` 會重設它，別的 session 順手開檔也可能碰到，
+    而這個數字要拿來說「這份計畫書是不是已經沒人在維護了」——訊號必須是真的編輯行為。
+    判斷不出來回 None（沒有 git、檔案沒進版控），呼叫端據此不顯示，不猜。
+    """
+    import subprocess
+    import time
+    p = Path(path) if path else PLAN_PATH
+    try:
+        r = subprocess.run(
+            ["git", "-C", str(HARNESS_ROOT), "log", "-1", "--format=%ct", "--", str(p)],
+            capture_output=True, text=True, timeout=10)
+        ts = int((r.stdout or "").strip())
+    except Exception:
+        return None            # 沒有 git／檔案沒進版控／輸出空 → 判斷不出來，不猜
+    if ts <= 0:
+        return None
+    return max(0, (int(time.time()) - ts) // 86400)
+
+
+# 超過這個天數就在圖上明講「來源已凍結」。挑 21 天的理由：harness 的計畫書在活躍期
+# 幾乎每週都動，連續三週沒動就不是「這週剛好沒進度」，是這條指標鏈斷了。
+_STALE_DAYS = 21
+
+
+def _age_badge(age_days: "int | None") -> str:
+    """來源新鮮度徽章。**這一段就是票 07 的解藥**：在它之前，來源凍結三週與今天剛更新
+    畫出來的圖一模一樣，「安靜地停在那一刻」指的就是這件事。判斷不出來（回 None）
+    就什麼都不顯示——不知道不該長成「很新鮮」。"""
+    if age_days is None:
+        return ""
+    if age_days >= _STALE_DAYS:
+        return (f' · <strong class="warn">⚠ 來源已凍結：§3 已 {age_days} 天未更新</strong>'
+                f'（規劃層若已改用 wayfinder map，依回寫慣例補 Phase 條目）')
+    return f' · §3 最後更新於 {age_days} 天前'
+
+
+def build_html(phases: list, age_days: "int | None" = None) -> str:
     counts = {c: 0 for c in STATUS_ORDER}
     for p in phases:
         for it in p["items"]:
@@ -147,7 +204,8 @@ def build_html(phases: list) -> str:
     lines.append('      <div class="section-head">')
     lines.append('        <h2>計畫進度</h2>')
     lines.append(f'        <span class="sub">{len(phases)} 個 Phase · {total} 項 · '
-                 f'由 <code>HARNESS_ROLE_ARCH_PLAN.md</code> §3 產生</span>')
+                 f'由 <code>HARNESS_ROLE_ARCH_PLAN.md</code> §3 產生'
+                 f'{_age_badge(age_days)}</span>')
     lines.append('      </div>')
     lines.append('      <p class="lead">單一真相是計畫書 §3 的那四張表，改完重跑腳本圖就更新。'
                  '<button type="button" class="cv-info" data-note="note-progress-lead" '
@@ -339,8 +397,9 @@ def inject(html: str, block: str) -> str:
 
 
 def main() -> None:
-    md = PLAN_PATH.read_text(encoding="utf-8")
+    md = load_source()
     phases = parse_plan(md)
+    age = source_age_days()
 
     if "--check" in sys.argv:
         total = sum(len(p["items"]) for p in phases)
@@ -356,7 +415,7 @@ def main() -> None:
         html = f.read()
     if "\r\n" in html:
         raise SystemExit("看板 HTML 出現 CRLF —— 本檔應為純 LF，先查是誰翻的。")
-    block = build_html(phases) + "\n\n" + build_capability_html()
+    block = build_html(phases, age_days=age) + "\n\n" + build_capability_html()
     out = inject(html, block)
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)

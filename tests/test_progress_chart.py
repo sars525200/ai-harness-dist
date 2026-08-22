@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import pathlib
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -201,6 +202,36 @@ def _c12():
                 f"計畫書說 Phase 1（解除 shadow）全完成，但 {rid} 在 "
                 f"dispatch_config.json 還是 shadow —— 圖表與實際設定矛盾"
             )
+
+
+@case("來源檔不存在要明講，不得丟 traceback 或出空圖")
+def _c_missing_source():
+    # 票 07：進度圖綁死單一檔名。那個檔被改名／搬走時，使用者該看到一句話說明，
+    # 不是一坨 FileNotFoundError（看起來像工具壞了，不像來源沒了）。
+    assert hasattr(g, "load_source"), (
+        "gen_progress_chart 應有 load_source() 統一處理來源讀取與缺檔——"
+        "現在 main() 直接 read_text()，缺檔時是 traceback")
+    try:
+        g.load_source(pathlib.Path(ROOT) / "這個檔不存在_PLAN.md")
+    except SystemExit as exc:
+        assert "找不到" in str(exc), f"缺檔訊息要說得出人話，實得：{exc}"
+    else:
+        raise AssertionError("來源不存在竟然沒有拒絕")
+
+
+@case("圖上要有來源新鮮度——凍結與剛更新不得長得一模一樣")
+def _c_freshness_shown():
+    # 票 07 的真正風險不是「解析不到」（那條已有守門），是**解析得到但安靜凍結**：
+    # 改制後 M 級工作走 map，這份計畫書會停止更新，而圖照樣畫得漂漂亮亮、不報錯。
+    assert hasattr(g, "source_age_days"), (
+        "應有 source_age_days()：用 git 最後一次 commit 該檔的時間算，"
+        "不用 mtime（checkout 會重設、別的 session 也會 touch）")
+    phases = g.parse_plan(_FAKE)
+    html = g.build_html(phases, age_days=99)
+    assert "99" in html and ("未更新" in html or "凍結" in html), (
+        "來源很久沒更新時，圖上必須看得到——這正是「安靜地停在那一刻」的解藥")
+    fresh = g.build_html(phases, age_days=0)
+    assert "凍結" not in fresh, "剛更新的來源不該掛凍結字樣"
 
 
 def run() -> "tuple[int, list[str]]":
