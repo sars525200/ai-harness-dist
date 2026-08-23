@@ -554,5 +554,19 @@
       "cwdKind": "project"
     }
   },
-  "generatedBy": "tools/skill_inventory.py"
+  "generatedBy": "tools/skill_inventory.py",
+  "officialCrossCheck": {
+    "capturedAt": "2026-08-23T22:49+0800",
+    "missingLocally": [
+      "batch",
+      "code-review",
+      "dataviz",
+      "debug",
+      "design-sync",
+      "doctor",
+      "run",
+      "run-skill-generator",
+      "verify"
+    ]
+  }
 }
