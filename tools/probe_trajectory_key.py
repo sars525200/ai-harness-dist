@@ -113,7 +113,32 @@ def main() -> int:
                  e, n, e / n * 100, label))
 
     print("")
-    print("=== wayfinder 四種 ticket type 的典型序列會被判成什麼 ===")
+    print("=== 真實的單段軌跡（不是合成形狀）===")
+    # 覆核 R2-M6：map 的驗證方式曾拿下面那張**合成表**的結果當判準
+    # （「task 型單票軌跡不再結構性恆 block」），而 `['Execute']` 依 track_flags 的
+    # 三條判準必然 block —— 判準綁在一個由 probe 自己造出來的形狀上，永遠 unmet，
+    # 而那不代表「沒接上」。要量就量真實資料：真實工作到底會不會產生單段軌跡。
+    singles = [t for t in tracks if len(t["seq"]) == 1]
+    print("  單段軌跡 %d / %d = %.1f%%" % (len(singles), n, len(singles) / n * 100))
+    if not singles:
+        print("  （真實資料裡一條都沒有 ⇒ 「單段軌跡恆 block」在實務上不會發生）")
+    else:
+        c = collections.Counter()
+        for t in singles:
+            c[tone_of(g.track_flags(t["seq"], scales=(t.get("scales") or [])))] += 1
+        print("  判定分佈：%s" % dict(c))
+        for t in singles[:5]:
+            fl = g.track_flags(t["seq"], scales=(t.get("scales") or []))
+            print("    %-26s %-14s -> %-5s %s"
+                  % (str(t.get("key"))[:26], str(t["seq"]), tone_of(fl),
+                     [x for x, _ in fl]))
+        if len(singles) > 5:
+            print("    …另有 %d 條未列" % (len(singles) - 5))
+
+    print("")
+    print("=== 合成參考形狀（**不是判準**，只用來看規則長什麼樣）===")
+    print("  ⚠ 這張表的輸入是本檔寫死的常數，不是任何人真的走過的軌跡。")
+    print("     不要拿它當「接上了沒」的證據 —— 那正是覆核 R2-M6 抓到的錯誤用法。")
     for seq, scales, label in TICKET_SHAPES:
         fl = g.track_flags(seq, scales=scales)
         print("  %-30s %-24s -> %-5s %s"

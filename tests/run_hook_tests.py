@@ -333,6 +333,25 @@ def main() -> int:
         print(f"  {'PASS' if not tv_failed else 'FAIL'}  待辦解析可見性"
               f"（{tv_passed}/{tv_passed + len(tv_failed)}）")
 
+        # 判準③探針的自檢（票 11 §二-5）。它自己的 `--self-test` 就是「怎麼證明它會紅」
+        # 那一題的答案：有 map→通過／沒提 map→違規／宣告了但檔案不存在→違規。
+        # 掛進全套是因為**探針壞掉會靜默**：它只會開始說「沒有 map」，看起來像判準未達。
+        import subprocess as _sp  # noqa: PLC0415
+        _probe = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                              "tools", "probe_m_level_map_coverage.py")
+        _r = _sp.run([sys.executable, _probe, "--self-test"], capture_output=True,
+                     text=True, encoding="utf-8", errors="replace",
+                     env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=120)
+        if _r.returncode == 0:
+            unit_passed += 1
+            print("  PASS  判準③探針自檢（1/1）")
+        else:
+            _d = ((_r.stdout or "") + (_r.stderr or "")).strip().splitlines()
+            _d = _d[-1] if _d else f"exit={_r.returncode}"
+            failed.append(("判準③探針自檢", _d))
+            unit_failed.append(_d)
+            print("  FAIL  判準③探針自檢（0/1）")
+
         # WARN 輸出通道與進度圖產生器。兩者都驗 fixture 層看不到的性質：
         # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），
         # 後者驗「看板的進度圖有沒有忠實反映計畫書」。掛進這支統一入口的理由很實際 ——
