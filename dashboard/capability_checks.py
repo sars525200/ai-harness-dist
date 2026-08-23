@@ -353,8 +353,13 @@ def _p_reversibility():
         bad.append("①")
 
     # 只認明確指定的落點，且檔名必須真的是 settings.json 的副本
+    # 2026-08-23 補第三個落點：`toolsackup_global_config.py` 把全域層實體檔
+    # 複製進 `harness\global\`（**進版控**，比 state/ 更強：有歷史、有還原點）。
+    # 原方案「檔案搬進 repo ＋ 原位置建連結」實測做不到 —— 跨磁碟硬連結是
+    # 「無效的參數」、符號連結要管理員權限；junction 是目錄專用，單檔沒這條路。
     cands = (list((home / ".claude" / "backups").glob("settings.json*"))
-             + list((HARNESS / "state" / "settings_backup").glob("settings.json*")))
+             + list((HARNESS / "state" / "settings_backup").glob("settings.json*"))
+             + list((HARNESS / "global").glob("settings.json*")))
     fresh = []
     for p in cands:
         try:
@@ -1081,7 +1086,7 @@ CATEGORIES = [
             ("dryrun", "改正式資料先出 dry-run", "auto", _p_dry_run_gate),
             ("plan_first", "大型工作計畫先行＋逐項討論", "auto", _p_plan_first),
             ("bypass", "BLOCK 有吵鬧的逃生口", "auto", _p_bypass_escape),
-            ("reversible", "動作之後回得去（可回滾）", "waived", _p_reversibility),
+            ("reversible", "動作之後回得去（可回滾）", "auto", _p_reversibility),
             ("wording", "閘門訊息措辭紀律", "auto", _p_message_wording),
         ],
     },
@@ -1110,8 +1115,6 @@ _WAIVED_META = {
     # 決定與理由在 HARNESS_PROGRESS.md:211-213（2 輪對抗式覆核用實測重算），但沒記日期
     "non_tool": {"decided_on": None,
                  "reopen_when": "人手在終端機 push 或 VM post-receive 造成第 1 次事故"},
-    "reversible": {"decided_on": "2026-08-22",
-                   "reopen_when": "全域 settings.json 有了任何自動備份機制（收工流程複製到 state/ 就算）"},
     "traces": {"decided_on": None,
                "reopen_when": "要歸因單一 hook 的延遲，或多 session 互相干擾到查不出是誰"},
 }
