@@ -600,12 +600,16 @@ user 選了「暫時只有 Claude Code」＋「**Cursor**」。⇒ 現在有第�
 `interactive`），**不是平台**。加第二個平台必須動 schema，而 §4.3 定案的
 「只准同模式相比」要重新表述為「**同平台同模式**」。
 
-**`baselines` 形狀的全部讀寫點＝14 處**（`grep -rn "baselines\|get_baseline\|VALID_MODES"`）：
+**`baselines` 形狀的全部讀寫點＝17 處**（**v1 寫 14 處是錯的**——當時的 grep 樣式是
+`baselines|get_baseline|VALID_MODES`，而 `skill_watch_run.py` 對這三個字樣命中 **0**，
+整個檔被漏掉。覆核 Round 1 #2 抓到，見 §15）：
 
 - `tools/skill_watch.py`：`:39` `VALID_MODES`／`:40` `SCHEMA_VERSION`／`:169-178` `get_baseline`／
   `:201` `compare`／`:237` `sanity_check`／`:258`·`:264` `capture`／`:288-289`·`:298` 寫入／
   `:334-335`·`:352`·`:377` CLI
 - `tools/skill_inventory.py`：`:138`·`:141`（算每支 skill 的 `modes` 欄）／`:230`（`inter`）
+- **`tools/skill_watch_run.py`：`:426`·`:427`·`:432`**（`officialCrossCheck` 的讀寫）
+  —— **v1 漏掉的三處**。它不含 `baselines` 字樣，所以原本的 grep 找不到它。
 - `SkillViewer/SkillViewer.ps1:12`：只有註解提到，**不讀 baselines**（只讀頂層 `skills[]`）
 
 ⚠ **`skill_inventory.py` 那兩處會靜默失效**：巢狀化之後 `.get(mode, {})` 回空 dict，
@@ -623,117 +627,182 @@ user 選了「暫時只有 Claude Code」＋「**Cursor**」。⇒ 現在有第�
 - 不做 Cursor 的實作（那是未完成 B，本節只保證「介面容得下它」）
 - 不改 `skills[]` 清冊與 SkillViewer 的顯示契約
 - 不重新開啟排程（§12 已定案純手動）
-
 ### 14.3 分岔決定（user 2026-08-23 逐項定案）
 
 | # | 分岔 | **決定** | 影響 |
 |---|---|---|---|
-| **W-9** | 多平台的 `baselines` 形狀 | **巢狀二維** `baselines[平台][模式]` | schemaVersion 2→3，要寫顯式遷移；每個平台自己有幾種模式由它自己決定（Cursor 可能只有一種） |
-| **W-10** | `enabled:false` 的基準 | **留著，只跳過擷取** | 重新啟用接得回去、不爆假「新增」；「混著沒在監控的東西」靠報告標出停用狀態解決，不靠刪資料 |
-| **W-11** | 勾選介面 | **skill 印出現況→問 user→寫回 JSON** | 不另做 UI；user 不必記 JSON 欄位名 |
-| **W-12** | adapter 介面深度 | **一次到位** | 現在就定死含 docs-only 平台的路徑與解析器插槽，Cursor 來了只填實作。⚠ **已知風險**：Cursor 實際形狀未查證，介面有白設的可能——user 2026-08-23 明確選這條 |
+| **W-9** | 多平台的 `baselines` 形狀 | **巢狀二維** `baselines[平台][模式]` | schemaVersion 2→3，要寫顯式遷移；每個平台自己有幾種模式由它自己決定 |
+| **W-10** | `enabled:false` 的基準 | **留著，只跳過擷取** | 重新啟用接得回去、不爆假「新增」。⚠ 覆核指出「接得回去」只在**沒有真實漂移**時成立，見 W-15 |
+| **W-11** | 勾選介面 | **skill 印出現況→問 user→寫回 JSON** | 不另做 UI。⚠ 寫回哪一份檔由 W-14 決定 |
+| **W-12** | adapter 介面深度 | **一次到位** | 現在就定死含 docs-only 路徑。⚠ 已知風險：Cursor 實際形狀未查證 |
+| **W-13** | 停用平台的凍結基準會餵 SkillViewer 幽靈卡（覆核 #4·現檔 24 張平台卡有 **10 張**只靠基準存在） | **清冊標出停用**，基準照舊保留 | 修顯示層不動資料，與 W-10「不靠刪資料解決」同一思路 |
+| **W-14** | `platforms.json` 落點（覆核 #10：放 `skills/` 會讓 `skill_manifest` 每次勾選都紅 ⇒ 人退化成按 `--accept`，防線判別力消失） | **拆兩層**：定義進版控跟著 skill 走，開關落 `state/`（已 gitignore） | 複製 skill 給別部門時定義跟著過去；勾選不污染完整性閘門 |
+| **W-15** | 長期停用後重新啟用，真實漂移超過收縮守衛怎麼辦（覆核 #15） | **走 bootstrap 路徑並明說**，不得靠 `--force` | `--force` 會連 F-3 守衛與 cwdKind 口徑守衛一起關掉，是錯的出口 |
 
-### 14.4 做法
+### 14.4 做法（v2·已納入覆核 Round 1 的 16 項）
 
-**① `<harness>/skills/skill-watch/platforms.json`**（跟著 skill 走，複製給別部門時設定一起過去）
+**① 設定拆兩層**（W-14）
 
-```jsonc
+`<harness>/skills/skill-watch/platforms.json` —— **平台定義**，進版控，跟著 skill 走。
+**純 JSON 不得有註解**（覆核 #8：Python `json` 讀不了，harness 內也無 `.jsonc` 先例）：
+
+```json
 {
   "schemaVersion": 1,
   "platforms": [
     {
       "id": "claude-code",
       "displayName": "Claude Code",
-      "enabled": true,
-      "probe": "injected-list",          // injected-list | docs-only
-      "filterLocal": true,               // 要不要濾掉本機自建（沒有這概念的平台填 false）
-      "cli": {                           // probe=injected-list 才需要
-        "exe": "claude",
-        "listArgs": ["-p", "{prompt}", "--max-budget-usd", "{budget}"],
-        "versionArgs": ["--version"],
-        "modes": ["headless"]            // 這個平台這條路徑維護哪些基準
-      },
-      "docs": {                          // 交叉驗證來源；docs-only 平台的唯一來源
-        "url": "https://code.claude.com/docs/en/commands.md",
-        "parser": "md-table-slash-cmd"   // ⚠ 具名解析器，對到程式裡的函式
-      }
+      "probe": "injected-list",
+      "modes": ["headless"],
+      "filterLocal": true,
+      "minPlausibleCount": 5,
+      "cli": { "exe": "claude", "versionArgs": ["--version"] },
+      "docs": { "url": "https://code.claude.com/docs/en/commands.md", "parser": "md-table-slash-cmd" }
     }
   ]
 }
 ```
 
-⚠ **`parser` 是具名 key 不是 inline regex**：正則寫進 JSON 等於把程式碼藏進設定檔，
-改錯不會被任何語法檢查抓到，而且驗證要造假時無從下手。
+`<harness>/state/skill_watch_platforms.json` —— **本機開關**，`.gitignore` 已涵蓋 `state/`：
 
-**② adapter 介面**（`tools/skill_watch_adapters.py`，一次到位）
+```json
+{ "enabled": { "claude-code": true, "cursor": false } }
+```
+
+四點與 v1 不同，都是覆核逼出來的：
+- **`modes` 移出 `cli`**（#11）：docs-only 平台沒有 `cli` 區塊，放裡面就宣告不出自己的 mode，實作者只能自己編一個 key，編成 `None` 會在 JSON 落盤成字串 `"null"` 而永遠對不上。
+- **`minPlausibleCount` 可設**（#11）：`sanity_check` 的 `len(names) < 5` 是硬下限，能力少於 5 個的平台**永遠建不了基準**。
+- **`parser` 具名不放正則**（v1 已定，覆核確認理由成立：`skill_watch_run.py:289` 與 `skill_inventory.py:111` 目前有兩份逐字相同的表格正則，具名解析器至少讓兩邊指得到同一個實作）。
+- **不得有註解**（#8）。
+
+**② adapter 介面**（`tools/skill_watch_adapters.py`）
 
 ```python
 class PlatformAdapter:
     id: str; display_name: str; enabled: bool
-    def modes(self) -> list[str]: ...                     # 這個平台維護哪些基準 key
-    def fetch_capabilities(self, mode, budget) -> list[str]: ...   # docs-only 平台丟 NotSupported
+    def modes(self) -> list[str]: ...
+    def fetch_capabilities(self, mode, budget) -> list[str]: ...   # docs-only 丟 NotSupported
     def fetch_official(self) -> tuple[dict | None, str | None]: ...
-    def local_names(self) -> set[str]: ...                # 無此概念回 set()
-    def cli_version(self) -> str | None: ...
+    def local_names(self) -> set[str]: ...        # filterLocal=false 回 set()
+    def cli_version(self) -> str | None: ...      # docs-only 回 None
+    def min_plausible_count(self) -> int: ...
 ```
 
-`probe` 決定 `fetch_capabilities` 走不走：`docs-only` 平台丟 `NotSupported`，
-主流程**跳過注入清單那半並在報告裡明說**（不得靜默當成「檢查完成」——
-這是 §5 已有的「向外抓失敗要講出來」同一條紀律）。
+`probe: docs-only` 時 `fetch_capabilities` 丟 `NotSupported`，主流程跳過注入清單那半**並在報告裡明說「本次只有半邊資料」**（沿用 §5 既有紀律）。
+`cliVersion`／`cwdKind` 對 docs-only 平台不寫入——⚠ 這使 `capture` 的口徑守衛（`skill_watch.py:265` 需 `prev_kind and cwd_kind` 皆真）**對它恆不作用**，已知且接受（那道守衛防的是「在不同目錄跑導致清單不同」，docs-only 沒有這個變因）。
 
 **③ baselines v3 與遷移**
 
 ```
-v2: baselines = { "headless": {...}, "interactive": {...} }
-v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...} } }
-    schemaVersion = 3   ← 顯式賦值，不可用 setdefault（見 14.1）
+v2: baselines = { "headless": {...}, "interactive": {...} },  officialCrossCheck = {...}  <- 頂層
+v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
+                                   "officialCrossCheck": {...} } }
+    schemaVersion = 3    <- 顯式賦值，不可用 setdefault
 ```
 
-- 遷移在 `load_doc()` 之後、任何比對之前執行，**冪等**（已是 v3 就不動）。
-- `officialCrossCheck` 目前是頂層，一併搬進 `baselines[平台]` 底下。
-- `get_baseline` / `compare` / `sanity_check` / `capture` 全部改吃 `(platform, mode)`。
-- `VALID_MODES` 的角色改變：不再是全域常數，改由各 adapter 的 `modes()` 提供。
-- **`skill_inventory.py:138`·`:141`·`:230` 必須同批改**（見 14.1 的靜默失效）。
+遷移在 `load_doc()` 之後、任何比對之前執行，**冪等**。**必須同批改的消費者共 17 處**（v1 寫 14 處是錯的，見 14.1）：
 
-**④ 停用語意**（W-10）
+- `skill_watch.py`：`get_baseline` / `compare` / `sanity_check` / `capture` 全部改吃 `(platform, mode)`；`VALID_MODES` 從全域常數改由 adapter 的 `modes()` 提供；CLI 加 `--platform`（#14：`--capture` 是 interactive 基準的唯一維護路徑，沒有 platform 維度就只能寫死）；`--show` 要能印巢狀（否則印「0 支」還 exit 0）。
+- **`skill_watch_run.py:426/427/432`**（#2·v1 完全漏掉）：`officialCrossCheck` 的讀寫要跟著搬進 `baselines[平台]`。⚠ **只搬不改 `:426` 的 `has_prev` 會讓 R3-2 的「永久靜音」復活一次**——遷移當天官方新發的 skill 永遠不再報，而頂層那份快照的 `capturedAt` 每次跑都更新、看起來完全健康。
+- `skill_inventory.py:138/141/230`：`:140` 的 `for mode in ("interactive", "headless")` 是**寫死的 mode tuple**，多平台後要改成走 adapter；`:230` 的 interactive 老化警報是**獨立於 `:138/141` 的第二條路徑**（#5），改對前者不代表改對它。
 
-`enabled:false` ＝「這次不要去問它」。基準原封不動、不刪、不標記。
-報告與 TODOS 列要**印出停用清單**，否則「沒變動」與「沒在看」在畫面上一樣。
+**⚠ `sanity_check` 的 fail-open（#1·最嚴重的一條）**：`:237` 的 `prev` 取不到時，`if prev:` 讓**收縮／膨脹守衛整段跳過並回傳「通過」**。實測：同一份 6 個垃圾名字的清單，v2 doc 拒絕、v3 doc 通過。這是整條鏈唯一脆弱環節的守衛（F-3），它靜默失效的徵兆只有那句本來就會印的「通過」。遷移沒改對它，等於把 F-3 整條拿掉。
+
+**④ 停用語意**（W-10 ＋ W-13）
+
+`enabled:false` ＝「這次不要去問它」。基準原封不動。
+- 報告與 TODOS 列印出停用清單。
+- **`skill_inventory` 對停用平台推論出來的項目加旗標**（W-13），SkillViewer 顯示得出「這張卡已經沒在監控」。不加的話 §1.3 控訴的原始病灶（清單停在舊快照、害人去用已改名的指令）會從這扇門回來。
 
 **⑤ 勾選流程**（W-11）
 
-`/skill-watch` 開場印出所有平台與開關狀態 → 用選擇題問這次要查哪幾個 →
-決定寫回 `platforms.json`。**寫回只改 `enabled` 欄位，其餘逐字保留**
-（不得整檔重建——那會弄丟註解與欄位順序）。
+`/skill-watch` 開場印出所有平台與開關 → 選擇題問這次要查哪幾個 → 寫回 `state/skill_watch_platforms.json`。
+- **寫檔的是一支函式不是模型用 Edit**（#8：沒有程式路徑就沒有變異對象，VA-8 會變成驗不到東西的空殼）。
+- **loader 必須驗 `enabled` 的型別**（#9）：`bool("false")` 是 `True`，字串混進來會讓「畫面顯示的」與「實際跑的」一致地錯。非布林一律拒跑（U-2 精神：缺設定拒跑不猜）。
 
-### 14.5 驗證方式（**動工前寫好**·每項都要答得出「怎麼證明它會紅」）
+**⑥ 平台間錯誤隔離與心跳**（#3·v1 完全沒提）
+
+- 一個平台失敗不得讓其餘平台不檢查；但**也不得靜默吞掉**——失敗的平台要進報告且影響 exit code。
+- **心跳要帶平台維度**：記下這次「哪些平台真的被擷取過」。現況只要流程跑完就 `ok=True`，而看板 `_p_skill_watch_alive` 只讀 `lastSuccessAt` ⇒ **全部停用時，看板照樣綠 14 天**。§12 取消排程後這格是唯一的補救，不能讓它退化成「有人打過指令」。
+- 看板那格的判準要改成「**至少一個平台在 14 天內真的被擷取過**」。
+
+**⑦ 新平台 bootstrap**（#13 ＋ W-15）
+
+現況 `compare` 缺基準丟 `WatchError` ⇒ 整支 exit 2。多平台後「第一次勾選 Cursor」會讓 claude-code 那半**這次也沒檢查**。
+- 缺基準時走**明示的 bootstrap**：只建快照、報告明說「首次建立基準，未做變動比對」，**不得回傳空集合**（§5 明文禁止：那會讓「還沒建立基準」偽裝成「什麼都沒變」）。
+- 長期停用後的真實漂移（W-15）走同一條路：`sanity_check` 擋下時，報告要能分辨「這是停用 N 天後的重新啟用」並引導走 bootstrap，**不是引導加 `--force`**。
+- ⚠ **`SKILL.md` 現在寫「第一次跑會自己建立基準」——那句今天就已經是假的**（覆核 #13 實跑 `compare` 於缺 key 的 doc 得 `WatchError`）。這輪一併修正。
+
+**⑧ TODOS 列要帶平台識別**（#16）
+
+`item` 目前是「平台 skill 變動偵測：<summary>」，而去重鍵是整列字串比對、命中就不前進基準（F-6）。多平台後兩個平台產出相同 summary 會讓第二列被吃掉 ⇒ 基準不前進 ⇒ 下次再報 ⇒ 再被吃掉 ⇒ **永久靜音迴圈**。列文字必須含平台 id。
+
+### 14.5 驗證方式（v2·**動工前寫好**·每項都要答得出「怎麼證明它會紅」）
 
 | # | 驗什麼 | 怎麼驗 | 怎麼證明它會紅 |
 |---|---|---|---|
-| VA-1 | 遷移正確 | 拿現有 v2 檔跑一次 | 遷移後 `baselines.claude-code.headless.names` 與 v2 的 `baselines.headless.names` **逐字相同**、`schemaVersion==3`。紅線：故意讓遷移漏掉 `interactive` → 比對該模式必須報「找不到基準」而非靜默當空 |
-| VA-2 | 遷移冪等 | 連跑兩次 | 第二次檔案 sha256 不變。紅線：把遷移改成無條件包一層 → 第二次變成 `claude-code/claude-code`，測試必須抓到 |
-| VA-3 | `setdefault` 陷阱真的解掉了 | 拿一份 `schemaVersion:2` 的檔跑 | 跑完必須是 3。紅線：把顯式賦值改回 `setdefault` → 必須留在 2 且測試紅 |
-| VA-4 | 停用不動基準 | `claude-code` 設 `enabled:false` 跑一次 | 報告印「跳過（停用）」，基準檔**逐位元不變**。紅線：在停用路徑仍呼叫 `capture` → 檔案 hash 變 |
-| VA-5 | 重新啟用不爆假新增 | 停用→跑→啟用→跑 | 第二次必須報「無變動」。紅線：改成停用即刪基準 → 必須報出整份清單為「新增」 |
-| VA-6 | 跨平台不互相污染 | 造假平台 `fake`，名單與 `claude-code` 完全不同 | 兩者各比各的，`claude-code` 報無變動。紅線：把 `compare` 的 platform 參數寫死 → `fake` 的名單污染 `claude-code`，必須報假變動 |
-| VA-7 | docs-only 路徑不呼叫 CLI | 造一個 `probe:"docs-only"` 的假平台 | 只走文件那半，且報告明說「本次只有半邊資料」。紅線：讓它照樣呼叫 CLI → 斷言必須擋下 |
-| VA-8 | 勾選寫回不破壞檔案 | 改一個平台的 `enabled` | 只有那一個布林值變，其餘欄位與順序逐字保留。紅線：改成整檔 `json.dump` 重建 → 註解遺失，逐字比對必須紅 |
-| VA-9 | `skill_inventory` 沒有靜默失效 | 遷移後跑 `skill_inventory.py` | `skills[].modes` 欄**仍有值**。紅線：只改 `skill_watch.py` 不改 `skill_inventory.py` → `modes` 全空，測試必須抓到（這一項就是為了擋那個靜默失效而存在） |
-| VA-10 | U-1 核心層不寫死專案路徑 | `grep -c "IT-department"` 新增檔案 | 必須為 0 |
-| VA-11 | 既有驗證不退化 | §5 那張表整張重跑 | 全部仍通過，特別是「不誤報」與「擷取失敗拒跑」 |
+| VA-1 | 遷移正確 | 拿現有 v2 檔跑一次 | `baselines.claude-code.headless.names` 與 v2 的 `baselines.headless.names` 逐字相同、`schemaVersion==3`。紅線：讓遷移漏掉 `interactive` → 比對該模式必須報「找不到基準」而非靜默當空 |
+| VA-2 | 遷移冪等 | 連跑兩次遷移函式 | **只比 `baselines` 子樹的深層相等**，不是整檔 hash（#6：`save_doc` 每次重寫整檔、`capturedAt` 記到分鐘，整檔 hash 恆變）。紅線：把遷移改成無條件包一層 → 第二次出現 `claude-code/claude-code`，必須抓到 |
+| VA-3 | `setdefault` 陷阱解掉 | 拿 `schemaVersion:2` 的檔跑 | 跑完必須是 3。紅線：改回 `setdefault` → 留在 2 且測試紅 |
+| VA-4 | 停用不動基準 | **混合設定**：`claude-code` 開、假平台 `fake` 關（#6：全停用的退化設定下整檔本來就不變，那個變異會活著通過） | `baselines.fake` 子樹逐字不變、`baselines.claude-code` 有前進。紅線：在停用路徑仍呼叫 `capture` → `fake` 子樹變動，必須抓到 |
+| VA-5 | 重新啟用不爆假新增 | 停用→跑→啟用→跑，**平台清單不變** | 第二次報「無變動」。紅線：改成停用即刪基準 → 必須報出整份清單為「新增」 |
+| VA-6 | 跨平台不互相污染 | 造假平台 `fake`，名單與 `claude-code` 完全不同 | **斷言 `fake` 拿到的是 `fake` 自己的基準**（#7：v1 斷言「`claude-code` 報無變動」方向寫反了——把 platform 寫死成 `claude-code` 時它自己那輪仍然正確，測試會綠）。紅線：把 platform 參數寫死 → `fake` 必須報假變動 |
+| VA-7 | docs-only 不呼叫 CLI | 造 `probe` 為 docs-only 的假平台 | 只走文件那半，報告明說「只有半邊資料」，且 `cliVersion`／`cwdKind` 不寫入基準。紅線：讓它呼叫 CLI → 斷言擋下 |
+| VA-8 | 勾選寫回不破壞檔案 | 呼叫**寫回函式**改一個平台的開關 | 只有那個布林值變，其餘 key、順序、值逐字保留。紅線：改成整檔 `json.dump` 重建 → key 順序被正規化，逐字比對必須紅。⚠ 前提是寫回由函式做（見 14.4⑤），模型用 Edit 改檔則本項無變異對象 |
+| VA-9 | `skill_inventory` 沒有靜默失效 | 遷移後跑 `skill_inventory.py` | `skills[].modes` 欄仍有值（實測：不改的話 `seen_in` 由 **17 筆掉到 0 筆**、24 支平台項的 `presentLocally` 全翻 False）。紅線：只改 `skill_watch.py` 不改 `skill_inventory.py` → 必須紅 |
+| VA-10 | U-1 不寫死專案路徑 | `grep -c "IT-department"` 新增檔案 | 必須為 0 |
+| VA-11 | 既有驗證不退化 | §5 那張表整張重跑 | 全部仍通過 |
+| **VA-12** | **`sanity_check` 的收縮／膨脹守衛熬過遷移**（#1·v1 整張表沒涵蓋） | 對 v3 doc 餵一份「比基準少一半」與一份「多一倍垃圾名字」的清單 | 兩者都必須被拒。紅線：不改 `:237` → 實測回傳 `None`＝通過，測試必須紅 |
+| **VA-13** | **interactive 老化警報還活著**（#5） | 對 v3 doc 跑 `skill_inventory.py` | `:230` 取得到 interactive 基準、30 天門檻仍會叫。紅線：只改 `:138/141` 不改 `:230` → `stamp` 為 `None`、警報永久關閉，測試必須紅 |
+| **VA-14** | **`officialCrossCheck` 搬家沒讓 R3-2 復活**（#2） | 造一份**含** `officialCrossCheck` 的 v2 檔（現檔沒有這個 key，VA-1 的 fixture 碰不到這段），遷移後跑一次 | `has_prev` 仍為真、`newly` 算得出來；檔案裡不得同時存在頂層與巢狀兩份。紅線：只搬不改 `:426` → `newly` 被吞掉且出現兩份副本，必須抓到 |
+| **VA-15** | **全部停用時看板不得綠**（#3） | 所有平台停用跑一次，再問 `_p_skill_watch_alive` | 必須**不綠**（或明確顯示「沒有平台在監控」）。紅線：沿用現況只看 `lastSuccessAt` → 綠，測試必須紅 |
+| **VA-16** | **新平台 bootstrap 不弄掛其餘平台**（#13） | `claude-code` 有基準、`cursor` 沒有，一起跑 | `claude-code` 正常完成；`cursor` 走 bootstrap 並在報告明說「首次建立基準」。紅線：沿用現況 → 整支 exit 2、`claude-code` 那半也沒檢查 |
+| **VA-17** | **TODOS 列帶平台、不撞去重**（#16） | 兩個平台同一次跑出**相同 summary** | 兩列都寫得進去、兩邊基準都前進。紅線：列文字不含平台 id → 第二列被去重吃掉且基準不前進，測試必須紅 |
 
-⚠ **VA-1～VA-9 全部是我自己寫的測試**，依 §3「兩支自己寫的實作互相比對不算獨立驗證」，
-每一項的通過**必須先看到它紅過**（上表「怎麼證明它會紅」那一欄就是變異腳本的規格）。
+⚠ **VA-1～VA-17 全部是我自己寫的測試**，依 §3「兩支自己寫的實作互相比對不算獨立驗證」，每一項的通過**必須先看到它紅過**——上表「怎麼證明它會紅」那一欄就是變異腳本的規格。
 
-**驗不到、要落 `PENDING_VERIFY.md` 的**：
-勾選流程好不好用只有 user 真的跑一次才知道 —— 項目「`/skill-watch` 勾選流程實跑」／
-為何沒驗「互動流程，需人在場判斷」／指令「`py -3 <harness>/skills/skill-watch/run.py`」／誰跑「user」。
+**驗不到、要落 `PENDING_VERIFY.md` 的**：勾選流程好不好用只有 user 真的跑一次才知道 —— 項目「`/skill-watch` 勾選流程實跑」／為何沒驗「互動流程，需人在場判斷」／驗證指令「`py -3 <harness>/skills/skill-watch/run.py`」／誰跑「user」。
 
 ### 14.6 狀態
 
-- [x] 2026-08-23 Design 完成，W-9～W-12 四個分岔全部有 user 決定
-- [x] 現況實查（寫死點 4 處、`baselines` 讀寫點 14 處、兩個靜默失效陷阱）
-- [x] 驗證方式 VA-1～VA-11 寫好，每項含紅線
-- [ ] Execute：①`platforms.json` ②adapter ③v3 遷移 ④停用語意 ⑤勾選流程
-- [ ] 驗 VA-1～VA-11（**先證明它會紅再信它的綠**）
-- [ ] 未完成 B（Cursor）—— 研究清單見 §13.3，本節的介面是為它留的
+- [x] 2026-08-23 Design v1，W-9～W-12 四個分岔有 user 決定
+- [x] 對抗式覆核 Round 1（claude-code／opus／high）**16 項發現全部處置**，見 §15
+- [x] v2：新增 W-13／W-14／W-15 三個分岔（覆核逼出來的），user 已定案
+- [x] 驗證表由 VA-11 擴到 **VA-17**，新增的五條都是「整張表原本沒涵蓋」的失效模式
+- [ ] 對抗式覆核 Round 2
+- [ ] Execute：①設定拆兩層 ②adapter ③v3 遷移 ④停用語意 ⑤勾選流程 ⑥錯誤隔離與心跳 ⑦bootstrap ⑧TODOS 列帶平台
+- [ ] 驗 VA-1～VA-17（**先證明它會紅再信它的綠**）
+- [ ] 順修：`SKILL.md`「第一次跑會自己建立基準」那句今天就是假的
+- [ ] 未完成 B（Cursor）—— 研究清單見 §13.3
+
+---
+
+## 15. v2 改版紀錄 —— 對抗式覆核 Round 1（2026-08-23）
+
+**審查者**：`claude-code` + `opus` + `high`（`reviewer_config.json` 指定的就是這個，**沒有換人**；Codex CLI 未安裝但設定本來就沒選它）。`Plan` 型 subagent＝有 Read/Grep/Bash 可查證、無 Edit/Write。
+
+**16 項發現，接受 15、部分接受 1、反駁 0。** 我自己抽驗了 #1／#2／#4／#12 的原始證據，全部成立。
+
+| # | 意見 | 處置 |
+|---|---|---|
+| 1 | `sanity_check:237` 巢狀化後 `prev` 恆 `None` ⇒ `if prev:` 讓收縮／膨脹守衛整段跳過並回傳「通過」；整張 VA 表沒有一條在驗它 | **接受**。14.4③ 加專段警告；**新增 VA-12**。抽驗確認：v2 doc 拒絕、v3 doc 通過同一份 6 個垃圾名字的清單 |
+| 2 | `officialCrossCheck` 只在 `skill_watch_run.py:426/427/432` 讀寫，而 v1 的「14 處」grep 樣式在該檔命中 **0** ⇒ 整個檔漏掉；搬家會讓 R3-2 的永久靜音復活一次 | **接受**。14.1 改 17 處並補列 run.py；14.4③ 加 `has_prev` 的處理要求；**新增 VA-14**（含「現檔沒有這個 key，VA-1 碰不到」這個 fixture 缺口） |
+| 3 | 心跳與看板沒有平台維度 ⇒ 全部停用時看板綠 14 天；而 VA-4 明文要求產生這個綠 | **接受**。新增 14.4⑥（錯誤隔離＋心跳帶平台＋看板判準改「至少一個平台真的被擷取過」）；**新增 VA-15**；VA-4 改用混合設定 |
+| 4 | 停用平台的凍結基準會餵 SkillViewer 幽靈卡；現檔 24 張平台卡有 10 張只靠基準存在 | **接受**，升級成分岔 **W-13**（user 定案：清冊標出停用）。14.4④ 補旗標要求 |
+| 5 | VA-9 只驗 `skills[].modes`，而 `:230` 的 interactive 老化警報是獨立路徑，會靜默關閉 | **接受**。**新增 VA-13** |
+| 6 | VA-2／VA-4 用整檔 hash 當紅線，但 `save_doc` 每次重寫整檔且 `capturedAt` 記到分鐘 ⇒ VA-2 恆紅、VA-4 只在全停用的退化設定下成立（那個變異會活著通過） | **接受**。VA-2 改比 `baselines` 子樹深層相等；VA-4 改用混合設定並斷言子樹 |
+| 7 | VA-6 紅線方向寫反：platform 寫死成 `claude-code` 時它自己那輪仍正確 ⇒ 原斷言會綠 | **接受**。VA-6 改成斷言 `fake` 拿到自己的基準 |
+| 8 | `platforms.json` 標 jsonc 且含註解，Python `json` 讀不了；不寫註解則 VA-8 的紅線永遠證不了；且沒說寫回是誰做的 ⇒ 可能沒有變異對象 | **接受**。改純 JSON；VA-8 紅線改為「key 順序被正規化」；14.4⑤ 明定寫回由函式做 |
+| 9 | `enabled` 沒型別驗證，`bool("false")` 是 `True` | **接受**。14.4⑤ 加型別閘門，非布林拒跑 |
+| 10 | 把每次勾選都會改的檔放進 `skills/skill-watch/` ⇒ `skill_manifest` 每次都紅 ⇒ 人從調查退化成按 `--accept`，防線判別力消失 | **接受**，升級成分岔 **W-14**（user 定案：拆兩層。定義進版控跟著 skill 走，開關落已 gitignore 的 `state/`）。**這條推翻了交接文 §13.2 提的落點** |
+| 11 | `modes` 放在 `cli` 內 ⇒ docs-only 平台宣告不出自己的 mode；`cliVersion`／`cwdKind` 對它無意義；`len<5` 硬下限讓小平台永遠建不了基準 | **接受**。`modes` 移出到平台頂層；新增 `minPlausibleCount`；口徑守衛對 docs-only 恆不作用列為已知且接受 |
+| 12 | `filterLocal` 設得了但傳不進 `capture`——`skill_watch.py:275` 是無條件呼叫 `local_skill_names()`（R3-3 刻意下沉的）；第二平台的能力只要與自建 skill 撞名就被靜默剔除 | **接受**。adapter 的 `local_names()` 要真的餵進 `capture`；抽驗確認 `:275` 確為無條件 |
+| 13 | 缺基準丟 `WatchError` ⇒ 新勾選一個平台會讓整支 exit 2、其餘平台這次也沒檢查；而 `SKILL.md` 寫「第一次跑會自己建立基準」今天就是假的 | **接受**。新增 14.4⑦ bootstrap（明示、不得回傳空集合）；**新增 VA-16**；`SKILL.md` 那句列入順修 |
+| 14 | `skill_watch.py` 的 CLI 沒有平台維度，而它是 interactive 基準的唯一維護路徑；`--show` 對 v3 會印「0 支」還 exit 0 | **接受**。14.4③ 加 `--platform` 與 `--show` 的要求 |
+| 15 | W-10「接得回去」在真有漂移時不成立：停用兩個月掉 4 支就超過 `limit=3` ⇒ 被 `sanity_check` 判成擷取失敗，而訊息引導人加 `--force`（會連 F-3 與口徑守衛一起關掉） | **部分接受**。「不爆假新增」那半成立、維持 W-10；「接得回去」那半升級成分岔 **W-15**（走 bootstrap，不走 `--force`），寫進 14.4⑦ |
+| 16 | TODOS 列不含平台識別，而去重鍵是整列字串、命中就不前進基準 ⇒ 兩平台同 summary 會進入永久靜音迴圈 | **接受**。新增 14.4⑧，列文字必須含平台 id；**新增 VA-17** |
+
+**審查者確認寫對、不必再改的**（它實際查證過的）：`setdefault` 陷阱為真、`skill_inventory` 靜默失效為真且量級更大（`seen_in` 17→0）、`SkillViewer.ps1` 確實不讀 `baselines`、`parser` 具名的理由成立、W-9 選巢狀而非複合字串 key 在這份程式裡是對的（扁平複合 key 會讓 `--show` 與 `skill_inventory` 不報錯地拿到錯東西）、VA-10 延用正確。
+
+**審查者沒查到的**（原樣轉載，不當成已排除）：Cursor 實際形狀完全沒查；勾選流程由誰寫檔（程式還不存在）；端到端實跑（會呼叫 `claude -p`、會改版控中的檔，違反唯讀限制）；`officialCrossCheck` 從未在真實環境落過檔，所以 #2 的「兩份副本」是依程式路徑推的、未在實檔上觀察到。
