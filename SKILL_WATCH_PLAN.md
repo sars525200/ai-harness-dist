@@ -630,7 +630,10 @@ user 選了「暫時只有 Claude Code」＋「**Cursor**」。⇒ 現在有第�
 
 **非目標**（明確排除，避免範圍膨脹）：
 - 不做 Cursor 的實作（那是未完成 B，本節只保證「介面容得下它」）
-- 不改 `skills[]` 清冊與 SkillViewer 的顯示契約
+- 不改 SkillViewer 的**本機自建面板**與它的分類對照表（`LocalSkillCategoryMap`）。
+  ⚠ **平台面板的投影、分組與卡片渲染在範圍內**——票 03 定案（2026-08-23）：
+  原本這裡寫的是「不改 `skills[]` 清冊與 SkillViewer 的顯示契約」，那句**與 W-13 互斥**
+  （W-13 要讓停用標記上畫面，而 `:130` 只投影三欄、多的屬性被靜默丟掉），已刪除。
 - 不重新開啟排程（§12 已定案純手動）
 ### 14.3 分岔決定（user 2026-08-23 逐項定案）
 
@@ -772,7 +775,7 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 | **VA-15** | **全部停用時看板不得綠**（#3） | 所有平台停用跑一次，再問 `_p_skill_watch_alive` | 必須**不綠**（或明確顯示「沒有平台在監控」）。紅線：沿用現況只看 `lastSuccessAt` → 綠，測試必須紅 |
 | **VA-16** | **新平台 bootstrap 不弄掛其餘平台**（#13） | `claude-code` 有基準、`cursor` 沒有，一起跑 | `claude-code` 正常完成；`cursor` 走 bootstrap 並在報告明說「首次建立基準」。紅線：沿用現況 → 整支 exit 2、`claude-code` 那半也沒檢查 |
 | **VA-17** | **TODOS 列帶平台、不撞去重**（#16） | 兩個平台同一次跑出**相同 summary** | 兩列都寫得進去、兩邊基準都前進。紅線：列文字不含平台 id → 第二列被去重吃掉且基準不前進，測試必須紅 |
-| **VA-18** | **SkillViewer 投影帶得出停用旗標**（§16.2 R2-2 補的·**原本沒有編號**，map 覆核 R1 #1 對帳時發現） | 給一個停用平台的推論項目加旗標，跑清冊產生器後看 SkillViewer | **旗標要抵達畫面，不是抵達投影。** ⚠ 兩層都要：①`SkillViewer.ps1:130` 的 `[pscustomobject]@{ Name; Description; Category }` 只投影三欄，多的屬性被 PowerShell 靜默丟掉（對不存在的屬性回 null 不報錯）②`New-SkillCard`（`:404-407`）只讀 Name／Description／Category，**它在 dot-source 測試縫 `GUI-SECTION-END`（`:140`）之外**——改了投影卡片仍可能逐像素不變（map 覆核 R2 #4）。紅線：只加 JSON 欄不改投影必須紅；只改投影不改 `New-SkillCard` **也必須紅**。⚠ 已知缺口：`tests/` 底下沒有任何 `.ps1` 測試，那個「測試 harness」目前不存在、也沒有票負責建 —— 這一條的第②層可能只驗得到人眼 |
+| **VA-18** | **SkillViewer 的停用旗標與顯示欄真的抵達畫面，且 payload 沒被污染**（§16.2 R2-2 補的·原本沒有編號；範圍在票 03 定案後擴充） | 給一個停用平台的推論項目加旗標＋一個帶後綴的 `displayName`，跑清冊產生器後看 SkillViewer | **三層都要紅線。** ①**投影層**：`:130` 只投影 `Name`／`Description`／`Category` 三欄，新欄被 PowerShell 靜默丟掉（對不存在的屬性回 null 不報錯）②**渲染層**：`New-SkillCard`（`:404-407`）只讀那三欄，**它在 dot-source 測試縫 `GUI-SECTION-END`（`:140`）之外**——改了投影卡片仍可能逐像素不變 ③**payload 層（票 03 更正 ①）**：`:445` 標題／`:472` 複製／`:479` 傳送都吃 `$cmdName`，**複製鈕產出的字串不得含 `displayName` 的後綴**——把 `$cmdName` 接成 `DisplayName` 的變異版必須紅，否則會出貨「複製得到 `/research (cursor)`」這個叫不出來的指令。⚠ 已知缺口：`tests/` 底下沒有任何 `.ps1` 測試，那個「測試 harness」不存在也沒有票負責建 ⇒ ②可能只驗得到人眼，但①③是純字串檢查、驗得起來 |
 
 ⚠ **VA-1～VA-17 全部是我自己寫的測試**，依 §3「兩支自己寫的實作互相比對不算獨立驗證」，每一項的通過**必須先看到它紅過**——上表「怎麼證明它會紅」那一欄就是變異腳本的規格。
 
@@ -895,7 +898,7 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 |---|---|---|
 | ✅ 已完成 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
 | ✅ 已完成 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
-| ⏳ 待做 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
+| ✅ 已完成 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
 | ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
 | ⏳ 待做 | 票 05 心跳 per-platform 欄位與看板判準 | grilling |
 | ⏳ 待做 | 票 06 三種初次體驗的預設（clone／複製／缺檔） | grilling |
