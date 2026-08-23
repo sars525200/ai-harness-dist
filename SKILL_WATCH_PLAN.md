@@ -899,11 +899,12 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 | ✅ 已完成 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
 | ✅ 已完成 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
 | ✅ 已完成 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
-| ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
+| ✅ 已完成 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
 | ⏳ 待做 | 票 05 心跳 per-platform 欄位與看板判準 | grilling |
 | ⏳ 待做 | 票 06 三種初次體驗的預設（clone／複製／缺檔） | grilling |
 | 🚧 待前置 | 票 16 順修兩處與實際行為不符的文字（前置 03） | task |
 | 🚧 待前置 | 票 17 收尾對帳·VA 認領全表與既有驗證不退化（前置 07–16） | task |
+| ⏳ 待做 | 票 18 回歸網改成自動發現測試檔（外部協調） | task |
 | 🚧 待前置 | 票 07 施作 run.py 注入縫（前置 04） | task |
 | 🚧 待前置 | 票 08 設定拆兩層與 loader（前置 06） | task |
 | 🚧 待前置 | 票 09 adapter 介面與 Claude Code adapter（前置 01·08） | task |
