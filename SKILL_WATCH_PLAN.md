@@ -712,6 +712,14 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 - **`skill_watch_run.py:426/427/432`**（#2·v1 完全漏掉）：`officialCrossCheck` 的讀寫要跟著搬進 `baselines[平台]`。⚠ **只搬不改 `:426` 的 `has_prev` 會讓 R3-2 的「永久靜音」復活一次**——遷移當天官方新發的 skill 永遠不再報，而頂層那份快照的 `capturedAt` 每次跑都更新、看起來完全健康。
 - `skill_inventory.py:138/141/230`：`:140` 的 `for mode in ("interactive", "headless")` 是**寫死的 mode tuple**，多平台後要改成走 adapter；`:230` 的 interactive 老化警報是**獨立於 `:138/141` 的第二條路徑**（#5），改對前者不代表改對它。
 
+
+**⚠ 2026-08-23 · 票 02 已定案，本段的 `skill_inventory` 部分以票 02 為準**
+（`.scratch/skill-watch-multiplatform/issues/02-modes-semantics-platform-key.md`）：
+`merged`／`seen_in`／`old_by_name` 三處的鍵一律 `(platform, name)`（非平台項 `platform=None`）；
+**`modes` 的語意不變**，只改成分平台讀；新增 `displayName` 欄而 `name` 保持乾淨。
+v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆人工 `category`，
+鍵不改就只留得住一筆而且不報錯。
+
 **⚠ `sanity_check` 的 fail-open（#1·最嚴重的一條）**：`:237` 的 `prev` 取不到時，`if prev:` 讓**收縮／膨脹守衛整段跳過並回傳「通過」**。實測：同一份 6 個垃圾名字的清單，v2 doc 拒絕、v3 doc 通過。這是整條鏈唯一脆弱環節的守衛（F-3），它靜默失效的徵兆只有那句本來就會印的「通過」。遷移沒改對它，等於把 F-3 整條拿掉。
 
 **④ 停用語意**（W-10 ＋ W-13）
@@ -886,7 +894,7 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 | 狀態 | 項目 | 說明 |
 |---|---|---|
 | ✅ 已完成 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
-| ⏳ 待做 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
+| ✅ 已完成 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
 | ⏳ 待做 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
 | ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
 | ⏳ 待做 | 票 05 心跳 per-platform 欄位與看板判準 | grilling |
