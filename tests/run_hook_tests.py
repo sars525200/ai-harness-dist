@@ -240,6 +240,14 @@ def _run_with(fx: dict, module, payload: dict) -> tuple[bool, str]:
 
 
 def main() -> int:
+    # 票 11 §二-2：讓被叫到的規則知道「現在是自檢」。
+    #
+    # fixture 是直接 `module.check(ctx)` 呼叫的（不走 dispatch 子進程），所以規則裡的
+    # `note_failopen` 在測試中照樣會寫進 `state/failopen.ndjson` —— 而那個檔正是判準②
+    # 的資料源，跑一次測試就 +2 筆（R3-3 實測 57→59）。標成 source=test 之後消費者濾得掉。
+    # ⚠ 這一行必須在載入 fixture **之前**：規則模組可能在 import 時就讀環境變數。
+    os.environ["HARNESS_UNDER_TEST"] = "1"
+
     filter_word = sys.argv[1] if len(sys.argv) > 1 else None
     fixtures = load_fixtures(filter_word)
 
@@ -302,6 +310,17 @@ def main() -> int:
             unit_failed.extend(enc_failed)
             print(f"  {'PASS' if not enc_failed else 'FAIL'}  hook 輸出編碼 {label}"
                   f"（{enc_passed}/{enc_passed + len(enc_failed)}）")
+
+        # fail-open 的 source 欄與 report.py 的消費者（票 11 §二-1／§二-2）。
+        # 這四條各自守著一個曾經真的發生過的缺陷，缺一條那個缺陷就會靜默回來。
+        import test_failopen_source
+        fo_passed, fo_failed = test_failopen_source.run()
+        unit_passed += fo_passed
+        for detail in fo_failed:
+            failed.append(("fail-open 量測", detail))
+        unit_failed.extend(fo_failed)
+        print(f"  {'PASS' if not fo_failed else 'FAIL'}  fail-open 量測"
+              f"（{fo_passed}/{fo_passed + len(fo_failed)}）")
 
         # WARN 輸出通道與進度圖產生器。兩者都驗 fixture 層看不到的性質：
         # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），

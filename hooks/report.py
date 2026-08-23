@@ -90,6 +90,143 @@ def _load_all_events(include_probes: bool = False) -> list[dict]:
     return events
 
 
+_UUID_STEM_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-")
+
+
+def _stop_dispatch_count() -> tuple[int, dict[str, int]]:
+    """fail-open 比率的分母：實際進到 dispatch 的 Stop／SubagentStop 次數。
+
+    票 11 §二-1（2026-08-23·user 定案「絕對數＋比率都報」）。分母不必另建——
+    `kind=dispatch` 的事件本來就帶 `event` 欄，撈出來就是。
+
+    ⚠ **這個分母有一個查不到的盲區**：hook 整支沒被呼叫時（cwd 不對／Claude Code
+    沒發 Stop／dispatch 自己炸了），分子與分母**會一起消失** ⇒ 比率量的是
+    「**有進到閘門的** Stop 裡有幾成是瞎的」，不是「所有 Stop 裡有幾成」。
+    後者沒有資料來源，不要假裝算得出來（R2-H1／R4「沒找到的」第 3 項）。
+    """
+    total = 0
+    by_day: dict[str, int] = {}
+    for row in _load_all_events():
+        if row.get("kind") != "dispatch":
+            continue
+        if row.get("event") not in ("Stop", "SubagentStop"):
+            continue
+        total += 1
+        day = str(row.get("ts", ""))[:10]
+        by_day[day] = by_day.get(day, 0) + 1
+    return total, by_day
+
+
+def _load_failopen_rows() -> list[dict]:
+    path = os.path.join(STATE_DIR, "failopen.ndjson")
+    if not os.path.exists(path):
+        return []
+    rows = []
+    with open(path, encoding="utf-8-sig") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    return rows
+
+
+def _looks_like_real_session(row: dict) -> bool:
+    """舊 fail-open 紀錄的真假推估（只給 source 欄上線前的資料用）。
+
+    判準＝`transcript` 欄長不長得像 Claude Code 的真實 transcript 檔名：
+    session 是 uuid、subagent 是 `agent-<hex>`。測試用的是 `unit-test.jsonl`／
+    `does_not_exist.jsonl`／空字串。
+
+    ⚠ **這是啟發式不是判定**，而且有一個修不掉的洞：reason 為「transcript_path 是
+    空的」那一批，`transcript` 依定義就是空字串，**真 session 與測試完全同形**
+    （R4「沒找到的」第 4 項）—— 那一批一律被算成非真，所以推估值是**下限**。
+    新資料有 source 欄之後這支就只服務歷史資料，不要拿它判新的。
+    """
+    t = str(row.get("transcript") or "")
+    if not t:
+        return False
+    if t.startswith("agent-"):
+        return True
+    return bool(_UUID_STEM_RE.match(t))
+
+
+def _print_failopen_stats() -> None:
+    """閘門有幾次是瞎的（票 11 §二-1，補 R2-H1 的零消費者）。
+
+    在此之前 `grep -rn failopen hooks/report.py dashboard/*.py` 是 **0 命中**——
+    fail-open 有留痕但沒有任何人在看，所以「閘門從明天起全瞎」與「一切正常」
+    在所有報表上長得一模一樣。
+
+    **為什麼絕對數與比率都要報**（user 定案，實測支撐）：2026-08-23 那天
+    6 次 fail-open／32 次 Stop＝18.8%，但攤到全期是 0.54%。絕對數看不出集中爆發，
+    攤平的比率也看不出來——**只有逐日比率抓得到**。
+    """
+    rows = _load_failopen_rows()
+    total_stop, stop_by_day = _stop_dispatch_count()
+
+    print()
+    print("=" * 70)
+    print("fail-open（閘門有幾次是瞎的）")
+    print("=" * 70)
+
+    if not rows:
+        print("  目前沒有 fail-open 紀錄。")
+        print("  ⚠ 這**不等於**閘門一直是好的：hook 整支沒跑時連 fail-open 都不會寫。")
+        return
+
+    # `source` 是 2026-08-23 才加的欄；舊資料沒有 ⇒ 一律當 unknown，
+    # **不可預設成 session**，否則會把歷史的自檢筆數算進判準②。
+    real = [r for r in rows if r.get("source") == "session"]
+    test = [r for r in rows if r.get("source") == "test"]
+    unknown = [r for r in rows if "source" not in r]
+
+    print(f"  紀錄總筆數 {len(rows)}"
+          f"（真 session {len(real)}／自檢 {len(test)}／舊資料未標 {len(unknown)}）")
+
+    # 舊資料走啟發式推估——**不可只認 source=session 就結束**。
+    # `source` 是 2026-08-23 才加的，在那之前的紀錄一筆都沒有這一欄；只認欄位的話
+    # 這個新裝的量測器第一次開口就會報「0 次、0.00%」，而同一批資料用 transcript
+    # 形狀量出來是 6 次、其中一天 18.8%。**新量測器第一次開口就報 0＝假綠**，
+    # 正是它自己要抓的那種東西。推估值要出來，但必須標明它是推估。
+    legacy_real = [r for r in unknown if _looks_like_real_session(r)]
+    if unknown:
+        print(f"  ⚠ 有 {len(unknown)} 筆寫在 source 欄上線之前。"
+              f"改用 transcript 檔名形狀**推估**：其中 {len(legacy_real)} 筆像真 session"
+              f"（uuid 或 agent-* 形狀），其餘視為自檢。")
+        print("    推估不是判定——判準②要引用時請說明這批是推估值。")
+
+    counted = real + legacy_real
+    pct = (len(counted) / total_stop * 100) if total_stop else 0.0
+    tag = "（含推估）" if legacy_real else ""
+    print(f"  全期{tag}：{len(counted)} 次 / {total_stop} 次 Stop+SubagentStop = {pct:.2f}%")
+
+    by_day: dict[str, int] = {}
+    for r in counted:
+        day = str(r.get("ts", ""))[:10]
+        by_day[day] = by_day.get(day, 0) + 1
+    if by_day:
+        print("  逐日（只列有 fail-open 的日子）：")
+        for day in sorted(by_day):
+            n = by_day[day]
+            d = stop_by_day.get(day, 0)
+            ratio = f"{n / d * 100:.1f}%" if d else "分母 0"
+            flag = "  ← 集中爆發" if d and n / d >= 0.10 else ""
+            print(f"    {day}  {n} 次 / {d} 次 = {ratio}{flag}")
+
+    reasons: Counter = Counter(r.get("reason", "") for r in counted)
+    if reasons:
+        print("  真 session 的原因分佈：")
+        for reason, n in reasons.most_common():
+            print(f"    {n:4d}  {reason}")
+
+    print("  ⚠ 分母只涵蓋**有進到 dispatch 的** Stop。hook 整支沒被呼叫時分子分母"
+          "一起消失，那種全瞎情境這張表看不到（R2-H1／R4）。")
+
+
 def _load_error_counts() -> dict[str, int]:
     counts: dict[str, int] = {}
     for path in glob.glob(os.path.join(STATE_DIR, "hook_errors.*.log")):
@@ -211,6 +348,10 @@ def main() -> None:
         print("    這不等於「規則很好所以沒事發生」—— 兩者在這張表以外分不出來。")
         print("    判斷方法：去找一個**已知該被抓到**的歷史樣本，看它會不會命中；")
         print("    不會的話就是判準綁錯層（R4／R1 都是這樣查出來的）。")
+
+    # 票 11 §二-1：接在死規則判讀後面是刻意的——上面那張表講「分子恆為 0 可能是
+    # 判準綁錯層」，這一節講的是**更早一層**的失敗：規則根本沒被評估到。
+    _print_failopen_stats()
 
     print()
     print("=" * 70)

@@ -309,6 +309,18 @@ def note_failopen(reason: str, transcript_path: str = "") -> None:
                 "ts": _time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "rule_id": RULE_ID, "reason": reason,
                 "transcript": os.path.basename(str(transcript_path or "")),
+                # 票 11 §二-2（2026-08-23·user 定案）：這一筆是自檢還是真 session。
+                #
+                # 這個檔是判準②的資料源，而跑一次 `run_hook_tests.py` 就往它加兩筆
+                # （R3-3 實測 57→59）⇒ 判準要量的東西被自己的測試污染。更麻煩的是
+                # reason 為「transcript_path 是空的」那一批：`transcript` 依定義就是
+                # 空字串，**真 session 與測試在資料上完全同形**（R4「沒找到的」第 4 項）
+                # ⇒ 消費者只能靠「檔名長不長得像 uuid」猜，那是啟發式不是判定。
+                # 有了這一欄，判準②就能從猜形狀改成看欄位。
+                #
+                # 舊資料沒有這一欄 ⇒ 消費者要把 missing 當 `unknown`（見 report.py），
+                # 不可預設成 session，否則會把歷史測試筆數算進判準。
+                "source": "test" if os.environ.get("HARNESS_UNDER_TEST") else "session",
             }, ensure_ascii=False) + "\n")
     except Exception:
         pass
