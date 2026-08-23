@@ -575,6 +575,7 @@ def collect() -> dict:
                                "stage": got["stage"], "files_raw": got["files"],
                                "scale": got["scale"],
                                "written": set(), "tmp_written": set(), "efforts": set(),
+                               "repos": {},
                                "agents": []}
                         segments.append(cur)
                         per_proj[proj["name"]]["n"] += 1
@@ -597,6 +598,15 @@ def collect() -> dict:
                             _eff = effort_of_path(p)
                             if _eff:
                                 cur["efforts"].add(_eff)
+                            # 2026-08-23（票 08）**專案維度改用寫檔路徑**，在這裡另記一份。
+                            # transcript 目錄量的其實是「session 在哪個目錄啟動」（cwd），
+                            # 不是「錢花在哪個專案」。實測最近 40 個標成 IT-department 的 session、
+                            # 2472 次寫檔裡有 **924 次（37.4%）落在 D:\.ai-harness** ——
+                            # harness 的錢一直靜默記在 IT-department 頭上。**$0 看得出來，錯歸屬看不出來。**
+                            # 用 Counter 不用 set：跨 repo 的段落要**按寫檔次數比例拆**（票 08 決策二）。
+                            _repo = repo_of_path(p)
+                            if _repo:
+                                cur["repos"][_repo] = cur["repos"].get(_repo, 0) + 1
                     elif name == "Agent":
                         at = inp.get("subagent_type") or "(未指定)"
                         agent_calls[blk.get("id")] = {
@@ -804,6 +814,55 @@ def split_cls(v: "str | None") -> list:
             out.append(q)
     return out
 
+
+_REPO_ROOTS = None
+
+
+def repo_roots() -> list:
+    r"""可歸屬的 repo 根目錄清單，回 [(名稱, 小寫根路徑)]，長的排前面。
+
+    **不寫死任何專案路徑**（U-1，`tests/test_harness_config.py` 的台帳在盯）：
+    專案來自 `gen_layers.survey_projects()`（同 `projects()` 的單一真相），
+    harness 自己來自 `config.HARNESS_ROOT`。
+
+    ⚠ harness **沒有 `.claude\` 目錄**，而 `harness.config.json` 的 `scanRoots`
+    靠 `.claude` 判定 ⇒ 它不會出現在 survey_projects 裡，只能另外補上。
+    漏了它的後果就是這張票要修的那件事：harness 的錢記到別人頭上。
+    """
+    global _REPO_ROOTS
+    if _REPO_ROOTS is not None:
+        return _REPO_ROOTS
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gl_for_repo", LAYERS_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    out = []
+    for r in (mod.survey_projects() or []):
+        path = str(r.get("path") or "").replace("/", "\\").rstrip("\\")
+        if path:
+            out.append((r.get("name") or Path(path).name, path.lower()))
+    h = str(HARNESS).replace("/", "\\").rstrip("\\")
+    if not any(root == h.lower() for _, root in out):
+        out.append((HARNESS.name, h.lower()))
+    # 長的排前面：專案有可能巢狀，短根先命中會把子專案吃掉。
+    out.sort(key=lambda x: -len(x[1]))
+    _REPO_ROOTS = out
+    return out
+
+
+def repo_of_path(p: str) -> "str | None":
+    """寫檔路徑屬於哪個 repo。推不出來回 None（scratchpad／暫存／別人的磁碟）。
+
+    推不出來**不是錯誤**：實測 18.5% 的寫檔落在三個根之外（scratchpad、OneDrive…），
+    那些本來就不該算進任何專案的成本。
+    """
+    q = str(p or "").replace("/", "\\").lower()
+    if ":" not in q[:3]:
+        return None          # 相對路徑推不出 repo
+    for name, root in repo_roots():
+        if q.startswith(root + "\\") or q == root:
+            return name
+    return None
 
 def effort_of_path(path: str) -> "str | None":
     """從寫檔路徑推出它屬於哪個 wayfinder effort（`.scratch/<effort>/…`）。
@@ -1186,6 +1245,58 @@ def build_html(data: dict) -> str:
            f'      </div>\n'
            f'    </section>')
 
+    # ── 3.6 專案維度對照（票 08·2026-08-23）
+    #
+    # transcript 目錄量的其實是「session 在哪個目錄啟動」（cwd），不是「錢花在哪個專案」。
+    # 實測最近 40 個標成 IT-department 的 session、2472 次寫檔裡有 924 次（37.4%）
+    # 落在 harness ⇒ **harness 的工作一直靜默記在 IT-department 頭上**。
+    # 這比顯示 $0 嚴重：**$0 看得出來，錯歸屬看不出來** —— 所以這一區把兩個維度並列。
+    # 跨 repo 的段落**按寫檔次數比例拆**（票 08 決策二），不猜主 repo。
+    _cwd_n: dict = {}
+    _path_n: dict = {}
+    _mixed = 0
+    for _s in data["segments"]:
+        _rp = _s.get("repos") or {}
+        if not _rp:
+            continue
+        _cwd_n[_s.get("proj")] = _cwd_n.get(_s.get("proj"), 0) + 1
+        _t = sum(_rp.values())
+        for _k, _v in _rp.items():
+            _path_n[_k] = _path_n.get(_k, 0) + _v / _t
+        if len(_rp) > 1:
+            _mixed += 1
+    _names = sorted(set(_cwd_n) | set(_path_n),
+                    key=lambda x: -(_path_n.get(x, 0) + _cwd_n.get(x, 0)))
+    _prows = ""
+    for _nm in _names:
+        _a, _b = _cwd_n.get(_nm, 0), _path_n.get(_nm, 0.0)
+        _d = _b - _a
+        _chip = (f'<span class="chip block">{_d:+.0f}</span>' if abs(_d) >= 1
+                 else f'<span class="rt-zero">{_d:+.0f}</span>')
+        _prows += (f'              <tr><td class="path">{_esc(str(_nm))}</td>'
+                   f'<td class="num">{_a}</td><td class="num">{_b:.1f}</td>'
+                   f'<td class="num">{_chip}</td></tr>\n')
+    _seg_n = sum(_cwd_n.values())
+    b36 = (f'    <section>\n'
+           f'      <div class="section-head">\n'
+           f'        <h2>專案維度對照</h2>\n'
+           f'        <span class="sub">{_seg_n} 段有寫檔 · 跨 repo {_mixed} 段'
+           f'（{_mixed * 100 // max(1, _seg_n)}%）</span>\n'
+           f'      </div>\n'
+           f'      <p class="lead"><b>「在哪開工」不等於「改了誰」。</b>'
+           f'左欄是 transcript 目錄（＝session 啟動時的 cwd），右欄是<b>實際寫檔路徑</b>。'
+           f'兩欄差很多的那一列，就是被記到別人頭上的工作 ——'
+           f'<b>$0 看得出來，錯歸屬看不出來。</b>'
+           f'跨 repo 的段落按寫檔次數比例拆，不猜主 repo。</p>\n'
+           f'      <div class="twrap">\n'
+           f'        <table>\n'
+           f'          <thead><tr><th>專案</th><th class="num">依 transcript 目錄</th>'
+           f'<th class="num">依寫檔路徑</th><th class="num">差</th></tr></thead>\n'
+           f'          <tbody>\n{_prows}          </tbody>\n'
+           f'        </table>\n'
+           f'      </div>\n'
+           f'    </section>')
+
     # ── 4 交接契約遵循（樣本可能為 0）
     hand = data["handoff"]
     if hand:
@@ -1251,7 +1362,7 @@ def build_html(data: dict) -> str:
           f'{body4}\n'
           f'    </section>')
 
-    return "\n".join([b1, b2, b3, b35, b4])
+    return "\n".join([b1, b2, b3, b35, b36, b4])
 
 
 def inject(html: str, block: str) -> str:

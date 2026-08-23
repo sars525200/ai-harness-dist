@@ -405,7 +405,38 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     # 2026-08-23（票 04）：4 → 5，新增「任務分類分佈」。
     # 這一條數的是**節數不是內容**，所以它會在加節時紅（正確：逼人來確認是不是有意的），
     # 但**不會**在某一節內容變空時紅 —— 那是上面各節自己的斷言在守。
-    ok(h1.count("<section>") == 5, "五個量測區塊都產出（少一節不會報錯，所以要數）")
+    # 2026-08-23（票 08）：5 → 6，新增「專案維度對照」。
+    ok(h1.count("<section>") == 6, "六個量測區塊都產出（少一節不會報錯，所以要數）")
+
+    # ── 6.6 專案維度改用寫檔路徑（票 08・2026-08-23）
+    #
+    # transcript 目錄量的是「session 在哪個目錄啟動」（cwd），不是「錢花在哪個專案」。
+    # 實測 37.4% 的寫檔落在 harness 卻記在 IT-department 名下 ——
+    # **$0 看得出來，錯歸屬看不出來**，所以這一組是它的守門。
+    _roots = m.repo_roots()
+    ok(bool(_roots), "repo 根清單非空")
+    # ⚠ harness 沒有 .claude 目錄 ⇒ 不會出現在 survey_projects 裡，必須另外補。
+    #   漏了它就是這張票要修的那件事本身。
+    ok(any("ai-harness" in r for _, r in _roots),
+       "harness 自己在 repo 根清單裡（它沒有 .claude，不會被 survey_projects 撈到）")
+    # 根清單長的排前面：專案巢狀時短根先命中會把子專案吃掉
+    ok([len(r) for _, r in _roots] == sorted([len(r) for _, r in _roots], reverse=True),
+       "根清單按長度遞減排（短根先命中會把巢狀子專案吃掉）")
+    ok(m.repo_of_path("app.js") is None, "相對路徑推不出 repo（回 None 不是猜一個）")
+    ok(m.repo_of_path(r"C:\Users\x\AppData\Local\Temp\t.py") is None,
+       "根之外的絕對路徑回 None（實測 18.5% 落在三個根之外，那些不該算進任何專案）")
+    _hit = m.repo_of_path(str(m.HARNESS / "dashboard" / "x.py"))
+    ok(_hit is not None and "harness" in str(_hit),
+       f"harness 底下的檔歸給 harness（實得 {_hit!r}）")
+    # **接線**：segment 真的帶 repos，而不是只有函式存在（票 01 的教訓）
+    import inspect  # noqa: PLC0415
+    _csrc = inspect.getsource(m.collect)
+    ok("repo_of_path(p)" in _csrc and 'cur["repos"]' in _csrc,
+       "collect() 真的把 repo 記進 segment（接線，不是只驗函式）")
+    # U-1：核心層不得寫死專案名（tests/test_harness_config.py 的台帳在盯同一件事）
+    _rsrc = inspect.getsource(m.repo_roots)
+    ok("IT-department" not in _rsrc and "AI-Projects" not in _rsrc,
+       "repo 根清單從設定推，沒有寫死任何專案名（U-1）")
 
     # ── 7. 篩選與捲動的接線（client JS 靠這些鉤子，漏了會靜靜沒反應）
     ok('class="twrap wfc-scroll"' in h1,
