@@ -923,3 +923,88 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 | 🚧 待前置 | 票 15 TODOS 列帶平台識別（前置 10） | task |
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
+
+---
+
+## 18. 交接文（2026-08-24 · 等 user 升版 Claude Code 後接手）
+
+> **新室只讀這一節就夠**。它是照「貼進新 session 也讀得懂」的標準寫的。
+
+### 18.1 一句話現況
+
+**user 原話「這個技能可以打開編輯 自己勾選要查詢的 AI 模型不要寫死」已經交付。**
+`/skill-watch` 現在有步驟 0：印出平台現況 → 用選擇題問 → 走旗標寫回。
+18 張決策票解了 9 張；**剩下 9 張服務的是「第二個平台真的接上去」才需要的機器**，
+而第二個平台（Cursor）明確在 Out of scope。
+
+### 18.2 升版後照這個順序做（順序有意義）
+
+**① 重跑 `/skill-watch`** ——⚠ **這會是第一次真的走完「有變動」那條鏈。**
+
+`PENDING_VERIFY.md` 掛著這一條：變動路徑（寫 TODOS 那一列、基準前進、去重）
+**從來沒被執行過**，因為需要「平台真的變了」才走得到，而那個條件製造不出來。
+升版正好製造它。
+
+預期會報**新增 6 支**：`/run`／`/verify`／`/batch`／`/debug`／`/run-skill-generator`／
+`/design-sync`（都是目前「官方有、本機沒有」的）。**那是預期不是異常。**
+
+要盯三件事：
+- `TODOS.md`「全域·需求」表**真的多了一列**（不是只印在畫面上）
+- 基準的 `capturedAt` **有前進**（無變動時它刻意不前進，F-6）
+- 沒有撞到去重（`row_item in lines[i]` 是整列子字串比對）
+
+**② 跑 `/doctor`，拿實際輸出比對自建的 `context-health`** —— `TODOS.md` 有那一列，
+含四個可能的判定（剃除／兩支各司其職／把自建的縮成官方沒做的部分）。
+`/doctor` 會先報告再問要不要改，不會自己動手。
+
+**③ 跑 `/fewer-permission-prompts`** —— `TODOS.md` 有那一列。
+⚠ **收清單之前逐條確認真的是唯讀**：`git checkout` 這種名字看起來像查詢、
+實際會毀資料的**不可放行**（2026-08-23 那一輪就被它擋過一次，而那次擋是對的）。
+
+### 18.3 這一輪（2026-08-23）做完的
+
+| 項目 | 落點 |
+|---|---|
+| 兩個閘門轉綠（provenance／manifest） | commit `7d69737`／`baf7005` |
+| 規格 §14 ＋ 兩輪對抗式覆核（26 項） | §14／§15／§16 |
+| wayfinder map ＋ 18 張票 ＋ 三輪 map 覆核（23 項） | `d:\IT-department\.scratch\skill-watch-multiplatform\` |
+| **解了 9 張票** | 01 Cursor 查證／02 鍵加平台／03 顯示層／04 注入縫形狀／06 共用vs本機／**07 注入縫實作**／**08 定義與開關**／**12 勾選流程**／**16 文件謊言** |
+| 報告改版（user 2026-08-23 要求） | 一句結論＋對照表＋**可用／可剃除判斷**；Workflow 不再隱形 |
+| `research` 改混合 | 查用官方 `/deep-research`、落檔用自建 |
+
+**功能程式**：`skill_watch_run.py`／`skill_watch.py`／`skill_inventory.py`／
+`skill_watch_platforms.py`（新）／`platforms.json`（新）／`SKILL.md`／`run.py`，
+外加兩支測試共 **50 條斷言、7 條變異自檢**。
+
+### 18.4 沒做的與為什麼
+
+**05**（心跳分平台）／**09**（adapter 介面）／**10**（基準 v3 遷移·最大的一張）／
+**11**（停用顯示）／**13**（錯誤隔離）／**14**（bootstrap）／**15**（TODOS 帶平台 id）／
+**17**（收尾對帳）——**全部服務「第二個平台接上去」的世界**，今天只有 Claude Code
+一個平台，那套機器一行都用不到。
+
+**18**（回歸網自動發現）——**卡外部協調**：`tests/run_hook_tests.py` 別條線一直在改。
+
+### 18.5 五個會踩雷的提醒
+
+1. **map 檔尾有 `ADVERSARIAL_REVIEW_PASSED` marker。** 動 `Destination`／`Notes`／
+   `驗證方式`／`Out of scope` 四節就要重審（PR-1 會擋收工）。
+   `Decisions so far` 與 `Not yet specified` 在 `REVIEW_SCOPE_IGNORE` 區，**append 是安全的**。
+2. **改 `skills/skill-watch/` 會讓 manifest 閘門紅**——那是 **W-14 預期的代價**
+   （定義檔跟著 skill 走）。確認是自己的改動就 `--accept`。這一輪紅了**四次**。
+3. **我寫的 50 條斷言不在回歸網裡。** `run_hook_tests.py` 是**寫死的登記清單**
+   （`:400-413` import ＋ `:417-422` 註冊表），沒登記就永遠不跑而且照樣全綠。
+   要跑得手動打 `py -3 -X utf8 tests/test_skill_watch_run.py` 與 `..._platforms.py`。**那是票 18。**
+4. **`git add .scratch/` 範圍太寬**會掃到別條線未 commit 的工作（2026-08-23 犯過一次，
+   已用 `reset --mixed` 修回）。一律 `git add .scratch/skill-watch-multiplatform/`。
+5. **別條線一直在改 `eval/`／`tests/`／`dashboard/`**。開工前 `git status`，
+   commit 前 `git show --stat` 逐檔對。
+
+### 18.6 這一輪已知還沒解決的
+
+- **`eval` L2 仍 FAIL**（`skill-watch` 的 `run.py` 假紅）——成因在別條線未 commit 的
+  `check_contracts.py` 重構裡，**刻意沒動**。細節 `.scratch/room-gate-cleanup/FINDINGS.md`。
+- **案 A（eval 子系統修復）完成並驗過但整批未 commit** ——同上，別人的工作沒動。
+- **VA-8 曾經寫錯**（本 effort 第四條寫錯的紅線）。`json.dumps` **不會**重排 key，
+  只有 `sort_keys=True` 才會。⚠ **寫紅線時先問「變異版會不會照樣綠」**——
+  這個 effort 四次栽在這一點上。
