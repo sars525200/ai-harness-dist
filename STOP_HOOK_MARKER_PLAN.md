@@ -120,9 +120,9 @@ Stop 事件觸發
 
 ### 4.2 ✅ PR-1 實作 + fixture + 端到端 dry-run（2026-07-28 完成）
 
-規則 ID **PR-1**，`hooks/rules/pr1_plan_review_marker.py`，已進 `dispatch.py` REGISTRY，`dispatch_config.json` 設 **shadow: true**。
+規則 ID **PR-1**，`hooks/rules/pr1_plan_review_marker.py`，已進 `dispatch.py` REGISTRY，`dispatch_config.json` 設 **shadow: false**（**2026-08-07 轉 enforce**；本句原寫 shadow: true，2026-08-23 稽核訂正）。
 
-**⚠ 注意：它現在就已經在所有 session 跑了（shadow 模式，只觀察不擋）** —— 因為 `settings.local.json` 的 `Stop` key 早在 AWC-1 時就掛上了，新規則一進 REGISTRY 就會被呼叫，不需要另外接線。這跟 `HARNESS_PROGRESS` 記錄過兩次的「規則寫好但 matcher 沒掛、從沒被呼叫」正好相反，別再假設「還沒接上」。
+**⚠ 注意：它一進 REGISTRY 就在所有 session 跑**（當時是 shadow 只觀察；**2026-08-07 起 enforce，會真的擋**） —— 因為 `settings.local.json` 的 `Stop` key 早在 AWC-1 時就掛上了，新規則一進 REGISTRY 就會被呼叫，不需要另外接線。這跟 `HARNESS_PROGRESS` 記錄過兩次的「規則寫好但 matcher 沒掛、從沒被呼叫」正好相反，別再假設「還沒接上」。
 
 **對 §3.1 修正 2 的實作偏離（刻意的）**：原文寫「範圍收成 `git diff`／`git status` 顯示這輪動過的 `*_PLAN.md`，跟 DB-1 判斷變更集同一招」。實作時改用 **transcript**，理由是照原設計會重演它自己要防的 D5：`git status` 是**跨 session 的共同事實**，A session 正在寫的草稿會出現在 B session 的 status 裡，於是 B 的對話被 A 的檔案擋住（並行 session 改同一批檔在本 repo 已真實發生過）。D6「用 git 當真相」是為了 DB-1 的**部署邊界**（那本來就該跨 session）；「這輪我改了什麼」要的是 per-session 精確，transcript 才是對的來源。
 
@@ -271,3 +271,25 @@ B1 選的是「機制被動、由人決定何時送審」——這個設計沒�
 
 hash 的計算範圍**仍用原文**，不剝——hash 是使用者看得到的那份內容的雜湊，
 剝過再算會讓蓋章的人算出來的值跟規則算的對不上，marker 從寫下那刻就是失效的。
+
+## §7 2026-08-22／23 演進（本檔以下各節的判定流程已被擴充，以程式碼為準）
+
+⚠ **本檔 §3.3 的判定流程圖與 §4 的狀態表停在 2026-08-20。** 之後 PR-1 加了五件事，
+**現行判定序以 `hooks/rules/pr1_plan_review_marker.py` 檔頭為準**，這裡只列改了什麼：
+
+1. **map 存在即待審**（8/22）——`.scratch/**/map.md` 不需要狀態行，**路徑形狀就是握手**。
+   判準是「`/.scratch/` in path 且 basename 恰為 `map.md`」，別的地方的 `map.md` 不歸這條管。
+2. **「驗證方式」空著就擋**（8/22）——等價於 `/design-spec` 步驟 4 的守門。
+   ⚠ 這一節**不得**搬進 `REVIEW_SCOPE_IGNORE` 區（搬進去等同沒寫、會被擋）。
+3. **三種 marker**（8/23）——`PASSED`／`SKIP`／`HISTORY`，一個檔只准一張有效的。
+   `PASSED` 與 `SKIP` 不得並存；要留「曾經審過」把舊的改字成 `HISTORY`（hash 中性）。
+4. **`reviewed=` 雙 hash**（8/22）——`reviewed=` 記派審查者當下、`sha256=` 記蓋章當下。
+   兩者不同就擋，因為那代表覆核期間審查範圍被改過。**省略照舊放行，但省略在 diff 裡零痕跡。**
+5. **覆核進行中便箋降級**（8/23）——`state/review_inflight.json` 的 hash 與現況相符時
+   從 **BLOCK 降成 WARN**。⚠ **降級不是關閉**：真正的閘門始終是「沒有相符的 hash
+   就蓋不出 PASSED」。做這個是因為慣例本身要求多輪覆核＋最後一輪必須零改動，
+   走正確流程的人保證會被連擋很多次（實地量到 6 次）。
+   工具：`tools/review_inflight.py --set/--clear/--list`。
+
+⚠ **`_inflight_matches` 是本規則唯一 fail-closed 的判斷**（讀不到便箋一律當沒有 → BLOCK），
+與檔頭「每個判斷都往不擋的方向 fail-open」相反 —— 因為這一處放行才是壞的那一邊。

@@ -32,35 +32,39 @@ hooks:
 稽核者改被稽核的東西是利益衝突——發現不一致時「順手改掉」會讓不一致從未被記錄，
 下次同樣的漂移再發生也沒人知道它是慣性問題。
 
-你有 `Bash`，但被專屬閘門收窄成唯讀：**只跑得動 `git` 唯讀 subcommand、
-`node --check`、`cmp`/`fc`/`diff`。`py`／`python` 不在白名單內** ——
-所以**下面那張真相來源表裡的 `py -3 …` 腳本你一支都跑不動**。
-那不是設定漏了，是刻意的：放行 python 腳本等於開一個任意程式碼執行的口
-（腳本內容可以被改），而 fail-closed 的能力邊界不該有那種洞。
+你有 `Bash`，但被專屬閘門收窄成唯讀：跑得動 `git` 唯讀 subcommand、`node --check`、
+`cmp`/`fc`/`diff`，**以及 `py -3 <D:\.ai-harness 底下的探測腳本>`**
+（`hooks\agent_readonly_gate.py:106` → `_decide_py()`；只放行 harness 根底下的 `.py`，
+`-c`／`-m` 與 harness 以外的檔一律擋，寫入型旗標另有黑名單）。
 
-**確定性探測由主 session 先跑好、把輸出交給你**（`/audit` skill 的步驟 1–3 就是這個
-分工：能用確定性腳本回答的問題不交給機率性的 agent）。你的工作從那些數字開始，
-做它們回答不了的判斷題：這些數字與文件對不對得上。
+⚠ **2026-08-23 稽核訂正**：本段原本寫「`py`／`python` 不在白名單內、那些腳本你一支都跑不動」，
+**那是錯的** —— 閘門連自己的拒絕訊息都列著 `py -3 <D:\.ai-harness 底下的探測腳本>` 可用。
+這是下面那條 2026-08-06 教訓的**反向重演**：那次寫成「你能跑」害稽核沒交叉驗證，
+這次寫成「你不能跑」同樣害稽核不敢交叉驗證，**後果一樣**。
+
+**所以真相來源表裡標 `py -3` 的，你自己跑**。主 session 若已經先跑好給你，
+**照樣值得自己重跑一次交叉驗證** —— 那正是稽核角色存在的理由。
 
 ⚠ **拿到的數字若少了你需要的那一項，就在「我查不到的」寫明少哪一項、以及少了它
 哪個判定不成立** —— 不要用讀原始碼反推來填補然後當成已驗證。
-2026-08-06 這一項寫錯過一次（正文說你能跑那些腳本），結果整份稽核沒有 probe
-交叉驗證，而稽核員自己誠實聲明了「一旦你給的數字有誤，我抓不出來」。
+2026-08-06 這一項寫錯過一次（正文說你能跑那些腳本，但當時閘門確實擋），
+結果整份稽核沒有 probe 交叉驗證，而稽核員自己誠實聲明了「一旦你給的數字有誤，我抓不出來」。
+**這兩次的共通點不是方向，是「角色檔對自己能力的描述沒有跟著閘門走」。**
 
 ## 稽核的核心判準
 
 **文件會過期，程式不會。** 所以一律以可執行的探測為準，文件當被稽核對象：
 
-**`py -3` 那幾支你跑不動（見上一節），一律由主 session 先跑好把輸出給你**；
+**`py -3` 那幾支你自己跑得動（見上一節）**；主 session 給了數字也值得重跑交叉驗證；
 標「你自己讀」的才是你的 `Read`／`Grep` 摸得到的。
 
 | 真相來源 | 用什麼讀 | 誰跑 |
 |---|---|---|
 | 規則的 enforce／shadow 現況 | `hooks\dispatch_config.json` | 你自己讀 |
-| 規則接線與實際命中 | `py -3 D:\.ai-harness\hooks\report.py` | 主 session |
-| 八大類能力現況 | `py -3 D:\.ai-harness\dashboard\capability_checks.py` | 主 session |
+| 規則接線與實際命中 | `py -3 D:\.ai-harness\hooks\report.py` | 你自己跑 |
+| 八大類能力現況 | `py -3 D:\.ai-harness\dashboard\capability_checks.py` | 你自己跑 |
 | Phase 進度 | `HARNESS_ROLE_ARCH_PLAN.md` §3（`REVIEW_SCOPE_IGNORE` 區間內） | 你自己讀 |
-| 看板與上次發布的差異 | `py -3 D:\.ai-harness\dashboard\check_freshness.py` | 主 session |
+| 看板與上次發布的差異 | `py -3 D:\.ai-harness\dashboard\check_freshness.py` | 你自己跑 |
 
 被稽核對象（這些是「宣稱」，不是真相）：
 `HARNESS_PROGRESS.md`、`dashboard\harness-dashboard.html`、各 `*_PLAN.md`、`CLAUDE.md` §8，

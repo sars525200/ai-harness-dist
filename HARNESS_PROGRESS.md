@@ -143,7 +143,7 @@
 | R3 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） |
 | R4 | PreToolUse **Write/Edit/MultiEdit** | BLOCK＋WARN | 🟢 **enforce**（8/07） | 腳本會 `connect()` 到 PROD DB 並寫入。**兩次 dead on arrival**：7/29 改綁前是守 `import server`（本 repo 不寫那形狀）；8/07 e2e 量到「路徑字面值寫在 connect() 括號裡」全 codebase **0/177 命中**，改成**變數追蹤**（賦予 PROD `.sqlite` 路徑的變數有沒有真的進 connect）後 4 支真陽性／0 誤判 |
 | AWC-1 | **Stop** | WARN | 🟢 **enforce** | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion` |
-| PR-1 | **Stop · SubagentStop** | BLOCK | 🟢 **enforce**（8/07） | 這輪改過的 `*_PLAN.md` 標「> 狀態：待審核」，但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker。**何時該標的判準**＝M 級 ＋ Design 收尾，載體是 `/design-spec` 步驟 5（`STOP_HOOK_MARKER_PLAN.md` §6） |
+| PR-1 | **Stop · SubagentStop** | BLOCK（便箋 hash 相符時降 WARN·8/23） | 🟢 **enforce**（8/07） | 這輪改過的 `.md` 標「> 狀態：待審核」**或**是 `.scratch/**/map.md`（存在即待審·8/22），但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker。**何時該標的判準**＝M 級 ＋ Design 收尾，載體是 `/design-spec` 步驟 5（`STOP_HOOK_MARKER_PLAN.md` §6） |
 
 fixture／回歸網總計 **492**（`py -3 tests\run_hook_tests.py`，8/07 實跑）。
 

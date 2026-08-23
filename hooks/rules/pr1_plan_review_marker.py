@@ -6,13 +6,16 @@
 
 地基（2026-07-28 實測，見該計畫書 §4.1）：Stop 的 exit 2 真的擋得住，
 stderr 全文真的餵回模型並被遵守。這條規則是整個 harness 第一條真的會
-「擋住對話結束」的規則，因此每個判斷都往「不擋」的方向 fail-open。
+「擋住對話結束」的規則，因此**除了一處例外**，每個判斷都往「不擋」的方向 fail-open。
+（例外＝`_inflight_matches`：讀不到便箋一律當「沒有便箋」→ 恢復 BLOCK。那一處放行才是壞的那一邊。）
 
-判定四層（愈後面愈貴，前面擋掉絕大多數 Stop 事件）：
+判定的四類判準（實際分支比四條多，**以 `check()` 為準**，這裡只給總覽）：
     1. applies()   —— 這一輪有沒有 Write/Edit 過 `.md`？（讀 transcript 尾段）
-    2. 狀態標記     —— 該檔是不是 `> 狀態：待審核`？草稿/沒標記一律放行（§3.2-B → B1）
-    3. SKIP marker —— 有逃生口就放行，但留痕計次（D10）
-    4. PASSED hash —— marker 的 sha256 對不對得上「審查範圍內」的現有內容
+    2. 該不該管     —— `> 狀態：待審核`？**或**是 `.scratch/**/map.md`（存在即待審，8/22）
+    3. 逃生口／便箋 —— SKIP marker 放行但留痕計次（D10）；覆核進行中便箋降 WARN（8/23）
+    4. PASSED hash —— marker 的 sha256 對不對得上「審查範圍內」的現有內容，
+                      並比對 `reviewed=`（8/22 併行防護）；「驗證方式」空著也擋（8/22）
+    ⚠ 另有多張 marker 並存、PASSED＋SKIP 並存、舊格式 SKIP 等分支，見 `check()`。
 
 **為什麼觸發範圍用 transcript 而不是 git status**（對計畫書 §3.1 修正 2 的實作修正）：
     計畫書原寫「範圍收成 git diff／git status 顯示這輪動過的 *_PLAN.md，跟
@@ -94,10 +97,11 @@ Destination／Notes／驗證方式／Out of scope 留在 hash 內——**重畫�
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 
-from contract import allow, block, bypassed, iter_turn_tool_uses
+from contract import allow, block, bypassed, iter_turn_tool_uses, warn
 
 RULE_ID = "PR-1"
 
@@ -382,12 +386,63 @@ def applies(ctx) -> bool:
     return bool(_touched_plan_files(ctx.turn_transcript_path))
 
 
+# ── 覆核進行中便箋（2026-08-23）────────────────────────────────────────────
+# **為什麼需要它**：map「存在即待審」，而慣例本身要求多輪覆核 ＋ 最後一輪必須是
+# 零改動輪 ⇒ 走正確流程的人保證會在每一個 Stop 被擋一次。實地量到連續 6 次，
+# 而這個 codebase 反覆記過的病就是「攔太多次之後人開始忽略它」。
+#
+# ⚠ **降級不是關閉**：命中時從 BLOCK 降成 WARN，不是放行不管。理由是
+# 「同一個 hash 只擋一次」用在 BLOCK 上等於擋一次之後就通過 —— 那是把閘門打穿，
+# 不是降噪。真正的閘門始終是「沒有相符的 hash 就蓋不出 PASSED」，Stop 這一擋
+# 是提醒；提醒可以降級，憑證不行。
+#
+# ⚠ **綁內容不綁時間**（D14）：便箋記的是派審查者當下的 content_hash。
+# 只有「便箋存在 **且** 記的 hash 等於現在的 hash」才降級 —— 動了審查範圍
+# hash 就變，便箋立刻失配、恢復 BLOCK。所以它擋不住「改完偷偷溜過去」。
+#
+# 誠實界線：模型有 shell 權限，可以不派審查者就寫便箋。這與 marker 本身的
+# 威脅模型一致（見檔頭 §1）——憑證的作用是留下可稽核的痕跡，不是防作弊。
+# 便箋檔的位置：**向 dispatch 借 STATE_DIR，不要自己從 __file__ 爬**
+# （2026-08-23 稽核 #9：本檔 note_failopen 上方那條註解記著一次「檔案有寫、位置錯、
+#  完全無聲」的事故，而第一版的 `_INFLIGHT_PATH` 正是又爬了一次 __file__ ——
+#  同一個目錄三份算法，正是那條註解記錄的病）。
+# `_INFLIGHT_PATH` 保留成模組變數是給測試覆寫用的：None ＝ 用 dispatch 的 STATE_DIR。
+_INFLIGHT_NAME = "review_inflight.json"
+_INFLIGHT_PATH = None
+
+
+def _inflight_file() -> str:
+    if _INFLIGHT_PATH:
+        return _INFLIGHT_PATH
+    from dispatch import STATE_DIR
+    return os.path.join(STATE_DIR, _INFLIGHT_NAME)
+
+
+def _inflight_key(path: str) -> str:
+    """路徑正規化。大小寫與斜線方向在 Windows 上會漂，漂掉的症狀是便箋永遠不命中。"""
+    return os.path.normcase(os.path.abspath(path)).replace("\\", "/")
+
+
+def _inflight_matches(path: str, text: str) -> dict | None:
+    """有相符的覆核進行中便箋就回那筆，否則 None。**讀不到一律當沒有**（fail-closed
+    到 BLOCK，與 PR-1 其餘判斷 fail-open 的方向相反 —— 這裡放行才是壞的那一邊）。"""
+    try:
+        with open(_inflight_file(), encoding="utf-8-sig") as fh:
+            notes = json.load(fh)
+        note = notes.get(_inflight_key(path))
+        if isinstance(note, dict) and note.get("hash") == content_hash(text):
+            return note
+    except Exception:
+        return None
+    return None
+
 def check(ctx):
     paths = _touched_plan_files(ctx.turn_transcript_path)
     if not paths:
         return allow()
 
     skipped: list[str] = []
+    inflight: list[str] = []
     for path in paths:
         text = _read_text(path)
         if text is None:
@@ -485,6 +540,13 @@ def check(ctx):
 
         passed = _PASSED.search(probe)
         if not passed:
+            _note = _inflight_matches(path, text)
+            if _note:
+                # ⚠ **不可以在這裡 return** —— 2026-08-23 稽核 #8：早退會讓同一輪
+                # sorted 順序在後的檔一次都不被判，而且不留痕跡。今天以前所有非
+                # ALLOW 出口都是 BLOCK 所以早退無害，加了降級之後就不是了。
+                inflight.append(f"{name}（第 {_note.get('round', '?')} 輪）")
+                continue
             if is_map:
                 return block(
                     f"{name} 是 wayfinder 規劃圖（.scratch 底下的 map.md）——**存在即待審**，"
@@ -598,6 +660,13 @@ def check(ctx):
     if skipped:
         return bypassed(
             f"PR-1 逃生口已使用：{'；'.join(skipped)}。審查被略過，此事已記錄。"
+        )
+    if inflight:
+        return warn(
+            f"覆核進行中：{'；'.join(inflight)}。便箋記的 hash 與現況相符，"
+            f"所以這一輪只提醒不擋。審查範圍一旦改動，hash 就不再相符、"
+            f"下一次 Stop 會恢復 BLOCK。收斂蓋章後清便箋："
+            f"tools/review_inflight.py --clear <map>"
         )
     return allow()
 
