@@ -260,6 +260,75 @@ def run(verbose: bool = False) -> "tuple[int, list]":
        "inject 不動 marker 以外的內容")
     ok("舊內容" not in out and "新內容" in out, "inject 會換掉區間內的舊內容")
 
+    # ── 5.5 「任務」欄（票 01・2026-08-23）—— 驗收錨點要的四種 fixture
+    #
+    # ⚠ 票 01 原話：**只用「／」的單行 fixture 一定綠**，那是這批缺陷至今沒被發現的原因。
+    # 所以這一組刻意涵蓋四種形狀，缺一不可。
+    def _task(line):
+        mm = m.FIELD["task"].search(line)
+        return m._norm_task(mm.group(1)) if mm else None
+
+    # ① 舊宣告不得產生幽靈任務（最高風險：實測 205 段有任務分類、沒有任務欄）
+    #    `任務` 是 `任務分類` 的字首，少了守門這 205 段會全部變成一個叫「分類」的任務，
+    #    而且「未標記佔比」會方向性偏低 —— 看起來像紀律變好了。
+    ok(_task("模式 DEV／任務分類 [devops]／階段 Execute／修改檔案 a.py") is None,
+       "舊宣告（有任務分類、無任務欄）不得產生幽靈任務")
+    #    黑名單擋不住還沒出現的詞：語料裡真的有「任務動線」「任務中心」「任務工單」，
+    #    後兩個是產品端名詞。守門是**要求分隔符**，不是列舉。
+    ok(_task("把「任務動線」做成看板區塊，階段 Execute") is None,
+       "複合詞（任務動線／任務中心／任務工單）不得被當成任務欄")
+
+    # ② 三種分隔符各一份
+    for _n, _s in (("全形／", "／"), ("半形/", "/"), ("全形｜", "｜")):
+        ok(_task(f"模式 DEV{_s}任務 成本歸因{_s}階段 Execute{_s}修改檔案 a.py") == "成本歸因",
+           f"任務欄在「{_n}」分隔下取得到、且不吞掉後面的欄位")
+
+    # ③ 正規化：同一個任務的六種寫法只能是同一個 key
+    #    票 01 §7：四個到達點條件全綠也抓不到裂開的 key，這裡是唯一防線。
+    _forms = ["模式 DEV／任務 成本歸因／階段 Execute",
+              "模式 DEV／任務 **成本歸因**／階段 Execute",
+              "模式 DEV／任務：成本歸因／階段 Execute",
+              "模式 DEV／任務 `成本歸因`／階段 Execute",
+              "模式 DEV／任務 成本歸因 ／階段 Execute",
+              "模式 DEV／任務 成本歸因。／階段 Execute"]
+    ok(len({_task(f) for f in _forms}) == 1 and _task(_forms[0]) == "成本歸因",
+       f"同一任務的六種寫法正規化成同一個 key（實得 {sorted({_task(f) for f in _forms})}）")
+
+    # ④ 貼著 DECL_LINE 的兩個硬上限（前綴 40／尾巴 400）
+    #    失效方向最壞：整行失配 ⇒ 該段同時從閘門與分母消失 ⇒ 少一段違規 ⇒ 數字變好看，
+    #    沒有任何訊號。所以「任務」欄定在**第二欄**（模式之後），不吃前綴預算。
+    _prefix = "x" * 39            # 前綴 39 字，DECL_LINE 允許 0-40
+    ok(m.DECL_LINE.search(_prefix + "模式 DEV／任務 成本歸因／階段 Execute") is not None,
+       "前綴貼著 40 字上限時整行仍匹配得到")
+    ok(m.DECL_LINE.search("x" * 41 + "模式 DEV／任務 成本歸因／階段 Execute") is None,
+       "前綴超過 40 字時**確實**失配（證明上面那條不是白撿的）")
+    _long = "模式 DEV／任務 成本歸因／階段 Execute／修改檔案 " + "a.py，" * 70
+    ok(m.DECL_LINE.search(_long) is not None,
+       "尾巴接近 400 字上限時整行仍匹配得到")
+
+    # ⑥ **接線**：正規化有沒有真的接在 segment 上（不是只有函式存在）
+    #
+    # ⚠ 這一條是 2026-08-23 變異測試逼出來的。原本只有上面 ③ 那條，它呼叫
+    #    `m._norm_task()` **直接驗函式**——把 segment 那行的 `_norm_task(got["task"])`
+    #    改成 `got["task"]`，函式還在、③ 照樣綠，而 segment 拿到的是沒正規化的值。
+    #    「函式對」與「函式有被接上」是兩件事，測前者測不到後者
+    #    （feedback-execution-test-before-deploy：畫得出來卻點不動）。
+    #
+    # 為什麼是原始碼層而不是資料層：`collect()` 現在回傳 **0 個帶任務名的 segment**
+    # （欄位今天才上線、還沒有人打過），資料層斷言會 vacuously 通過 ——
+    # 那正是「零目標須拒跑」要擋的假綠燈。等語料裡有真實任務名之後，
+    # 這條應該換成「collect() 的每個 segment 都滿足 task == _norm_task(task)」。
+    import inspect  # noqa: PLC0415
+    _src = inspect.getsource(m.collect)
+    ok('"task": _norm_task(' in _src,
+       "segment 的 task 欄位確實經過 _norm_task（接線，不是只驗函式）")
+
+    # ⑤ 圍欄式多行宣告（實測 2%）—— 任務欄在第一行，行錨定的消費端看得到
+    _fenced = chr(10).join(["```", "模式 DEV／任務 成本歸因／階段 Execute",
+                            "修改檔案 a.py", "```"])
+    ok(_task(_fenced) == "成本歸因",
+       "圍欄式多行宣告：任務欄放第一行取得到")
+
     # ── 6. 冪等：**在固定快照上驗**
     #
     # 不可以用「連跑兩次產生器比對檔案雜湊」——上游 transcript 每回合都在長，
