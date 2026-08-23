@@ -5,8 +5,34 @@
 > 只有「現況陳述」被更新——判斷方式：總覽表與各章的表格是現況，`### 本 session 完成`／
 > `### 🔴 …` 這類敘事小節是當時的紀錄。**架構現況以 `HARNESS_ROLE_ARCH_PLAN.md` 為權威**，
 > 本檔是跨 session 的六大歸類總表。
-> 本檔是**跨 session 的現況總表**；施工細節見 `HARNESS_PLAN.md`（hook 工程）、`IT-DEPARTMENT_CLAUDEMD_PLAN.md`（規則結構）、`TRIGGER_MECHANISMS_REFERENCE.md`（觸發機制對照）。
+> 本檔是**跨 session 的現況總表**；各計畫書管什麼見下方「計畫書落點對照」。
 > ⚠ 多 session 並行是常態（實測同時 3–4 個），本表可能在你讀的當下就已落後。
+
+---
+
+## 計畫書落點對照
+
+> **動 harness 任何設計前先讀前兩份。** 這張表 2026-08-24 從 IT-dept 的
+> `.aimemory/MEMORY.md` 搬過來——它在那邊是常駐層、每則對話都付，而它是查詢用的
+> 導航表、不是每次都要讀的規則。原位留了一句指路。
+
+| 檔 | 管什麼 |
+|---|---|
+| `UNIVERSAL_HARNESS_PLAN.md` | **先讀**。方向·通用化分發各部門當地基 |
+| `HARNESS_ROLE_ARCH_PLAN.md` | **先讀**。角色與 hook·**架構現況以這份為權威**·改前先確認別的 session 動到哪 |
+| `HARNESS_PROGRESS.md`（本檔） | 六大歸類總表與規則 enforce 狀態 |
+| `HARNESS_PLAN.md` | hook 閘門 D1–D15（hook 工程） |
+| `IT-DEPARTMENT_CLAUDEMD_PLAN.md` | 規則結構 |
+| `TRIGGER_MECHANISMS_REFERENCE.md` | 觸發機制對照 |
+| `DASHBOARD_IA_PLAN.md` | 看板與 `pythonw` 踩雷 |
+| `STOP_HOOK_MARKER_PLAN.md` | Stop／exit 2 語意實測 |
+| `WORKFLOW_5STAGE_PLAN.md`＋`MODEL_ROUTING_PLAN.md` | 五階段·四象限·G2 階段成本歸因與 `PRICE_IN` |
+| `PHASE3_PLAN.md` | Phase 2/3 定案與跨磁碟鏡像 |
+| `CONTEXT_HEALTH_PLAN.md` | 常駐層瘦身的判準·分岔與踩雷史 |
+| `SKILL_WATCH_PLAN.md` | 平台能力偵測（`/skill-watch`）·§18 是最新交接文 |
+
+⚠ **改看板結構前先讀 `d:\IT-department\.claude\rules\dashboard-generators.md`**
+——它的 `paths` 對 `D:\.ai-harness` **不生效**，所以碰 harness 看板時要手動整份讀。
 
 ---
 
