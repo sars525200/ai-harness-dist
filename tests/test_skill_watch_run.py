@@ -516,6 +516,20 @@ def test_skillmd_report_spec_covers_what_the_tool_prints() -> None:
         check(f"回報規格涵蓋「{key}」（{why}）", key in spec,
               "工具印得出來、但回報規格沒提 ⇒ 模型照規格寫就會把它丟掉")
 
+    # ── 以下兩條的來源不同，**刻意分開標**，免得被當成同一種強度 ──
+    # (A) 從原始碼推導：`missingLocally` 存進去的是**名稱列**（無 description），
+    #     所以回報規格必須指到別的地方拿說明，否則那一欄必然填不出來。
+    if '"missingLocally": miss' in src:
+        check("回報規格指出官方說明要去 skills[] 拿（missingLocally 只有名稱）",
+              "skills[]" in spec,
+              "2026-08-24 實際發生過：規格說「抄工具輸出」⇒ 官方說明整欄空白")
+    # (B) **規格要求，不是原始碼推導**：工具全程沒有任何「這支到底能不能用」的探測，
+    #     `missingLocally` 純粹是集合相減 ⇒ 內建 CLI 指令必然被誤報成「本機沒有」
+    #     （`doctor` 是已確認的實例）。所以規格必須要求宣告前先查。
+    check("回報規格要求宣告『本機沒有』之前先查 claude --help（假陽性防線）",
+          "claude --help" in spec,
+          "這條是規格要求不是原始碼推導 —— 工具沒有可用性探測，假陽性只能靠規格擋")
+
 
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
