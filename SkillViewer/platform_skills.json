@@ -514,20 +514,26 @@
   "schemaVersion": 2,
   "baselines": {
     "headless": {
-      "capturedAt": "2026-08-22T23:39+0800",
+      "capturedAt": "2026-08-24T00:09+0800",
       "names": [
+        "design",
+        "dataviz",
+        "artifact-design",
+        "artifact-diagramming",
+        "artifact-capabilities",
         "update-config",
         "keybindings-help",
+        "code-review",
         "simplify",
         "fewer-permission-prompts",
         "loop",
         "schedule",
         "claude-api",
+        "run",
         "init",
-        "review",
         "security-review"
       ],
-      "cliVersion": "2.1.143",
+      "cliVersion": "2.1.241",
       "cwdKind": "neutral"
     },
     "interactive": {
@@ -556,15 +562,12 @@
   },
   "generatedBy": "tools/skill_inventory.py",
   "officialCrossCheck": {
-    "capturedAt": "2026-08-23T23:06+0800",
+    "capturedAt": "2026-08-24T00:09+0800",
     "missingLocally": [
       "batch",
-      "code-review",
-      "dataviz",
       "debug",
       "design-sync",
       "doctor",
-      "run",
       "run-skill-generator",
       "verify"
     ]

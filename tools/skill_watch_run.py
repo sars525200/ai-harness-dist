@@ -284,9 +284,16 @@ def capture_headless(budget: float) -> list[str]:
     exe = shutil.which("claude")
     if not exe:
         raise RunError("PATH 上找不到 claude CLI——拒跑。")
-    cmd = [exe, "-p", PROMPT, "--max-budget-usd", str(budget)]
+    # ⚠ **prompt 走 stdin，不要放進 argv**（2026-08-24 實測抓到的平台破壞性變更）。
+    # Claude Code 2.1.241 起，`-p <多行字串>` 會**截在第一個換行**——後半靜默消失，
+    # 模型只看到第一行。實測：多行 prompt 送 argv，模型回「訊息在那之後就結束了」；
+    # 同一份 prompt 送 stdin，兩行都到得了。
+    # 那次真跑沒有產出錯的清單，是因為 F-3 的擷取健全性守衛擋下了（它拒絕解析
+    # 夾著散文的回覆、不做部分解析）—— 這是那道守衛第一次真的救到。
+    # 附帶：新版沒收到 stdin 會等 3 秒再繼續並印 warning，走 stdin 順便消掉那個等待。
+    cmd = [exe, "-p", "--max-budget-usd", str(budget)]
     try:
-        r = subprocess.run(cmd, cwd=str(HARNESS_ROOT), capture_output=True,
+        r = subprocess.run(cmd, input=PROMPT, cwd=str(HARNESS_ROOT), capture_output=True,
                            text=True, encoding="utf-8", errors="replace", timeout=600)
     except subprocess.TimeoutExpired as exc:
         raise RunError(f"claude -p 逾時（600s）：{exc}") from exc
