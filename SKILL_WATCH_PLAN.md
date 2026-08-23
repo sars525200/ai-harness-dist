@@ -1008,3 +1008,46 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 - **VA-8 曾經寫錯**（本 effort 第四條寫錯的紅線）。`json.dumps` **不會**重排 key，
   只有 `sort_keys=True` 才會。⚠ **寫紅線時先問「變異版會不會照樣綠」**——
   這個 effort 四次栽在這一點上。
+
+### 18.7 補記（2026-08-24 · 升版之後發生的事）
+
+**§18.2 那三件已經做完兩件半，狀態如下。**
+
+**① 升版完成：2.1.143 → 2.1.241。** `/doctor`（需 2.1.206）與 `/dataviz`（需 2.1.198）都拿得到了。
+
+**② 升版第一跑就爆，抓到平台破壞性變更（已修·commit 在 harness）**
+Claude Code 2.1.241 起 **`-p <多行字串>` 截在第一個換行**，後半靜默消失。
+我們的 PROMPT 是多行的 ⇒ 模型只看到第一行，回了散文清單。
+**F-3 擷取守衛第一次真的救到**（拒絕部分解析、印出原始輸出前 300 字）。
+修法：prompt 改走 **stdin**（實測 stdin 完整保住換行）。⚠ 新版沒收到 stdin 會空等 3 秒。
+
+**③ 變動鏈第一次真的跑完——`PENDING_VERIFY` 那條已銷。**
+膨脹守衛先擋一次（多 7 支·上限 3），確認是升版帶來的已知技能後 `--force`（**票 16 保留的
+「`--force` 是正解」情境**）。結果：新增 7（design/dataviz/artifact-design/artifact-diagramming/
+artifact-capabilities/code-review/run）、消失 1（review）、改名候選 `review → code-review` 0.706。
+基準前進到 `2026-08-24T00:09`／16 支／`cliVersion 2.1.241`。
+**待驗清單只剩「真人走步驟 0 看模型會不會用選擇題問」**（要先 `--disable` 製造未勾狀態才觸發得到）。
+
+**④ `/doctor` 跑完了——判定「兩支各司其職，不剃除 `context-health`」。**
+`/doctor` 在這個 repo 找不到 CLAUDE.md 可削，**不是因為它弱，是因為 `context-health` 與
+`check_bloat` 已經削完了**。它多做兩件：找出沒在用的技能／MCP／plugin 對照 context 成本、
+安裝健康與設定檔 parse 檢查。⇒ `TODOS.md` 那一列可以改成這個判定並結案。
+其餘 doctor 結果：安裝乾淨、0 個 MCP／plugin、`defaultMode` 已是 `auto`、
+被拒 6 次全是**該拒的**（`cd &&` 串接 ×4／`git add`／`git checkout`）⇒ **零提案**。
+兩個警告：**Stop hook 最慢 13.5 秒**（中位 2.4s·門檻 10s）、技能清單 3.8k。
+
+**⑤ `/context-health` 跑完，搬了兩處（都已 commit·五項驗證全過）**
+`MEMORY.md` 的九檔對照表 → `HARNESS_PROGRESS.md`「計畫書落點對照」（540→289 字）；
+`dashboard-generators.md` 的三節 2026-08-06 學習紀錄 → `DASHBOARD_IA_PLAN.md` §9（30,792→23,984 bytes）。
+⚠ **最值錢的不是位元組**：`## 發布（已廢除）` 那個標題在說謊——它裝的是四道寫入守門與
+`pythonw` 陷阱，**我差點整節刪掉**。已改名為「本機服務與寫入守門（取代發布）」並加了「別整節刪」。
+
+**⑥ 決定開始用四支官方技能**：`/code-review`（我們的 diff 審查是空白）／
+`/fewer-permission-prompts`／`/simplify`／`/claude-api`。不需安裝，缺的是「有人記得用」。
+
+### 18.8 下一室最該知道的三個數字
+
+1. **context 壓力 93.7% 是對話本身**（937k），常駐記憶只佔 2.4%（23.9k）。**瘦身救不了它。**
+2. **`tokens ≈ 字元/4` 對中文低估約 3 倍**（我用它估 CLAUDE.md 得 3,800，實測 11.7k）。要真數字打 `/context`。
+3. **`TODOS.md` 還有兩列待辦**：跑 `/fewer-permission-prompts`（⚠ 收清單前逐條確認真唯讀）、
+   workflow 沒有基準（官方新增 workflow 偵測不到，已修一半：現在會印出來但不進基準）。
