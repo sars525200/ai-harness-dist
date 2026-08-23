@@ -44,7 +44,17 @@ py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
    理由：寫回要保留使用者手加的其他鍵與其他平台的開關，而那份保留邏輯有測試守著
    （`tests/test_skill_watch_platforms.py`，含三種寫壞的變異證明）。用 Edit 改就繞過了它。
 
-**一個都沒勾就不要往下跑**——那次擷取什麼都不會查，只會白花一次時間。
+**一個平台都沒勾的話不必你記得——`run.py` 會自己拒跑**（票 19 · 2026-08-24）：
+exit 2、**不呼叫擷取器**（省下那 0.6 USD）、而且**不前進 `lastSuccessAt`**。
+最後那一項是重點：看板那格（`_p_skill_watch_alive`）只讀 `lastSuccessAt`，
+「什麼都沒查」被記成「成功檢查過」會讓它**永遠綠**，而全部停用正是最需要它變紅的時候。
+勾了一個**沒有擷取實作**的平台（今天只有 `claude-code` 有）也一樣拒跑——
+不讓它「跑起來但其實只查了 Claude Code」。
+
+⚠ 在票 19 之前，這裡寫的是「一個都沒勾就不要往下跑」，而**守的人是模型不是程式**：
+直接打 `py -3 run.py` 就繞過去了。這句話現在有測試綁著
+（`tests/test_skill_watch_run.py` 的 `test_toggle_gate_*` 與 `test_skillmd_documents_toggle_gate`），
+改程式不改這裡、或改這裡不改程式，都會紅。
 
 ### 1. 跑偵測
 

@@ -53,11 +53,17 @@ if sys.stderr is None:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import skill_watch  # noqa: E402
+import skill_watch_platforms  # noqa: E402
 
 HARNESS_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = HARNESS_ROOT / "harness.config.json"
 TODOS_PATH = HARNESS_ROOT / "TODOS.md"
 STATE_DIR = HARNESS_ROOT / "state"
+
+# 目前唯一有擷取實作的平台。**這不是「支援的平台清單」**——多平台迴圈是票 09／13
+# 的工作且已凍結（SKILL_WATCH_PLAN.md §18.9），在那之前勾了別的平台也查不到東西，
+# 所以這裡要說得出「勾了但沒實作」而不是默默只查這一個。
+PRIMARY_PLATFORM = "claude-code"
 LOG_PATH = STATE_DIR / "skill_watch.log"
 HEARTBEAT_PATH = STATE_DIR / "skill_watch_heartbeat.json"
 
@@ -412,6 +418,19 @@ def append_todo(row_item: str, row_status: str, row_next: str, who: str = "待�
     return True
 
 
+def resolve_platforms():
+    """讀平台開關，回 `(要查的, 沒勾的)`。
+
+    **獨立成一支的理由**：測試要接得住這一層。開關檔在 `skill_watch_platforms`
+    模組裡，不在票 07 的注入縫涵蓋範圍內；沙盒 monkeypatch 這支就不必去動那條縫，
+    也不會讓測試結果取決於開發者本機當下勾了什麼。
+    """
+    try:
+        return skill_watch_platforms.resolve()
+    except skill_watch_platforms.PlatformConfigError as exc:
+        raise RunError(f"平台設定讀不動：{exc}") from exc
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="平台 skill 變動偵測（手動執行）")
     ap.add_argument("--budget", type=float, default=0.60, help="claude -p 的成本上限（USD）")
@@ -435,6 +454,34 @@ def main(argv: list[str] | None = None) -> int:
         if bad:
             raise RunError("設定檔驗證失敗，claude -p 會靜默忽略它們並產出不完整的清單：\n  "
                            + "\n  ".join(bad))
+
+        # ⚠ **開關必須有「程式的」消費者**（票 19 · 2026-08-24）。在此之前 `main()`
+        # 從頭到尾不讀開關檔，「停用某平台」只靠 SKILL.md 步驟 0 那句散文守著 ——
+        # 守的人是模型不是程式，直接打 `py -3 run.py` 就繞過去了，而且照樣寫
+        # `lastSuccessAt`。那正是 feedback-fake-settings-ui-audit 講的形狀：
+        # 設定要有程式的消費者才算功能。
+        on, off = resolve_platforms()
+        on_ids = [pf["id"] for pf in on]
+        if not on_ids:
+            raise RunError(
+                "一個平台都沒勾 —— 拒跑。\n"
+                "  這不是當機，是設定狀態：state/skill_watch_platforms.json 裡沒有任何平台是 true。\n"
+                "  ⚠ 拒跑是刻意的：跑完會寫 lastSuccessAt，而「什麼都沒查」被記成「成功檢查過」\n"
+                "     會讓看板那格永遠綠（_p_skill_watch_alive 只讀 lastSuccessAt）。\n"
+                "  要開請跑：py -3 <harness>/skills/skill-watch/run.py --platforms --enable <平台 id>")
+        if PRIMARY_PLATFORM not in on_ids:
+            raise RunError(
+                f"勾選的平台（{'、'.join(on_ids)}）都沒有擷取實作 —— 拒跑。\n"
+                f"  本檔的擷取路徑只有 {PRIMARY_PLATFORM}；多平台迴圈是票 09／13 的工作，\n"
+                "  已凍結（見 SKILL_WATCH_PLAN.md §18.9）。\n"
+                "  ⚠ 不讓它「跑起來但其實只查了 Claude Code」—— 那與勾選畫面說的不一致。")
+        print(f"[0/6] 平台開關：要查 {'、'.join(on_ids)}")
+        unimplemented = [i for i in on_ids if i != PRIMARY_PLATFORM]
+        if unimplemented:
+            print(f"      ⚠ 勾了但沒有擷取實作，本次查不到：{'、'.join(unimplemented)}"
+                  "（票 09／13 已凍結）")
+        if off:
+            print(f"      定義裡有、你沒勾：{'、'.join(pf['id'] for pf in off)}")
 
         print(f"[1/6] 在中性目錄 {HARNESS_ROOT} 起無頭 session…")
         raw_names = capture_headless(args.budget)

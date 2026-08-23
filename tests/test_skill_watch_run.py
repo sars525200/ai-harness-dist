@@ -72,15 +72,21 @@ def _digest(p) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def _path_consts() -> dict:
+def _path_consts(mod=None) -> dict:
     """模組裡所有看起來像落地路徑的常數。判準是名字尾綴，不是白名單——
-    白名單會讓「新增了一個常數」這件事悄悄通過。"""
-    return {k: v for k, v in vars(m).items()
+    白名單會讓「新增了一個常數」這件事悄悄通過。
+
+    `mod` 參數是票 19 加的：原始碼層變異測試要對「拿掉閘門的那份模組」做同樣的事。"""
+    return {k: v for k, v in vars(mod or m).items()
             if isinstance(v, Path)
             and (k.endswith("_PATH") or k.endswith("_DIR") or k.endswith("_ROOT"))}
 
 
 _BASE_NAMES = [f"fake-skill-{i:02d}" for i in range(20)]
+
+# 票 19：沙盒預設「claude-code 已勾」。**寫死在測試裡是刻意的** —— 不這樣做的話，
+# 這批測試會取決於開發者本機當下勾了什麼，而那是會變的。
+_ON_DEFAULT = ([{"id": "claude-code", "displayName": "Claude Code"}], [])
 
 
 def _make_root(root: Path) -> None:
@@ -103,24 +109,38 @@ def _make_root(root: Path) -> None:
 class _Sandbox:
     """在 tmp 裡跑一次 `main()`，跑完把模組狀態與 `sys.stdout` 還原。"""
 
-    def __init__(self, tmp: Path, capture_names):
+    def __init__(self, tmp: Path, capture_names, platforms=None, mod=None):
         self.tmp = tmp
         self.capture_names = capture_names
+        self.platforms = _ON_DEFAULT if platforms is None else platforms
+        self.mod = mod or m
+        self.captured = []                       # 票 19：記錄擷取器有沒有被呼叫
         self._saved = {}
 
     def __enter__(self):
-        self._saved = dict(_path_consts())
+        mod = self.mod
+        self._saved = dict(_path_consts(mod))
         self._saved["_stdout"] = sys.stdout
-        self._saved["capture_headless"] = m.capture_headless
-        self._saved["fetch_official"] = m.fetch_official
-        self._saved["cli_version"] = m.cli_version
+        self._saved["capture_headless"] = mod.capture_headless
+        self._saved["fetch_official"] = mod.fetch_official
+        self._saved["cli_version"] = mod.cli_version
+        if hasattr(mod, "resolve_platforms"):
+            self._saved["resolve_platforms"] = mod.resolve_platforms
         _make_root(self.tmp)
-        m._set_paths(self.tmp)
+        mod._set_paths(self.tmp)
+
+        def _cap(budget):
+            self.captured.append(budget)
+            return list(self.capture_names)
+
         # 票 04 Q2：擷取器 monkeypatch 掉，不呼叫真的 CLI（一次 0.6 USD）
-        m.capture_headless = lambda budget: list(self.capture_names)
+        mod.capture_headless = _cap
         # 不連網。取「抓取失敗」那條分支是**誠實的**：測試環境本來就不該連外
-        m.fetch_official = lambda: (None, "測試環境不連網")
-        m.cli_version = lambda: "0.0.0-test"
+        mod.fetch_official = lambda: (None, "測試環境不連網")
+        mod.cli_version = lambda: "0.0.0-test"
+        # 票 19：開關不讀真檔（見 _ON_DEFAULT 的理由）
+        if hasattr(mod, "resolve_platforms"):
+            mod.resolve_platforms = lambda: self.platforms
         return self
 
     def __exit__(self, *exc):
@@ -128,7 +148,7 @@ class _Sandbox:
         # Windows 上不關就刪不掉 tmp 目錄。「行為零改動」不准在 run.py 修它，
         # 所以由測試側收拾——順帶把這個缺陷登記在票 07 的 Answer 裡。
         cur = sys.stdout
-        if isinstance(cur, m._Tee):
+        if isinstance(cur, self.mod._Tee):
             for st in cur.streams:
                 if st is not self._saved.get("_stdout"):
                     try:
@@ -139,13 +159,20 @@ class _Sandbox:
             if k == "_stdout":
                 sys.stdout = v
             else:
-                setattr(m, k, v)
+                setattr(self.mod, k, v)
         return False
 
 
-def _run_once(tmp: Path, names) -> int:
-    with _Sandbox(tmp, names):
-        return m.main([])
+def _run_once(tmp: Path, names, platforms=None, mod=None) -> int:
+    with _Sandbox(tmp, names, platforms, mod):
+        return (mod or m).main([])
+
+
+def _run_capturing(tmp: Path, names, platforms=None, mod=None):
+    """跑一次並回 `(exit code, 擷取器被呼叫幾次)`。票 19 要證明閘門擋在擷取之前。"""
+    with _Sandbox(tmp, names, platforms, mod) as sb:
+        rc = (mod or m).main([])
+        return rc, len(sb.captured)
 
 
 def test_set_paths_covers_every_path_const() -> None:
@@ -278,7 +305,11 @@ def run(verbose: bool = True):
     for fn in (test_zero_behaviour_change,
                test_skillmd_matches_actual_first_run_behaviour,
                test_set_paths_covers_every_path_const,
-               test_writes_land_in_tmp_and_real_files_untouched):
+               test_writes_land_in_tmp_and_real_files_untouched,
+               test_toggle_gate_refuses_when_nothing_enabled,
+               test_toggle_gate_refuses_platform_without_capture_impl,
+               test_skillmd_documents_toggle_gate,
+               selftest_toggle_gate):
         try:
             fn()
         except Exception as exc:                            # noqa: BLE001
@@ -318,6 +349,141 @@ def test_skillmd_matches_actual_first_run_behaviour() -> None:
     check("SKILL.md 沒有把『自己建立基準』當成現況陳述",
           "第一次跑會自己建立基準（首次" not in flat,
           "那句從來沒成立過——它是票 16 修掉的原文")
+
+
+
+
+
+def test_toggle_gate_refuses_when_nothing_enabled() -> None:
+    """票 19：一個平台都沒勾時必須拒跑，而且**不能讓 `lastSuccessAt` 前進**。
+
+    為什麼這是硬規則：看板那格（`capability_checks._p_skill_watch_alive`）**只讀
+    `lastSuccessAt`**。跑完就寫＝「什麼都沒查」被記成「成功檢查過」⇒ 全部停用之後
+    那格**永遠綠**，而停用正是最需要它變紅的時候（票 05 的事實 #1）。
+
+    這條同時證明閘門擋在**擷取之前**：擷取器一次要 0.6 USD，擋在後面等於沒擋。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        hb = tmp / "state" / "skill_watch_heartbeat.json"
+
+        # 前置＋**正控制組**：正常勾選時跑得起來、擷取器真的被呼叫到
+        rc0, n0 = _run_capturing(tmp, _BASE_NAMES)
+        check("正控制組：正常勾選 exit 0", rc0 == 0, f"exit={rc0}")
+        check("正控制組：擷取器有被呼叫", n0 == 1,
+              f"呼叫 {n0} 次 —— 這條顧的是「計數器根本沒在動」的假綠")
+        first = json.loads(hb.read_text(encoding="utf-8"))
+        check("正控制組：lastSuccessAt 有值", bool(first.get("lastSuccessAt"))
+              and first.get("ok") is True, f"{first}")
+        # ⚠ **把時間戳塞舊**：`_now()` 是分鐘解析度，同一分鐘內跑兩次會拿到同一個字串
+        # ⇒「lastSuccessAt 沒前進」在**沒有閘門的版本上也會成立**，那條斷言等於空的。
+        # 這一步是變異自檢逼出來的（第一版寫完，變異版沒紅）。
+        stamp = "2020-01-01T00:00+0800"
+        first["lastSuccessAt"] = stamp
+        hb.write_text(json.dumps(first, ensure_ascii=False), encoding="utf-8")
+
+        todos_before = (tmp / "TODOS.md").read_text(encoding="utf-8")
+        # 刻意餵**有變動**的清單：閘門若沒擋住，它會一路寫到 TODOS 與基準
+        rc, n = _run_capturing(tmp, _BASE_NAMES + ["fake-skill-new"],
+                               platforms=([], [{"id": "claude-code", "displayName": "Claude Code"}]))
+        after = json.loads(hb.read_text(encoding="utf-8"))
+        check("零平台 → exit 2（拒跑）", rc == 2, f"exit={rc}")
+        check("零平台 → 擷取器完全沒被呼叫", n == 0, f"呼叫了 {n} 次 —— 閘門排在擷取之後")
+        check("零平台 → 心跳 ok=false", after.get("ok") is False, f"{after}")
+        check("零平台 → lastSuccessAt **不前進**", after.get("lastSuccessAt") == stamp,
+              f"{stamp} -> {after.get('lastSuccessAt')} —— 看板會因此永遠綠")
+        check("零平台 → TODOS 沒被寫",
+              (tmp / "TODOS.md").read_text(encoding="utf-8") == todos_before)
+
+
+def test_toggle_gate_refuses_platform_without_capture_impl() -> None:
+    """勾了一個**沒有擷取實作**的平台也要拒跑，不可以「跑起來但其實只查了 Claude Code」。
+
+    這條守的是誠實：勾選畫面說要查 Cursor，實際只查 Claude Code 而報告不說，
+    使用者會以為 Cursor 在監控中。多平台迴圈是票 09／13，已凍結。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rc, n = _run_capturing(tmp, _BASE_NAMES,
+                               platforms=([{"id": "cursor", "displayName": "Cursor"}], []))
+        check("只勾了沒有實作的平台 → exit 2", rc == 2, f"exit={rc}")
+        check("只勾了沒有實作的平台 → 擷取器沒被呼叫", n == 0, f"呼叫了 {n} 次")
+
+
+def selftest_toggle_gate() -> None:
+    """**先證明它會紅**：把閘門從原始碼裡整段拿掉，零平台情境必須退回票 19 之前的病——
+    exit 0、擷取器被呼叫、`lastSuccessAt` 前進。抓不到就代表上面那兩條在空轉。
+
+    做原始碼層變異而不是「換一組輸入」，是因為要驗的正是**那段程式存不存在**。
+    """
+    import importlib.util
+    src_path = HARNESS / "tools" / "skill_watch_run.py"
+    src = src_path.read_text(encoding="utf-8")
+    head = "        on, off = resolve_platforms()"
+    tail = '        print(f"[1/6] 在中性目錄'
+    if head not in src or tail not in src:
+        check("變異：切得到閘門的頭尾", False, "錨點不在了 —— 閘門被改過，這支自檢要跟著更新")
+        return
+    mutated = src[:src.index(head)] + src[src.index(tail):]
+    check("變異：閘門真的被拿掉了", "on, off = resolve_platforms()" not in mutated)
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        mut_file = tmp / "mut" / "skill_watch_run_mut.py"
+        mut_file.parent.mkdir(parents=True, exist_ok=True)
+        mut_file.write_bytes(mutated.encode("utf-8"))
+        spec = importlib.util.spec_from_file_location("skill_watch_run_mut", mut_file)
+        mut = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mut)
+
+        work = tmp / "work"
+        hb = work / "state" / "skill_watch_heartbeat.json"
+        _run_capturing(work, _BASE_NAMES, mod=mut)
+        doc = json.loads(hb.read_text(encoding="utf-8"))
+        stamp = "2020-01-01T00:00+0800"          # 同上：分鐘解析度會讓比對失效
+        doc["lastSuccessAt"] = stamp
+        hb.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+        rc, n = _run_capturing(work, _BASE_NAMES + ["fake-skill-new"],
+                               platforms=([], []), mod=mut)
+        after = json.loads(hb.read_text(encoding="utf-8"))
+        check("變異版：零平台照樣跑完（exit 0）", rc == 0,
+              f"exit={rc} —— 變異版沒紅，代表測試抓的不是閘門")
+        check("變異版：零平台照樣呼叫擷取器", n == 1, f"呼叫 {n} 次")
+        check("變異版：零平台照樣把心跳記成成功", after.get("ok") is True,
+              f"ok={after.get('ok')} —— 那「心跳 ok=false」那條就不是閘門在守的")
+        check("變異版：零平台照樣讓 lastSuccessAt 前進", after.get("lastSuccessAt") != stamp,
+              f"仍是 {stamp} —— 那「lastSuccessAt 不前進」那條就不是閘門在守的")
+
+
+def _zero_platform_stderr() -> str:
+    """真的跑一次零平台情境，把 `main()` 印到 stderr 的訊息原文撈回來。
+
+    **撈程式實際吐的字，不是我此刻寫的字** —— 這樣文件與程式兩個方向都綁得住（票 16 的做法）。
+    """
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with tempfile.TemporaryDirectory() as td:
+        with contextlib.redirect_stderr(buf):
+            _run_once(Path(td), _BASE_NAMES, platforms=([], []))
+    return buf.getvalue()
+
+
+def test_skillmd_documents_toggle_gate() -> None:
+    """票 19：`SKILL.md` 步驟 0 必須說「程式會拒跑」，而且用的是程式**實際吐出來的字**。
+
+    這條擋的是票 19 修掉的那個病本身：文件寫了一條規則，而執行它的是模型不是程式。
+    """
+    msg = _zero_platform_stderr()
+    doc = (HARNESS / "skills" / "skill-watch" / "SKILL.md").read_text(encoding="utf-8")
+    check("零平台真的會印出拒跑訊息", "拒跑" in msg, f"實際印的是：{msg[:200]}")
+    for frag in ("一個平台都沒勾", "lastSuccessAt"):
+        check(f"SKILL.md 引用了實際訊息的片段：{frag}", frag in msg and frag in doc,
+              f"在訊息裡={frag in msg}／在 SKILL.md 裡={frag in doc}")
+    flat = "".join(doc.split())
+    check("SKILL.md 沒有把『靠人記得不要往下跑』當成現況陳述",
+          "**一個都沒勾就不要往下跑**——那次擷取什麼都不會查" not in flat,
+          "那是票 19 之前的原文：守的人是模型不是程式")
 
 
 if __name__ == "__main__":
