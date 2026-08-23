@@ -523,11 +523,18 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"      [Workflow] {w} — {skill_watch.gist(desc0.get(w, ''))}")
             # 逐項附描述：報告那張對照表要有「這東西是幹嘛的」，而
             # 「可合併／可取代」的判斷恰恰需要它（2026-08-23 user 定的版型）。
-            # 這一批多半是 headless／interactive 的系統性差異（無頭沒有 Artifact 工具），
-            # 是**常態不是變動** ⇒ 只印名字。附說明的留給下面「這次才新出現」那批。
+            # ⚠ **這批不是「你沒有」**（2026-08-24 訂正，原本這裡寫「本機沒有」）。
+            # 差集的右邊是**注入清單**，而注入清單**只裝 skill**：
+            # 內建 slash command 一支都不會出現在裡面。已實證的假陽性 3 支——
+            # `doctor`（`claude --help` 的 Commands 區有它，且 8/24 實跑成功）、
+            # `verify`／`batch`（user 8/24 在互動 session 打 `/` 確認補得出來）。
+            # ⇒ 這裡只能誠實說「不在注入清單」，能不能用**這支工具測不到**。
             desc = desc0
-            print(f"      官方有、本機沒有的 Skill：{len(miss)} 支"
+            print(f"      官方文件有、不在注入清單：{len(miss)} 支"
                   + (f" → {', '.join(miss)}" if miss else ""))
+            if miss:
+                print("        ⚠ 這**不等於**「本機沒有」——注入清單不裝內建 slash command。"
+                      "要確認打 `/` 看補完，或查 `claude --help` 的 Commands 區。")
             # ⚠ 覆核 N-9：v2 把恆真常數換成了真實差集，但差集去了跟常數同一個
             # 地方——一個沒人讀的 log。user 的原話是「檢查平台**最新更新的** skill」，
             # 而「官方發了新 skill、本機版本還沒到」這條路徑 `compare()` 看不到
@@ -541,7 +548,7 @@ def main(argv: list[str] | None = None) -> int:
             newly = sorted(set(miss) - prev_miss)
             if has_prev and newly:
                 cross_delta = newly
-                print(f"      ⚠ 官方新增、本機沒有的：{len(newly)} 支")
+                print(f"      ⚠ 官方文件新增、不在注入清單的：{len(newly)} 支")
                 for n_ in newly:
                     print(f"        · {n_} — {skill_watch.gist(desc.get(n_, ''))}")
             doc["officialCrossCheck"] = {"capturedAt": _now(), "missingLocally": miss}

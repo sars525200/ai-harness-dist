@@ -508,13 +508,23 @@ def test_skillmd_report_spec_covers_what_the_tool_prints() -> None:
         return
     check("SKILL.md 切得出回報規格那一段", True)
     # 判準來自**工具的原始碼**，不是我此刻寫的清單 —— 工具不印了就不該再要求規格提它
-    for probe, key, why in (
+    # ⚠ **探針要釘在穩定的識別字上，不要釘在顯示字串上**（2026-08-24 當場踩到）：
+    # 原本第二條釘的是 `"官方有、本機沒有的 Skill"` 這個 print 字面值，工具一改措辭
+    # 就 `not in src` ⇒ **靜默跳過**，斷言數 40 掉到 39 而**沒有任何一條紅**。
+    # 改釘變數名（`missingLocally`）：措辭可以改，識別字不會。
+    ran = 0
+    for src_token, doc_key, why in (
             ("[Workflow]", "Workflow", "工具會逐項印出官方 Workflow"),
-            ("官方有、本機沒有的 Skill", "官方有、本機沒有", "工具會印這批的數量與名單")):
-        if probe not in src:
+            ("missingLocally", "注入清單", "工具會印「官方文件有、不在注入清單」那批")):
+        if src_token not in src:
+            check(f"探針不適用：工具原始碼已無 {src_token}", True,
+                  "若非預期，這支測試要跟著更新")
             continue
-        check(f"回報規格涵蓋「{key}」（{why}）", key in spec,
+        ran += 1
+        check(f"回報規格涵蓋「{doc_key}」（{why}）", doc_key in spec,
               "工具印得出來、但回報規格沒提 ⇒ 模型照規格寫就會把它丟掉")
+    # 零目標不算通過（feedback-execution-test-before-deploy）：全部跳過也會全綠
+    check("探針沒有整批空轉", ran >= 2, f"只有 {ran} 條探針真的跑到")
 
     # ── 以下兩條的來源不同，**刻意分開標**，免得被當成同一種強度 ──
     # (A) 從原始碼推導：`missingLocally` 存進去的是**名稱列**（無 description），
@@ -529,6 +539,13 @@ def test_skillmd_report_spec_covers_what_the_tool_prints() -> None:
     check("回報規格要求宣告『本機沒有』之前先查 claude --help（假陽性防線）",
           "claude --help" in spec,
           "這條是規格要求不是原始碼推導 —— 工具沒有可用性探測，假陽性只能靠規格擋")
+    # (C) 回歸守門：「本機沒有」是已實證會誤導的措辭（doctor／verify／batch 三支假陽性）。
+    #     工具要嘛不用這個詞，要用就必須當場附上「不等於」的但書。
+    bad = "本機沒有"
+    if bad in src:
+        check("工具若仍說「本機沒有」，必須同時印出但書",
+              "不等於" in src,
+              "3 支已實證的假陽性：doctor（內建指令）／verify／batch（打 / 補得出來）")
 
 
 if __name__ == "__main__":
