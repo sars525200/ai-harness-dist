@@ -20,6 +20,12 @@ import sys
 import tempfile
 import types
 
+# 覆核 R6-L10：`HARNESS_UNDER_TEST` 原本只有 `run_hook_tests.main()` 會設，
+# 而票 11 §四教的紅燈跑法是**直接跑這個檔**——走那條路徑呼叫 `check()` 寫出的
+# fail-open 會被標成 `source=session`、**污染判準②的資料源**。
+# 在模組層設，直接跑與經由 runner 跑都涵蓋得到（不是靠個別測試自律）。
+os.environ.setdefault("HARNESS_UNDER_TEST", "1")
+
 _HOOKS = r"D:\.ai-harness\hooks"
 for _p in (_HOOKS, _HOOKS + r"\rules"):
     if _p not in sys.path:
