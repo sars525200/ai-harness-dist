@@ -582,11 +582,31 @@ demo 把四種候選佈局蓋在**暫存目錄**、真的跑一次兩家的掃�
   - 新增 **§7.1**：誠實標示 `/audit` 的 28 項產出與本任務的關係（**大多無關**），
     以及它另開的 `AUDIT_FIX_PLAN_20260822.md` 是**獨立的一條線、不是本任務的進度**。
 
-- **本任務實際進度（2026-08-22 對齊後）**：第一階段完成；
-  **§7 五列只關掉一列**（`/audit`）；其餘四列中三列需 user 實跑、一列（eval L2）處置已定案未做；
+- ~~**本任務實際進度（2026-08-22 對齊後）**：第一階段完成；
+  **§7 五列只關掉一列**（`/audit`）；其餘四列中三列需 user 實跑、一列（eval L2）處置已定案未做；~~
   **第二階段：2026-08-22 起走完握手鏈**——分岔 0／1／2／3 全定案（M-only／C＋D／B／
   維持版控）、票 01–04 收斂、map 通過對抗式覆核 Round 1（18 條逐條處置）、
   PR-1 對 map 的第一筆 production BLOCK 已落 event log。剩票 06–10。
+
+- **本任務實際進度（2026-08-23 重新對齊·以 event log 為準而非文件宣稱）**
+
+  上面那段 08-22 的進度描述**當時就已經過期**（寫「五列只關掉一列」時表上其實已關四列），
+  這次連同 §13.1 的 `research` 一起更正。⚠ **兩處都是狀態欄漂移**，不是設計變更。
+
+  - **第一階段（安裝＋接線）**：完成。
+  - **§7 未驗項：五列關掉四列**（`/audit`／`eval` L2／`to-tickets`＋`wayfinder`／`prototype`）。
+    **只剩 `grilling` 從未實跑**——event log 的 `skill` 欄 **0 次命中**（另有 6 筆是訊息裡
+    提到它、不是呼叫）。這一列**模型代跑不了**：要驗的正是「真人回答一輪之後 AWC-1 的
+    WARN 率會不會被推高」（K8 的預測），沒有真人問答就沒有那個輸入。
+  - **匯入 skill 的實跑狀態**（`state/events.*.ndjson` 的 `skill` 欄實查）：
+    `domain-modeling` 08-21 17:18／`research` 08-21 17:39／`prototype` 08-22 19:48
+    ／`skill-watch` 08-23 00:34；`to-tickets`／`wayfinder` 帶 `disable-model-invocation`，
+    由 user 親打、不進 `skill` 欄（§7.2 有紀錄）。**只有 `grilling` 是零**。
+  - **第二階段（規劃層改制）**：票 01–10 resolved；**票 11**（覆核 R2／R3／R4／R5 的機制
+    缺口）**§一 五項 2026-08-23 做完**（harness commit `22add37`，1041/1041，八條 fixture
+    紅燈先行），**§二／§三／§四 未動**。
+  - **map 已通過對抗式覆核 rounds=5**，並蓋出 `reviewed=` 雙 hash 的第一張合格憑證
+    （紅燈與綠燈都有 production 實例）。
 
 ### 第二階段決策票回寫（票 06 慣例·看板待辦來源）
 
@@ -707,7 +727,7 @@ prototype／research）**全部已裝**。
 | `to-tickets`／`wayfinder` | **我驗不了——工具層硬限制** | `Skill to-tickets cannot be used with Skill tool due to disable-model-invocation. Ask the user to run /to-tickets themselves... Do not replicate this skill's workflow by other means.` 連繞路模擬都被明文禁止。**這比 §1.7 原本寫的「模型叫不動」更硬**：不是不會叫，是被禁止叫 |
 | `grilling` | **未跑** | 需要 user 實際回答一輪才驗得到；且會踩 K8（推高 AWC-1 的 WARN 率） |
 | `prototype` | **未跑（刻意不跑）** | `prototype.md:26` 會自行 commit 到 throwaway branch，而這個 repo 多 session 併行＋外部程序定期 `git add -A`（K9）。不宜在未定處置前貿然跑 |
-| `research` | **未跑** | 會 `Write the findings to a single Markdown file in the repo`，**寫檔位置尚未定義**（K10） |
+| `research` | ✅ **已跑（2026-08-23 更正，本列原寫「未跑」）** | event log：`2026-08-21T17:39:20` 有 `skill=research`，**跟這份計畫書同一天、寫下這一列之後 21 分鐘**。產出＝`d:/IT-department/.scratch/research/skills-cli-update-semantics.md`（29KB，mtime 17:54），內容就是 `reference-external-skill-import` 那筆記憶的來源（`npx skills update` 會靜默覆寫在地修改）。⇒ **K10「寫檔位置尚未定義」在實務上早就解掉了**（落在 `.scratch/research/`），只是沒人回頭關這一列。要不要把那個位置寫成正式慣例，另議 |
 
 
 ### §13.2 K9／K10 處置（2026-08-21・user 定案「改 skill 內文加 LOCAL EDIT」）
