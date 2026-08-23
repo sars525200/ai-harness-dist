@@ -309,6 +309,7 @@ def run(verbose: bool = True):
                test_toggle_gate_refuses_when_nothing_enabled,
                test_toggle_gate_refuses_platform_without_capture_impl,
                test_skillmd_documents_toggle_gate,
+               test_skillmd_report_spec_covers_what_the_tool_prints,
                selftest_toggle_gate):
         try:
             fn()
@@ -484,6 +485,36 @@ def test_skillmd_documents_toggle_gate() -> None:
     check("SKILL.md 沒有把『靠人記得不要往下跑』當成現況陳述",
           "**一個都沒勾就不要往下跑**——那次擷取什麼都不會查" not in flat,
           "那是票 19 之前的原文：守的人是模型不是程式")
+
+
+def test_skillmd_report_spec_covers_what_the_tool_prints() -> None:
+    """SKILL.md 的**回報規格**（步驟 3／4／完成判準）必須涵蓋工具實際會印的每一類訊息。
+
+    這條擋的是 2026-08-24 真的發生過的漏：`skill_watch_run.py` 會印
+    `[Workflow] …` 逐項清單，而 SKILL.md 的回報規格**一個字都沒提 Workflow**
+    ⇒ 模型照規格寫回報時就把它整個丟掉了。而母計畫書 §18.7 ⑥ 卻記著
+    「報告改版：Workflow 不再隱形」——**工具那一半做到了，規格那一半沒有**。
+
+    ⚠ **界線**：它綁的是「規格有沒有涵蓋工具印得出來的東西」，
+    **不是**「模型回報時有沒有照做」。回報是模型產的字、不是程式輸出，測試看不到。
+    別把這條讀成「回報品質有守門」——那一半只能靠人看。
+    """
+    src = (HARNESS / "tools" / "skill_watch_run.py").read_text(encoding="utf-8")
+    doc = (HARNESS / "skills" / "skill-watch" / "SKILL.md").read_text(encoding="utf-8")
+    try:
+        spec = doc[doc.index("### 3. 回報給 user"):doc.index("## 換一個部門要改什麼")]
+    except ValueError:
+        check("SKILL.md 切得出回報規格那一段", False, "章節標題被改過，這支要跟著更新")
+        return
+    check("SKILL.md 切得出回報規格那一段", True)
+    # 判準來自**工具的原始碼**，不是我此刻寫的清單 —— 工具不印了就不該再要求規格提它
+    for probe, key, why in (
+            ("[Workflow]", "Workflow", "工具會逐項印出官方 Workflow"),
+            ("官方有、本機沒有的 Skill", "官方有、本機沒有", "工具會印這批的數量與名單")):
+        if probe not in src:
+            continue
+        check(f"回報規格涵蓋「{key}」（{why}）", key in spec,
+              "工具印得出來、但回報規格沒提 ⇒ 模型照規格寫就會把它丟掉")
 
 
 if __name__ == "__main__":
