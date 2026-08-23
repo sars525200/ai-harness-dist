@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 reviewed= 不符的 BLOCK 訊息必須附重算指令",
+ "why": "覆核 R2-M13 後半：那是唯一一個不附 _RECOMPUTE_HINT 的 BLOCK 分支，與模組自己第 227 行「攔下來之後唯一的出路就是這行指令；擋了人卻沒給路走＝與設計方向相反」直接衝突。它開的處方（讓兩個 hash 一致）恰恰需要那行指令。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=54895ad3be6e7258f232060cf1c9cb164751a64d8f095cc01ccd514bb78cd6d7 reviewed=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc rounds=1 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-revhint",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "重算 hash"
+ },
+ "rule": "pr1_plan_review_marker"
+}

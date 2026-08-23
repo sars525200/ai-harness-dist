@@ -208,6 +208,20 @@ _SKIP = re.compile(
 )
 # 舊格式（無 hash）—— 認得出來但視為無效，給出明確的升級指引而不是靜默放行。
 _SKIP_LEGACY = re.compile(r"<!--\s*ADVERSARIAL_REVIEW_SKIP\s*:\s*([^>]*?)-->")
+# 歷史紀錄（2026-08-23·覆核 R2-H4 定案 A）：「這份文件曾經在某時審過」的位置。
+#
+# 為什麼需要它：PASSED 與 SKIP 並存時規則先查 SKIP ⇒ 檔案靠逃生口活著，而打開檔案
+# 的人看到的是「ADVERSARIAL_REVIEW_PASSED rounds=N」。兩句單獨都真、擺在一起會誤導，
+# 被誤導的（稽核角色／看板／讀檔的人）**恰好都看不到 hook 訊息**。實例＝
+# SKILL_IMPORT_WAYFINDER_PLAN.md，而且那張 SKIP 的理由明寫「PASSED 刻意保留為歷史
+# 紀錄」——**是有意識的合理需求**，所以處置不是禁掉它，是給它一個不會被誤讀的形狀。
+#
+# 兩個刻意的性質：①**不驗 hash**——歷史 marker 的 hash 本來就預期是過期的，那正是
+# 它在說的事；②**不進 content_hash**（見下方 filter）——否則光是把舊 PASSED 改名成
+# HISTORY 就會讓現行憑證當場失效，遷移變成「為了留痕而必須重審一輪」。
+_HISTORY = re.compile(
+    r"<!--\s*ADVERSARIAL_REVIEW_HISTORY\s+sha256=([0-9a-fA-F]{64})[^>]*-->"
+)
 
 # 雜湊範圍排除區間：狀態／進度／完成記錄放這裡面，改它不會讓 marker 失效。
 #
@@ -300,6 +314,32 @@ def note_failopen(reason: str, transcript_path: str = "") -> None:
         pass
 
 
+def _review_scope(text: str) -> str:
+    """審查範圍＝扣掉 `REVIEW_SCOPE_IGNORE` 區之後的內容。
+
+    覆核 R2-M14（2026-08-23）：`content_hash` 扣 IGNORE 區、`_verification_gap`
+    原本吃不扣的全文 ⇒ **兩道機制對「範圍」的定義相反**。實際後果是把
+    「## 驗證方式」整節搬進 `REVIEW_SCOPE_IGNORE_START/END`：守門看得到（照過），
+    而 hash 看不到（那一節從此不在 hash 內，可以每輪重寫、marker 永不失效）。
+    **改「怎麼驗」正是最該重審的動作之一**，那條路把它變成免審。
+
+    模組註解一直宣稱「這一節被刻意留在 hash 範圍內（改它就要重審）」，但在此之前
+    沒有任何檢查在強制它。範圍的定義只能有一個，就是這裡。
+    """
+    return _IGNORE_BLOCK.sub("", text)
+
+
+def _verification_gap_block(name: str, path: str, gap: str):
+    return block(
+        f"{name} 的「## 驗證方式」{gap}——**規劃圖不得在沒寫怎麼驗之前推進**。\n"
+        f"這是 `/design-spec` 步驟 4 那道守門的等價物：每一項要答得出"
+        f"**「怎麼證明它會紅」**，不是寫「會測試」。\n"
+        f"⚠ 那一節必須在 hash 範圍內——包進 REVIEW_SCOPE_IGNORE 區等同沒寫（R2-M14）。\n"
+        f"寫完之後 hash 會變，記得重簽 marker：\n"
+        + _RECOMPUTE_HINT.format(path=path)
+    )
+
+
 def applies(ctx) -> bool:
     return bool(_touched_plan_files(ctx.turn_transcript_path))
 
@@ -325,9 +365,39 @@ def check(ctx):
         name = os.path.basename(path)
         actual = content_hash(text)
 
+        # 覆核 R2-H4（2026-08-23·定案 A）：PASSED 與 SKIP **不得並存**。
+        # 規則先查 SKIP ⇒ 這個檔實際是靠逃生口放行的，但讀檔的人看到「已通過覆核」。
+        # M5 的多 marker 死結守門只數 PASSED 的**個數**，混合情形一次都不會叫。
+        # 這道必須排在 SKIP 分支之前，否則 SKIP 相符就 continue 了、永遠走不到這裡。
+        if _PASSED.search(probe) and (_SKIP.search(probe) or _SKIP_LEGACY.search(probe)):
+            return block(
+                f"{name} 同時掛著 ADVERSARIAL_REVIEW_PASSED 與 ADVERSARIAL_REVIEW_SKIP。"
+                f"規則先查 SKIP ⇒ 這個檔**實際上是靠逃生口放行的**，"
+                f"但打開檔案的人（稽核角色、看板、以及任何讀它的人）看到的是「已通過覆核」"
+                f"——他們看不到這則訊息。\n"
+                f"處置二選一：\n"
+                f"  ①這份**真的**已通過覆核 → 刪掉 SKIP，只留 PASSED（hash 要對得上現況）。\n"
+                f"  ②PASSED 是舊的、想留作歷史 → 把那一行的 `PASSED` 改成 `HISTORY`：\n"
+                f"    <!-- ADVERSARIAL_REVIEW_HISTORY sha256=<原本那個> "
+                f"rounds=<N> at=<當初時間> -->\n"
+                f"    HISTORY 不驗 hash、也不進 content_hash，"
+                f"**改名不會讓現行的 SKIP 失效**（可以放心遷移）。\n"
+                + _RECOMPUTE_HINT.format(path=path)
+            )
+
         skip = _SKIP.search(probe)
         if skip:
             if skip.group(1).lower() == actual:
+                # 覆核 R2-H3（2026-08-23）：逃生口略過的是「審查」，不是「有沒有寫怎麼驗」。
+                # 這個 continue 原本排在 _verification_gap 之前 ⇒ 一份完全沒有
+                # 「## 驗證方式」的 map，蓋一個 hash 相符的 SKIP 就過；而缺 marker 的
+                # BLOCK 訊息逐字附上 SKIP 寫法＝**閘門自己在教繞法**，票 05 想擋的
+                # 「不寫怎麼驗就開工」原封不動。SKIP 可以說「這次不用審」，
+                # 不能說「這份規劃圖不必答得出怎麼證明它會紅」。
+                if is_map:
+                    gap = _verification_gap(_review_scope(probe))
+                    if gap:
+                        return _verification_gap_block(name, path, gap)
                 skipped.append(f"{name}（理由：{skip.group(2).strip()}）")
                 continue
             return block(
@@ -367,7 +437,13 @@ def check(ctx):
                     f"沒有狀態行可改。檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker。"
                     f"請先跑 /adversarial-review（map 是合法的審查對象，見 "
                     f"docs/agents/issue-tracker.md 的 map 慣例），審完在檔尾補上：\n"
-                    f"    <!-- ADVERSARIAL_REVIEW_PASSED sha256=<自己算> rounds=<N> at=<ISO時間> -->\n"
+                    f"    <!-- ADVERSARIAL_REVIEW_PASSED sha256=<現況> "
+                    f"reviewed=<派審查者當下> rounds=<N> at=<ISO時間> -->\n"
+                    f"⚠ **`reviewed=` 不要省略**（併行防護·2026-08-22 起）：它記的是"
+                    f"**派出審查者那一刻**算的 hash，`sha256=` 記蓋章當下。兩者不同代表"
+                    f"覆核期間審查範圍被改過，那段改動沒被審過卻會跟著憑證被當成已審。"
+                    f"做法＝派審查者之前先算一次記下來。省略它照舊放行（向後相容），"
+                    f"但**省略在 diff 裡零痕跡**，等於這道防護一次都不會啟動。\n"
                     f"{_RECOMPUTE_HINT.format(path=path)}\n"
                     f"審查範圍＝Destination／Notes／驗證方式／Out of scope；"
                     f"Decisions so far 與 Not yet specified 應包在 REVIEW_SCOPE_IGNORE 區內"
@@ -378,35 +454,24 @@ def check(ctx):
             return block(
                 f"{name} 標記為「待審核」，但檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker。"
                 f"請先跑 /adversarial-review，審完在檔尾補上：\n"
-                f"    <!-- ADVERSARIAL_REVIEW_PASSED sha256=<自己算> rounds=<N> at=<ISO時間> -->\n"
+                f"    <!-- ADVERSARIAL_REVIEW_PASSED sha256=<現況> "
+                f"reviewed=<派審查者當下> rounds=<N> at=<ISO時間> -->\n"
+                f"⚠ **`reviewed=` 不要省略**：它記的是派出審查者那一刻算的 hash，"
+                f"兩個 hash 不同代表覆核期間審查範圍被改過。省略照舊放行（向後相容），"
+                f"但省略在 diff 裡零痕跡＝這道防護一次都不會啟動。\n"
                 f"{_RECOMPUTE_HINT.format(path=path)}\n"
                 f"若這次不需要審查，改用逃生口："
                 f"<!-- ADVERSARIAL_REVIEW_SKIP sha256=<自己算>: <理由> -->；"
                 f"或把狀態改回「> 狀態：草稿」。"
             )
 
-        rev = _REVIEWED.search(probe)
-        if rev and rev.group(1).lower() != passed.group(1).lower():
-            return block(
-                f"{name} 的 marker 兩個 hash 對不上：`reviewed=` 記的是覆核當下審查者"
-                f"讀到的內容，`sha256=` 是蓋章當下的現況——**代表覆核期間審查範圍被改過**"
-                f"（多半是另一個 session）。那個改動沒有被審過，卻會跟著憑證一起被當成已審。\n"
-                f"處置：確認那段改動是什麼；要嘛把它退掉、要嘛重跑一輪覆核並讓兩個 hash 一致。"
-            )
-
-        # marker 有效之後才查驗證方式：先擋「沒被審」再擋「沒寫怎麼驗」，
-        # 一次只給一件事做，否則 BLOCK 訊息會同時要人做兩件不相干的事。
-        if is_map and passed.group(1).lower() == actual:
-            gap = _verification_gap(probe)
-            if gap:
-                return block(
-                    f"{name} 的「## 驗證方式」{gap}——**規劃圖不得在沒寫怎麼驗之前推進**。\n"
-                    f"這是 `/design-spec` 步驟 4 那道守門的等價物：每一項要答得出"
-                    f"**「怎麼證明它會紅」**，不是寫「會測試」。\n"
-                    f"寫完之後 hash 會變，記得重簽 marker：\n"
-                    + _RECOMPUTE_HINT.format(path=path)
-                )
-
+        # 覆核 R2-M13（2026-08-23）：**這三道的順序本身就是判準**。
+        # 原本是 reviewed → 驗證方式 → 過期，於是一個「只是過期」的 marker，
+        # 只要當初有寫 reviewed=，就會先撞上 reviewed 分支、拿到「覆核期間審查範圍
+        # 被改過（多半是另一個 session）」這個**錯的歸因**——而那是唯一一個不附重算
+        # 指令的分支 ⇒ 擋了人卻沒給路走（與第 227 行的註解直接衝突），下一步最省力的
+        # 動作就變成走 SKIP，而 SKIP 的寫法就在前一個分支的訊息裡。
+        # 正確順序＝先問「marker 還是不是現況」，再問「它是不是誠實蓋的」。
         if passed.group(1).lower() != actual:
             return block(
                 f"{name} 有 ADVERSARIAL_REVIEW_PASSED marker，但 hash 對不上"
@@ -417,6 +482,29 @@ def check(ctx):
                 f"就不會影響 hash；若改的是結論本身，請重跑 /adversarial-review。\n"
                 + _RECOMPUTE_HINT.format(path=path)
             )
+
+        rev = _REVIEWED.search(probe)
+        if rev and rev.group(1).lower() != passed.group(1).lower():
+            return block(
+                f"{name} 的 marker 兩個 hash 對不上：`reviewed=` 記的是**派出審查者當下**"
+                f"的內容，`sha256=` 是蓋章當下的現況（已確認等於檔案現況）——"
+                f"**代表覆核期間審查範圍被改過**，而那段改動沒有被審過，"
+                f"卻會跟著憑證一起被當成已審。\n"
+                f"兩種可能，先分清楚是哪一種：①**另一個 session 動了這個檔**"
+                f"（`git log -1 --stat` 看最後一筆是誰的）；②**你自己照審查意見改了 "
+                f"in-scope 段落**——那是正常流程，但代價是最後一輪必須是「零改動輪」，"
+                f"要再派一輪確認沒有新意見，才蓋得出兩個 hash 一致的章。\n"
+                f"處置：①退掉那段改動，或②重跑一輪覆核並讓兩個 hash 一致。\n"
+                + _RECOMPUTE_HINT.format(path=path)
+            )
+
+        # marker 已確認有效（hash 是現況、reviewed 一致）之後才查驗證方式：
+        # 先擋「沒被審」再擋「沒寫怎麼驗」，一次只給一件事做，
+        # 否則 BLOCK 訊息會同時要人做兩件不相干的事。
+        if is_map:
+            gap = _verification_gap(_review_scope(probe))
+            if gap:
+                return _verification_gap_block(name, path, gap)
 
     if skipped:
         return bypassed(
@@ -449,7 +537,8 @@ def content_hash(text: str) -> str:
     body = _IGNORE_BLOCK.sub("", text)
     lines = [
         ln for ln in body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        if not (_PASSED.search(ln) or _SKIP.search(ln) or _SKIP_LEGACY.search(ln))
+        if not (_PASSED.search(ln) or _SKIP.search(ln) or _SKIP_LEGACY.search(ln)
+                or _HISTORY.search(ln))
     ]
     collapsed: list[str] = []
     for ln in lines:

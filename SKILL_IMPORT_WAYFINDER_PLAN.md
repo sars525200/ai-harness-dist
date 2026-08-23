@@ -791,6 +791,6 @@ lock 檔測試前後內容一致（已比對）。完整 `capability_checks.py` 
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
-<!-- ADVERSARIAL_REVIEW_PASSED sha256=ef47173339edf5a379cd8ecb8565aa83c394b805393dbdba1793e7ab290ede0e rounds=2 at=2026-08-21T15:02:01Z -->
+<!-- ADVERSARIAL_REVIEW_HISTORY sha256=ef47173339edf5a379cd8ecb8565aa83c394b805393dbdba1793e7ab290ede0e rounds=2 at=2026-08-21T15:02:01+08:00 -->
 
-<!-- ADVERSARIAL_REVIEW_SKIP sha256=62cba8532a9fd3282356dcc4fd8bbbe76f7b039ab6c9f15349e1786029fde426: 只更新狀態欄——§7 的 /audit 標成已跑、更正一個被證偽的前提、修掉 grilling 那列的斷行 bug、新增 §7.1 誠實標示 audit 產出與本任務的關係、§12 加 v7。未改任何設計決定或分岔。§7 已包進 REVIEW_SCOPE_IGNORE，之後更新進度不需再 SKIP。上方 rounds=2 的 PASSED marker 刻意保留為歷史紀錄，它的 hash 對不上正說明內容自那次覆核後變過。 -->
+<!-- ADVERSARIAL_REVIEW_SKIP sha256=62cba8532a9fd3282356dcc4fd8bbbe76f7b039ab6c9f15349e1786029fde426: 只更新狀態欄——§7 的 /audit 標成已跑、更正一個被證偽的前提、修掉 grilling 那列的斷行 bug、新增 §7.1 誠實標示 audit 產出與本任務的關係、§12 加 v7。未改任何設計決定或分岔。§7 已包進 REVIEW_SCOPE_IGNORE，之後更新進度不需再 SKIP。上方那張是 ADVERSARIAL_REVIEW_HISTORY（2026-08-23 從 PASSED 遷過來·覆核 R2-H4 定案 A）：它記錄「這份文件曾在 8/21 跑過 rounds=2」，hash 對不上正說明內容自那次覆核後變過——那是歷史該有的樣子，不是憑證。原本用 PASSED 寫，規則先查 SKIP 所以照樣放行，但讀檔的人會看到「已通過覆核」而誤以為現在還有效。 -->

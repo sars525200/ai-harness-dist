@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 map 缺 marker 的 BLOCK 訊息必須教 reviewed= 欄位",
+ "why": "覆核 R2-M12：_REVIEWED 只在 marker 帶 reviewed= 時才比對，而 BLOCK 訊息教的形狀不含它、issue-tracker 慣例也沒提。模型被擋之後最常見的行為就是照訊息逐字抄（票 04 紀錄如此），抄出來的 marker 沒有 reviewed= ⇒ 併行防護一次都不會啟動，而省略在 diff 裡零痕跡。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-teachrev",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "reviewed="
+ },
+ "rule": "pr1_plan_review_marker"
+}

@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 map 蓋 SKIP 就能繞過「驗證方式空著就擋」→ 應 BLOCK",
+ "why": "覆核 R2-H3：SKIP 分支的 continue 排在 _verification_gap 之前，所以一份完全沒寫怎麼驗的 map，蓋一個 hash 相符的 SKIP 就過。而缺 marker 的 BLOCK 訊息逐字附上 SKIP 寫法＝閘門自己在教繞法，票 05 想擋的事原封不動。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_SKIP sha256=f82a02340be44dbfcac494328486f9b4ac2f785605da7d71832ea4823ad2b145: 這次只改狀態，不用審 -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-skipgate",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "驗證方式"
+ },
+ "rule": "pr1_plan_review_marker"
+}

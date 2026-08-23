@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 過期的 PASSED 與相符的 SKIP 並存 → 應 BLOCK，並教人把舊的改成 HISTORY",
+ "why": "覆核 R2-H4（票 06 曾指名記在票 10、票 10 收斂時掉了）：閘門先查 SKIP ⇒ 檔案靠逃生口活著，但打開檔案的人看到的是「ADVERSARIAL_REVIEW_PASSED rounds=2」。M5 修的多 marker 死結守門**只數 PASSED**，混合情形不叫。被誤導的是稽核角色、看板、以及讀檔的人——他們都看不到 hook 訊息。實例：SKILL_IMPORT_WAYFINDER_PLAN.md:793/795。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee rounds=2 at=T -->\n\n<!-- ADVERSARIAL_REVIEW_SKIP sha256=54895ad3be6e7258f232060cf1c9cb164751a64d8f095cc01ccd514bb78cd6d7: 只更新狀態欄 -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-mixed",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "BLOCK",
+  "message_contains": "ADVERSARIAL_REVIEW_HISTORY"
+ },
+ "rule": "pr1_plan_review_marker"
+}

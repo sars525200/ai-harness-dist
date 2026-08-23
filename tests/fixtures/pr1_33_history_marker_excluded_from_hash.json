@@ -1,0 +1,55 @@
+{
+ "name": "PR-1 HISTORY marker 不計入 content_hash → 加了它不會讓現行 PASSED 失效",
+ "why": "選 A 的前提：歷史欄位若計入 hash，光是把舊 PASSED 改名成 HISTORY 就會讓現行憑證當場失效，遷移變成「為了留痕而必須重審一輪」。HISTORY 的 hash 本來就預期是過期的（那正是它的意義），所以它必須跟 PASSED／SKIP 一樣被整行扣除。紅燈＝改動前 hash 含 HISTORY 那行 ⇒ 對不上 ⇒ BLOCK。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_HISTORY sha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee rounds=2 at=2026-08-21 -->\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=54895ad3be6e7258f232060cf1c9cb164751a64d8f095cc01ccd514bb78cd6d7 rounds=3 at=T -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-histhash",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "ALLOW"
+ },
+ "rule": "pr1_plan_review_marker"
+}

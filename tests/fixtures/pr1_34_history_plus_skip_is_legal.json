@@ -1,0 +1,56 @@
+{
+ "name": "PR-1 HISTORY ＋ SKIP 並存 → 應 ALLOW（bypassed），這是混合情形的遷移目標",
+ "why": "禁止 PASSED＋SKIP 並存之後，必須有一條合法的路讓「曾經審過、現在靠逃生口活著」表達得出來，否則 R2-H4 的處置等於把一個合理需求變成違規。HISTORY＋SKIP 就是那條路：讀檔的人一眼看出「歷史上審過、現在不是靠那張憑證」，而 hook 照樣記錄逃生口已使用。",
+ "workspace": {
+  "files": {
+   ".scratch/test-effort/map.md": "# map\n\n## Destination\n\n測試用的目的地。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n跑 `py -3 x.py` 全綠；紅燈＝刪掉守門那行必轉紅。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_HISTORY sha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee rounds=2 at=2026-08-21 -->\n\n<!-- ADVERSARIAL_REVIEW_SKIP sha256=54895ad3be6e7258f232060cf1c9cb164751a64d8f095cc01ccd514bb78cd6d7: 只更新狀態欄 -->\n"
+  },
+  "transcript": [
+   {
+    "type": "user",
+    "message": {
+     "content": "更新規劃圖"
+    }
+   },
+   {
+    "type": "assistant",
+    "message": {
+     "content": [
+      {
+       "type": "tool_use",
+       "name": "Edit",
+       "input": {
+        "file_path": "<DIR>/.scratch/test-effort/map.md",
+        "old_string": "x",
+        "new_string": "y"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "type": "user",
+    "message": {
+     "content": [
+      {
+       "type": "tool_result",
+       "content": "ok"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "payload": {
+  "hook_event_name": "Stop",
+  "session_id": "fx-pr1-histskip",
+  "transcript_path": "<TRANSCRIPT>",
+  "cwd": "<DIR>",
+  "stop_hook_active": false
+ },
+ "expect": {
+  "decision": "ALLOW",
+  "bypassed": true
+ },
+ "rule": "pr1_plan_review_marker"
+}
