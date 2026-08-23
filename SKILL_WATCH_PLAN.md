@@ -884,7 +884,7 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 
 | 狀態 | 項目 | 說明 |
 |---|---|---|
-| ⏳ 待做 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
+| ✅ 已完成 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
 | ⏳ 待做 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
 | ⏳ 待做 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
 | ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
