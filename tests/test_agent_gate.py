@@ -30,6 +30,23 @@ CASES = [
     # ⚠ 位置參數是「要查的路徑」，**不能**放進 _GIT_NO_POSITIONAL（放了等於整條沒用）。
     ("git check-ignore -v state/review_inflight.json", True, "查 ignore 規則命中"),
     ("git check-ignore state/foo.json", True, "查 ignore（不帶 -v）"),
+    # ── 2026-08-23：`ls` 的唯讀形式。盤存目錄是稽核角色的第一個動作，
+    #    被擋掉的後果不是「慢一點」是**整輪 tool block 零產出**
+    #    （2026-08-22 票 08 實測，改用 4 次 Glob 才補回同樣的清單）。
+    ("ls", True, "列目錄"),
+    ("ls -la D:/.ai-harness/state", True, "列目錄（合寫旗標）"),
+    ("ls -R D:/IT-department/.claude", True, "遞迴列目錄"),
+    ("ls -la D:/a D:/b", True, "多個路徑（ls 不寫檔，限制個數沒有安全收益）"),
+    ("ls --color=always", False, "長旗標不在白名單"),
+    # ── 同日：`py -3 <harness 腳本> <任意路徑>`。
+    #    現行實作把「所有 .py 引數」都當成要跑的腳本，於是「拿 harness 的工具去
+    #    讀專案的檔」被擋 —— 而安全邊界是**哪一段程式碼會跑**，不是**提到哪些路徑**。
+    ("py -3 D:/.ai-harness/tools/py_syntax_check.py D:/IT-department/SOP_PROD/05_UI_Demo/server.py",
+     True, "harness 腳本讀專案檔（第一個 .py 才是被執行的）"),
+    ("py -3 D:/IT-department/SOP_PROD/05_UI_Demo/server.py", False,
+     "被執行的腳本不在 harness 底下 —— 仍要擋"),
+    ("py -3 -m py_compile D:/IT-department/x.py", False,
+     "-m 仍擋：py_compile 會寫 __pycache__，破壞唯讀不變量"),
     ('node --check "d:/IT-department/SOP/05_UI_Demo/app.js"', True,
      "CLAUDE.md §6 要求兩端都跑 node --check"),
     ("node -c app.js", True, "--check 的短旗標"),

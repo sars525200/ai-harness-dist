@@ -111,12 +111,14 @@ def _decide(command: str) -> "str | None":
         return "node 只允許語法檢查（node --check <file>）"
     if head in {"py", "python", "python3", "pythonw"}:
         return _decide_py(cmd)
+    if head == "ls":
+        return _decide_ls(tokens)
     if head in {"cmp", "fc", "diff"}:
         return None
 
     return (
         f"指令 {head!r} 不在唯讀角色的白名單內。"
-        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、"
+        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、ls（列表旗標）、"
         f"py -3 <D:\\.ai-harness 底下的探測腳本>；"
         f"讀檔請用 Read／Grep／Glob 工具。"
     )
@@ -129,6 +131,34 @@ _PY_ALLOWED_ROOT = os.path.dirname(HOOKS_DIR).replace("\\", "/").lower().rstrip(
 # 真正的守門是上面那條「只放行 harness 底下的既有腳本」。新增寫入開關要同步加進來。
 _PY_WRITE_FLAGS = {"--write", "--write-snapshot", "--apply", "--force", "--fix",
                    "--init", "--append-history", "--commit", "--publish"}
+
+
+# `ls` 的唯讀形式（2026-08-23）。**盤存目錄是稽核角色的第一個動作**，
+# 而它被擋掉的後果不是「角色慢一點」是**整輪 tool block 零產出**——
+# 2026-08-22 票 08 實測，`ls -la <dir>` 與 `ls -R <dir>` 兩條全被擋，
+# 改用 4 次 `Glob` 才補回同樣的清單。與其他被擋項不同的是：
+# **這一項每次稽核都必然發生**，不是偶爾才需要的能力。
+#
+# 收窄只有兩條：只認列表用的短旗標、拒絕長旗標。
+# ⚠ **刻意不限位置參數個數**（登記時寫了「限單一路徑」，實作時推翻）：
+#   `ls` 一個字都不寫，限制個數沒有任何安全收益，只會逼角色分成多次呼叫。
+#   真正的守門是上面那條「不得含 shell 元字元」——沒有它，`ls x && rm y` 就通了。
+_LS_FLAGS = set("laRrhtSF1d")
+
+
+def _decide_ls(tokens) -> "str | None":
+    from contract import _unquote
+    for t in tokens[1:]:
+        v = _unquote(t)
+        if v.startswith("--"):
+            return (f"ls 的長旗標 {v!r} 不在唯讀白名單 —— 只認 -l／-a／-R 這類列表旗標。"
+                    f"長旗標的行為差異大（`--color`／`--time-style`…），一條一條放行才驗得動。")
+        if v.startswith("-") and len(v) > 1:
+            bad = [c for c in v[1:] if c not in _LS_FLAGS]
+            if bad:
+                return (f"ls 旗標 -{''.join(bad)} 不在唯讀白名單"
+                        f"（可用：-{''.join(sorted(_LS_FLAGS))}）。")
+    return None
 
 
 def _decide_py(raw_command: str) -> "str | None":
@@ -182,7 +212,11 @@ def _decide_py(raw_command: str) -> "str | None":
         low = a.lower()
         if low in {"-c", "-m"}:
             return ("py/python 的 -c／-m 是執行任意程式碼，不在唯讀白名單內"
-                    "（放行的是「跑一支看得見的既有腳本」，不是「跑一段字串」）。")
+                    "（放行的是「跑一支看得見的既有腳本」，不是「跑一段字串」）。"
+                    "⚠ 若你要的是**語法檢查**，用 "
+                    r"`py -3 D:\.ai-harness\tools\py_syntax_check.py <檔…>` —— "
+                    "`-m py_compile` 不放行的理由不是它危險，是**它會寫 `__pycache__`**，"
+                    "而這道閘門的不變量是唯讀。")
         if low.startswith("--write") or low in _PY_WRITE_FLAGS:
             return (f"參數 {a!r} 會讓腳本寫檔——唯讀角色只能跑不帶寫入開關的形狀。"
                     f"要寫請回報給主 session 代跑。")
@@ -192,7 +226,13 @@ def _decide_py(raw_command: str) -> "str | None":
     if not scripts:
         return ("py/python 只放行「跑一支 .py 檔」的形狀，這條指令裡看不到 .py 檔。")
 
-    for s in scripts:
+    # ⚠ **只有第一個 `.py` 是被執行的東西**（2026-08-23 訂正）。
+    # 在此之前這裡對「所有 .py 引數」都要求落在 harness 底下，於是
+    # `py -3 <harness 的工具> <專案的檔>` 這種「拿唯讀工具去讀別處的檔」被擋 ——
+    # 而**安全邊界是「哪一段程式碼會跑」，不是「指令裡提到哪些路徑」**。
+    # 兩者混在一起的後果：稽核角色連語法檢查專案的 .py 都做不到（被喊過兩次）。
+    # 其餘 .py 是引數，寫入風險仍由上面的 `_PY_WRITE_FLAGS` 黑名單守。
+    for s in scripts[:1]:
         norm = s.replace("\\", "/").lower()
         if not norm.startswith(_PY_ALLOWED_ROOT):
             return (f"腳本 {s!r} 不在 D:\\.ai-harness 底下——唯讀角色只能跑那裡的既有探測"

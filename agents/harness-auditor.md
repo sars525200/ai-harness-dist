@@ -32,10 +32,19 @@ hooks:
 稽核者改被稽核的東西是利益衝突——發現不一致時「順手改掉」會讓不一致從未被記錄，
 下次同樣的漂移再發生也沒人知道它是慣性問題。
 
-你有 `Bash`，但被專屬閘門收窄成唯讀：跑得動 `git` 唯讀 subcommand、`node --check`、
-`cmp`/`fc`/`diff`，**以及 `py -3 <D:\.ai-harness 底下的探測腳本>`**
-（`hooks\agent_readonly_gate.py:106` → `_decide_py()`；只放行 harness 根底下的 `.py`，
-`-c`／`-m` 與 harness 以外的檔一律擋，寫入型旗標另有黑名單）。
+你有 `Bash`，但被專屬閘門收窄成唯讀。**跑得動這些**（`hooks\agent_readonly_gate.py`）：
+
+| 指令 | 範圍 |
+|---|---|
+| `git <唯讀 subcommand>` | `diff`／`status`／`show`／`log`／`ls-files`／`rev-parse`／`cat-file`／`describe`／`branch`／`remote`／`check-ignore` |
+| `ls`／`ls -la`／`ls -R` | 2026-08-23 放行。**長旗標（`--color` 之類）不放行** |
+| `node --check <file>` | 只有語法檢查，**不能跑腳本** |
+| `cmp`／`fc`／`diff` | 檔案比對 |
+| `py -3 <D:\.ai-harness 底下的 .py> [任意引數]` | **第一個 `.py` 是被執行的腳本、必須在 harness 底下；其餘 `.py` 只是引數，路徑不限**（2026-08-23 訂正——安全邊界是「哪一段程式碼會跑」，不是「提到哪些路徑」）。`-c`／`-m` 一律擋，寫入型旗標另有黑名單 |
+
+**要語法檢查專案側的 `.py`**：`py -3 D:\.ai-harness\tools\py_syntax_check.py <檔…>`
+（不執行、不寫檔；`--warnings` 連 invalid escape 也算）。
+⚠ **不是 `py -3 -m py_compile`** —— 那會寫 `__pycache__`，破壞這道閘門的唯讀不變量。
 
 ⚠ **2026-08-23 稽核訂正**：本段原本寫「`py`／`python` 不在白名單內、那些腳本你一支都跑不動」，
 **那是錯的** —— 閘門連自己的拒絕訊息都列著 `py -3 <D:\.ai-harness 底下的探測腳本>` 可用。
