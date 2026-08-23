@@ -454,15 +454,24 @@ def main(argv: list[str] | None = None) -> int:
             print(f"      ⚠ 官方文件抓取失敗：{err}")
             print("      → 本次只有注入清單那一半，**不是完整檢查**")
         else:
+            desc0 = official.get("descriptions", {})
             cross = cross_check(names, official)
             miss = cross["officialSkillsMissingLocally"]
             print(f"      官方標記 Skill {len(official['skills'])} 支、"
                   f"Workflow {len(official['workflows'])} 支")
+            # ⚠ Workflow 曾經是完全的盲區（2026-08-23 發現）：交叉驗證只比 Skill 那一類，
+            # 而 `/deep-research` 被官方標成 `[Workflow]` ⇒ 它從來沒被端到人面前過，
+            # 儘管本檔開場白自己就在講「我們正打算自己包一支功能更弱的」講的就是它。
+            # Workflow 依定義不進注入清單，所以「有沒有」比不出來——但**列出來讓人看見**
+            # 是這支工具的本份（它的任務是「告訴人平台有什麼可以用」）。
+            # ⚠ 仍未做：workflow 沒有基準 ⇒ **官方新增一個 workflow 不會被報成變動**。
+            for w in official["workflows"]:
+                print(f"      [Workflow] {w} — {skill_watch.gist(desc0.get(w, ''))}")
             # 逐項附描述：報告那張對照表要有「這東西是幹嘛的」，而
             # 「可合併／可取代」的判斷恰恰需要它（2026-08-23 user 定的版型）。
             # 這一批多半是 headless／interactive 的系統性差異（無頭沒有 Artifact 工具），
             # 是**常態不是變動** ⇒ 只印名字。附說明的留給下面「這次才新出現」那批。
-            desc = official.get("descriptions", {})
+            desc = desc0
             print(f"      官方有、本機沒有的 Skill：{len(miss)} 支"
                   + (f" → {', '.join(miss)}" if miss else ""))
             # ⚠ 覆核 N-9：v2 把恆真常數換成了真實差集，但差集去了跟常數同一個
