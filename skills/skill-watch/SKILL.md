@@ -22,6 +22,30 @@ description: 檢查你使用的 AI 平台有沒有推出新技能、改名、或
 
 ## 步驟
 
+### 0. 先確認要查哪些平台
+
+```
+py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
+```
+
+（一律走 `run.py`，理由見步驟 1 的 symlink 說明。）
+
+它會印「要查的平台」與「定義裡有、你還沒勾」。**兩件事要照做**：
+
+1. **有沒勾的就用選擇題問 user 這次要不要勾**（全域 `CLAUDE.md`：問題一律用選擇題）。
+   不要自己替他決定——「要監控哪些平台」是他的事，這支 skill 存在的理由就是這個。
+2. **要改就走旗標，不要自己用 Edit 改那個 JSON**：
+
+   ```
+   py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms --enable <平台 id>
+   py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms --disable <平台 id>
+   ```
+
+   理由：寫回要保留使用者手加的其他鍵與其他平台的開關，而那份保留邏輯有測試守著
+   （`tests/test_skill_watch_platforms.py`，含三種寫壞的變異證明）。用 Edit 改就繞過了它。
+
+**一個都沒勾就不要往下跑**——那次擷取什麼都不會查，只會白花一次時間。
+
 ### 1. 跑偵測
 
 ```

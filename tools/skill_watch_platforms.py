@@ -139,8 +139,9 @@ def describe(on: list[dict], off: list[dict]) -> str:
     if off:
         lines.append("定義裡有、你還沒勾：" + "、".join(
             f"{p['displayName']}（{p['id']}）" for p in off))
-        lines.append(f"要勾請編輯 {TOGGLES_PATH}，格式："
-                     '{"enabled": {"' + off[0]["id"] + '": true}}')
+        lines.append(f"要勾請跑：py -3 <harness>/skills/skill-watch/run.py "
+                     f"--platforms --enable {off[0]['id']}")
+        lines.append(f"⚠ 不要直接手改 {TOGGLES_PATH} —— 走旗標才會經過保留其他鍵的邏輯。")
     return "\n".join(lines)
 
 
@@ -148,13 +149,70 @@ def main(argv=None) -> int:
     import sys
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    argv = list(sys.argv[1:] if argv is None else argv)
     try:
+        for flag, val in (("--enable", True), ("--disable", False)):
+            if flag in argv:
+                pid = argv[argv.index(flag) + 1]
+                path = set_enabled(pid, val)
+                print(f"已把 {pid} 設為 {'開' if val else '關'} → {path}")
         on, off = resolve()
+    except IndexError:
+        print("[skill-watch-platforms] --enable／--disable 後面要接平台 id", file=sys.stderr)
+        return 2
     except PlatformConfigError as exc:
         print(f"[skill-watch-platforms] {exc}", file=sys.stderr)
         return 2
     print(describe(on, off))
     return 0
+
+
+
+
+def set_enabled(platform_id: str, value: bool) -> Path:
+    r"""把某個平台的開關寫回 `TOGGLES_PATH`。回傳寫到哪個檔（給呼叫端印出來）。
+
+    **為什麼要有這支函式，而不是讓模型用 Edit 改檔**（票 12）：沒有程式路徑就沒有
+    變異對象，那條「寫回不破壞檔案」的驗證會變成驗不到東西的空殼。
+
+    **只動那一個布林值**：其餘頂層 key、`enabled` 裡其他平台、以及 key 的順序全部保留。
+    ⚠ 實測（2026-08-23）：Python 3.7+ 的 dict 保序，`json.dumps` **不會**重排 key，
+    只有 `sort_keys=True` 才會 —— 所以「順序被正規化」不是這裡的風險。
+    真正的風險是**整個 `enabled` 被換成只有這一個平台**，或**丟掉其他頂層 key**。
+    """
+    if not isinstance(value, bool):
+        raise PlatformConfigError(
+            f"set_enabled 的 value 必須是布林，收到 {type(value).__name__}：{value!r}")
+    known = {p["id"] for p in load_definitions()}
+    if platform_id not in known:
+        raise PlatformConfigError(
+            f"平台 {platform_id!r} 不在定義裡（有的是 {sorted(known)}）—— "
+            "拒寫。寫進去會產生一個永遠不會被查、也不會有人發現的開關。")
+
+    doc: dict = {}
+    if TOGGLES_PATH.is_file():
+        try:
+            doc = json.loads(TOGGLES_PATH.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as exc:
+            raise PlatformConfigError(
+                f"{TOGGLES_PATH} 不是合法 JSON：{exc}\n"
+                "⚠ 拒寫 —— 覆蓋一個壞掉的檔會把使用者原本的勾選一起丟掉。") from exc
+        if not isinstance(doc, dict):
+            raise PlatformConfigError(f"{TOGGLES_PATH} 頂層不是物件：{doc!r}")
+
+    enabled = doc.get("enabled")
+    if enabled is None:
+        enabled = {}
+        doc["enabled"] = enabled          # 新鍵 append 在最後，不動既有順序
+    elif not isinstance(enabled, dict):
+        raise PlatformConfigError(f"{TOGGLES_PATH} 的 enabled 不是物件：{enabled!r}")
+    enabled[platform_id] = value          # 既有平台就地改，新平台 append
+
+    TOGGLES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    TOGGLES_PATH.write_text(
+        json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8", newline="\n")
+    return TOGGLES_PATH
 
 
 if __name__ == "__main__":

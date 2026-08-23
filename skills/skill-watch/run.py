@@ -32,4 +32,11 @@ sys.path.insert(0, str(TOOLS))
 import skill_watch_run  # noqa: E402
 
 if __name__ == "__main__":
-    sys.exit(skill_watch_run.main(sys.argv[1:]))
+    argv = sys.argv[1:]
+    # `--platforms` 走平台開關那支（票 12）。放在這裡而不是 skill_watch_run 裡，
+    # 是因為「要查哪些平台」是**偵測之前**的決定，兩者的失敗模式也不同：
+    # 開關設錯是「什麼都沒查」，偵測失敗是「查了但結果不可信」。
+    if "--platforms" in argv:
+        import skill_watch_platforms  # noqa: E402
+        sys.exit(skill_watch_platforms.main([a for a in argv if a != "--platforms"]))
+    sys.exit(skill_watch_run.main(argv))

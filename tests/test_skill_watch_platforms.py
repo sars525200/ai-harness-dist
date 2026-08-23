@@ -80,7 +80,10 @@ def test_missing_toggle_file_means_all_off() -> None:
         on, off = m.resolve()
         check("缺開關檔：全關", [p["id"] for p in on] == [])
         check("缺開關檔：沒勾的全部列出來", sorted(p["id"] for p in off) == ["alpha", "beta"])
-        check("缺開關檔：訊息說得出怎麼勾", "enabled" in m.describe(on, off))
+        msg = m.describe(on, off)
+        check("缺開關檔：訊息給得出可以照打的指令",
+              "--enable" in msg and "alpha" in msg,
+              f"訊息沒說怎麼勾：{msg!r}")
         check("缺開關檔：**不寫任何檔**",
               not (root / "state" / "skill_watch_platforms.json").exists(),
               "首跑不該自己造開關檔——那等於替使用者做了勾選的決定")
@@ -211,7 +214,9 @@ def run(verbose: bool = True):
     for fn in (test_missing_toggle_file_means_all_off, test_missing_key_means_off,
                test_enabled_must_be_bool, test_broken_toggle_file_is_not_silently_all_off,
                test_definitions_refuse_when_broken, test_toggles_never_live_under_skills,
-               test_u1_no_project_literal, test_set_paths_covers_every_path_const):
+               test_u1_no_project_literal, test_set_paths_covers_every_path_const,
+               test_set_enabled_preserves_everything_else, test_set_enabled_refuses_bad_input,
+               test_set_enabled_creates_file_when_absent):
         try:
             fn()
         except Exception as exc:                              # noqa: BLE001
@@ -221,11 +226,100 @@ def run(verbose: bool = True):
     return _passed, list(_details)
 
 
+
+# ── 寫回（票 12） ─────────────────────────────────────────────────────────
+# ⚠ VA-8 原本的紅線寫錯了：「改成整檔 json.dump 重建 → key 順序被正規化」。
+# 實測 Python 3.7+ 的 dict 保序，`json.dumps` **不會**重排 key，只有 sort_keys=True 才會
+# ⇒ 那個變異根本不會紅。真正會發生的實作 bug 是下面三種。
+
+def _mutant_write(path: Path, doc: dict, pid: str, val: bool, mode: str) -> None:
+    """故意寫壞的三種寫回，用來證明斷言真的會紅。"""
+    if mode == "drop-top-keys":                 # 只留 enabled，丟掉其他頂層 key
+        doc = {"enabled": {**doc.get("enabled", {}), pid: val}}
+    elif mode == "replace-enabled":             # 整個 enabled 換成只有這一個平台
+        doc = {**doc, "enabled": {pid: val}}
+    elif mode == "sort-keys":                   # 這一種是真的會重排
+        doc = {**doc, "enabled": {**doc.get("enabled", {}), pid: val}}
+        path.write_text(json.dumps(doc, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8", newline="\n")
+        return
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+
+
+_RICH = {"note": "手寫的說明", "enabled": {"beta": True, "alpha": False}, "zzz": 1}
+
+
+def _assert_preserved(doc_after: dict, pid: str, val: bool) -> tuple[bool, bool, bool]:
+    """回 (其他頂層 key 在不在, 其他平台在不在, 順序對不對)。三條分開回，紅的時候分得出是哪一種。"""
+    top_ok = doc_after.get("note") == "手寫的說明" and doc_after.get("zzz") == 1
+    other_ok = doc_after.get("enabled", {}).get("beta") is True
+    order_ok = list(doc_after) == list(_RICH) and \
+        list(doc_after.get("enabled", {}))[:2] == ["beta", "alpha"]
+    return top_ok, other_ok, order_ok
+
+
+def test_set_enabled_preserves_everything_else() -> None:
+    with _Root(toggles=_RICH) as root:
+        m.set_enabled("alpha", True)
+        after = json.loads((root / "state" / "skill_watch_platforms.json")
+                           .read_text(encoding="utf-8"))
+        check("寫回：目標值真的改了", after["enabled"]["alpha"] is True)
+        top_ok, other_ok, order_ok = _assert_preserved(after, "alpha", True)
+        check("寫回：其他頂層 key 保留", top_ok, f"{after}")
+        check("寫回：其他平台的開關保留", other_ok, f"{after}")
+        check("寫回：key 順序保留", order_ok, f"{list(after)} / {list(after['enabled'])}")
+
+
+def test_set_enabled_refuses_bad_input() -> None:
+    with _Root(toggles=_RICH):
+        for pid, val, why in (("alpha", "true", "value 非布林"),
+                              ("不存在的平台", True, "平台不在定義裡")):
+            try:
+                m.set_enabled(pid, val)
+                check(f"寫回：拒寫（{why}）", False, "沒拒寫")
+            except m.PlatformConfigError:
+                check(f"寫回：拒寫（{why}）", True)
+    with _Root() as root:
+        bad = root / "state" / "skill_watch_platforms.json"
+        bad.write_text("{壞掉", encoding="utf-8")
+        try:
+            m.set_enabled("alpha", True)
+            check("寫回：檔壞掉時拒寫（不覆蓋）", False, "覆蓋了壞檔，使用者原本的勾選會一起沒")
+        except m.PlatformConfigError:
+            check("寫回：檔壞掉時拒寫（不覆蓋）", bad.read_text(encoding="utf-8") == "{壞掉",
+                  "拒寫了但檔案已經被動過")
+
+
+def test_set_enabled_creates_file_when_absent() -> None:
+    with _Root() as root:
+        f = root / "state" / "skill_watch_platforms.json"
+        check("寫回前：檔不存在", not f.exists())
+        m.set_enabled("alpha", True)
+        check("寫回後：檔建出來且內容正確",
+              json.loads(f.read_text(encoding="utf-8")) == {"enabled": {"alpha": True}})
+
+
+def selftest_write_redlines() -> None:
+    """**先證明它會紅**：三種寫壞的寫回，斷言各自要抓到。"""
+    for mode, expect in (("drop-top-keys", "top"), ("replace-enabled", "other"),
+                         ("sort-keys", "order")):
+        with _Root(toggles=_RICH) as root:
+            f = root / "state" / "skill_watch_platforms.json"
+            _mutant_write(f, json.loads(f.read_text(encoding="utf-8")), "alpha", True, mode)
+            after = json.loads(f.read_text(encoding="utf-8"))
+            top_ok, other_ok, order_ok = _assert_preserved(after, "alpha", True)
+            got = {"top": top_ok, "other": other_ok, "order": order_ok}
+            check(f"自檢：變異 {mode} 讓「{expect}」那條紅", got[expect] is False,
+                  f"變異版沒被抓到，got={got} —— 那條斷言沒有鑑別力")
+
+
 if __name__ == "__main__":
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     print("平台定義與開關（票 08）：")
     selftest()
+    selftest_write_redlines()
     p, f = run()
     print(f"\n平台定義與開關：{p} 通過、{len(f)} 失敗")
     sys.exit(1 if f else 0)
