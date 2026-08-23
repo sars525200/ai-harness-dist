@@ -320,7 +320,7 @@ def fetch_official() -> tuple[dict[str, list[str]] | None, str | None]:
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         return None, f"{type(exc).__name__}: {exc}"
 
-    skills, workflows = [], []
+    skills, workflows, descriptions = [], [], {}
     for line in body.splitlines():
         if not line.startswith("|"):
             continue
@@ -332,9 +332,16 @@ def fetch_official() -> tuple[dict[str, list[str]] | None, str | None]:
             skills.append(name)
         elif "[Workflow]" in rest:
             workflows.append(name)
+        else:
+            continue
+        # 描述本來就已經解析出來了（在 `rest` 裡），舊版用完就丟。留下來讓報告
+        # 那張對照表有「這東西是幹嘛的」可寫 —— 而「可合併／可取代」的判斷
+        # 恰恰需要它。清理走 skill_watch 的共用 helper，不寫第三份。
+        descriptions[name] = skill_watch.clean_doc_description(rest)
     if not skills:
         return None, "抓到文件但解析出 0 支 Skill——版面可能改了，判定為解析失敗而非平台清空。"
-    return {"skills": sorted(set(skills)), "workflows": sorted(set(workflows))}, None
+    return {"skills": sorted(set(skills)), "workflows": sorted(set(workflows)),
+            "descriptions": descriptions}, None
 
 
 def cross_check(names: list[str], official: dict) -> dict:
@@ -451,6 +458,11 @@ def main(argv: list[str] | None = None) -> int:
             miss = cross["officialSkillsMissingLocally"]
             print(f"      官方標記 Skill {len(official['skills'])} 支、"
                   f"Workflow {len(official['workflows'])} 支")
+            # 逐項附描述：報告那張對照表要有「這東西是幹嘛的」，而
+            # 「可合併／可取代」的判斷恰恰需要它（2026-08-23 user 定的版型）。
+            # 這一批多半是 headless／interactive 的系統性差異（無頭沒有 Artifact 工具），
+            # 是**常態不是變動** ⇒ 只印名字。附說明的留給下面「這次才新出現」那批。
+            desc = official.get("descriptions", {})
             print(f"      官方有、本機沒有的 Skill：{len(miss)} 支"
                   + (f" → {', '.join(miss)}" if miss else ""))
             # ⚠ 覆核 N-9：v2 把恆真常數換成了真實差集，但差集去了跟常數同一個
@@ -466,7 +478,9 @@ def main(argv: list[str] | None = None) -> int:
             newly = sorted(set(miss) - prev_miss)
             if has_prev and newly:
                 cross_delta = newly
-                print(f"      ⚠ 官方新增、本機沒有的：{', '.join(newly)}")
+                print(f"      ⚠ 官方新增、本機沒有的：{len(newly)} 支")
+                for n_ in newly:
+                    print(f"        · {n_} — {skill_watch.gist(desc.get(n_, ''))}")
             doc["officialCrossCheck"] = {"capturedAt": _now(), "missingLocally": miss}
 
         print("[4/6] 與 headless 基準比對…")

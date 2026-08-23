@@ -118,9 +118,9 @@ def fetch_platform() -> list[dict]:
             kind = "workflow"
         else:
             continue
-        desc = re.sub(r"\*\*\[(Skill|Workflow)\]\([^)]*\)\.\*\*\s*", "", rest)
-        desc = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", desc)
-        desc = desc.strip().rstrip("|").strip()
+        # 清理邏輯抽進 skill_watch 共用（2026-08-23）——原本這裡與 skill_watch_run
+        # 各有一份逐字相同的副本。⚠ 正則本身還沒合併，那是票 09 的具名解析器。
+        desc = skill_watch.clean_doc_description(rest)
         items.append({
             "name": name,
             "description": desc,

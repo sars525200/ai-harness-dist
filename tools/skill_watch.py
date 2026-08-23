@@ -393,3 +393,36 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def clean_doc_description(rest: str) -> str:
+    r"""把官方 commands 表格第二欄清成人看得懂的描述。
+
+    輸入是 `| \`/name\` | ... |` 那一列被切出來的後半段，裡面混著
+    `**[Skill](連結).**` 這種標記與一般的 markdown 連結。
+
+    **抽出來共用的理由**（2026-08-23）：`skill_watch_run.fetch_official()` 與
+    `skill_inventory.fetch_platform()` 各有一份逐字相同的表格正則（`SKILL_WATCH_PLAN.md`
+    覆核已登記為「多處副本」的既有例子）。這次要讓 `fetch_official` 也留下描述，
+    與其寫第三份，不如把清理那段抽出來、**兩邊都改用它** —— 是減少副本不是增加。
+    ⚠ 那兩份**正則本身**還沒合併（票 09 的具名解析器才會處理），這裡只統一了清理。
+    """
+    desc = re.sub(r"\*\*\[(Skill|Workflow)\]\([^)]*\)\.\*\*\s*", "", rest)
+    desc = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", desc)
+    return desc.strip().rstrip("|").strip()
+
+
+def gist(desc: str, cap: int = 110) -> str:
+    r"""把官方描述壓成一句話。報告要的是「這東西是幹嘛的」，不是整段文件。
+
+    官方描述有的長達五、六行（`/doctor` 那條逐字 500+ 字）。整段貼進報告的對照表
+    等於沒有對照表 —— **「更簡單明瞭」是 2026-08-23 user 對報告版型的原話**。
+    取第一句（英文 `. ` 或中文句號），再硬切在 `cap`。
+    """
+    if not desc:
+        return "（官方文件沒給描述）"
+    for sep in ("。", ". "):
+        i = desc.find(sep)
+        if 0 < i <= cap:
+            return desc[:i + (1 if sep == "。" else 1)].strip()
+    return (desc[:cap].rstrip() + "…") if len(desc) > cap else desc
