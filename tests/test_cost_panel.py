@@ -591,6 +591,51 @@ def _case_escaping(fails: list) -> None:
         fails.append("_esc 沒有轉義角括號")
 
 
+def _case_subagent_corpus(fails: list) -> None:
+    """票 10：subagent 的錢要進 token 統計、但**不進 session 集合**。"""
+    m = _load()
+    corpus = m._token_corpus()
+    subs = [f for f in corpus if f.parent.name == "subagents"]
+    tops = [f for f in corpus if f.parent.name != "subagents"]
+    # ⚠ 佈局是兩層 `<project>/<uuid>/subagents/agent-*.jsonl`。寫成 `subagents/*.jsonl`
+    #   會匹配 0 個檔 ——「跑得動、數字紋風不動、沒有紅燈」。這條就是那個守門。
+    if not subs:
+        fails.append("token 語料裡沒有任何 subagent 檔 —— glob 層數可能寫錯（少一層會靜默 0 命中）")
+    if not tops:
+        fails.append("token 語料裡沒有主語料檔")
+    _by_day, sess = m.aggregate_tokens()
+    bad = [s for s in sess if str(s).startswith("agent-")]
+    # subagent 檔名是 agent-<hex> 不是 session UUID；混進去只會多出永遠對不上的 key，
+    # project_total 原地不動而「對不上的 session 數」暴增（票 10 連帶效應②）。
+    if bad:
+        fails.append(f"session 集合混進 {len(bad)} 個 subagent stem —— ccusage 交集會被污染")
+
+
+def _case_stage_detect_single_source(fails: list) -> None:
+    """票 10：階段偵測改吃 gen_workflow_compliance，不自己留第二份。"""
+    m = _load()
+    # ① 散文不得移動游標。**兩種散文各對應一道閘**——第一版只寫了一個 fixture
+    #    而且是短行，實測直接綠燈通過：短行本來就該放行，真正擋掉真實樣本的是
+    #    **前綴限**不是散文閘。fixture 不忠實的症狀跟「程式沒問題」一模一樣。
+    #    (a) 前綴超過 40 字（真實樣本：前綴 533／1288 字的討論段落）
+    prose_a = "先講結論再看細節，這一段在討論規則本身而不是在宣告，" * 3 + "階段 Execute 這幾個字只是被引用"
+    if m._wfc_stage_of(prose_a) is not None:
+        fails.append("前綴超過 40 字的討論段落不得被當成宣告移動金錢游標")
+    #    (b) 前綴短但整行是長散文、且沒有任何宣告欄（模式／修改檔案／摘要）
+    prose_b = "談 階段 Execute 的判準：" + "這一段在解釋為什麼要這樣量測而不是在宣告，" * 6
+    if m._wfc_stage_of(prose_b) is not None:
+        fails.append("長散文（無模式／修改檔案／摘要欄）不得被當成宣告移動金錢游標")
+    # ② 真宣告要收得到（含只帶模式欄、沒有修改檔案欄的那種——票 10 實測樣本）
+    real = "模式 VERIFY／階段 Research。權威記憶檔已給出關鍵線索：" + "x" * 130
+    if m._wfc_stage_of(real) != "Research":
+        fails.append("帶模式欄的真宣告被散文閘擋掉了")
+    # ③ 正則不是自己抄一份
+    import inspect
+    src = inspect.getsource(m._wfc_stage_of)
+    msg = "階段偵測沒有走 gen_workflow_compliance 的正則 —— 兩份判準遲早會漂（實測曾差 44 筆）"
+    if not ("_WFC.DECL_LINE" in src and "_WFC.FIELD" in src):
+        fails.append(msg)
+
 def run() -> "tuple[int, list]":
     """回 (通過數, 失敗描述清單) —— 與 run_hook_tests.py 的統一入口契約一致。
 
@@ -609,6 +654,8 @@ def run() -> "tuple[int, list]":
         ("長文說明收進 (!) 鈕且預設收合", _case_notes_collapsed),
         ("圖表提示不用原生 title、單位標在圖上", _case_chart_tip_and_unit),
         ("階段歸因：宣告邊界／來源／去重", _case_stage_attribution),
+        ("subagent 進 token 語料、不進 session 集合", _case_subagent_corpus),
+        ("階段偵測吃遵循度那側（單一真相·擋散文）", _case_stage_detect_single_source),
         ("階段金額五項公式且 5m≠1h", _case_stage_cost_formula),
         ("階段表零宣告仍出表且有對帳差", _case_stage_html),
         ("窗口零紀錄時不整段消失", _case_stage_empty_window),

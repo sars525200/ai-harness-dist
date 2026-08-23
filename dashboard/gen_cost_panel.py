@@ -125,6 +125,17 @@ def _family(model: str) -> str:
 
 # ── 資料源 1：transcript → 按日×模型的 token ────────────────────────────────
 
+def _token_corpus() -> list:
+    """token 統計要掃的檔：主語料 ＋ **subagent**（票 10）。
+
+    佈局是兩層：`<project>/<session-uuid>/subagents/agent-<id>.jsonl`。
+    ⚠ `subagents/*.jsonl` 這個樣式**今天匹配 0 個檔**（少一層）——照字面寫會
+    「跑得動、數字紋風不動、沒有紅燈」。單一真相在 `subagent_stats`（它的 `:119`
+    就是用 `*/subagents/*.meta.json`），這裡沿用同一個層數。
+    """
+    return sorted(PROJECT_DIR.glob("*.jsonl")) + sorted(PROJECT_DIR.glob("*/subagents/*.jsonl"))
+
+
 def aggregate_tokens() -> "tuple[dict, set]":
     """回 ({day: {family: {...}}}, 本專案 session id 集合)。
 
@@ -135,8 +146,29 @@ def aggregate_tokens() -> "tuple[dict, set]":
         raise SystemExit(f"找不到 transcript 目錄 {PROJECT_DIR} —— 零目標拒跑，不產空表。")
     by_day: dict = {}
     sessions: set = set()
-    for fp in PROJECT_DIR.glob("*.jsonl"):
-        sessions.add(fp.stem)
+    # 2026-08-23（票 10）**語料納入 subagent**。原本是非遞迴 glob，於是
+    # `<session>/subagents/agent-*.jsonl` **整批不在語料裡** —— 實測 334 個檔、
+    # post-cutoff 唯一訊息 6,065 筆（24.3%）、與主語料 id 零重疊、按各家族單價 ≈ US$385。
+    # 後果不是「少一點」而是**方向性偏差**：實測 output token 的 mix
+    # Opus 91.3% → 89.6%、Sonnet 7.2% → 8.8%，而「Opus:Sonnet 目標 4:6」正是這一頁
+    # 存在的理由 —— 用一個系統性高估 Opus 的數字去追那個比例，追的是幻影。
+    #
+    # ⚠ **只有這一個 glob 納入**。另外兩處刻意維持非遞迴，理由各不相同：
+    #   `stage_attribution()`：6,098 筆 subagent 訊息裡帶「階段 X」的只有 **1** 筆 ⇒
+    #     直接納入等於 24% 的訊息一次掉進未標記桶，而「未標記佔比＝宣告紀律」是
+    #     既有量測 ⇒ **紀律沒變、數字崩壞**。正解是走 meta.json 的 `toolUseId`
+    #     掛回派它的那一段（實測與 `gen_workflow_compliance.agent_calls` 交集 225 個
+    #     ＝ 95%），那是票 03 的兩條游標結構要做的事。
+    #   ccusage 交集：subagent 檔名是 `agent-<hex>` 不是 session UUID，納入只會多出
+    #     334 個對不上的 key，`project_total` 原地不動。
+    for fp in _token_corpus():
+        # ⚠ **subagent 的 stem 不進 session 集合**（票 10 連帶效應②）。這個集合唯一的
+        #   用途是跟 ccusage 的 session UUID 取交集算金額；subagent 檔名是
+        #   `agent-<hex>`，加進去只會多出 334 個永遠對不上的 key，`project_total`
+        #   原地不動而「對不上的 session 數」暴增 —— 看起來像對帳突然壞掉。
+        #   token 統計要它們（上面那段），金額交集不要 —— **兩件事，兩個集合**。
+        if fp.parent.name != "subagents":
+            sessions.add(fp.stem)
         try:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except Exception:
@@ -171,6 +203,37 @@ def aggregate_tokens() -> "tuple[dict, set]":
 
 
 # ── 資料源 1b：transcript → 按「階段」的 token 與估算金額（G2）─────────────
+
+_WFC = None
+
+
+def _wfc_stage_of(text: str) -> "str | None":
+    """用遵循度那側的完整閘門鏈認宣告，回階段名或 None。
+
+    **單一真相**：正則與閘門都取自 `gen_workflow_compliance`，這裡不留第二份。
+    留第二份的代價已經量到了 —— 兩側對稱差 44 筆，而且是**雙向**的。
+    """
+    import importlib.util as _il
+    global _WFC
+    if _WFC is None:
+        _spec = _il.spec_from_file_location("wfc_for_cost", DASHBOARD_DIR / "gen_workflow_compliance.py")
+        _mod = _il.module_from_spec(_spec)
+        _spec.loader.exec_module(_mod)
+        _WFC = _mod
+    for mm in _WFC.DECL_LINE.finditer(text or ""):
+        line = mm.group(0).strip()
+        if "階段" not in line:
+            continue
+        got = {k: (r.search(line).group(1).strip() if r.search(line) else None)
+               for k, r in _WFC.FIELD.items()}
+        if not got["stage"]:
+            continue
+        if (not got["mode"] and "修改檔案" not in line
+                and "摘要" not in line and len(line) > 120):
+            continue
+        return got["stage"]
+    return None
+
 
 def stage_attribution(since: str = STAGE_RULE_SINCE) -> "tuple[dict, dict]":
     """回 ({階段: {family: {n,in,out,cw5,cw1,cr}}}, meta)。
@@ -239,9 +302,21 @@ def stage_attribution(since: str = STAGE_RULE_SINCE) -> "tuple[dict, dict]":
                 continue
             for blk in (rec.get("message") or {}).get("content") or []:
                 if isinstance(blk, dict) and blk.get("type") == "text":
-                    m = _STAGE_RE.search(blk.get("text") or "")
-                    if m:
-                        decl_of[mid] = (m.group(1), rec.get("timestamp") or "")
+                    # 2026-08-23（票 10）**改吃 `gen_workflow_compliance` 的偵測，不自己解析**。
+                    # 原本是裸的 `_STAGE_RE.search()`：沒有 `DECL_LINE` 行錨、沒有 40 字前綴限、
+                    # 沒有 120 字散文閘（遵循度那側三道全有）。**它至今安全只有一個理由：
+                    # 階段是封閉五值。** 任務名是開放字串，同一機制下每一句「這個任務…」
+                    # 都會移動游標並長出一列新任務 —— 票 03 要加任務游標，這裡非先收斂不可。
+                    #
+                    # 雙向實測（票 §驗收②要求雙向量，不是只看新增）：
+                    #   兩側都偵測到 404、只有遵循度側 39、只有這一側 5。
+                    #   那 5 筆**逐筆看過**：3 筆是散文與引述（該擋），2 筆是真宣告 ——
+                    #   其中 1 筆已由散文閘的 `mode` 訊號救回，另 1 筆（前綴 84 字、被 40 限擋）
+                    #   **已知漏掉且刻意不修**：放寬前綴到 120 實測多收 3 段而 2 段是噪音。
+                    _decl = _wfc_stage_of(blk.get('text') or '')
+                    if _decl:
+                        decl_of[mid] = (_decl, rec.get("timestamp") or "")
+                        break
                         break
 
         # 每個檔（＝每個 session）各自從「未標記」起算：新 session 沒有上一輪的
