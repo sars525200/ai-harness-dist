@@ -274,7 +274,7 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
 
     排除靠**章節標題**（`_NOT_TODO_SECTION`），不靠「第幾張表」。
     """
-    out, in_tbl, skip_section, prio_idx = [], False, False, None
+    out, in_tbl, skip_section, prio_idx, cat_idx = [], False, False, None, None
     for lineno, ln in enumerate(text.splitlines(), 1):
         if ln.startswith("#"):
             in_tbl = False
@@ -288,6 +288,9 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
                 # 規定位置的話，既有那些沒有這一欄的表全部要一起改。
                 heads = split_row(ln)
                 prio_idx = next((i for i, h in enumerate(heads) if "優先" in h), None)
+                # 「分類」同樣是選配、同樣用表頭找（2026-08-23）。位置不限的理由
+                # 與「優先」相同：規定第幾欄的話，既有那些沒有這欄的表要一起改。
+                cat_idx = next((i for i, h in enumerate(heads) if "分類" in h), None)
             continue
         if ln.startswith("|---") or not ln.strip():
             continue
@@ -304,11 +307,16 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
         prio = None
         if prio_idx is not None and prio_idx < len(cells):
             prio = _PRIO_WORDS.get(plain(cells[prio_idx]).lower())
+        cat = ""
+        if cat_idx is not None and cat_idx < len(cells):
+            # 值域刻意**不做白名單**：填了沒見過的字就照實顯示，
+            # 而不是靜靜丟掉。看到怪字的人才會回頭改，靜靜丟掉沒有人會發現。
+            cat = plain(cells[cat_idx]).strip()
         out.append({
             "scope": scope, "kind": kind, "title": title,
             "detail": plain(cells[1]), "next": plain(cells[2]), "who": plain(cells[3]),
             "src": src, "line": lineno, "sha": line_sha(ln),
-            "prio": prio, "prio_manual": prio is not None,
+            "prio": prio, "prio_manual": prio is not None, "cat": cat,
         })
     return out
 
@@ -407,7 +415,7 @@ def parse_plan_open(text: str, src: str, scope: str) -> list:
             "detail": _clip(detail, 240),
             "next": "開 " + src + " 第 %d 行看上下文再決定下一步" % lineno,
             "who": who, "src": src, "line": lineno, "sha": line_sha(ln),
-            "prio": None, "prio_manual": False,
+            "prio": None, "prio_manual": False, "cat": "",
         })
     return out
 
@@ -433,7 +441,7 @@ def parse_prose(text: str, src: str, scope: str) -> list:
             "scope": scope, "kind": "prose", "title": _clip(head or body, 110),
             "detail": _clip(rest, 260), "next": "開 %s 第 %d 行看完整脈絡" % (src, lineno),
             "who": "", "src": src, "line": lineno, "sha": line_sha(ln),
-            "prio": None, "prio_manual": False,
+            "prio": None, "prio_manual": False, "cat": "",
         })
     return out
 
@@ -672,6 +680,9 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
         % (p["cls"], p["label"], prio_note, p["glyph"], p["label"]),
         '            <span class="wfc-pn %s todo-proj">%s</span>'
         % (pcls.get(item["scope"], "pn"), _html.escape(scope_label)),
+        # 分類（2026-08-23）：沒填就整個不出現 —— 空 chip 比沒有 chip 更吵。
+        ('            <span class="todo-cat">%s</span>' % _html.escape(item.get("cat", "")))
+        if item.get("cat") else '',
         # 標題｜時間 · 類型：時間跟著該專案的分類色，類型退成小字灰。
         # 三段黏在一起（`｜` 與 `·` 是分隔字元不是欄位），列尾就不會參差不齊。
         '            <span class="todo-t">%s</span>' % _html.escape(item["title"]),
@@ -710,7 +721,8 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
     bits.append('            <p class="todo-m">%s</p>' % "".join(meta))
     bits.append("          </div>")
     bits.append("        </li>")
-    return "\n".join(bits)
+    # 空字串是「分類沒填」那一格留下的，濾掉才不會在 HTML 裡留空行。
+    return "\n".join(b for b in bits if b)
 
 
 def _filter_bar(items: list) -> str:
