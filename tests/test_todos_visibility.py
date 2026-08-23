@@ -163,6 +163,32 @@ def _case_empty_glob_reported():
     return None
 
 
+def _case_empty_glob_production_side():
+    """0 命中的 glob 要**在 collect() 裡真的被記下來**，不是只有印出端有測。
+
+    覆核 R7-8：`_case_empty_glob_reported` 是自己往 `_EMPTY_GLOBS` append 一筆再驗印出端，
+    真正的生產端（`collect()` 裡 glob 0 命中時 append）**沒有任何測試會因為它被拿掉而紅**。
+    對照組 `_case_check_reports_dropped` 是走 `parse_plan_open()` 真的生產一筆，有覆蓋。
+    """
+    import gen_todos
+
+    orig = gen_todos.project_sources
+    saved = list(gen_todos._EMPTY_GLOBS)
+    try:
+        gen_todos.project_sources = lambda proj: [("plan", "ZZ_NEVER_MATCHES_*_PLAN.md")]
+        gen_todos._EMPTY_GLOBS.clear()
+        gen_todos.collect()
+        got = [e for e in gen_todos._EMPTY_GLOBS
+               if e.get("pattern") == "ZZ_NEVER_MATCHES_*_PLAN.md"]
+    finally:
+        gen_todos.project_sources = orig
+        gen_todos._EMPTY_GLOBS.clear()
+        gen_todos._EMPTY_GLOBS.extend(saved)
+    if not got:
+        return ("collect() 遇到 0 命中的來源 glob 卻沒有記錄 —— "
+                "登記了卻拼錯會回到完全靜默，而印出端的測試照樣全綠")
+    return None
+
 def run():
     passed = 0
     failed = []
@@ -172,6 +198,7 @@ def run():
         ("--check 截斷時會說還有幾筆", _case_check_no_silent_cap),
         ("--check 不寫 blame 快取", _case_check_is_read_only),
         ("0 命中的來源 glob 會被點名", _case_empty_glob_reported),
+        ("0 命中的 glob 在 collect 裡真的被記下", _case_empty_glob_production_side),
     ):
         try:
             detail = fn()

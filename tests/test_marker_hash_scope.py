@@ -105,7 +105,15 @@ def _case_verify_section_must_be_inside_hash():
     scoped = p._review_scope(text)                 # content_hash 的視角（不剝 fence）
     gap = p._verification_gap(p._review_scope(p._detectable(text)))
     if p._VERIFY_SECTION.search(scoped) or gap is not None:
-        return None            # 兩個視角一致，或守門本來就會擋，這個形狀不成立
+        # ⚠ **不得靜默通過**（覆核 R7-6）：第一版在這裡 `return None`（綠），
+        # 而判斷「這個形狀成不成立」用的是**被測模組自己的**函式。若日後有人把
+        # `_review_scope` 也改成先剝 fence（很自然的「收斂範圍」直覺修法），
+        # 守門與這條測試會**一起漂、測試靜默轉綠**——與 R6-H3 同族，
+        # 只是逃逸方式從「假綠斷言」換成「靜默不斷言」。
+        # 本 repo 的紀律是「零目標一律視為失敗」，所以這裡回報 fixture 失效。
+        return ("這個利用形狀在目前的實作下組不出來（scoped 找得到驗證方式，"
+                "或守門本來就會擋）⇒ 這條測試此刻沒有在測任何東西。"
+                "請重新設計 fixture，不要讓它靜默通過。")
 
     # 到這裡代表「守門看得到、hash 看不到」的分岔確實成立 ⇒ 必須有一道守門擋下來。
     tmp = tempfile.mkdtemp(prefix="verify_scope_")

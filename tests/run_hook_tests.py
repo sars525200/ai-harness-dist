@@ -345,6 +345,18 @@ def main() -> int:
         print(f"  {'PASS' if not mh_failed else 'FAIL'}  marker 扣除範圍"
               f"（{mh_passed}/{mh_passed + len(mh_failed)}）")
 
+        # 判準③探針的三個性質（票 11 §五·覆核 R7-1／R7-2／R7-4）。
+        # 這支探針的失敗方式全部是靜默的——排除吃掉真違規、零樣本不印盲區、
+        # 盲區數字寫死，三種都是「輸出看起來正常」。
+        import test_probe_m_map
+        pm_passed, pm_failed = test_probe_m_map.run()
+        unit_passed += pm_passed
+        for detail in pm_failed:
+            failed.append(("判準③探針性質", detail))
+        unit_failed.extend(pm_failed)
+        print(f"  {'PASS' if not pm_failed else 'FAIL'}  判準③探針性質"
+              f"（{pm_passed}/{pm_passed + len(pm_failed)}）")
+
         # 判準③探針的自檢（票 11 §二-5）。它自己的 `--self-test` 就是「怎麼證明它會紅」
         # 那一題的答案：有 map→通過／沒提 map→違規／宣告了但檔案不存在→違規。
         # 掛進全套是因為**探針壞掉會靜默**：它只會開始說「沒有 map」，看起來像判準未達。

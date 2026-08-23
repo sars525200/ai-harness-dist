@@ -418,7 +418,10 @@ def check(ctx):
                 f"  ②PASSED 是舊的、想留作歷史 → 把那一行的 `PASSED` 改成 `HISTORY`：\n"
                 f"    <!-- ADVERSARIAL_REVIEW_HISTORY sha256=<原本那個> "
                 f"rounds=<N> at=<當初時間> -->\n"
-                f"    HISTORY 不驗 hash、也不進 content_hash，"
+                f"    ⚠ **那一行只能有 marker、不能有別的字**（覆核 R7-5）：規則扣的是"
+                f"「整行恰好就是 marker」的行，掛在內容行尾巴會讓 marker 自己被算進 hash、"
+                f"永遠對不上。\n"
+                f"    HISTORY 不驗 hash、獨佔一行時也不進 content_hash，"
                 f"**改名不會讓現行的 SKIP 失效**（可以放心遷移）。\n"
                 + _RECOMPUTE_HINT.format(path=path)
             )
@@ -458,6 +461,19 @@ def check(ctx):
         # 最舊的 → hash 必不符 → BLOCK 訊息又教人「補上」marker → 越補越出不去，
         # 唯一的門變成逃生口。map 存在即待審、每次改 hash 範圍都要重簽，
         # 這情境的發生率遠高於計畫書。多於一個 → 直接擋、教人收斂成一個。
+        # 覆核 R6-L10：多張 SKIP 與 M5 的多張 PASSED **完全同型**——`.search` 取第一張，
+        # 若它過期 → BLOCK 訊息教「重簽」→ 補第三張 → 永遠取到第一張，越補越出不去。
+        # 本輪把守門延伸到「PASSED＋SKIP」時漏了這一組。
+        all_skip = _SKIP.findall(probe)
+        if len(all_skip) > 1:
+            return block(
+                f"{name} 有 {len(all_skip)} 個 ADVERSARIAL_REVIEW_SKIP marker——"
+                f"規則只認得一個，而且會拿到最舊的那個，補新的永遠出不去"
+                f"（與多張 PASSED 同型的死結）。"
+                f"請**刪掉舊的、收斂成一個**（保留最新那次略過的理由）。\n"
+                + _RECOMPUTE_HINT.format(path=path)
+            )
+
         all_passed = _PASSED.findall(probe)
         if len(all_passed) > 1:
             return block(
@@ -511,6 +527,22 @@ def check(ctx):
         # 動作就變成走 SKIP，而 SKIP 的寫法就在前一個分支的訊息裡。
         # 正確順序＝先問「marker 還是不是現況」，再問「它是不是誠實蓋的」。
         if passed.group(1).lower() != actual:
+            # 覆核 R7-3：marker 與內容**同一行**時，`content_hash` 會把 marker 自己
+            # 算進去（自我指涉）⇒ 照下面那行指令重算、貼回去、還是不符、再重算……
+            # **實測連跑 4 次每次都是新 hash、每次都 BLOCK**。而預設訊息說的是
+            # 「審查通過之後內容又被改了」＝**錯的歸因**，於是最省力的下一步就變成
+            # 走 SKIP——正是 R2-M13 記過的「擋了人卻沒給路走」。
+            # 這個形狀在 R6-H1 收緊之前是 ALLOW（整行被扣掉），是本輪改出來的新行為，
+            # 方向正確（那正是逃生口）但診斷必須補上，否則就是一條死路。
+            if not any(_is_marker_only_line(ln) for ln in text.splitlines()):
+                return block(
+                    f"{name} 的 ADVERSARIAL_REVIEW_PASSED marker **沒有獨佔一行**——"
+                    f"它跟內容寫在同一行，所以 marker 自己會被算進 hash（自我指涉），"
+                    f"**照重算指令算再多次都不會相符**。\n"
+                    f"處置：把那個 marker 單獨放一行（前後可以有空白，但那一行不能有"
+                    f"別的字），再重算一次 hash。\n"
+                    + _RECOMPUTE_HINT.format(path=path)
+                )
             return block(
                 f"{name} 有 ADVERSARIAL_REVIEW_PASSED marker，但 hash 對不上"
                 f"（marker 記的是 {passed.group(1)[:12]}…）"
@@ -591,7 +623,11 @@ def content_hash(text: str) -> str:
     代價是「在審查範圍內增刪空行」不再讓 marker 失效 —— 那本來就沒有實質
     意義，而每一次不必要的重簽都在把重算 hash 訓練成反射動作（§4.1 4️⃣）。
     """
-    body = _IGNORE_BLOCK.sub("", text)
+    # 覆核 R7-7：這裡曾自己寫一份 `_IGNORE_BLOCK.sub`，而 `_review_scope()` 寫一份，
+    # 今天逐字相同、明天不保證——而新加的守門正是拿 `_review_scope()` 當「hash 視角」
+    # 的代理去驗「兩個視角一致」。兩份實作＝那道保證會靜默失效。改成呼叫同一支。
+    # （in-scope 說「收斂做不到」只對 `_detectable`／fence 那一層成立；IGNORE 這一層做得到。）
+    body = _review_scope(text)
     lines = [
         ln for ln in body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         if not _is_marker_only_line(ln)

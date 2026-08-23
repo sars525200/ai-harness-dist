@@ -59,19 +59,57 @@ DEADLINE = "2026-09-15"       # 到期日；過期未達即判定失敗
 # （兩段都不是它），但這個 effort 的 session 下次宣告 M 級時，探針會靜默地拿它自己當分子。
 SELF_EFFORT = "wayfinder-planning-layer"
 
-# 這支量不到的東西。**必須每次印出來**——一個報「判準成立」的工具如果不說自己看不到什麼，
-# 讀的人會把「它沒抓到」讀成「沒有問題」（覆核 R6-M4 逐條實查）。
-BLIND_SPOTS = [
-    "subagent 裡的宣告完全看不到：`gen_workflow_compliance` 只掃 transcript 目錄的頂層，"
-    "而 `<uuid>/subagents/agent-*.jsonl` 是巢狀的（實測 322 個，其中 6 個含「規模 M」字樣）。"
-    "M 級規劃外包給 subagent＝那段宣告連分母都進不去。",
-    "起算日是 UTC 日期字串比對，而 fail-open 那邊用本地時間 ⇒ 實際起算是本地 08:00，"
-    "起算日凌晨那 8 小時的宣告不計。同一份文件裡兩個判準的「起算日」不是同一條線。",
-    "量的是「**宣告 M 的**」不是「**M 級的**」：漏標規模欄是最常見的失守方式"
-    "（全期宣告裡無規模欄與待定合計數以百計）⇒ 分母系統性偏小。",
-    "`classify()` 第三條路（同 session 其他段開過 map）是假綠向量："
-    "同一個 session 只要別的段落開過任一 map，這一段就算通過。",
-]
+def _count_subagent_transcripts() -> tuple:
+    """(巢狀 subagent transcript 數, 其中含「規模 M」字樣的數)。
+
+    路徑重用 `gen_workflow_compliance.PROJECTS_ROOT`，**不自己寫死**（U-1）。
+    ⚠ 實際結構是 `<專案目錄>/<session-uuid>/subagents/agent-*.jsonl`＝**兩層**。
+    寫成 `*/subagents/…` 少爬一層時**回 0 個而不是報錯** ⇒ 盲區敘述會變成
+    「我看不到 0 個東西」，剛好是最讓人放心的假話。與票 10 的 `note_failopen`
+    少爬一層落錯目錄完全同型（那次也是有寫、位置錯、無聲）。
+    """
+    try:
+        files = list(g.PROJECTS_ROOT.glob("*/*/subagents/agent-*.jsonl"))
+        hit = 0
+        for f in files:
+            try:
+                if "規模 M" in f.read_text(encoding="utf-8", errors="replace"):
+                    hit += 1
+            except Exception:
+                continue
+        return len(files), hit
+    except Exception:
+        return -1, -1          # 讀不到就回 -1，讓它在輸出裡顯眼，不要冒充 0
+
+
+def blind_spots() -> list:
+    """這支量不到的東西。**必須每次印出來**——一個報「判準成立」的工具如果不說自己
+    看不到什麼，讀的人會把「它沒抓到」讀成「沒有問題」（覆核 R6-M4 逐條實查）。
+
+    ⚠ **數量一律執行當下實算**（覆核 R7-4）：第一版把「322 個、其中 6 個含規模 M」
+    寫死在常數裡，R7 隔幾小時實查已是 335／5，而 `6` 用任何合理 pattern 都重現不出來。
+    **一個每次印給人看的數字寫死在原始碼裡只會愈來愈假**——而它印的正是「這支看不到
+    多少東西」，假掉的方向恰好是**讓人低估盲區**。
+    """
+    nested, with_m = _count_subagent_transcripts()
+    if nested < 0:
+        first = ("subagent 裡的宣告完全看不到：`gen_workflow_compliance` 只掃 transcript "
+                 "目錄的頂層，而 `<專案>/<uuid>/subagents/agent-*.jsonl` 是巢狀的"
+                 "（⚠ **本次實算失敗**，數量不明）。")
+    else:
+        first = ("subagent 裡的宣告完全看不到：`gen_workflow_compliance` 只掃 transcript "
+                 "目錄的頂層，而 `<專案>/<uuid>/subagents/agent-*.jsonl` 是巢狀的"
+                 "（**執行當下實算**：%d 個，其中 %d 個含「規模 M」字樣）。"
+                 "M 級規劃外包給 subagent＝那段宣告連分母都進不去。" % (nested, with_m))
+    return [
+        first,
+        "起算日是 UTC 日期字串比對，而 fail-open 那邊用本地時間 ⇒ 實際起算是本地 08:00，"
+        "起算日凌晨那 8 小時的宣告不計。同一份文件裡兩個判準的「起算日」不是同一條線。",
+        "量的是「**宣告 M 的**」不是「**M 級的**」：漏標規模欄是最常見的失守方式"
+        "⇒ 分母系統性偏小。",
+        "`classify()` 第三條路（同 session 其他段開過 map）是假綠向量："
+        "同一個 session 只要別的段落開過任一 map，這一段就算通過。",
+    ]
 
 # 宣告原文裡的 map 路徑。
 #
@@ -81,7 +119,14 @@ BLIND_SPOTS = [
 # 於是 Windows 路徑一個都比不到。錯得很安靜：pattern 合法、compile 得過、
 # 只是永遠不命中。是這支自己的 `--self-test` 當場抓到的（假紅）。
 # 同一個母題在 `D:\.ai-harness\TODOS.md` 已記到第 6 例，這是第 7 例。
-_MAP_IN_TEXT = re.compile(r"[./]scratch/([^/\s`｜|]+)/map(?:\.md)?", re.IGNORECASE)
+#
+# ⚠ **認的是 `.scratch/<effort>/` 而不只是 `<effort>/map.md`**（實跑抓到的假紅）：
+# 一段真實宣告寫「修改檔案 `.scratch/skill-watch-multiplatform/issues/02-….md`、
+# `map.md`（解票）」——effort 名字明明在原文裡，但只認 `map.md` 那一種形狀就判成
+# 「找不到任何 map」。**map 確實存在、宣告也確實指到它**，純粹是解析太窄。
+# 放寬的是**辨識**不是**通過**：認出 effort 之後仍要確認 map 檔真的在磁碟上，
+# 所以不會製造假綠（與 R7-1 警告的「用 raw 子字串做**排除**」不同——那個沒有後續驗證）。
+_MAP_IN_TEXT = re.compile(r"[./]scratch/([^/\s`｜|、，,]+)/", re.IGNORECASE)
 
 
 def _efforts_from_text(text: str) -> set:
@@ -229,13 +274,32 @@ def main() -> int:
     m_segs = [s for s in segs
               if s.get("scale") == "M" and str(s.get("ts", ""))[:10] >= args.since]
     # 本 effort 自己不計入（map 判準③逐字要求；R6-M4 抓到第一版沒實作）
-    excluded = [s for s in m_segs if SELF_EFFORT in str(s.get("raw", ""))
-                or SELF_EFFORT in set(s.get("efforts") or ())]
-    m_segs = [s for s in m_segs if s not in excluded]
+    # ⚠ **綁 effort 不綁 raw 子字串**（覆核 R7-1）：第一版寫
+    # `SELF_EFFORT in str(seg["raw"])`，於是某個**真違規**只要在宣告裡順口提到
+    # 「沿用 wayfinder-planning-layer 的慣例做 C 模組」就被整段吃掉——而且一行都不印。
+    # 那正是票 11 §二剛修完的「靜默丟棄」，換到這支身上。
+    def _is_self(seg: dict) -> bool:
+        efforts = set(seg.get("efforts") or ())
+        efforts |= _efforts_from_text(seg.get("raw"))
+        return SELF_EFFORT in efforts
+
+    excluded = [s for s in m_segs if _is_self(s)]
+    m_segs = [s for s in m_segs if not _is_self(s)]
 
     print("=== 判準③：改制後的 M 級任務有沒有開 map（起算 %s・期限 %s）==="
           % (args.since, DEADLINE))
     print("  掃描根目錄：%s" % "、".join(str(r) for r in roots))
+    if excluded:
+        print("  已排除本 effort 自己的宣告 %d 段（判準③：計入等於自己證明自己）"
+              % len(excluded))
+
+    # ⚠ 盲區印在**早退之前**（覆核 R7-2）：零樣本那條 `return 2` 原本排在印盲區之前，
+    # 而零樣本正是最需要被告知「subagent 裡的宣告我根本看不到」的時候。
+    # map in-scope 寫著「探針每次都會把它們印出來」——搬過來之後那句話才是真的。
+    print("")
+    print("  ⚠ 這支量不到的（每次都印，因為「沒抓到」不等於「沒問題」）：")
+    for b in blind_spots():
+        print("    · %s" % b)
 
     if not m_segs:
         print("\n  起算日之後**沒有任何 M 級宣告** —— 尚無樣本。")
@@ -259,11 +323,6 @@ def main() -> int:
             print("      → 宣告了 effort=%s 但%s" % (res["effort"], res["how"]))
         else:
             print("      → 找不到任何 .scratch/<effort>/map.md")
-
-    print("")
-    print("  ⚠ 這支量不到的（每次都印，因為「沒抓到」不等於「沒問題」）：")
-    for b in BLIND_SPOTS:
-        print("    · %s" % b)
 
     print("")
     if bad:
