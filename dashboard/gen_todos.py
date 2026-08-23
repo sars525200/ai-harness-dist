@@ -121,6 +121,24 @@ def _is_open_status(cell: str) -> bool:
     return bool(_OPEN_TEXT.match(cell)) and len(cell) <= _STATUS_CELL_MAX
 # 已結案符號：整列出現任一個就不算待辦（與 gen_progress_chart 的 STATUS_MAP 同族）
 _CLOSED = re.compile(r"✅|⏸|❌|🔻|已完成|已上線|已定案|已結案")
+
+# ── 靜默丟棄的追蹤（票 11 §二-3／§二-4·覆核 R3-1／R4-2）────────────────────
+#
+# 回寫一列到 `*_PLAN.md` 之後，這支可能因為三個理由把它丟掉，而**三個都沒有提示**：
+#   ①狀態格詞彙不在白名單（`⬜ 待辦` ⇒ 0 項。2026-08-23 我自己犯的：補了一列、
+#     以為接上了，實際解析出 0 項且完全靜默，是對抗式覆核當場抓到的）
+#   ②`_CLOSED` 掃的是**整列** joined，說明欄提到「已完成」就整列被丟
+#   ③純文字狀態格超過 12 字就不算狀態
+#
+# 判準②的驗收指令就是 `--check`，所以「撈不到」與「這一列根本不合格」在輸出上
+# 必須分得出來——否則驗收只會得到一個沒有資訊量的 0。**不改解析判準**（`max(others,
+# key=len)` 與整列掃 `_CLOSED` 各有它們的理由），只把丟棄理由記下來給 `--check` 印。
+_DROPPED: list = []
+
+# 近似狀態格：長得像人想標「待辦」但不在白名單裡的寫法。
+# 只用來**報告**，不放行——放行等於白名單形同虛設。
+_NEAR_MISS_EMOJI = re.compile(r"^(⬜|☐|▢|🔲|🔳|◻|□|◽|▫)")
+_NEAR_MISS_TEXT = re.compile(r"^(待辦|代辦|待處理|未完成|未結案|處理中|待中|待辦中)")
 # 散文 bullet 的未完成訊號。`代辦` 是這裡實際會出現的寫法（記憶檔與 user 都這樣打），
 # 不收就會漏掉整條 —— 判準要對著**真實文字**，不是對著正確寫法。
 _PROSE_OPEN = re.compile(
@@ -278,10 +296,49 @@ def parse_plan_open(text: str, src: str, scope: str) -> list:
         if len(cells) < 2:
             continue
         joined = " ".join(cells)
-        if _CLOSED.search(joined):
-            continue
         st_idx = next((i for i, c in enumerate(cells) if _is_open_status(c)), None)
+
+        if _CLOSED.search(joined):
+            # 結案字樣落在**狀態格以外**時記一筆：那一列的狀態是開放的，
+            # 只是別的欄提到「已完成」就被整列丟掉（覆核 R4-2 的實例：
+            # `| ⏳ 待做 | 票 12 … | 前置票 08 已完成，本票接手 |`）。
+            # 落在狀態格內的是正常結案，不報。
+            if st_idx is not None and not _CLOSED.search(cells[st_idx]):
+                hit = next((i for i, c in enumerate(cells)
+                            if i != st_idx and _CLOSED.search(c)), None)
+                if hit is not None:
+                    _DROPPED.append({
+                        "src": src, "line": lineno,
+                        "reason": "狀態是開放的，但第 %d 格有結案字樣「%s」⇒ 整列被丟"
+                                  % (hit + 1, _clip(cells[hit], 40)),
+                        "row": _clip(joined, 90),
+                    })
+            continue
+
         if st_idx is None:
+            # 沒有任何格通過狀態判準——只在「看起來有人想標待辦」時才報，
+            # 否則整份文件的普通表格列都會湧進來。
+            for i, c in enumerate(cells):
+                if not c:
+                    continue
+                if _NEAR_MISS_EMOJI.match(c) or _NEAR_MISS_TEXT.match(c):
+                    _DROPPED.append({
+                        "src": src, "line": lineno,
+                        "reason": "第 %d 格「%s」不在狀態白名單（只認 ⏳🔄🚧 或 "
+                                  "進行中/待做/待施工/待動工/未開工/規劃中/待評估/待討論/待排程）"
+                                  % (i + 1, _clip(c, 20)),
+                        "row": _clip(joined, 90),
+                    })
+                    break
+                if i == 0 and len(cells) >= 3 and _OPEN_TEXT.match(c) \
+                        and len(c) > _STATUS_CELL_MAX:
+                    _DROPPED.append({
+                        "src": src, "line": lineno,
+                        "reason": "第 1 格以狀態字開頭但有 %d 字（上限 %d）⇒ 當敘述不當狀態"
+                                  % (len(c), _STATUS_CELL_MAX),
+                        "row": _clip(joined, 90),
+                    })
+                    break
             continue
         # 標題取「狀態格以外最長的那一格」—— 計畫書的欄序不一致（有的狀態在
         # 第二欄、有的在最後），固定取第一欄會抓到編號（`R1`／`03`）當標題。
@@ -368,6 +425,11 @@ def project_sources(proj_root: Path) -> list:
 # --------------------------------------------------------------------------
 BLAME_CACHE = HARNESS / "state" / "todo_blame_cache.json"
 
+# `--check` 被當唯讀驗收指令用（map 判準②／看板鏈那條逐字引用它），所以它不該寫檔。
+# 覆核 R3-7 抓到：docstring 的「不寫檔」其實只指不寫 HTML，`_blame_times` 在快取
+# miss 時照樣寫 `state/todo_blame_cache.json`。旗標由 main() 依 argv 設定。
+SKIP_CACHE_WRITE = False
+
 
 def _blame_times(repo: Path, rel: str, content_hash: str) -> list:
     r"""回該檔每一行的 commit 時間（epoch 秒），index 0 ＝第 1 行。
@@ -400,6 +462,8 @@ def _blame_times(repo: Path, rel: str, content_hash: str) -> list:
     except Exception:
         return []
     cache[key] = {"hash": content_hash, "times": times}
+    if SKIP_CACHE_WRITE:
+        return times          # 唯讀模式：算得出來照樣回傳，只是不落檔
     try:
         BLAME_CACHE.parent.mkdir(parents=True, exist_ok=True)
         BLAME_CACHE.write_text(json.dumps(cache), encoding="utf-8")
@@ -675,6 +739,12 @@ def inject(html: str, bar: str, block: str, default_count: int) -> str:
 
 
 def main() -> None:
+    # `--check` 是唯讀驗收指令（map 判準與看板鏈那條都逐字引用它），
+    # 所以它不該留下副作用。必須在 collect() **之前**設——blame 是在收集途中算的。
+    global SKIP_CACHE_WRITE
+    if "--check" in sys.argv:
+        SKIP_CACHE_WRITE = True
+
     buckets = collect()
     layers = _load_layers()
     roots, current = {}, None
@@ -698,11 +768,41 @@ def main() -> None:
                     continue
                 print("  %s %d：" % (KINDS[k]["label"], len(sub)))
                 for i in sub[:3]:
-                    print("    - [%s:%d] %s" % (i["src"], i["line"], _clip(i["title"], 62)))
+                    # 標題取「最長的那一格」，而計畫書的說明欄通常比項目欄長 ⇒
+                    # 印出來常常**不含票名**，照票名 grep 驗收會判成假紅（覆核 R4-3）。
+                    # 補印 detail 的第一段（通常就是項目欄）。
+                    head = (i.get("detail") or "").split(" ／ ")[0]
+                    extra = "｜%s" % _clip(head, 34) if head else ""
+                    print("    - [%s:%d] %s%s"
+                          % (i["src"], i["line"], _clip(i["title"], 62), extra))
+                if len(sub) > 3:
+                    # no silent caps：截斷要說。第 4 筆之後的項目在驗收時
+                    # 本來等於不存在，而「撈不到」與「被截掉」長得一樣（覆核 R3-7）。
+                    print("      …另有 %d 筆未列（本指令每類只印前 3 筆）" % (len(sub) - 3))
         print("\n合計 %d 項；預設頁籤徽章（%s）= %d" % (total, current, len(buckets.get(current, []))))
         if empty_kinds:
             print("⚠ 這幾類一項都沒抓到：%s —— 正式產出時會拒跑"
                   % "、".join(KINDS[k]["label"] for k in empty_kinds))
+
+        # 被丟棄的候選列（票 11 §二-3／§二-4）。回寫一列卻撈不到時，
+        # 沒有這一段就只能得到一個沒有資訊量的 0。
+        if _DROPPED:
+            by_src: dict = {}
+            for d in _DROPPED:
+                by_src.setdefault(d["src"], []).append(d)
+            print("\n被丟棄的候選列（%d 筆，%d 個檔）—— 看起來有人想標待辦，但沒通過判準："
+                  % (len(_DROPPED), len(by_src)))
+            print("  「我回寫了一列卻撈不到」先在這裡找，不要只看上面的 0。")
+            for src in sorted(by_src, key=lambda s: (-len(by_src[s]), s)):
+                rows = by_src[src]
+                print("\n  %s（%d 筆）" % (src, len(rows)))
+                for d in rows[:2]:
+                    print("    ✗ 第 %d 行：%s" % (d["line"], d["reason"]))
+                    print("        %s" % d["row"])
+                if len(rows) > 2:
+                    print("    …另有 %d 筆同檔未列" % (len(rows) - 2))
+        else:
+            print("\n被丟棄的候選列：無。")
         return
 
     # 拒絕產出空表：空清單跟「正常但沒事要做」在畫面上長得一樣。

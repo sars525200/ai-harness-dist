@@ -322,6 +322,17 @@ def main() -> int:
         print(f"  {'PASS' if not fo_failed else 'FAIL'}  fail-open 量測"
               f"（{fo_passed}/{fo_passed + len(fo_failed)}）")
 
+        # 看板待辦的靜默丟棄（票 11 §二-3／§二-4）。三種丟法都曾經沒有任何提示，
+        # 其中一種是我自己在 2026-08-23 犯的（`⬜ 待辦` ⇒ 解析 0 項）。
+        import test_todos_visibility
+        tv_passed, tv_failed = test_todos_visibility.run()
+        unit_passed += tv_passed
+        for detail in tv_failed:
+            failed.append(("待辦解析可見性", detail))
+        unit_failed.extend(tv_failed)
+        print(f"  {'PASS' if not tv_failed else 'FAIL'}  待辦解析可見性"
+              f"（{tv_passed}/{tv_passed + len(tv_failed)}）")
+
         # WARN 輸出通道與進度圖產生器。兩者都驗 fixture 層看不到的性質：
         # 前者驗 stdout 的 JSON 形狀（既有 fixture 完全沒驗 stdout 與 exit code 映射），
         # 後者驗「看板的進度圖有沒有忠實反映計畫書」。掛進這支統一入口的理由很實際 ——
