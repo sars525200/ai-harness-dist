@@ -525,10 +525,12 @@ def main(argv: list[str] | None = None) -> int:
             # 「可合併／可取代」的判斷恰恰需要它（2026-08-23 user 定的版型）。
             # ⚠ **這批不是「你沒有」**（2026-08-24 訂正，原本這裡寫「本機沒有」）。
             # 差集的右邊是**注入清單**，而注入清單**只裝 skill**：
-            # 內建 slash command 一支都不會出現在裡面。已實證的假陽性 3 支——
-            # `doctor`（`claude --help` 的 Commands 區有它，且 8/24 實跑成功）、
-            # `verify`／`batch`（user 8/24 在互動 session 打 `/` 確認補得出來）。
-            # ⇒ 這裡只能誠實說「不在注入清單」，能不能用**這支工具測不到**。
+            # 內建 slash command 一支都不會出現在裡面。
+            # **2026-08-24 實測 6/6 全是假陽性**——`doctor`（`claude --help` 的 Commands 區
+            # 有它、實跑成功）、`verify`／`batch`／`debug`／`design-sync`／
+            # `run-skill-generator`（user 在互動 session 打 `/`，補完清單裡全都有）。
+            # ⇒ **這條訊號到目前為止一次真缺口都沒抓到過。**
+            # 能不能用**這支工具測不到**，只有打 `/` 看補完才算數。
             desc = desc0
             print(f"      官方文件有、不在注入清單：{len(miss)} 支"
                   + (f" → {', '.join(miss)}" if miss else ""))
@@ -573,8 +575,12 @@ def main(argv: list[str] | None = None) -> int:
         if rep["removed"]:
             parts.append(f"消失 {len(rep['removed'])} 支（{', '.join(rep['removed'])}）")
         if cross_delta:
-            parts.append(f"官方新增而本機沒有 {len(cross_delta)} 支"
-                         f"（{', '.join(cross_delta)}）——可能需要升版才拿得到")
+            # ⚠ 2026-08-24：原本寫「官方新增而本機沒有…可能需要升版才拿得到」，
+            # 那句**兩個斷言都是錯的**——差集右邊是注入清單，而 6/6 實測全部拿得到。
+            # 真正有價值的訊號是「**官方文件新增了東西**」，不是「你缺了東西」。
+            parts.append(f"官方文件新增 {len(cross_delta)} 項"
+                         f"（{', '.join(cross_delta)}）"
+                         "——**注入清單沒有不等於拿不到**，打 `/` 看補完才算數")
         summary = "；".join(parts)
 
         item = f"🔧 **平台 skill 變動偵測：{summary}**"
