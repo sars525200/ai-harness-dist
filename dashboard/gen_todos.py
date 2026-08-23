@@ -743,6 +743,32 @@ def _filter_bar(items: list) -> str:
     return "\n".join(btns)
 
 
+def _cat_bar(current: list, everything: list) -> str:
+    """分類篩選列（2026-08-23）。與上面那條「來源類型」是**兩道獨立的篩選**。
+
+    ⚠ **按鈕集合取自 `everything`、數字取自 `current`**：分類目前只有全域那張
+    登記簿在填，而預設層別是「本專案＋全域關」⇒ 若按鈕也跟著 current 生，
+    載入時整條列會是空的，切到全域才突然長出來 —— 那看起來像壞掉。
+    數字由 JS 在切層時重算（同 kind 那條）。
+
+    分類全空時整條列不出現：一條全 0 的篩選列比沒有更吵。
+    """
+    cats = sorted({i.get("cat") for i in everything if i.get("cat")})
+    if not cats:
+        return ""
+    n_all = sum(1 for i in current if i.get("cat"))
+    btns = ['      <div class="subtabs todo-filters todo-catfilters" role="group" '
+            'aria-label="待辦領域分類">',
+            '        <button type="button" class="subtab" data-cat="all" aria-pressed="true">'
+            '全部領域<span class="count">%d</span></button>' % n_all]
+    for c in cats:
+        n = sum(1 for i in current if i.get("cat") == c)
+        btns.append('        <button type="button" class="subtab" data-cat="%s" '
+                    'aria-pressed="false">%s<span class="count">%d</span></button>'
+                    % (_html.escape(c, quote=True), _html.escape(c), n))
+    btns.append("      </div>")
+    return "\n".join(btns)
+
 def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: list) -> str:
     counts = " · ".join("%s %d" % (PRIO[p]["label"], sum(1 for i in items if i["prio"] == p))
                         for p in PRIO_ORDER if any(i["prio"] == p for i in items))
@@ -877,8 +903,13 @@ def main() -> None:
         html = f.read()
     # 分類列的初始數字＝**預設狀態下看得到的那些**（本專案＋全域關），與頁籤徽章
     # 同一個口徑；JS 會在切層時重算，兩邊語意必須一致。
-    out = inject(html, _filter_bar(buckets.get(current, [])),
-                 build_html(buckets, roots, current), len(buckets.get(current, [])))
+    _cur = buckets.get(current, [])
+    _all = [i for v in buckets.values() for i in v]
+    _bar = _filter_bar(_cur)
+    _cb = _cat_bar(_cur, _all)
+    if _cb:
+        _bar = _bar + chr(10) + _cb
+    out = inject(html, _bar, build_html(buckets, roots, current), len(_cur))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
     print("已注入待辦：%d 項（%s）" % (
