@@ -764,7 +764,7 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 | **VA-15** | **全部停用時看板不得綠**（#3） | 所有平台停用跑一次，再問 `_p_skill_watch_alive` | 必須**不綠**（或明確顯示「沒有平台在監控」）。紅線：沿用現況只看 `lastSuccessAt` → 綠，測試必須紅 |
 | **VA-16** | **新平台 bootstrap 不弄掛其餘平台**（#13） | `claude-code` 有基準、`cursor` 沒有，一起跑 | `claude-code` 正常完成；`cursor` 走 bootstrap 並在報告明說「首次建立基準」。紅線：沿用現況 → 整支 exit 2、`claude-code` 那半也沒檢查 |
 | **VA-17** | **TODOS 列帶平台、不撞去重**（#16） | 兩個平台同一次跑出**相同 summary** | 兩列都寫得進去、兩邊基準都前進。紅線：列文字不含平台 id → 第二列被去重吃掉且基準不前進，測試必須紅 |
-| **VA-18** | **SkillViewer 投影帶得出停用旗標**（§16.2 R2-2 補的·**原本沒有編號**，map 覆核 #1 對帳時發現） | 給一個停用平台的推論項目加旗標，跑清冊產生器後看 SkillViewer 的投影 | 旗標要**抵達畫面**。⚠ `SkillViewer.ps1:130` 是 `[pscustomobject]@{ Name; Description; Category }`，**只投影三欄**，多的屬性被 PowerShell 靜默丟掉（對不存在的屬性回 null 不報錯）。紅線：只加 JSON 欄不改投影的變異版必須紅 |
+| **VA-18** | **SkillViewer 投影帶得出停用旗標**（§16.2 R2-2 補的·**原本沒有編號**，map 覆核 R1 #1 對帳時發現） | 給一個停用平台的推論項目加旗標，跑清冊產生器後看 SkillViewer | **旗標要抵達畫面，不是抵達投影。** ⚠ 兩層都要：①`SkillViewer.ps1:130` 的 `[pscustomobject]@{ Name; Description; Category }` 只投影三欄，多的屬性被 PowerShell 靜默丟掉（對不存在的屬性回 null 不報錯）②`New-SkillCard`（`:404-407`）只讀 Name／Description／Category，**它在 dot-source 測試縫 `GUI-SECTION-END`（`:140`）之外**——改了投影卡片仍可能逐像素不變（map 覆核 R2 #4）。紅線：只加 JSON 欄不改投影必須紅；只改投影不改 `New-SkillCard` **也必須紅**。⚠ 已知缺口：`tests/` 底下沒有任何 `.ps1` 測試，那個「測試 harness」目前不存在、也沒有票負責建 —— 這一條的第②層可能只驗得到人眼 |
 
 ⚠ **VA-1～VA-17 全部是我自己寫的測試**，依 §3「兩支自己寫的實作互相比對不算獨立驗證」，每一項的通過**必須先看到它紅過**——上表「怎麼證明它會紅」那一欄就是變異腳本的規格。
 
@@ -891,7 +891,7 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 | ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
 | ⏳ 待做 | 票 05 心跳 per-platform 欄位與看板判準 | grilling |
 | ⏳ 待做 | 票 06 三種初次體驗的預設（clone／複製／缺檔） | grilling |
-| 🚧 待前置 | 票 16 順修四處與實際行為不符的文字（前置 05） | task |
+| 🚧 待前置 | 票 16 順修兩處與實際行為不符的文字（前置 03） | task |
 | 🚧 待前置 | 票 17 收尾對帳·VA 認領全表與既有驗證不退化（前置 07–16） | task |
 | 🚧 待前置 | 票 07 施作 run.py 注入縫（前置 04） | task |
 | 🚧 待前置 | 票 08 設定拆兩層與 loader（前置 06） | task |
