@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "platforms": [
+    {
+      "id": "claude-code",
+      "displayName": "Claude Code",
+      "probe": "injected-list",
+      "modes": ["headless", "interactive"],
+      "filterLocal": true,
+      "minPlausibleCount": 5,
+      "cli": {
+        "exe": "claude",
+        "versionArgs": ["--version"]
+      },
+      "docs": {
+        "urls": ["https://code.claude.com/docs/en/commands.md"],
+        "parser": "md-table-slash-cmd"
+      }
+    }
+  ]
+}
