@@ -38,6 +38,7 @@ r"""產生看板「待辦」頁籤：把散在各處的未完成事項收成一�
 """
 from __future__ import annotations
 
+import collections
 import html as _html
 import hashlib
 import importlib.util
@@ -671,8 +672,9 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
         # 身分四件套：**完成**按鈕靠它們指回來源檔的那一行。
         # `data-sha` 是樂觀鎖（見 `line_sha`），少了它就會在別人剛改過檔案時寫錯行。
         '        <li class="todo-row" data-kind="%s" data-prio="%s" data-scope="%s" '
-        'data-src="%s" data-line="%d" data-sha="%s">'
+        'data-cat="%s" data-src="%s" data-line="%d" data-sha="%s">'
         % (item["kind"], item["prio"], _html.escape(item["scope"], quote=True),
+           _html.escape(item.get("cat", ""), quote=True),
            _html.escape(item["src"], quote=True), item["line"], item.get("sha", "")),
         '          <div class="todo-l1">',
         '            <span class="todo-prio %s" aria-label="優先 %s%s">'
@@ -744,6 +746,11 @@ def _filter_bar(items: list) -> str:
 def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: list) -> str:
     counts = " · ".join("%s %d" % (PRIO[p]["label"], sum(1 for i in items if i["prio"] == p))
                         for p in PRIO_ORDER if any(i["prio"] == p for i in items))
+    # 分類計數（2026-08-23）：只列**有值**的分類，按數量排。
+    # 沒有任何一列填分類的區塊（例如專案側那幾個來源）整段不出現 ——
+    # 印「分類 0」比不印更吵，而且會讓人以為那一區的分類壞掉了。
+    _cats = collections.Counter(i.get("cat") for i in items if i.get("cat"))
+    cat_counts = " · ".join("%s %d" % (c, n) for c, n in _cats.most_common())
     head = [
         '      <div class="todo-gh">',
         '        <h3>%s<span class="todo-n-badge">%d</span></h3>' % (_html.escape(title), len(items)),
@@ -751,6 +758,9 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: l
     ]
     if items:
         head.append('        <span class="todo-mix">%s</span>' % _html.escape(counts))
+        if cat_counts:
+            head.append('        <span class="todo-mix todo-catmix">%s</span>'
+                        % _html.escape(cat_counts))
         head.append('        <button type="button" class="todo-copy-all" '
                     'aria-label="複製本區全部項目">複製全部</button>')
     head.append("      </div>")
