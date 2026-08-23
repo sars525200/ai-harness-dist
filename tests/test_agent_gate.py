@@ -47,6 +47,16 @@ CASES = [
      "被執行的腳本不在 harness 底下 —— 仍要擋"),
     ("py -3 -m py_compile D:/IT-department/x.py", False,
      "-m 仍擋：py_compile 會寫 __pycache__，破壞唯讀不變量"),
+    # ── 2026-08-23：`curl -sI`（只看 HTTP 狀態碼／標頭）。
+    #    稽核「部署鏈」時要能問「站台活著嗎、版號端點回什麼」，而那不需要 ssh 也不碰 DB。
+    ("curl -sI https://itportal.example.com/api/version", True, "HEAD 探測"),
+    ("curl -s -I http://10.0.0.3:8080/", True, "分寫的 -s -I"),
+    ("curl -sI -m 5 https://x/", True, "帶逾時"),
+    ("curl -s https://x/", False, "沒有 -I 就是抓 body，不放行"),
+    ("curl -sI -o out.txt https://x/", False, "-o 會寫檔"),
+    ("curl -sI -d a=1 https://x/", False, "-d 是送資料"),
+    ("curl -sI -X DELETE https://x/", False, "-X 換方法"),
+    ("curl -sI --upload-file x https://x/", False, "上傳"),
     ('node --check "d:/IT-department/SOP/05_UI_Demo/app.js"', True,
      "CLAUDE.md §6 要求兩端都跑 node --check"),
     ("node -c app.js", True, "--check 的短旗標"),

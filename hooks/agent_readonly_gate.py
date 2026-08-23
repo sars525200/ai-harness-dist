@@ -111,6 +111,8 @@ def _decide(command: str) -> "str | None":
         return "node 只允許語法檢查（node --check <file>）"
     if head in {"py", "python", "python3", "pythonw"}:
         return _decide_py(cmd)
+    if head == "curl":
+        return _decide_curl(tokens)
     if head == "ls":
         return _decide_ls(tokens)
     if head in {"cmp", "fc", "diff"}:
@@ -118,7 +120,7 @@ def _decide(command: str) -> "str | None":
 
     return (
         f"指令 {head!r} 不在唯讀角色的白名單內。"
-        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、ls（列表旗標）、"
+        f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、ls（列表旗標）、curl -sI、"
         f"py -3 <D:\\.ai-harness 底下的探測腳本>；"
         f"讀檔請用 Read／Grep／Glob 工具。"
     )
@@ -144,6 +146,56 @@ _PY_WRITE_FLAGS = {"--write", "--write-snapshot", "--apply", "--force", "--fix",
 #   `ls` 一個字都不寫，限制個數沒有任何安全收益，只會逼角色分成多次呼叫。
 #   真正的守門是上面那條「不得含 shell 元字元」——沒有它，`ls x && rm y` 就通了。
 _LS_FLAGS = set("laRrhtSF1d")
+# `curl` 的唯讀形式（2026-08-23）：**只放行 HEAD 探測**。
+# 稽核「部署→遷移→dump 重生」那條鏈時要能問「站台活著嗎、版號端點回什麼」，
+# 而那不需要 ssh、也不碰 DB。在此之前整條鏈只能抄被稽核者的自陳
+# ——**稽核變成「稽核者相信被稽核者」**。
+#
+# ⚠ **用白名單不用黑名單**：curl 的旗標有上百個、好幾個會寫檔或送資料
+# （`-o`／`-O`／`-T`／`-F`／`-d`／`-K`…），黑名單天生擋不完。
+# 這裡只認四個旗標，其餘一律拒絕——包含看起來無害的，因為「看起來無害」
+# 不是判準，「我驗過它不寫不送」才是。
+_CURL_OK_FLAGS = {"-s", "--silent", "-i", "--head", "-m", "--max-time"}
+_CURL_HEAD_FLAGS = {"-i", "--head"}          # 小寫比較；`-I` 會被 lower() 成 `-i`
+_CURL_TAKES_VALUE = {"-m", "--max-time"}
+
+
+def _decide_curl(tokens) -> "str | None":
+    from contract import _unquote
+    saw_head, urls, expect_value = False, 0, False
+    for t in tokens[1:]:
+        v = _unquote(t)
+        if expect_value:
+            expect_value = False
+            continue
+        if v.startswith("-"):
+            # 合寫的短旗標（`-sI`）逐字元拆開比對；長旗標整串比對。
+            if not v.startswith("--") and len(v) > 2:
+                for c in v[1:]:
+                    if ("-" + c).lower() not in _CURL_OK_FLAGS:
+                        return (f"curl 旗標 -{c} 不在唯讀白名單"
+                                f"（只放行 -s／-I／-m，其餘一律拒絕：curl 有上百個旗標，"
+                                f"好幾個會寫檔或送資料，黑名單天生擋不完）。")
+                    if ("-" + c).lower() in _CURL_HEAD_FLAGS:
+                        saw_head = True
+                continue
+            low = v.lower()
+            if low not in _CURL_OK_FLAGS:
+                return (f"curl 旗標 {v!r} 不在唯讀白名單（只放行 -s／-I／-m）。")
+            if low in _CURL_HEAD_FLAGS:
+                saw_head = True
+            if low in _CURL_TAKES_VALUE:
+                expect_value = True
+            continue
+        urls += 1
+    if not saw_head:
+        return ("curl 只放行 **HEAD 探測**（要有 -I／--head）—— 沒有它就是在抓 body，"
+                "而那已經超出「站台活著嗎、端點回什麼狀態」這個唯讀目的。")
+    if urls != 1:
+        return f"curl 只放行單一 URL（這條有 {urls} 個位置參數）。"
+    return None
+
+
 
 
 def _decide_ls(tokens) -> "str | None":
