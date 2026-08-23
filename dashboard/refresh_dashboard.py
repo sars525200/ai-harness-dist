@@ -55,6 +55,7 @@ STATE_FILE = DASHBOARD / "sources_state.json"
 if str(DASHBOARD) not in sys.path:
     sys.path.insert(0, str(DASHBOARD))
 from check_freshness import ops_dirs as _ops_dirs, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
+import refresh_lock  # noqa: E402
 
 # 看板內容的上游。動到這些才需要重生 —— 清單刻意列明，
 # 不用「整個目錄」：那會把 state/*.ndjson（每次工具呼叫都在長）也算進來，
@@ -204,43 +205,20 @@ def run(script: Path) -> "tuple[int, str]":
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
-LOCK_FILE = DASHBOARD / ".refresh.lock"
-LOCK_STALE_SEC = 120
+# 鎖的實作抽到 refresh_lock.py —— 收工才跑的四支產生器要用**同一把**鎖，
+# 留兩份實作遲早會漂掉（CLAUDE.md：改前先 grep 找齊全部 copy）。
+# 這裡維持 `wait=0`＝搶不到就跳過的語意：熱路徑每 10 秒還會再來一次，
+# 阻塞在 Stop hook 裡（預算 20–30ms）才是真問題。
+LOCK_FILE = refresh_lock.LOCK_FILE
+LOCK_STALE_SEC = refresh_lock.LOCK_STALE_SEC
 
 
 def acquire_lock() -> bool:
-    """粗粒度鎖：多 session 並行是這個環境的常態（實測同時 3–4 個）。
-
-    兩個 session 同時重生會同時整檔覆寫 HTML —— 產生器是冪等的所以內容不會錯，
-    但**寫入過程不是原子的**，讀到半寫入的 HTML 才是真風險。
-    用 `x` 模式建檔當鎖（原子操作），過期鎖自動接管避免當機留下的鎖永久卡住。
-    """
-    import os
-    import time
-    if LOCK_FILE.exists():
-        try:
-            age = time.time() - LOCK_FILE.stat().st_mtime
-            if age > LOCK_STALE_SEC:
-                LOCK_FILE.unlink()   # 過期＝上次跑到一半死掉，接管
-            else:
-                return False
-        except Exception:
-            return False
-    try:
-        with io.open(LOCK_FILE, "x", encoding="utf-8") as f:
-            f.write(f"pid={os.getpid()}\n")
-        return True
-    except FileExistsError:
-        return False          # 剛好被別的 session 搶到
-    except Exception:
-        return True           # 鎖機制自己壞掉不該擋住正常工作
+    return refresh_lock.acquire(wait=0)
 
 
 def release_lock() -> None:
-    try:
-        LOCK_FILE.unlink()
-    except Exception:
-        pass
+    refresh_lock.release()
 
 
 def main() -> int:

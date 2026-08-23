@@ -58,6 +58,13 @@ HOOKS_DIR = HARNESS / "hooks"
 AGENTS_DIR = HARNESS / "agents"
 REPORT_PY = HOOKS_DIR / "report.py"
 HTML_PATH = DASHBOARD / "harness-dashboard.html"
+
+# 看板 HTML 的寫入互斥鎖。這支是收工才跑的產生器，**不在 refresh_dashboard 的熱路徑
+# 清單裡**，但寫的是同一份 HTML —— 而 serve_dashboard.py 每 10 秒會重生一次。
+# 不取鎖＝沒有互斥的 read-modify-write（2026-08-23 實測：手動持鎖時這支照樣寫進去）。
+if str(DASHBOARD) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD))
+import refresh_lock  # noqa: E402
 HARNESS_CONFIG = HARNESS / "harness.config.json"
 
 MARK_START = "<!-- TASK_FLOW_START"
@@ -899,11 +906,12 @@ def main() -> None:
                   f"\n  補在 gen_task_flow.py 的 BUILTIN")
         return
 
-    with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
-        html = f.read()
-    out = sync_tab_badge(inject(html, build_html(d)))
-    with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
-        f.write(out)
+    with refresh_lock.guard(who="gen_task_flow.py"):
+        with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
+            html = f.read()
+        out = sync_tab_badge(inject(html, build_html(d)))
+        with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
+            f.write(out)
     print(f"已注入任務動線：{len(d['wired'])} 個事件 · {len(d['rules'])} 條規則 · "
           f"{len(d['disp']['roles'])} 個角色 · "
           f"{sum(v['runs'] for v in d['disp']['roles'].values()):,} 次派工")

@@ -52,6 +52,13 @@ DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
 STATE_DIR = HARNESS_ROOT / "state"
 HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
+
+# 看板 HTML 的寫入互斥鎖。這支是收工才跑的產生器，**不在 refresh_dashboard 的熱路徑
+# 清單裡**，但寫的是同一份 HTML —— 而 serve_dashboard.py 每 10 秒會重生一次。
+# 不取鎖＝沒有互斥的 read-modify-write（2026-08-23 實測：手動持鎖時這支照樣寫進去）。
+if str(DASHBOARD_DIR) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD_DIR))
+import refresh_lock  # noqa: E402
 COST_STATE = DASHBOARD_DIR / "cost_state.json"
 
 # 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
@@ -1000,12 +1007,13 @@ def main() -> None:
                       f"  則數 {sum(v.get('n', 0) for v in st[name].values())}")
         return
 
-    with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
-        html = f.read()
-    block = _wrap_subtabs(build_html(by_day, ev, cost, skills, agents, stage), len(by_day))
-    out = inject(html, block)
-    with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
-        f.write(out)
+    with refresh_lock.guard(who="gen_cost_panel.py"):
+        with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
+            html = f.read()
+        block = _wrap_subtabs(build_html(by_day, ev, cost, skills, agents, stage), len(by_day))
+        out = inject(html, block)
+        with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
+            f.write(out)
     print(f"已注入成本分頁：{len(by_day)} 天 · skill {len(skills)} 支 · 角色 {len(agents)} 個"
           + (f" · 金額 ${cost['project_total']:,.2f}" if cost else " · 無金額快取"))
 
