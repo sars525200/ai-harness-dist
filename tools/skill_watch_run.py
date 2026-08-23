@@ -61,6 +61,44 @@ STATE_DIR = HARNESS_ROOT / "state"
 LOG_PATH = STATE_DIR / "skill_watch.log"
 HEARTBEAT_PATH = STATE_DIR / "skill_watch_heartbeat.json"
 
+# 基準路徑：**自己拿一份**，不要在呼叫點直接引用 `skill_watch.DEFAULT_BASELINE`
+# （票 04 Q4）。理由是可注入性：`_set_paths()` 管得到本模組的常數，管不到別的模組的；
+# 三個呼叫點若各自引用那邊的常數，測試就得同時 patch 兩個模組，而「漏 patch 一個」
+# 的後果是**寫進版控中的 `platform_skills.json`**——有寫、位置錯、完全無聲。
+BASELINE_PATH = skill_watch.DEFAULT_BASELINE
+
+
+def _set_paths(root) -> None:
+    r"""把本模組所有會落地的路徑重指到 `root`（票 04 定案的注入縫）。
+
+    **為什麼要有這支，而不是讓測試逐一改常數**（票 04 Q3）：
+    `LOG_PATH` 與 `HEARTBEAT_PATH` 是**在 import 當下**從 `STATE_DIR` 衍生的。
+    測試寫 `m.STATE_DIR = tmp` 改不到那兩個 —— 心跳照樣寫真檔，而測試會綠。
+    這正是 `tests\test_contract_units.py:383` 記下的那次假綠的形狀：
+    「有寫、位置錯、完全無聲」（`makedirs` 會順手把錯的目錄建出來）。
+    單一入口讓「漏設一個」不可能發生。
+
+    **為什麼連 `HARNESS_ROOT` 與 `CONFIG_PATH` 一起換**（票 04 Q5）：
+    `harness.config.json` 是 gitignored（每台機器不同），而 `load_config()` 缺它就拒跑。
+    測試若讓 `CONFIG_PATH` 指向真檔，換一台機器或在 CI 上就會**因為錯的理由失敗**。
+    換掉 `HARNESS_ROOT` 之後 `settings_files()`／`assert_neutral_cwd()`／
+    `capture_headless()` 的 cwd 也跟著走（它們都在呼叫當下讀這個全域）。
+
+    ⚠ **新增任何路徑常數都要接進這裡。** `tests\test_skill_watch_run.py` 有一條
+    枚舉守門會掃本模組所有 `*_PATH`／`*_DIR`，漏接就會紅。
+    """
+    global HARNESS_ROOT, CONFIG_PATH, TODOS_PATH, STATE_DIR, LOG_PATH
+    global HEARTBEAT_PATH, BASELINE_PATH
+    root = Path(root)
+    HARNESS_ROOT = root
+    CONFIG_PATH = root / "harness.config.json"
+    TODOS_PATH = root / "TODOS.md"
+    STATE_DIR = root / "state"
+    LOG_PATH = STATE_DIR / "skill_watch.log"
+    HEARTBEAT_PATH = STATE_DIR / "skill_watch_heartbeat.json"
+    BASELINE_PATH = root / "SkillViewer" / "platform_skills.json"
+
+
 DOCS_URL = "https://code.claude.com/docs/en/commands.md"
 UA = {"User-Agent": "Mozilla/5.0 (harness skill_watch)"}
 
@@ -396,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
               f" → 平台內建 {len(names)} 支")
 
         print("[2/6] 擷取健全性檢查…")
-        doc = skill_watch.load_doc(skill_watch.DEFAULT_BASELINE)
+        doc = skill_watch.load_doc(BASELINE_PATH)
         problem = None if args.force else skill_watch.sanity_check(doc, "headless", names)
         if problem:
             raise RunError(f"擷取結果不可信，拒絕往下走：{problem}")
@@ -440,7 +478,7 @@ def main(argv: list[str] | None = None) -> int:
             print("[6/6] 基準維持不變。")
             if not err and not args.dry_run:
                 # 交叉驗證的快照即使無變動也要落盤，否則 `newly` 永遠算不出來
-                skill_watch.save_doc(skill_watch.DEFAULT_BASELINE, doc)
+                skill_watch.save_doc(BASELINE_PATH, doc)
             write_heartbeat(True, f"無變動（平台內建 {len(names)} 支）"
                             + ("；官方文件抓取失敗" if err else ""), changed=False)
             return 0
@@ -485,7 +523,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1 if args.exit_on_change else 0
 
         skill_watch.capture(doc, "headless", names, cli_version(), "neutral", args.force)
-        skill_watch.save_doc(skill_watch.DEFAULT_BASELINE, doc)
+        skill_watch.save_doc(BASELINE_PATH, doc)
         print("[6/6] 已更新 headless 基準")
         write_heartbeat(True, summary, changed=True)
         return 1 if args.exit_on_change else 0
