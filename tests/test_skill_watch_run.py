@@ -276,6 +276,7 @@ def run(verbose: bool = True):
     global _passed, _failed, _details
     _passed, _failed, _details = 0, 0, []
     for fn in (test_zero_behaviour_change,
+               test_skillmd_matches_actual_first_run_behaviour,
                test_set_paths_covers_every_path_const,
                test_writes_land_in_tmp_and_real_files_untouched):
         try:
@@ -285,6 +286,38 @@ def run(verbose: bool = True):
             _details.append(f"{fn.__name__} 拋例外：{exc}")
             print(f"  FAIL {fn.__name__} 拋例外：{exc}")
     return _passed, list(_details)
+
+
+
+def test_skillmd_matches_actual_first_run_behaviour() -> None:
+    r"""票 16：`SKILL.md` 描述的首跑行為必須與 `compare()` 缺基準時的**實際訊息**一致。
+
+    **綁的是程式吐出來的字，不是我此刻寫的字**——這樣兩個方向都守得住：
+    改文件而不改程式會紅，改程式的訊息而不更新文件也會紅。
+
+    這條票 16 存在的理由：`SKILL.md` 原本寫「第一次跑會自己建立基準（首次不報
+    新增一堆，只建快照）」，而實際行為是 `WatchError` → exit 2。**那句從來沒成立過。**
+    """
+    import skill_watch as sw
+    try:
+        sw.compare({}, "headless", ["a", "b", "c", "d", "e"])
+        check("缺基準時 compare 會拋 WatchError", False, "沒拋——文件與程式的比對前提不成立")
+        return
+    except sw.WatchError as exc:
+        msg = str(exc)
+    check("缺基準時 compare 會拋 WatchError", True)
+
+    doc = (HARNESS / "skills" / "skill-watch" / "SKILL.md").read_text(encoding="utf-8")
+    # 引號會被改寫（「」／『』），所以只比對不含引號的判別性片段
+    for frag in ("還沒建立基準", "什麼都沒變", "--capture"):
+        check(f"SKILL.md 引用了實際訊息的片段：{frag}", frag in msg and frag in doc,
+              f"在訊息裡={frag in msg}／在 SKILL.md 裡={frag in doc}")
+    # ⚠ 這條原本比對含換行的原句，而變異版換了折行位置就繞過去了（實測綠）。
+    # 壓掉所有空白再比 —— 折行不該影響「這句話有沒有被當成現況說出來」。
+    flat = "".join(doc.split())
+    check("SKILL.md 沒有把『自己建立基準』當成現況陳述",
+          "第一次跑會自己建立基準（首次" not in flat,
+          "那句從來沒成立過——它是票 16 修掉的原文")
 
 
 if __name__ == "__main__":

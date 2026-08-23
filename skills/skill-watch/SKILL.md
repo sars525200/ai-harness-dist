@@ -104,11 +104,25 @@ exit code：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗�
 - **路徑自己解析**：`run.py` 從自身位置往上三層找 harness 根（`Path(__file__).resolve()`），
   沒有寫死任何絕對路徑，也不受 symlink／junction 影響。
 - **設定從 `harness.config.json` 讀**：腳本自己會讀 `currentProject`，讀不到會拒跑並說缺什麼。
-- **基準檔** 落在 `<harness>/SkillViewer/platform_skills.json`，第一次跑會自己建立基準
-  （首次不報「新增一堆」，只建快照）。
+- **基準檔** 目前落在 `<harness>/SkillViewer/platform_skills.json`。
+  ⚠ **缺基準時它是拒跑（exit 2），不是「自己建一份」**——訊息會說
+  「這是『還沒建立基準』，不是『什麼都沒變』——先跑 `--capture`」。
+  這是刻意的：回傳空表會讓「還沒建立基準」偽裝成「什麼都沒變」。
+  （這裡原本寫「第一次跑會自己建立基準」，那句從來沒成立過，2026-08-23 票 16 修正。
+  真正的 bootstrap 由票 14 做，屆時要回頭改這一段；**在那之前不要預寫未來式**。）
 
-⚠ **目前只支援 Claude Code 一種平台**。要監控別的 AI 工具（Cursor、Copilot…）
-需要為那個工具寫一支取得技能清單的實作——**在有第二個實際要用的工具之前不預先抽象**
-（`UNIVERSAL_HARNESS_PLAN.md` §5：為了通用而通用，抽象層本身不會讓任何人少犯錯）。
+⚠ **要監控哪些平台已經可以設定了**（2026-08-23 票 08）：定義在
+`<harness>/skills/skill-watch/platforms.json`（進版控·跟著 skill 走），
+開關在 `<harness>/state/skill_watch_platforms.json`（本機狀態·不進版控）。
+**缺開關檔＝全關**，什麼都不會查；用步驟 0 的旗標勾選。
 
-設計與三輪對抗式覆核紀錄見 `<harness>/SKILL_WATCH_PLAN.md`。
+**目前定義裡只有 Claude Code**。加第二個平台除了在定義檔加一筆，還要有對應的
+adapter 實作（票 09）——`platforms.json` 裡放一個沒有 adapter 的平台，等於埋一個
+勾了就爆的選項。
+⚠ `UNIVERSAL_HARNESS_PLAN.md` §5「在有第二個實際要用的工具之前不預先抽象」
+**這條的擋箭牌已經解除**（2026-08-23 票 01：Cursor 確認為第二個實際要用的工具，
+`probe = injected-list`），W-12 因此定案介面一次到位。
+
+設計、對抗式覆核紀錄與決策票見 `<harness>/SKILL_WATCH_PLAN.md`
+（§14 規格／§15·§16 覆核／§17 決策票待辦）與
+`d:\IT-department\.scratch\skill-watch-multiplatform\`。
