@@ -333,6 +333,18 @@ def main() -> int:
         print(f"  {'PASS' if not tv_failed else 'FAIL'}  待辦解析可見性"
               f"（{tv_passed}/{tv_passed + len(tv_failed)}）")
 
+        # marker 的扣除範圍與「驗證方式必須在 hash 內」（覆核 Round 6-H1／M6）。
+        # 這兩條守的是**我自己在票 11 §一引入的回歸**：HISTORY 併進 content_hash 時
+        # 扣的是整行，於是「行尾掛 marker」變成零成本的改內容不重簽路徑。
+        import test_marker_hash_scope
+        mh_passed, mh_failed = test_marker_hash_scope.run()
+        unit_passed += mh_passed
+        for detail in mh_failed:
+            failed.append(("marker 扣除範圍", detail))
+        unit_failed.extend(mh_failed)
+        print(f"  {'PASS' if not mh_failed else 'FAIL'}  marker 扣除範圍"
+              f"（{mh_passed}/{mh_passed + len(mh_failed)}）")
+
         # 判準③探針的自檢（票 11 §二-5）。它自己的 `--self-test` 就是「怎麼證明它會紅」
         # 那一題的答案：有 map→通過／沒提 map→違規／宣告了但檔案不存在→違規。
         # 掛進全套是因為**探針壞掉會靜默**：它只會開始說「沒有 map」，看起來像判準未達。

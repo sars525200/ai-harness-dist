@@ -326,6 +326,32 @@ def note_failopen(reason: str, transcript_path: str = "") -> None:
         pass
 
 
+def _is_marker_only_line(line: str) -> bool:
+    """這一行 strip 之後**恰好就是一個 marker**（而不是「這一行裡有 marker」）。
+
+    覆核 Round 6-H1（2026-08-23）實測抓到的洞：`content_hash` 原本用 `.search()`，
+    也就是「**這一行含有 marker 就扣掉整行**」。`PASSED`／`SKIP` 各有守門（多張擋、
+    兩種並存擋）所以還撐得住，但票 11 §一新增的 `HISTORY` **不驗 hash、無張數上限、
+    慣例還明寫可以有多張** ⇒ 三個保護一個都沒有，於是出現一條零成本的繞法：
+
+        不要改 in-scope，用 append。
+        在 Destination 底下加一行「上面那條已作廢，範圍改成 X」，行尾掛一個 HISTORY，
+        hash **一個 bit 都不會動**，現行憑證永久有效。
+
+    極端版實測：每一行都掛 ⇒ `content_hash` == `sha256("")`（`e3b0c442…`），
+    蓋一張那個值的 PASSED 之後，**那份文件之後寫什麼都通關**。
+
+    改成 `fullmatch(strip)` 之後：遷移場景（marker 獨佔一行）完全不受影響，
+    「掛在內容行尾巴」這條路直接消失——那一行的內容會照常計入 hash。
+    ⚠ 這也順手收緊了 PASSED／SKIP：它們同樣不該讓一整行內容跟著憑證一起消失。
+    """
+    s = line.strip()
+    if not s:
+        return False
+    return bool(_PASSED.fullmatch(s) or _SKIP.fullmatch(s)
+                or _SKIP_LEGACY.fullmatch(s) or _HISTORY.fullmatch(s))
+
+
 def _review_scope(text: str) -> str:
     """審查範圍＝扣掉 `REVIEW_SCOPE_IGNORE` 區之後的內容。
 
@@ -517,6 +543,25 @@ def check(ctx):
             gap = _verification_gap(_review_scope(probe))
             if gap:
                 return _verification_gap_block(name, path, gap)
+            # 覆核 Round 6-M6：**守門看得到 ≠ 它在 hash 範圍內**。
+            # 兩個視角差一層 `_detectable`：守門吃剝過 code fence 的版本，
+            # `content_hash` 吃原文。所以 fence 裡放一行孤兒
+            # `REVIEW_SCOPE_IGNORE_START`（**一份在教這個慣例的文件天然會有**），
+            # 對守門來說不存在、對 hash 來說會跟後面真的 END 配對，
+            # 把整段驗證方式連同結論一起吞出 hash ⇒ R2-M14 換個入口復發。
+            # 收斂範圍定義做不到（hash 必須綁使用者看得到的原文），
+            # 所以改成**直接驗那個性質**：它必須在 hash 視角裡也找得到。
+            if not _VERIFY_SECTION.search(_review_scope(text)):
+                return block(
+                    f"{name} 的「## 驗證方式」**不在 hash 範圍內**——守門看得到它，"
+                    f"但蓋章綁的內容裡沒有它 ⇒ 那一節可以每輪重寫而 marker 永不失效。\n"
+                    f"最常見的成因：`REVIEW_SCOPE_IGNORE_START/END` 沒有成對，"
+                    f"或有一個落在 ``` 圍欄裡（教這個慣例的文件很容易寫出這種形狀）——"
+                    f"對 hash 來說圍欄裡的那個是真的，會跟後面的 END 配對、"
+                    f"把中間整段吞掉。\n"
+                    f"處置：檢查那對標記，讓「## 驗證方式」確實落在 IGNORE 區**之外**。\n"
+                    + _RECOMPUTE_HINT.format(path=path)
+                )
 
     if skipped:
         return bypassed(
@@ -549,8 +594,7 @@ def content_hash(text: str) -> str:
     body = _IGNORE_BLOCK.sub("", text)
     lines = [
         ln for ln in body.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        if not (_PASSED.search(ln) or _SKIP.search(ln) or _SKIP_LEGACY.search(ln)
-                or _HISTORY.search(ln))
+        if not _is_marker_only_line(ln)
     ]
     collapsed: list[str] = []
     for ln in lines:
