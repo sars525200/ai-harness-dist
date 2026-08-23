@@ -726,6 +726,73 @@ def _norm_task(v: "str | None") -> "str | None":
     return t or None
 
 
+_CLS_SPLIT = re.compile(r"[|｜／/、,，]")
+
+
+def task_classes() -> dict:
+    r"""每個專案宣告的「任務分類」值域，讀各自 `.claude\PROJECT_CONTEXT.md` 的
+    「任務分類值域」表。回 {專案名: [值, ...]}。
+
+    **為什麼不寫死**：`[UI|DB|邏輯|文件|devops]` 這組值只有 IT 資產平台成立，
+    而 harness 是跨部門共用的核心層 —— 寫死就是 `UNIVERSAL_HARNESS_PLAN.md`
+    U-3「換部門還成立嗎」的反例，而且 `tests/test_harness_config.py` 的 U-1
+    台帳正在盯這類寫死。同 `check_freshness.ops_dirs()`／`gen_todos` 的慣例。
+
+    **為什麼是 per-project 而不是一份全域值域**：這個面板同時呈現多個專案的宣告，
+    而「UI」對 IT 資產平台與對別的部門可以是不同的東西。專案清單沿用
+    `projects()` 的單一真相（`gen_layers.survey_projects()`），不自己再數一份。
+
+    某個專案沒宣告就不在回傳的 dict 裡：對新部門來說「還沒宣告值域」是**合法狀態**
+    （照實顯示所有出現過的標籤就是答案），不是環境壞掉。
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gl_for_cls", LAYERS_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    out: dict = {}
+    for r in (mod.survey_projects() or []):
+        root = Path(r.get("path") or "")
+        ctx = root / ".claude" / "PROJECT_CONTEXT.md"
+        if not ctx.exists():
+            continue
+        mm = re.search(r"^##\s+任務分類值域.*?$(.*?)(?=^##\s|\Z)",
+                       ctx.read_text(encoding="utf-8-sig"), re.M | re.S)
+        if not mm:
+            continue
+        vals = []
+        for ln in mm.group(1).splitlines():
+            if not ln.startswith("|") or ln.startswith("|---"):
+                continue
+            cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+            v = cells[0].strip("`").strip()
+            if v and v != "值":
+                vals.append(v)
+        if vals:
+            out[r.get("name") or root.name] = vals
+    return out
+
+
+def split_cls(v: "str | None") -> list:
+    """把「任務分類」欄拆成標籤清單，**順便正規化**。
+
+    實測 206 段有值卻長出 **30 種寫法** —— `[UI|邏輯]` 與 `[UI｜邏輯]` 是兩個
+    不同字串、`devops` 與 `[devops]` 也是。不正規化，消費端會把同一類拆成好幾格。
+
+    **拆標籤而不是把組合當一格**：多標籤佔 38%，組合式有 19 種（其中 10 種只出現
+    1~4 次），拆完只剩 7 種。分佈看得見比原貌保真重要 —— 原貌在 `raw` 裡還在。
+    """
+    if not v:
+        return []
+    t = str(v).strip().strip("[]【】")
+    out = []
+    for part in _CLS_SPLIT.split(t):
+        q = part.strip().strip("*` 　")
+        if q:
+            out.append(q)
+    return out
+
+
 def effort_of_path(path: str) -> "str | None":
     """從寫檔路徑推出它屬於哪個 wayfinder effort（`.scratch/<effort>/…`）。
 
@@ -1033,6 +1100,80 @@ def build_html(data: dict) -> str:
           f'      <div class="criteria">\n        {zero_line}\n      </div>\n'
           f'    </section>')
 
+    # ── 3.5 任務分類分佈（票 04·2026-08-23）
+    #
+    # 這個欄位從 2026-08-07 起就在被解析並存進 segment，但**全 harness 零消費者** ——
+    # 收了 206 段、畫面上一格都沒有。「設定必有讀取消費者才算功能」
+    # （feedback-fake-settings-ui-audit）。這一區就是它的消費端。
+    #
+    # **拆標籤而不是把組合當一格**：多標籤佔 38%，組合式 19 種（10 種只出現 1~4 次），
+    # 拆完剩 7 種。分佈看得見比原貌保真重要——原貌在 segment 的 `raw` 裡還在。
+    #
+    # **值域來自各專案的 PROJECT_CONTEXT.md**，不寫死（U-3：換部門還成立嗎）。
+    # 值域外的值進「其他」並**顯示出來**——靜靜吃掉就看不見「有人在用規範外的寫法」。
+    _vocab_by_proj = task_classes()
+    _vocab = []
+    for _vs in _vocab_by_proj.values():
+        for _v in _vs:
+            if _v not in _vocab:
+                _vocab.append(_v)
+    _cnt: dict = {}
+    _filled = 0
+    for _s in data["segments"]:
+        _labs = split_cls(_s.get("cls"))
+        if not _labs:
+            continue
+        _filled += 1
+        for _l in _labs:
+            _cnt[_l] = _cnt.get(_l, 0) + 1
+    _blank = len(data["segments"]) - _filled
+    _known = sorted([(l, c) for l, c in _cnt.items() if l in _vocab], key=lambda x: -x[1])
+    _other = sorted([(l, c) for l, c in _cnt.items() if l not in _vocab], key=lambda x: -x[1])
+    _peak = max([c for _, c in _known + _other] + [1])
+
+    def _clsrow(label, cnt, extra=""):
+        w = max(2, round(120 * cnt / _peak)) if cnt else 0
+        bar = (f'<span class="rt-bar" style="width:{w}px" aria-hidden="true"></span>'
+               if cnt else "")
+        pct = f'{round(100 * cnt / n)}%' if n else "—"
+        return (f'              <tr><td class="path">{_esc(label)}{extra}</td>'
+                f'<td class="num">{bar}{cnt}</td><td class="num">{pct}</td></tr>\n')
+
+    _rows = "".join(_clsrow(l, c) for l, c in _known)
+    _rows += "".join(_clsrow(l, c, '<span class="chip block">規範外</span>')
+                     for l, c in _other)
+    _rows += _clsrow("（未填）", _blank)
+
+    _vocab_line = ("、".join(f"{k}：{'／'.join(v)}" for k, v in _vocab_by_proj.items())
+                   if _vocab_by_proj else
+                   "<b>沒有任何專案宣告值域</b>——所有出現過的標籤都照實列出，那是答案不是壞掉")
+    _other_line = (f'<p><b>規範外的值 {len(_other)} 種：'
+                   f'{"、".join(_esc(l) for l, _ in _other)}</b>——'
+                   f'那是「有人在用規範外的寫法」的訊號，不是雜訊。</p>' if _other else
+                   '<p>沒有規範外的值。</p>')
+    b35 = (f'    <section>\n'
+           f'      <div class="section-head">\n'
+           f'        <h2>任務分類分佈</h2>\n'
+           f'        <span class="sub">{_filled}/{len(data["segments"])} 段有填 · '
+           f'值域來自各專案 PROJECT_CONTEXT.md</span>\n'
+           f'      </div>\n'
+           f'      <p class="lead">宣告的「任務分類」欄落在哪些類。'
+           f'<b>多標籤各記一次</b>（[UI｜邏輯] 在 UI 與邏輯各記一筆），'
+           f'所以各列佔比合計會超過「有填」的比例。'
+           f'<b>未填單獨列出來、不藏</b>——藏起來等於把分母換成「有填的人」，'
+           f'比例會看起來漂亮而不是真的好。</p>\n'
+           f'      <div class="twrap">\n'
+           f'        <table>\n'
+           f'          <thead><tr><th>分類</th><th class="num">段數</th>'
+           f'<th class="num">佔全部宣告</th></tr></thead>\n'
+           f'          <tbody>\n{_rows}          </tbody>\n'
+           f'        </table>\n'
+           f'      </div>\n'
+           f'      <div class="criteria">\n'
+           f'        <p>值域：{_vocab_line}</p>\n        {_other_line}\n'
+           f'      </div>\n'
+           f'    </section>')
+
     # ── 4 交接契約遵循（樣本可能為 0）
     hand = data["handoff"]
     if hand:
@@ -1098,7 +1239,7 @@ def build_html(data: dict) -> str:
           f'{body4}\n'
           f'    </section>')
 
-    return "\n".join([b1, b2, b3, b4])
+    return "\n".join([b1, b2, b3, b35, b4])
 
 
 def inject(html: str, block: str) -> str:

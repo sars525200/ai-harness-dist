@@ -364,9 +364,48 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     h1 = m.build_html(snap)
     h2 = m.build_html(snap)
     ok(h1 == h2, "同一份輸入產出的 HTML 逐字相同（冪等·在快照上驗）")
+
+    # ── 6.5 「任務分類」死欄位的消費端（票 04・2026-08-23）
+    #
+    # ⚠ 票 04 驗收錨點原文：**驗收不是 grep**。grep 只證明呼叫點存在於原始碼，
+    #    證明不了執行期會走到 —— 消費端若寫成 `if seg.get("cls"):`，在 6 成的段落上
+    #    那個分支根本不進去，**grep 綠、畫面空**，而那正是死欄位本來的病。
+    #    所以這一組驗的是「產出的 HTML 裡真的有那些數字」。
+    ok("任務分類分佈" in h1, "遵循度面板真的有「任務分類分佈」這一區（拿掉消費端這條會紅）")
+    ok(">devops<" in h1 or "devops" in h1.split("任務分類分佈")[-1][:2000],
+       "快照裡的 [devops] 有被拆成標籤並渲染出來")
+    ok("（未填）" in h1,
+       "未填單獨列出來（快照裡 Beta 那段 cls=None）—— 藏起來等於把分母換成有填的人")
+
+    # 值域讀的是各專案 PROJECT_CONTEXT.md，不是寫死（U-3）
+    _tc = m.task_classes()
+    ok(isinstance(_tc, dict), "task_classes() 回 per-project 的 dict")
+    ok(all(isinstance(v, list) for v in _tc.values()), "每個專案的值域是清單")
+    _src = inspect.getsource(m.task_classes)
+    ok("PROJECT_CONTEXT.md" in _src and "UI" not in _src.split('"""')[-1],
+       "值域從 PROJECT_CONTEXT.md 讀，核心層沒有寫死本專案的值（U-1／U-3）")
+
+    # 拆標籤＋正規化：30 種寫法要收斂
+    ok(m.split_cls("[UI|邏輯]") == ["UI", "邏輯"], "組合值拆成標籤")
+    ok(m.split_cls("[UI｜邏輯]") == m.split_cls("[UI|邏輯]"),
+       "全形｜與半形| 是同一組標籤（實測這兩種各自成格是 30 種寫法的來源之一）")
+    ok(m.split_cls("devops") == m.split_cls("[devops]"),
+       "有沒有方括號是同一個標籤")
+    ok(m.split_cls(None) == [] and m.split_cls("") == [], "未填回空清單不是 [None]")
+
+    # **非 vacuous 守門**：真實語料必須真的有分類值，否則上面那些都是空轉
+    # （「零目標須拒跑」——新裝的量測器對舊資料報零，看起來跟「一切正常」一樣）。
+    _real = m.collect()["segments"]
+    _lab = [l for _s in _real for l in m.split_cls(_s.get("cls"))]
+    ok(len(_lab) > 0,
+       f"真實語料裡確實有任務分類可拆（實得 {len(_lab)} 個標籤）—— 這條是上面那組的非空守門")
+
     ok("尚無樣本" in h1, "交接契約零樣本時顯示「尚無樣本」，不畫 0% 空表")
     ok("缺修改檔案欄" in h1, "快照裡的缺欄段落有被判定出來（證明快照真的走過判定層）")
-    ok(h1.count("<section>") == 4, "四個量測區塊都產出（少一節不會報錯，所以要數）")
+    # 2026-08-23（票 04）：4 → 5，新增「任務分類分佈」。
+    # 這一條數的是**節數不是內容**，所以它會在加節時紅（正確：逼人來確認是不是有意的），
+    # 但**不會**在某一節內容變空時紅 —— 那是上面各節自己的斷言在守。
+    ok(h1.count("<section>") == 5, "五個量測區塊都產出（少一節不會報錯，所以要數）")
 
     # ── 7. 篩選與捲動的接線（client JS 靠這些鉤子，漏了會靜靜沒反應）
     ok('class="twrap wfc-scroll"' in h1,
