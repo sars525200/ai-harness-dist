@@ -49,6 +49,33 @@ OPS_DIR = Path(r"D:\IT-department\SOP_PROD\05_UI_Demo\ops")
 sys.path.insert(0, str(HOOKS_DIR))
 
 
+def count_tool_scripts() -> dict:
+    r"""維運腳本清點 —— **看板那一行與 `tool_raw_count` 共用這一份**。
+
+    2026-08-23 抽出來的理由：看板「維運腳本 N 支」原本是手寫的，每次收工由
+    `check_freshness` 報差異、人再去改 HTML。改成產生器之後，若讓產生器自己
+    數一次，就會有第二份會漂的判準 —— 而漂掉的症狀是「同一個數字在看板上
+    兩個地方不一樣」，那比純粹過期更難查。所以計數只有這一份，
+    `gather_current()` 與 `gen_layers.sync_tool_counts()` 都呼叫它。
+
+    回傳三個值而不是只回總數：看板那一行要印「總數 · ops N ＋ hooks M」的拆分，
+    只回總數的話拆分又得在別處自己數一次，等於白抽。
+    """
+    ops = 0
+    if OPS_DIR.exists():
+        ops = sum(
+            1 for p in OPS_DIR.iterdir()
+            if p.is_file() and p.suffix in (".py", ".sh", ".js")
+        )
+    hooks = 0
+    for d in (HOOKS_DIR, HOOKS_DIR / "rules"):
+        if d.exists():
+            hooks += sum(
+                1 for p in d.glob("*.py") if p.name != "__init__.py"
+            )
+    return {"ops": ops, "hooks": hooks, "total": ops + hooks}
+
+
 def gather_current() -> dict:
     from dispatch import REGISTRY  # noqa: E402  重用同一份規則登記表，不另抄一份會漂移的清單
     from report import _load_all_events  # noqa: E402  重用同一份 ndjson 解析（含 utf-8-sig BOM 處理）
@@ -72,17 +99,7 @@ def gather_current() -> dict:
         if any(d.exists() for d in _skill_dirs) else None
     )
 
-    tool_raw_count = 0
-    if OPS_DIR.exists():
-        tool_raw_count += sum(
-            1 for p in OPS_DIR.iterdir()
-            if p.is_file() and p.suffix in (".py", ".sh", ".js")
-        )
-    for d in (HOOKS_DIR, HOOKS_DIR / "rules"):
-        if d.exists():
-            tool_raw_count += sum(
-                1 for p in d.glob("*.py") if p.name != "__init__.py"
-            )
+    tool_raw_count = count_tool_scripts()["total"]
 
     # 2026-07-29 補：**規則的執行模式**（shadow 觀察 vs enforce 真擋）。
     # 漏掉這個訊號害看板漏報過一次：DB-1 當天從 shadow 轉 enforce ——「整套 harness
@@ -180,8 +197,19 @@ def main() -> None:
         # 上游同樣是 event log。少列這一行的話，規則表更新了而動線圖沒有，
         # 同一頁看板上兩個數字會互相打臉。
         print("     py -3 D:\\.ai-harness\\dashboard\\gen_task_flow.py")
-    print("  ② 其餘差異（skill／tool 原始檔案數等）→ 讀 dashboard/harness-dashboard.html")
-    print("     編輯對應分頁（那些還是手寫的）。")
+    # 2026-08-23：這一項從「手動編輯」改成「跑產生器」。在那之前看板「維運腳本 N 支」
+    # 是手寫的，這支每次收工都報一次差異卻只能報不能改，於是數字一路漂到 40 vs 85。
+    _tool = [r for r in reasons if "tool 原始檔案數" in r]
+    _skill = [r for r in reasons if "skill 原始檔案數" in r]
+    if _tool:
+        print("  ② 維運腳本數 → 跑產生器，**不要手動改 HTML**：")
+        print("     py -3 D:\\.ai-harness\\dashboard\\gen_layers.py")
+    if _skill:
+        print("  ② skill 原始檔案數 → 看板上**沒有**對應的手寫數字（Skill 清冊徽章走")
+        print("     gen_roles_topology.sync_tab_badge，數的是專案那批）→ 跑角色拓樸產生器：")
+        print("     py -3 D:\\.ai-harness\\dashboard\\gen_roles_topology.py")
+    if not _tool and not _skill and not any("would-block" in r or "規則" in r for r in reasons):
+        print("  ② 其餘差異 → 讀 dashboard/harness-dashboard.html，確認是哪個區塊在講這件事。")
     print("  ③ 確認本機服務已重載（http://127.0.0.1:8099/ 會自動重讀），然後跑：")
     print("     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
     print("     把這次的數字寫回 snapshot.json（別忘了 commit）。")

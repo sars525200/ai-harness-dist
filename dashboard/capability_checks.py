@@ -473,9 +473,15 @@ def _p_deny_symmetric():
 
 
 def _p_ops_scripts():
-    ops = IT_DEPT / "SOP_PROD" / "05_UI_Demo" / "ops"
-    n = sum(1 for p in ops.iterdir()
-            if p.is_file() and p.suffix in (".py", ".sh", ".js")) if ops.exists() else 0
+    # 2026-08-23：改用 check_freshness.count_tool_scripts() 的 ops 值。
+    # 在那之前這裡自己數一次，而看板「維運腳本 N 支」又數第三次 —— 同一個問題
+    # 三份判準。它們今天算出同一個 66 只是碰巧範圍還一樣，任何一邊改了排除規則
+    # 就會變成「同一頁看板兩個地方講不同的數字」，那比單純過期更難查。
+    _d = str(Path(__file__).resolve().parent)
+    if _d not in sys.path:          # 被別處 import 時 dashboard\ 不一定在 path 上
+        sys.path.insert(0, _d)
+    from check_freshness import count_tool_scripts
+    n = count_tool_scripts()["ops"]
     return n > 5, f"ops/ 自建維運腳本 {n} 支"
 
 

@@ -45,6 +45,14 @@ CONFIG_SCHEMA = 1
 HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 GLOBAL_DIR = Path.home() / ".claude"
 
+# 維運腳本計數的單一真相。**要先確保本檔所在目錄在 sys.path 上**：
+# `rulefile\check_bloat.py` 與 `check_prose_blocks.py` 會 import 本檔，
+# 那時 cwd 與 sys.path 都不是 dashboard\ —— 少了這三行，
+# 症狀是「兩支完全無關的常駐層工具突然 ModuleNotFoundError」（2026-08-23 當場踩到）。
+if str(DASHBOARD_DIR) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD_DIR))
+from check_freshness import count_tool_scripts  # noqa: E402
+
 MARK_START = "<!-- LAYERS_GLOBAL_START"
 MARK_END = "<!-- LAYERS_GLOBAL_END -->"
 
@@ -381,6 +389,35 @@ def inject(html: str, block: str) -> str:
     return f"{head}{marker}\n{block}\n    {MARK_END}{tail}"
 
 
+def sync_tool_counts(html: str) -> str:
+    r"""同步「維運腳本 N 支」那一行 —— 數得出來的數字不該有人在維護它。
+
+    2026-08-23 接手。在那之前這一行是**手寫**的：`check_freshness` 每次收工都
+    報一次 `tool 原始檔案數` 差異，但它只能報不能改，於是那個數字一路漂到
+    「看板 40 / 實際 85」。這正是 `dashboard-generators.md` 第一條的反例。
+
+    ⚠ **計數不在這裡數**——呼叫 `check_freshness.count_tool_scripts()`。
+    在這裡自己數一次就是把同一個病換個地方復發：兩份判準遲早不一致，
+    而症狀（同一個數字在看板兩處對不上）比單純過期更難查。
+    """
+    c = count_tool_scripts()
+    if c["total"] == 0:
+        # 比照 gen_roles_topology.sync_tab_badge 的零目標拒跑：路徑錯掉時
+        # 靜默寫成「0 支」比報錯難發現得多——畫面看起來只是「還沒有腳本」。
+        raise SystemExit("數不到任何維運腳本 —— 零目標拒跑，不把看板寫成 0 支。")
+    text = (f'{c["total"]} 支自建腳本 · <code>ops/</code> {c["ops"]}'
+            f' ＋ <code>hooks/</code> {c["hooks"]}')
+    pat = r'(<h2>維運腳本</h2>\s*<span class="sub")[^>]*(>).*?(</span>)'
+    out, cnt = re.subn(
+        pat,
+        lambda m: (m.group(1) + ' data-gen="gen_layers.sync_tool_counts"'
+                   + m.group(2) + text + m.group(3)),
+        html, count=1, flags=re.S)
+    if cnt != 1:
+        raise SystemExit("找不到「維運腳本」的 section-head —— 注入點不見了，不靜默略過。")
+    return out
+
+
 def sync_layer_counts(html: str, s: dict) -> str:
     """把全域層區塊裡的 skill／角色數字同步成實掃值。
 
@@ -434,14 +471,19 @@ def main() -> None:
             print(f"         allow={v['allow']} deny={v['deny']} hooks={v['hooks'] or '無'}")
             print(f"         skills={v['skills']} agents={v['agents']} "
                   f"rules={v['rules']} commands={v['commands']}")
+        _t = count_tool_scripts()
+        print(f"維運腳本  總計 {_t['total']} 支（ops/ {_t['ops']} ＋ hooks/ {_t['hooks']}）"
+              f" —— 看板那一行由 sync_tool_counts() 寫，不手寫")
         return
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
-    out = sync_layer_counts(inject(html, build_html(s)), s)
+    out = sync_tool_counts(sync_layer_counts(inject(html, build_html(s)), s))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)
+    _t = count_tool_scripts()
     print(f"已注入兩層對照：全域 allow={s['global']['allow']}／skills={s['global']['skills']}"
-          f"　專案 allow={s['project']['allow']}／skills={s['project']['skills']}")
+          f"　專案 allow={s['project']['allow']}／skills={s['project']['skills']}"
+          f"　維運腳本 {_t['total']} 支（ops/ {_t['ops']} ＋ hooks/ {_t['hooks']}）")
 
 
 if __name__ == "__main__":

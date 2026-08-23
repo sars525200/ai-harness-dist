@@ -43,6 +43,12 @@ HARNESS = DASHBOARD.parent
 IT_DEPT = Path(r"D:\IT-department")
 STATE_FILE = DASHBOARD / "sources_state.json"
 
+# 維運腳本的目錄路徑：與 check_freshness.count_tool_scripts() 同一份，不抄第二份。
+# 同 gen_layers：被別處 import 時 sys.path 上不一定有 dashboard 目錄。
+if str(DASHBOARD) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD))
+from check_freshness import OPS_DIR as _OPS_DIR, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
+
 # 看板內容的上游。動到這些才需要重生 —— 清單刻意列明，
 # 不用「整個目錄」：那會把 state/*.ndjson（每次工具呼叫都在長）也算進來，
 # 導致每回合都判定「有變」，那就失去便宜的意義。
@@ -82,6 +88,16 @@ SOURCE_GLOBS = [
     (HARNESS / "tests", "*.py"),
     (HARNESS / "tests" / "fixtures", "*.json"),
     (HARNESS / "tests" / "mutations", "*.py"),
+    # 2026-08-23：看板「維運腳本 N 支」改由 gen_layers.sync_tool_counts 產生後，
+    # **它數的那兩個目錄就是上游**（同 D6 那三個數字的道理）。少了這幾條的話，
+    # 新增一支 ops 腳本不會觸發重生 —— 產生器接好了卻不會被叫到，
+    # 症狀跟「還是手寫的」一模一樣，但更難查（大家會以為已經自動了）。
+    # 目錄路徑從 check_freshness 匯入，不在這裡抄第二份。
+    (_OPS_DIR, "*.py"),
+    (_OPS_DIR, "*.sh"),
+    (_OPS_DIR, "*.js"),
+    (_HOOKS_DIR, "*.py"),
+    (_HOOKS_DIR / "rules", "*.py"),
 ]
 # 有些產生器讀的檔**不能在這裡寫死**：待辦的來源是各專案 `PROJECT_CONTEXT.md`
 # 的「待辦來源」表決定的，新專案填了表就會多幾個檔。寫死清單必然漂，而漂掉的症狀
