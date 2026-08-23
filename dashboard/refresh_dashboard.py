@@ -40,14 +40,21 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 DASHBOARD = Path(__file__).resolve().parent
 HARNESS = DASHBOARD.parent
-IT_DEPT = Path(r"D:\IT-department")
+# 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
+# 2026-08-23 之前這裡是 Path(r"D:\IT-department") —— 換部門後它照跑不誤，
+# 只是掃的是別人的專案，而那個錯誤沒有任何紅燈。
+if str(HARNESS) not in sys.path:
+    sys.path.insert(0, str(HARNESS))
+import config  # noqa: E402
+
+IT_DEPT = config.PROJECT_ROOT
 STATE_FILE = DASHBOARD / "sources_state.json"
 
 # 維運腳本的目錄路徑：與 check_freshness.count_tool_scripts() 同一份，不抄第二份。
 # 同 gen_layers：被別處 import 時 sys.path 上不一定有 dashboard 目錄。
 if str(DASHBOARD) not in sys.path:
     sys.path.insert(0, str(DASHBOARD))
-from check_freshness import OPS_DIR as _OPS_DIR, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
+from check_freshness import ops_dirs as _ops_dirs, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
 
 # 看板內容的上游。動到這些才需要重生 —— 清單刻意列明，
 # 不用「整個目錄」：那會把 state/*.ndjson（每次工具呼叫都在長）也算進來，
@@ -93,11 +100,12 @@ SOURCE_GLOBS = [
     # 新增一支 ops 腳本不會觸發重生 —— 產生器接好了卻不會被叫到，
     # 症狀跟「還是手寫的」一模一樣，但更難查（大家會以為已經自動了）。
     # 目錄路徑從 check_freshness 匯入，不在這裡抄第二份。
-    (_OPS_DIR, "*.py"),
-    (_OPS_DIR, "*.sh"),
-    (_OPS_DIR, "*.js"),
     (_HOOKS_DIR, "*.py"),
     (_HOOKS_DIR / "rules", "*.py"),
+] + [
+    # ops 目錄由專案自己宣告（`.claude\PROJECT_CONTEXT.md` 的「維運腳本來源」），
+    # 所以這幾條是**算出來的**不是寫死的 —— 新部門登記了自己的目錄就自動被盯上。
+    (d, pat) for d in _ops_dirs() for pat in ("*.py", "*.sh", "*.js")
 ]
 # 有些產生器讀的檔**不能在這裡寫死**：待辦的來源是各專案 `PROJECT_CONTEXT.md`
 # 的「待辦來源」表決定的，新專案填了表就會多幾個檔。寫死清單必然漂，而漂掉的症狀

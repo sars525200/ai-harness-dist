@@ -54,7 +54,14 @@ STATE_DIR = HARNESS_ROOT / "state"
 HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 COST_STATE = DASHBOARD_DIR / "cost_state.json"
 
-IT_DEPT = Path(r"D:\IT-department")
+# 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
+# 2026-08-23 之前這裡是 Path(r"D:\IT-department") —— 換部門後它照跑不誤，
+# 只是掃的是別人的專案，而那個錯誤沒有任何紅燈。
+if str(HARNESS_ROOT) not in sys.path:
+    sys.path.insert(0, str(HARNESS_ROOT))
+import config  # noqa: E402
+
+IT_DEPT = config.PROJECT_ROOT
 SKILLS_DIR = IT_DEPT / ".claude" / "skills"
 # 全域層 skill（跨專案共用）。與專案層是兩個不同的目錄，清冊要涵蓋兩邊 —— 
 # 見 roster() 的註解：只掃專案層會讓 8 支全域 skill 憑空從分母消失。

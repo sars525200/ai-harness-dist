@@ -45,7 +45,14 @@ sys.stderr.reconfigure(encoding="utf-8")
 HARNESS = Path(__file__).resolve().parent.parent
 HOOKS = HARNESS / "hooks"
 TESTS = HARNESS / "tests"
-IT_DEPT = Path(r"D:\IT-department")
+# 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
+# 2026-08-23 之前這裡是 Path(r"D:\IT-department") —— 換部門後它照跑不誤，
+# 只是掃的是別人的專案，而那個錯誤沒有任何紅燈。
+if str(HARNESS) not in sys.path:
+    sys.path.insert(0, str(HARNESS))
+import config  # noqa: E402
+
+IT_DEPT = config.PROJECT_ROOT
 CLAUDE_MD = IT_DEPT / "CLAUDE.md"
 # **全域 CLAUDE.md 也是 always-loaded**，而 2026-08-05～06 起通則（5 模式路由、
 # 升級安全閥、選擇題、五階段工作流）全部搬到那裡，專案檔只留指標句。

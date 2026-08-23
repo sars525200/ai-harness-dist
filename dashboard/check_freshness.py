@@ -35,6 +35,7 @@ exit code：0 = 無需更新　1 = 建議更新（stdout 印出具體差異，�
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -43,10 +44,46 @@ HARNESS_ROOT = DASHBOARD_DIR.parent
 HOOKS_DIR = HARNESS_ROOT / "hooks"
 SNAPSHOT_PATH = DASHBOARD_DIR / "snapshot.json"
 
-IT_DEPT_SKILLS_DIR = Path(r"D:\IT-department\.claude\skills")
-OPS_DIR = Path(r"D:\IT-department\SOP_PROD\05_UI_Demo\ops")
+# 專案路徑一律走 harness 層設定（`harness.config.json` 的 currentProject），
+# **不寫死** —— UNIVERSAL_HARNESS_PLAN U-1。2026-08-23 之前這裡是
+# `Path(r"D:\IT-department\...")`，換一個部門就整支失準而且不會報錯。
+if str(HARNESS_ROOT) not in sys.path:
+    sys.path.insert(0, str(HARNESS_ROOT))
+import config  # noqa: E402
 
 sys.path.insert(0, str(HOOKS_DIR))
+
+
+def ops_dirs() -> list:
+    r"""該專案的維運腳本目錄，讀 `.claude\PROJECT_CONTEXT.md` 的「維運腳本來源」表。
+
+    **為什麼不寫死也不自動掃**：`SOP_PROD\05_UI_Demo\ops` 這個形狀只有這個專案
+    成立；而自動遞迴掃 `**/ops/` 會把 DEV 側的鏡像複本一起數進來（實測 93 vs 66）。
+    「哪一個目錄才算數」是專案知識，所以由專案自己宣告 —— 同 `gen_todos`
+    的「待辦來源」表。
+
+    找不到檔或找不到那一節都回空清單：對一個新部門來說「還沒登記維運腳本」
+    是**合法狀態**（看板顯示 0 就是答案），不是環境壞掉。
+    """
+    ctx = config.PROJECT_CLAUDE_DIR / "PROJECT_CONTEXT.md"
+    if not ctx.exists():
+        return []
+    m = re.search(r"^##\s+維運腳本來源.*?$(.*?)(?=^##\s|\Z)",
+                  ctx.read_text(encoding="utf-8-sig"), re.M | re.S)
+    if not m:
+        return []
+    out = []
+    for ln in m.group(1).splitlines():
+        if not ln.startswith("|") or ln.startswith("|---"):
+            continue
+        cells = [c.strip() for c in ln.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        rel = cells[1].strip("`").strip()
+        if not rel or "路徑" in rel:      # 表頭那一列
+            continue
+        out.append(config.PROJECT_ROOT / rel)
+    return out
 
 
 def count_tool_scripts() -> dict:
@@ -62,11 +99,12 @@ def count_tool_scripts() -> dict:
     只回總數的話拆分又得在別處自己數一次，等於白抽。
     """
     ops = 0
-    if OPS_DIR.exists():
-        ops = sum(
-            1 for p in OPS_DIR.iterdir()
-            if p.is_file() and p.suffix in (".py", ".sh", ".js")
-        )
+    for d in ops_dirs():
+        if d.exists():
+            ops += sum(
+                1 for p in d.iterdir()
+                if p.is_file() and p.suffix in (".py", ".sh", ".js")
+            )
     hooks = 0
     for d in (HOOKS_DIR, HOOKS_DIR / "rules"):
         if d.exists():
@@ -93,7 +131,7 @@ def gather_current() -> dict:
     for rid in rule_ids:
         would_block.setdefault(rid, 0)
 
-    _skill_dirs = [IT_DEPT_SKILLS_DIR, HARNESS_ROOT / "skills"]
+    _skill_dirs = config.SKILL_DIRS   # 全域層 <harness>/skills ＋ 專案層 .claude/skills
     skill_count = (
         sum(len(list(d.glob("*/SKILL.md"))) for d in _skill_dirs if d.exists())
         if any(d.exists() for d in _skill_dirs) else None

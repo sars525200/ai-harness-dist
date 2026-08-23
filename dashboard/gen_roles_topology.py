@@ -74,7 +74,14 @@ AGENTS_DIR = HARNESS_ROOT / "agents"
 # ⚠ 已登記的硬編碼債務（UNIVERSAL_HARNESS_PLAN §1），但**集中成一個常數**：
 # 原本 skills 是用 `AGENTS_DIR.parent / "skills"` 推導的，角色搬走後那個推導就錯了
 # ——「A 目錄旁邊一定有 B 目錄」這種假設，在任一邊搬家時會靜默指向不存在的路徑。
-PROJECT_ROOT = Path(r"D:\IT-department")
+# 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
+# 2026-08-23 之前這裡是 Path(r"D:\IT-department") —— 換部門後它照跑不誤，
+# 只是掃的是別人的專案，而那個錯誤沒有任何紅燈。
+if str(HARNESS_ROOT) not in sys.path:
+    sys.path.insert(0, str(HARNESS_ROOT))
+import config  # noqa: E402
+
+PROJECT_ROOT = config.PROJECT_ROOT
 SKILLS_DIR = PROJECT_ROOT / ".claude" / "skills"
 
 MARK_START = "<!-- ROLES_TOPOLOGY_START"
