@@ -135,6 +135,12 @@ _CLOSED = re.compile(r"✅|⏸|❌|🔻|已完成|已上線|已定案|已結案"
 # key=len)` 與整列掃 `_CLOSED` 各有它們的理由），只把丟棄理由記下來給 `--check` 印。
 _DROPPED: list = []
 
+# 待辦來源表登記了、卻一個檔都沒匹配到的 glob（票 11 §三·2026-08-23 實踩）。
+# `_sources` 取整格再剝反引號 ⇒ 路徑格裡多寫一句括號說明，glob 就變成
+# `*_PLAN.md（repo 根層）`、匹配 0 個檔，**登記了等於沒登記而且完全靜默**。
+# 「沒列的檔案看板當它不存在」是刻意的設計；「列了卻拼錯」不該也一樣安靜。
+_EMPTY_GLOBS: list = []
+
 # 近似狀態格：長得像人想標「待辦」但不在白名單裡的寫法。
 # 只用來**報告**，不放行——放行等於白名單形同虛設。
 _NEAR_MISS_EMOJI = re.compile(r"^(⬜|☐|▢|🔲|🔳|◻|□|◽|▫)")
@@ -194,6 +200,22 @@ def line_sha(raw: str) -> str:
     所以按下完成時要把這個值送回來比對，不符就拒絕並請使用者重新整理。
     """
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+
+
+def _print_empty_globs() -> None:
+    """把「登記了卻 0 命中」的來源 glob 印出來。`--check` 與正式產出都會叫。"""
+    if not _EMPTY_GLOBS:
+        print()
+        print("待辦來源 glob：全部都有匹配到檔案（無 0 命中）。")
+        return
+    print()
+    print("⚠ 待辦來源表登記了、但 0 命中的 glob（%d 筆）：" % len(_EMPTY_GLOBS))
+    print("  登記了卻拼錯，跟沒登記在畫面上長得一樣——所以這裡要點名。")
+    for e in _EMPTY_GLOBS:
+        print("  ✗ [%s] %s 類：%r" % (e["proj"], KINDS.get(e["kind"], {}).get("label", e["kind"]),
+                                      e["pattern"]))
+    print("  ⚠ 路徑格只能放 glob 本身：解析器取整格再剝反引號，"
+          "括號說明會變成 glob 的一部分。")
 
 
 def _load_layers():
@@ -529,9 +551,10 @@ def collect() -> dict:
         name = proj.name
         buckets.setdefault(name, [])
         for kind, pattern in project_sources(proj):
-            for f in sorted(proj.glob(pattern)):
-                if not f.is_file():
-                    continue
+            matched = [f for f in sorted(proj.glob(pattern)) if f.is_file()]
+            if not matched:
+                _EMPTY_GLOBS.append({"proj": name, "kind": kind, "pattern": pattern})
+            for f in matched:
                 rel = f.relative_to(proj).as_posix()
                 text = _read(f)
                 if kind == "pending":
@@ -803,7 +826,11 @@ def main() -> None:
                     print("    …另有 %d 筆同檔未列" % (len(rows) - 2))
         else:
             print("\n被丟棄的候選列：無。")
+        _print_empty_globs()
         return
+
+    # 正式產出也要印：登記了卻拼錯的 glob，在 HTML 上跟「那個檔沒有待辦」長得一樣。
+    _print_empty_globs()
 
     # 拒絕產出空表：空清單跟「正常但沒事要做」在畫面上長得一樣。
     if total == 0:

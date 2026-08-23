@@ -110,6 +110,31 @@ def _case_check_is_read_only():
     return None
 
 
+def _case_empty_glob_reported():
+    """待辦來源表登記了、卻一個檔都沒匹配到的 glob，必須被點名。
+
+    `_sources` 取整格再剝反引號 ⇒ 路徑格裡多寫一句括號說明，glob 就變成
+    `*_PLAN.md（repo 根層）`、匹配 0 個檔，而且**完全靜默**：登記了等於沒登記。
+    2026-08-23 補票 11 §三 那一列時當場踩到（實測 0 項）。
+    「沒列的檔案看板當它不存在」是刻意的設計，但「列了卻拼錯」不該也一樣安靜。
+    """
+    import gen_todos
+
+    if not hasattr(gen_todos, "_EMPTY_GLOBS"):
+        return ("gen_todos 沒有 _EMPTY_GLOBS —— 登記了卻 0 命中的 glob 不會被點名，"
+                "拼錯路徑與沒登記在畫面上長得一樣")
+    gen_todos._EMPTY_GLOBS.clear()
+    gen_todos.collect()
+    # 真實設定應該是乾淨的；這裡驗的是「機制存在且會累積」，不是驗現況有沒有錯。
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        gen_todos._print_empty_globs()
+    out = buf.getvalue()
+    if "0 命中" not in out and "沒有匹配" not in out and "無" not in out:
+        return f"_print_empty_globs() 的輸出看不出結論：{out!r}"
+    return None
+
+
 def run():
     passed = 0
     failed = []
@@ -118,6 +143,7 @@ def run():
         ("--check 印得出被丟棄的列", _case_check_reports_dropped),
         ("--check 截斷時會說還有幾筆", _case_check_no_silent_cap),
         ("--check 不寫 blame 快取", _case_check_is_read_only),
+        ("0 命中的來源 glob 會被點名", _case_empty_glob_reported),
     ):
         try:
             detail = fn()
