@@ -44,6 +44,12 @@ _SHELL_METACHARS = (">", "<", "|", "&", ";", "`", "$(", "\n")
 _GIT_READONLY = {
     "diff", "status", "show", "log", "ls-files", "rev-parse",
     "cat-file", "describe", "branch", "remote",
+    # 2026-08-23 補：`check-ignore` 只回報「哪條 ignore 規則命中這個路徑」，
+    # 不寫任何東西，與 `ls-files` 同級。稽核角色**為它被擋過兩次**
+    # （8/22 票 08、8/23 harness 稽核），兩次都只能改用間接證據推 ——
+    # 而「檔案已被追蹤」證明不了「沒有規則命中」，結論的證據力因此變弱。
+    # ⚠ 它的位置參數是**要查的路徑**，所以不得進 `_GIT_NO_POSITIONAL`。
+    "check-ignore",
 }
 
 # 這些 subcommand **不帶位置參數時**是列表查詢，帶了就變成寫：

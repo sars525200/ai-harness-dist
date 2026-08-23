@@ -25,6 +25,11 @@ CASES = [
     ("git show HEAD:SOP_PROD/05_UI_Demo/app.js", True, "取 PROD 側 blob 內容"),
     ("git log --oneline -5", True, "看最近改了什麼"),
     ("git ls-files SOP/05_UI_Demo", True, "列受管檔案"),
+    # 2026-08-23：稽核角色第 2 次為這條被擋（8/22 票 08、8/23 harness 稽核）。
+    # `check-ignore` 只回報命中哪條 ignore 規則、不寫任何東西，與 ls-files 同級。
+    # ⚠ 位置參數是「要查的路徑」，**不能**放進 _GIT_NO_POSITIONAL（放了等於整條沒用）。
+    ("git check-ignore -v state/review_inflight.json", True, "查 ignore 規則命中"),
+    ("git check-ignore state/foo.json", True, "查 ignore（不帶 -v）"),
     ('node --check "d:/IT-department/SOP/05_UI_Demo/app.js"', True,
      "CLAUDE.md §6 要求兩端都跑 node --check"),
     ("node -c app.js", True, "--check 的短旗標"),
