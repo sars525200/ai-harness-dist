@@ -54,15 +54,33 @@ def _case_dropped_rows_recorded():
 
 
 def _case_check_reports_dropped():
-    """`--check` 要把丟棄的候選列印出來，不能只印撈到的。"""
-    r = subprocess.run(
-        [sys.executable, os.path.join(_DASH, "gen_todos.py"), "--check"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"}, timeout=180)
-    out = (r.stdout or "") + (r.stderr or "")
-    if "丟棄" not in out and "未收" not in out:
-        return ("--check 的輸出沒有任何『被丟棄的候選列』區塊 —— "
-                "回寫一列卻撈不到時，驗收只會得到一個沒有資訊量的 0")
+    """`--check` 要把丟棄的候選列**逐筆**印出來，不是印一句「無」就算。
+
+    覆核 R6-H3 同族：第一版斷言「輸出含『丟棄』」，而空分支印的是
+    「被丟棄的候選列：無。」——**那句話本身就含斷言要找的字**。
+    把 `_DROPPED.append` 整個打死照樣全綠。改成餵一筆已知會被丟的列，
+    要求它的**理由與來源檔名**都出現在輸出裡。
+    """
+    import gen_todos
+
+    text = chr(10).join([
+        "| 狀態 | 項目 | 說明 |",
+        "|---|---|---|",
+        "| ⬜ 待辦 | 票 X 白名單外的狀態格 | 普通說明 |",
+    ])
+    gen_todos._DROPPED.clear()
+    gen_todos.parse_plan_open(text, "ZZ_PROBE_PLAN.md", "__global__")
+    if not gen_todos._DROPPED:
+        return "餵一列 `⬜ 待辦` 進去，_DROPPED 卻是空的 —— 丟棄仍然是靜默的"
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        gen_todos._print_dropped()
+    out = buf.getvalue()
+    if "ZZ_PROBE_PLAN.md" not in out:
+        return "輸出沒有指出是哪個檔哪一行 —— 「我回寫了一列卻撈不到」還是查不到"
+    if "白名單" not in out:
+        return "輸出沒有說明為什麼被丟 —— 只說有東西被丟等於沒說"
+    gen_todos._DROPPED.clear()
     return None
 
 
@@ -111,27 +129,37 @@ def _case_check_is_read_only():
 
 
 def _case_empty_glob_reported():
-    """待辦來源表登記了、卻一個檔都沒匹配到的 glob，必須被點名。
+    """登記了卻 0 命中的 glob 必須被**指名**，不是印一句「無 0 命中」就算。
 
-    `_sources` 取整格再剝反引號 ⇒ 路徑格裡多寫一句括號說明，glob 就變成
-    `*_PLAN.md（repo 根層）`、匹配 0 個檔，而且**完全靜默**：登記了等於沒登記。
-    2026-08-23 補票 11 §三 那一列時當場踩到（實測 0 項）。
-    「沒列的檔案看板當它不存在」是刻意的設計，但「列了卻拼錯」不該也一樣安靜。
+    覆核 R6-H3 同族：第一版斷言「輸出含『0 命中』」，而空分支印的是
+    「待辦來源 glob：全部都有匹配到檔案（無 0 命中）」——**又是那句話自己含關鍵字**。
+    實測把 `_EMPTY_GLOBS.append` 打死，該條仍回 None。
     """
     import gen_todos
 
     if not hasattr(gen_todos, "_EMPTY_GLOBS"):
         return ("gen_todos 沒有 _EMPTY_GLOBS —— 登記了卻 0 命中的 glob 不會被點名，"
                 "拼錯路徑與沒登記在畫面上長得一樣")
-    gen_todos._EMPTY_GLOBS.clear()
-    gen_todos.collect()
-    # 真實設定應該是乾淨的；這裡驗的是「機制存在且會累積」，不是驗現況有沒有錯。
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        gen_todos._print_empty_globs()
-    out = buf.getvalue()
-    if "0 命中" not in out and "沒有匹配" not in out and "無" not in out:
-        return f"_print_empty_globs() 的輸出看不出結論：{out!r}"
+    saved = list(gen_todos._EMPTY_GLOBS)
+    try:
+        gen_todos._EMPTY_GLOBS.clear()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            gen_todos._print_empty_globs()
+        clean = buf.getvalue()
+        gen_todos._EMPTY_GLOBS.append(
+            {"proj": "ZZ-PROBE", "kind": "plan", "pattern": "*_PLAN.md（括號說明）"})
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            gen_todos._print_empty_globs()
+        dirty = buf.getvalue()
+    finally:
+        gen_todos._EMPTY_GLOBS.clear()
+        gen_todos._EMPTY_GLOBS.extend(saved)
+    if "ZZ-PROBE" not in dirty or "括號說明" not in dirty:
+        return "有 0 命中的 glob 時沒有指名是哪個專案、哪個 pattern：" + repr(dirty[:200])
+    if clean == dirty:
+        return "有沒有 0 命中，輸出一模一樣 —— 那個區塊沒有鑑別力"
     return None
 
 

@@ -202,6 +202,35 @@ def line_sha(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
 
 
+def _print_dropped() -> None:
+    """把被丟棄的候選列分檔印出來。
+
+    抽成函式是為了**測得到**（覆核 R6-H3）：原本內嵌在 `main()` 的 `--check` 分支，
+    測試只能 grep 子進程輸出，而空分支印的「被丟棄的候選列：無。」**自己就含關鍵字**
+    ⇒ 斷言穿不透，把 `_DROPPED.append` 整個打死照樣全綠。
+    """
+    if not _DROPPED:
+        print()
+        print("被丟棄的候選列：無。")
+        return
+    by_src: dict = {}
+    for d in _DROPPED:
+        by_src.setdefault(d["src"], []).append(d)
+    print()
+    print("被丟棄的候選列（%d 筆，%d 個檔）—— 看起來有人想標待辦，但沒通過判準："
+          % (len(_DROPPED), len(by_src)))
+    print("  「我回寫了一列卻撈不到」先在這裡找，不要只看上面的 0。")
+    for src_name in sorted(by_src, key=lambda s: (-len(by_src[s]), s)):
+        rows = by_src[src_name]
+        print()
+        print("  %s（%d 筆）" % (src_name, len(rows)))
+        for d in rows[:2]:
+            print("    ✗ 第 %d 行：%s" % (d["line"], d["reason"]))
+            print("        %s" % d["row"])
+        if len(rows) > 2:
+            print("    …另有 %d 筆同檔未列" % (len(rows) - 2))
+
+
 def _print_empty_globs() -> None:
     """把「登記了卻 0 命中」的來源 glob 印出來。`--check` 與正式產出都會叫。"""
     if not _EMPTY_GLOBS:
@@ -807,25 +836,7 @@ def main() -> None:
             print("⚠ 這幾類一項都沒抓到：%s —— 正式產出時會拒跑"
                   % "、".join(KINDS[k]["label"] for k in empty_kinds))
 
-        # 被丟棄的候選列（票 11 §二-3／§二-4）。回寫一列卻撈不到時，
-        # 沒有這一段就只能得到一個沒有資訊量的 0。
-        if _DROPPED:
-            by_src: dict = {}
-            for d in _DROPPED:
-                by_src.setdefault(d["src"], []).append(d)
-            print("\n被丟棄的候選列（%d 筆，%d 個檔）—— 看起來有人想標待辦，但沒通過判準："
-                  % (len(_DROPPED), len(by_src)))
-            print("  「我回寫了一列卻撈不到」先在這裡找，不要只看上面的 0。")
-            for src in sorted(by_src, key=lambda s: (-len(by_src[s]), s)):
-                rows = by_src[src]
-                print("\n  %s（%d 筆）" % (src, len(rows)))
-                for d in rows[:2]:
-                    print("    ✗ 第 %d 行：%s" % (d["line"], d["reason"]))
-                    print("        %s" % d["row"])
-                if len(rows) > 2:
-                    print("    …另有 %d 筆同檔未列" % (len(rows) - 2))
-        else:
-            print("\n被丟棄的候選列：無。")
+        _print_dropped()
         _print_empty_globs()
         return
 

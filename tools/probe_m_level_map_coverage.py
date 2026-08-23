@@ -54,6 +54,25 @@ import gen_workflow_compliance as g  # noqa: E402
 SINCE = "2026-08-23"          # 判準③的起算日（map 的 Destination 逐字寫死這一天）
 DEADLINE = "2026-09-15"       # 到期日；過期未達即判定失敗
 
+# 本 effort 自己不計入分子——map 的判準③逐字寫「它是改制本身，計入等於自己證明自己」。
+# ⚠ 覆核 R6-M4 抓到：**map 寫了這條排除，probe 第一版沒有實作**。今天剛好沒撞到
+# （兩段都不是它），但這個 effort 的 session 下次宣告 M 級時，探針會靜默地拿它自己當分子。
+SELF_EFFORT = "wayfinder-planning-layer"
+
+# 這支量不到的東西。**必須每次印出來**——一個報「判準成立」的工具如果不說自己看不到什麼，
+# 讀的人會把「它沒抓到」讀成「沒有問題」（覆核 R6-M4 逐條實查）。
+BLIND_SPOTS = [
+    "subagent 裡的宣告完全看不到：`gen_workflow_compliance` 只掃 transcript 目錄的頂層，"
+    "而 `<uuid>/subagents/agent-*.jsonl` 是巢狀的（實測 322 個，其中 6 個含「規模 M」字樣）。"
+    "M 級規劃外包給 subagent＝那段宣告連分母都進不去。",
+    "起算日是 UTC 日期字串比對，而 fail-open 那邊用本地時間 ⇒ 實際起算是本地 08:00，"
+    "起算日凌晨那 8 小時的宣告不計。同一份文件裡兩個判準的「起算日」不是同一條線。",
+    "量的是「**宣告 M 的**」不是「**M 級的**」：漏標規模欄是最常見的失守方式"
+    "（全期宣告裡無規模欄與待定合計數以百計）⇒ 分母系統性偏小。",
+    "`classify()` 第三條路（同 session 其他段開過 map）是假綠向量："
+    "同一個 session 只要別的段落開過任一 map，這一段就算通過。",
+]
+
 # 宣告原文裡的 map 路徑。
 #
 # ⚠ **只寫正斜線，反斜線在比對前先正規化掉**（`_efforts_from_text`）。原因是實踩：
@@ -102,8 +121,16 @@ def classify(seg: dict, session_efforts: dict, roots: list) -> dict:
 
 
 def _project_roots() -> list:
-    """要去哪些 repo 底下找 `.scratch/`。重用 gen_layers 的專案探索，不寫死路徑。"""
-    roots = []
+    """要去哪些 repo 底下找 `.scratch/`。重用 gen_layers 的專案探索，不寫死路徑。
+
+    ⚠ **harness 自己也要掃**：`discover_projects()` 只回被服務的專案
+    （實測 `D:\\AI-Projects`、`D:\\IT-department`），不含 harness repo——但 harness 領域
+    的 effort 實際上就開在 `D:\\.ai-harness\\.scratch\\`（實測有 `room-gate-cleanup`、
+    `task-identity-cost-attribution` 兩個）。第一版漏掉它，於是 session `cb1eb811`
+    在 18:22 宣告 M 級、map 明明建好了，探針卻報「檔案不存在」＝**假紅**。
+    **一個報「判準未達」的工具自己有盲區，比沒有工具更糟**：它會叫人去修沒有壞的東西。
+    """
+    roots = [HARNESS]
     try:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
@@ -121,7 +148,7 @@ def _project_roots() -> list:
             "專案探索失敗（%s: %s）—— 拒跑。\n"
             "這支要掃 `<專案>/.scratch/`，探索不到就沒有掃描範圍。"
             % (type(exc).__name__, exc)) from exc
-    if not roots:
+    if len(roots) <= 1:
         # ⚠ **這裡刻意不給 fallback**。第一版寫成退回 `d:\IT-department`，
         # 當場被 P-12／U-1 閘門擋下（「新檔不得引入寫死的專案路徑」）——而那條規則
         # 正是 `UNIVERSAL_HARNESS_PLAN` 的核心：harness 要能分發給別的部門當地基。
@@ -201,6 +228,10 @@ def main() -> int:
 
     m_segs = [s for s in segs
               if s.get("scale") == "M" and str(s.get("ts", ""))[:10] >= args.since]
+    # 本 effort 自己不計入（map 判準③逐字要求；R6-M4 抓到第一版沒實作）
+    excluded = [s for s in m_segs if SELF_EFFORT in str(s.get("raw", ""))
+                or SELF_EFFORT in set(s.get("efforts") or ())]
+    m_segs = [s for s in m_segs if s not in excluded]
 
     print("=== 判準③：改制後的 M 級任務有沒有開 map（起算 %s・期限 %s）==="
           % (args.since, DEADLINE))
@@ -228,6 +259,11 @@ def main() -> int:
             print("      → 宣告了 effort=%s 但%s" % (res["effort"], res["how"]))
         else:
             print("      → 找不到任何 .scratch/<effort>/map.md")
+
+    print("")
+    print("  ⚠ 這支量不到的（每次都印，因為「沒抓到」不等於「沒問題」）：")
+    for b in BLIND_SPOTS:
+        print("    · %s" % b)
 
     print("")
     if bad:

@@ -63,33 +63,78 @@ def _case_source_field():
 
 
 def _case_report_consumes():
-    """report.py 必須報得出 fail-open，而且絕對數與比率都要有（user 定案）。"""
+    """report.py 報的數字必須跟資料對得上——不是「有印出某幾個字」就算。
+
+    覆核 Round 6-H3 用變異打穿了這一條的第一版：它只檢查輸出含不含「fail-open」
+    與百分號。把 `_looks_like_real_session` 打死成 `return False`，報表會印
+    「全期：0 次 / 1107 次 = 0.00%」——**正是本檔第四條說要抓的那件事**——
+    而測試 4/4 全綠。斷言必須綁**值**，不是綁字串存在。
+    """
+    import re as _re
     import report
 
     if not hasattr(report, "_print_failopen_stats"):
         return "report.py 沒有 _print_failopen_stats —— fail-open 至今零消費者（R2-H1）"
+    rows = report._load_failopen_rows()
+    # ⚠ **期望值必須獨立算**：第一版用 `report._looks_like_real_session` 去算 expect，
+    # 於是把推估器打死成 `return False` 時兩邊一起變 0、測試照樣綠（覆核 R6-H3 的變異 1
+    # 在修過一次之後**仍然穿透**）。這正是 feedback 檔第八種「斷言因為別的理由而綠」：
+    # 判準沒有被隔離出來。這裡改成在測試裡自己寫一份最小實作。
+    def _independent_real(row):
+        t = str(row.get("transcript") or "")
+        if not t:
+            return False
+        if t.startswith("agent-"):
+            return True
+        return bool(_re.match("[0-9a-f]{8}-[0-9a-f]{4}-", t))
+
+    labelled = [r for r in rows if r.get("source") == "session"]
+    legacy = [r for r in rows if "source" not in r and _independent_real(r)]
+    expect = len(labelled) + len(legacy)
     buf = io.StringIO()
     with redirect_stdout(buf):
         report._print_failopen_stats()
     out = buf.getvalue()
     if "fail-open" not in out:
-        return "report._print_failopen_stats() 的輸出沒提到 fail-open"
+        return "輸出沒提到 fail-open"
     if "%" not in out:
         return "輸出沒有比率（user 定案＝絕對數與比率都要報）"
+    m = _re.search("全期[^：]*：" + chr(92) + "s*(" + chr(92) + "d+)" + chr(92) + "s*次", out)
+    if not m:
+        return "輸出裡找不到「全期…：N 次」那一行，無法對帳：" + repr(out[:200])
+    got = int(m.group(1))
+    if got != expect:
+        return ("報表說 %d 次，但直接從 failopen.ndjson 算出來是 %d 次 —— "
+                "報表與資料對不上（推估器壞掉時就會長這樣）" % (got, expect))
+    if expect > 0 and "0.00%" in out:
+        return "有真 session fail-open 卻印出 0.00% —— 新量測器報 0＝假綠"
     return None
 
 
 def _case_denominator_exists():
-    """比率的分母必須來自真實事件，不是寫死或估計。"""
+    """比率的分母必須是**真實事件數**，不是寫死或估計——所以要跟獨立算的對得上。
+
+    覆核 Round 6-H3：第一版只驗 `hasattr` ＋ 正整數 ＋ dict。把
+    `_stop_dispatch_count` 換成 `lambda: (999999, {})` 照樣全綠，
+    而這條的 docstring 逐字寫著「不是寫死或估計」。
+    """
     import report
 
     if not hasattr(report, "_stop_dispatch_count"):
         return "report.py 沒有 _stop_dispatch_count —— 比率沒有可查證的分母來源"
     total, by_day = report._stop_dispatch_count()
-    if not isinstance(total, int) or total <= 0:
-        return f"分母應為正整數（dispatch 的 Stop+SubagentStop 事件數），實得 {total!r}"
     if not isinstance(by_day, dict):
-        return f"應同時回傳逐日分佈供近期比率使用，實得 {type(by_day).__name__}"
+        return "應同時回傳逐日分佈供近期比率使用，實得 " + type(by_day).__name__
+    independent = sum(
+        1 for e in report._load_all_events()
+        if e.get("kind") == "dispatch" and e.get("event") in ("Stop", "SubagentStop"))
+    if total != independent:
+        return ("分母 %d 與獨立從 events 數出來的 %d 對不上 —— "
+                "它不是真實事件數（寫死／估計／濾錯都會長這樣）" % (total, independent))
+    if total != sum(by_day.values()):
+        return "總數 %d 與逐日分佈加總 %d 對不上" % (total, sum(by_day.values()))
+    if total <= 0:
+        return "分母為 0 —— 零目標不報成功"
     return None
 
 
