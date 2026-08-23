@@ -866,3 +866,39 @@ v3: baselines = { "claude-code": { "headless": {...}, "interactive": {...},
 **審查者確認這一輪已處理乾淨的**：VA-12 紅線成立（實跑：v2 拒絕／v3 通過同一份清單）；VA-2 改比子樹、VA-6 改斷言 `fake` 拿自己的基準，方向都對；純 JSON、`modes` 移出 `cli`、`enabled` 型別閘門、平台 id 進 TODOS 列（並提醒：格式一改舊格式列不再命中去重，**現在表裡沒有這種列，所以現在改代價最低**）；VA-14 指認的 fixture 缺口正確。
 
 **審查者沒查到的**（原樣轉載）：Cursor 實際形狀仍未查；端到端沒跑（會花錢、會改版控中的檔）⇒ R2-5／R2-6 是從控制流讀出來的；SkillViewer GUI 沒實際開起來看；兩份新設定檔還不存在 ⇒ R2-9 的預設值後果是規格層推論；`dashboard/` 其餘部分沒全掃是否還有第二處消費 `skills[]` 或心跳；**`state/skill_watch.log` 最後兩筆是改版前的 5 步版本，而心跳說 00:37 跑過 6 步版本——兩者對不起來**（最可能是那次帶了 `--no-log` 或 `--dry-run`），沒追下去，若是 log 靜默寫失敗那是另一件事。
+
+---
+
+## 17. 決策票待辦（回寫給看板·2026-08-23）
+
+> **為什麼這一節存在**：規模改判 M 之後規劃層改走 wayfinder map
+> （`d:\IT-department\.scratch\skill-watch-multiplatform\`），而**決策票對看板產生器是結構性隱形的**
+> ——它只認表格列，票是散文＋checkbox，實測命中數 0。所以 effort 要自己回寫一份摘要，
+> 產生器一行都不改。慣例見 `d:\IT-department\docs\agents\issue-tracker.md`「回寫摘要」節。
+>
+> **維護規則**：**開一張票就回寫一列，關一張票就把狀態格改成 `✅ 已完成`**
+> ——不是收斂後才回寫，只在收斂時回寫的話待辦板永遠只看得到做完的事。
+> 票的本體在 `.scratch/skill-watch-multiplatform/issues/NN-*.md`。
+
+<!-- REVIEW_SCOPE_IGNORE_START -->
+
+| 狀態 | 項目 | 說明 |
+|---|---|---|
+| ⏳ 待做 | 票 01 Cursor 有沒有機器可讀的能力清單來源 | research |
+| ⏳ 待做 | 票 02 多平台後 modes 欄語意與 seen_in 的鍵 | grilling |
+| ⏳ 待做 | 票 03 停用標記要改到 SkillViewer 哪一層 | grilling |
+| ⏳ 待做 | 票 04 run.py 注入縫要做成什麼形狀 | grilling |
+| ⏳ 待做 | 票 05 心跳 per-platform 欄位與看板判準 | grilling |
+| ⏳ 待做 | 票 06 三種初次體驗的預設（clone／複製／缺檔） | grilling |
+| ⏳ 待做 | 票 16 順修三處與實際行為不符的文字 | task |
+| 🚧 待前置 | 票 07 施作 run.py 注入縫（前置 04） | task |
+| 🚧 待前置 | 票 08 設定拆兩層與 loader（前置 06） | task |
+| 🚧 待前置 | 票 09 adapter 介面與 Claude Code adapter（前置 01·08） | task |
+| 🚧 待前置 | 票 10 baselines v3 遷移·巢狀二維（前置 02） | task |
+| 🚧 待前置 | 票 11 停用語意與清冊顯示標記（前置 03·08） | task |
+| 🚧 待前置 | 票 12 勾選流程與寫回函式（前置 07·08） | task |
+| 🚧 待前置 | 票 13 平台間錯誤隔離·心跳·看板探針（前置 05·07） | task |
+| 🚧 待前置 | 票 14 bootstrap 與長期停用後重新啟用（前置 06·10） | task |
+| 🚧 待前置 | 票 15 TODOS 列帶平台識別（前置 10） | task |
+
+<!-- REVIEW_SCOPE_IGNORE_END -->
