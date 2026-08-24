@@ -21,7 +21,7 @@
 | `to-tickets` | mattpocock/skills（github） | 2026-08-21 | `b32c94e5a51c24ee9c41fcb7fe9ea9fff9af6369` |
 | `wayfinder` | mattpocock/skills（github） | 2026-08-21 | `8ec0462658381bd1606d3f9db14ffc67df6a2a43` |
 
-## 本地自建（4 支）
+## 本地自建（5 支）
 
 | skill | 說明 |
 |---|---|
@@ -29,6 +29,7 @@
 | `visual-check` | headless 截圖驗證 UI |
 | `skill-watch` | 平台能力偵測：平台加了／改名了／移除了哪些技能（純手動，不掛排程） |
 | `escalate` | 派工受阻／成本明顯超過價值時把它變成一次請示，不默默繞過去（角色回報的「【需要但沒有】」要落 `TODOS.md`） |
+| `chat-handoff` | 換則交接：把當則臨時脈絡寫進 `.scratch/handoff/`，給新對話可貼的第一句 |
 
 ## 已移除（留痕，不要重裝）
 
