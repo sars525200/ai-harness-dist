@@ -1,6 +1,6 @@
 # 專案脈絡（harness 核心層·給 Cursor 讀）
 
-> **這份只存在 `.cursor/`，是 Cursor 的平台知識。** 共用契約在 repo 根 `CLAUDE.md`；主要規則在 `global/CLAUDE.md`。不要搬去 `.claude/PROJECT_CONTEXT.md`——產生器的 `discover_projects()` 把帶 `.claude\` 的目錄當成部門專案，harness 自己不能當一號專案。
+> **這份只存在 `.cursor/`（產生器不掃），不要搬去 `.claude/`。** 共用契約在 repo 根 `CLAUDE.md`；主要規則在 `global/CLAUDE.md`。根 CLAUDE.md 查閱表會指過來——Claude 可以 Read 本檔，不准拷進 `.claude/PROJECT_CONTEXT.md`（`discover_projects()` 會把地基誤認成部門專案）。
 >
 > 角色的作用對象若是「某個部門」，仍讀那個部門的 `.claude/PROJECT_CONTEXT.md`。本檔回答的是：**正在改地基本身時，東西在哪。**
 
@@ -10,7 +10,7 @@ AI 工作站 harness。Hook 閘門、event log、看板產生器、eval、全域
 
 方向文件：`UNIVERSAL_HARNESS_PLAN.md`（要往哪、什麼不准做）。現況：`HARNESS_PLAN.md`（閘門）、`HARNESS_ROLE_ARCH_PLAN.md`（角色）、`HARNESS_PROGRESS.md`（易過期，以 probe 為準）。
 
-本機看板：`http://127.0.0.1:8099/`（`dashboard/serve_dashboard.py`，禁改 `HOST` 為 `0.0.0.0`）。
+本機看板（現況全景）：`http://127.0.0.1:8099/`（`dashboard/serve_dashboard.py`，禁改 `HOST` 為 `0.0.0.0`）。查現況開這個網址；`dashboard/harness-dashboard.html` 是產生器快照，不是即時真相。
 
 ## 雙目錄同步
 

@@ -1,8 +1,24 @@
 # Harness 核心層（Claude ↔ Cursor 共用契約）
 
-本 repo 是公司 AI 地基，不是部門業務專案。工作方式以 `global/CLAUDE.md` 為準（已裝到 `~\.claude\CLAUDE.md`）。本檔只回答「共用什麼、各平台知識放哪」，不複製全域規則。
+本 repo 是公司 AI 地基，不是部門業務專案。工作方式以 `global/CLAUDE.md` 為準（已裝到 `~\.claude\CLAUDE.md`）。本檔是地圖：共用什麼、知識放哪、查哪類開哪檔。不複製全域規則。
 
 <!-- rules-section: all -->
+
+## 查閱（一問一檔）
+
+要查細節就開右欄：檔就 Read，現況開 8099。不要在 `*_PLAN.md` 裡猜，也不要把 html 產物當現況。
+
+| 要查 | 開 |
+|---|---|
+| 工作方式 | `global/CLAUDE.md` |
+| 東西在哪 | `.cursor/PROJECT_CONTEXT.md`（Claude 可 Read；產生器不掃） |
+| 協作禁做 | `COLLAB_HANDOFF.md` |
+| 閘門 | `hooks/`、`HARNESS_PLAN.md` |
+| 現況全景 | `http://127.0.0.1:8099/`（不要把磁碟 html 當現況） |
+| 改看板 | `dashboard/` 產生器；先 Read `.cursor/rules/dashboard-generators.mdc` |
+| 角色／Skill | `agents/*.md`、`skills/*/SKILL.md` |
+| 待辦 | `TODOS.md` |
+| 方向／不准做 | `UNIVERSAL_HARNESS_PLAN.md` |
 
 ## 共用（單一 git 真相）
 

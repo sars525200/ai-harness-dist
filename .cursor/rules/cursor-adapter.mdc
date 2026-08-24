@@ -14,3 +14,5 @@ alwaysApply: true
 - **本平台知識**在 `.cursor/PROJECT_CONTEXT.md`（產生器不掃）。Claude 側契約是根目錄 `CLAUDE.md`，不要互拷。
 - **看板規範**在 `.cursor/rules/dashboard-generators.mdc`。glob 不把本文注入模型（2026-08-24）；改看板用 `@dashboard-generators` 或手動 Read。改這份本文還要同步 IT 專案 `.claude/rules` 與 `.cursor/rules` 那兩份。
 - 看板綁 127.0.0.1、不對外發布。`HOST` 改 `0.0.0.0` 就對外了，畫面上沒差別。
+- **角色派工（Cursor）**：流程同 Claude。內建：`explore`／`generalPurpose`／`cursor-guide`／Plan 模式／主 session。查詢＝`explore`。自訂五個見 `cursor-agents/`（同步 `~\.cursor\agents`）；規範真相 `agents/*.md`。截圖＝Browser。
+- **模型（僅 Cursor）**：主＝Grok 4.6 High。自訂五個＝`composer-2.5[fast=false]`。explore／shell／guide 能指定則 Composer。Opus Extra High 只主 session 卡關。不用 Auto 派自代理。
