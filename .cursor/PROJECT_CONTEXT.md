@@ -46,7 +46,7 @@ Harness 待辦用 `TODOS.md` 的分類欄（閘門／看板／角色／流程／
 
 ## 前端與樣式
 
-只動 `dashboard/` 的 HTML／CSS／產生器填的 marker 區間。先讀 `.cursor/rules/dashboard-generators.mdc`。
+只動 `dashboard/` 的 HTML／CSS／產生器填的 marker 區間。用 `@dashboard-generators` 或手動 Read `.cursor/rules/dashboard-generators.mdc`（glob 不注入模型）。
 
 - 可改：看板 markup、token、產生器填 marker 之間的內容契約。
 - 不可改：部門業務前端、`HOST` 對外、手改 marker 區間裡的數字。

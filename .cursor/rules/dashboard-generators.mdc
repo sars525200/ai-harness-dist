@@ -1,6 +1,6 @@
 ---
 description: Harness dashboard generators, layout, local server guards, headless screenshots
-globs: "**/dashboard/**,**/gen_*.py,**/capability_checks.py,**/refresh_dashboard.py"
+globs: **/dashboard/*.py,**/dashboard/*.html,**/gen_*.py,**/capability_checks.py,**/refresh_dashboard.py
 alwaysApply: false
 ---
 

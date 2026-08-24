@@ -1,6 +1,6 @@
 ---
 description: Harness hook gates; read dispatch_config before adding or moving rules
-globs: "**/hooks/**/*.py,**/hooks/**/*.json"
+globs: **/hooks/**/*.py,**/hooks/**/*.json
 alwaysApply: false
 ---
 

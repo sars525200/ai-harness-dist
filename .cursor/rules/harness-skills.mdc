@@ -1,6 +1,6 @@
 ---
 description: Harness global skills live in skills/; do not junction or triplicate them
-globs: "**/skills/**"
+globs: **/skills/**
 alwaysApply: false
 ---
 
