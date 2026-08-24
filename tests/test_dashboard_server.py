@@ -70,8 +70,11 @@ def run() -> "tuple[int, list]":
     # 注入的東西不可以出現在磁碟上的 HTML 裡
     disk = open(_HTML, encoding="utf-8").read()
     check("自動重載的 UI 不在 HTML 檔裡（只在服務端注入）",
-          "hd-live" not in disk and "id=\"hd-live\"" not in disk,
+          "hd-live" not in disk and 'id="hd-live"' not in disk,
           "看板檔本身含有注入標記 —— 結構驗證與冪等都會被污染")
+    check("開檔鈕不在 HTML 檔裡（只在服務端注入）",
+          "hd-open" not in disk and "data-hd-open" not in disk,
+          "開檔注入寫進磁碟 HTML 了")
 
     # pythonw 情境：sys.stdout 是 None 時 import 不能炸
     r = subprocess.run(
@@ -159,6 +162,20 @@ def run() -> "tuple[int, list]":
               "服務吐的東西裡沒有待辦頁籤 —— 可能吐錯檔了")
         check("首頁有注入即時狀態徽章", b'id="hd-live"' in body,
               "注入沒發生：新鮮度就只剩使用者自己按 F5")
+        check("首頁有注入開檔鈕腳本", b"data-hd-open" in body and b"/_open" in body,
+              "開檔注入沒進服務吐的頁")
+        st, catb = get("/_open-catalog")
+        cat = json.loads(catb)
+        check("/_open-catalog 回清單", st == 200 and isinstance(cat, list) and cat,
+              repr(type(cat)))
+        _req_open = urllib.request.Request(
+            base + "/_open", data=b'{"kind":"skill","id":"shougong"}',
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(_req_open, timeout=60)
+            check("沒帶權杖的 /_open 被擋", False, "竟然通過了")
+        except urllib.error.HTTPError as exc:
+            check("沒帶權杖的 /_open 被擋（403）", exc.code == 403, f"回 {exc.code}")
 
         st, body = get("/_state")
         s = json.loads(body)

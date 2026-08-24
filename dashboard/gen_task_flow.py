@@ -864,9 +864,9 @@ def sync_tab_badge(html: str) -> str:
     n = html.count('aria-controls="sp-workflow-')
     if n == 0:
         raise SystemExit("數不到工作流程的子分頁 —— 零目標拒跑，不把徽章寫成 0。")
-    pat = re.compile(r'(id="tab-workflow"[^>]*>工作流程<span class="count">)(\d+)(</span>)')
+    pat = re.compile(r'(id="tab-workflow"[^>]*>工作流效益<span class="count">)(\d+)(</span>)')
     if not pat.search(html):
-        raise SystemExit("找不到工作流程頁籤的徽章 —— 不猜位置。")
+        raise SystemExit("找不到工作流效益頁籤的徽章 —— 不猜位置。")
     return pat.sub(lambda m: f"{m.group(1)}{n}{m.group(3)}", html)
 
 

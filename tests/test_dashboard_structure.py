@@ -36,6 +36,30 @@ labelled = dict(re.findall(r'<div class="panel[^"]*" id="(panel-[\w-]+)"[^>]*ari
 
 print("頁籤 ↔ 面板配對")
 check(len(tabs) == len(panel_ids), "tab 數(%d) == panel 數(%d)" % (len(tabs), len(panel_ids)))
+_keys = [k for _, _, k in tabs]
+check(_keys[:5] == ["workflow", "dispatch", "obs", "skills", "orch"],
+      "側欄前五問順序：工作流／派工／成本／Skill／角色（實得 %s）" % _keys[:5])
+check("sys-toggle" in nav and "sys-menu" in nav, "系統摺疊（sys-toggle／sys-menu）存在")
+check("tab-todo" in nav.split('id="sys-menu"')[1] if 'id="sys-menu"' in nav else False,
+      "待辦頁籤在系統摺疊內（不當主列、徽章不搶五問）")
+check("select(saved && panels[saved] ? saved : 'workflow'" in html
+      or "saved === 'overview') saved = 'workflow'" in html,
+      "預設頁是工作流效益（舊 overview 會改走 workflow）")
+check("技術決策時間軸" not in html and "D 槽工作區" not in html,
+      "總覽的決策時間軸與 D 槽工作區已刪")
+check("COST_PANEL_START" in html and "ROLES_TOPOLOGY_START" in html
+      and "WORKFLOW_COMPLIANCE_START" in html and "PROGRESS_CHART_START" in html,
+      "四塊產生器 marker 仍各在")
+check(html.count("COST_PANEL_START") == 1 and html.count("COST_PANEL_END") == 1, "COST_PANEL 未拆")
+check('id="st-workflow-1"' not in html, "工作流講義子頁（五階段等）已從導航拿掉")
+check("class=\"desk\"" in html and "class=\"desk-main\"" in html, "左欄 desk 殼存在")
+check(html.count("class=\"stmt-head\"") == 5, "五問各有一個報表帳頭（實得 %d）" % html.count("class=\"stmt-head\""))
+check(html.find("id=\"panel-obs\"") < html.find("COST_PANEL_START") and html.find("id=\"cost-kpis\"") < html.find("COST_PANEL_START") and html.find("id=\"cost-kpis\"") > html.find("id=\"panel-obs\""),
+      "成本頁帳頭與 KPI 在 COST_PANEL 之外（產生器重跑不會洗掉）")
+check('id="disp-n"' in html and "stmt-recon" in html, "派工頁有對帳表")
+check('id="role-kpis"' in html and 'id="skill-kpis"' in html, "角色／Skill 頁有 KPI 條")
+check(".stmt-head{" in html, "帳頭 CSS 與 class 同名（否則畫面有格無樣式）")
+check("dashboard/visual-lib/" not in html, "美術庫說明不塞進看板 HTML")
 for tab_id, ctrl, key in tabs:
     check(ctrl in panel_ids, "%s 的 aria-controls=%s 有對應 panel" % (tab_id, ctrl))
     check(labelled.get(ctrl) == tab_id, "%s 的 aria-labelledby 回指 %s" % (ctrl, tab_id))
@@ -155,8 +179,23 @@ check(_badge is not None and int(_badge.group(1)) == len(rows),
 # Skill 徽章對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
 # （六大類卡片 → 角色表 → nav 角色徽章 → Skill 徽章）。這條讓它下次自己現形。
 # 只綁徽章不綁表格列數：清冊的分組是人工的，未來可能刻意不列某支。
-_skills_dir = Path(r"D:\IT-department\.claude\skills")
-_skill_files = len(list(_skills_dir.glob("*/SKILL.md"))) if _skills_dir.exists() else 0
+# Skill 徽章對產生器同一口徑：全域層 + 專案層、junction 去重。
+# 只數專案 `.claude/skills` 會把 harness 層 skill 從分母拿掉，徽章看起來像「寫錯了」。
+HARNESS = Path(r"D:\.ai-harness")
+if str(HARNESS) not in sys.path:
+    sys.path.insert(0, str(HARNESS))
+import config as _harness_cfg  # noqa: E402
+_seen_skills = set()
+_skill_files = 0
+for _root in _harness_cfg.SKILL_DIRS:
+    if not _root.is_dir():
+        continue
+    for _p in _root.glob("*/SKILL.md"):
+        _real = str(_p.resolve()).lower()
+        if _real in _seen_skills:
+            continue
+        _seen_skills.add(_real)
+        _skill_files += 1
 _sbadge = re.search(r'id="st-orch-1"[^>]*>Skill 清冊<span class="count">(\d+)</span>', html)
 check(_skill_files > 0, "找得到 skills 目錄（找不到無從比對）")
 check(_sbadge is not None and int(_sbadge.group(1)) == _skill_files,
@@ -172,8 +211,11 @@ check("agent_readonly_gate.py" in roles, "閘門檔名有寫出來")
 # 內容真的是產生器填的、徽章與畫面預設狀態一致、每一項都能複製。
 print("\n待辦頁籤")
 check("panel-todo" in panel_ids, "panel-todo 存在")
-check("待辦" not in html.split('<div class="subtabs" role="tablist" aria-label="總覽 子分頁">')[1]
-      .split("</div>")[0], "總覽子分頁裡已經沒有『待辦』（單一入口，不留兩個）")
+_ovbar = re.search(r'<div class="subtabs" role="tablist" aria-label="[^"]*"', panel_slice("panel-overview"))
+check(_ovbar is not None and "待辦" not in panel_slice("panel-overview")[
+      panel_slice("panel-overview").find('class="subtabs"'):
+      panel_slice("panel-overview").find('class="subtabs"') + 400],
+      "計畫進度子分頁裡已經沒有『待辦』（單一入口，不留兩個）")
 _todo = panel_slice("panel-todo")
 check("TODOS_START" in _todo and "TODOS_END" in _todo, "待辦區間有 marker（內容由產生器填）")
 _secs = re.findall(r'<section class="todo-sec" data-todo-scope="([^"]+)"', _todo)

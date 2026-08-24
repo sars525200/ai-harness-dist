@@ -397,6 +397,7 @@ def main() -> int:
         import test_hook_rules
         import test_mutation_anchors
         import test_dashboard_server
+        import test_open_in_ide
         import test_decl1
         import test_disp1
         import test_esc1
@@ -436,6 +437,7 @@ def main() -> int:
             (test_workflow_compliance.run, "工作流程遵循度產生器"),
             (test_todos.run, "待辦產生器"),
             (test_dashboard_server.run, "本機看板服務"),
+            (test_open_in_ide.run, "看板在 IDE 開檔"),
             (test_decl1.run, "DECL-1 宣告欄位"),
             (test_disp1.run, "DISP-1 派工紀律"),
             (test_esc1.run, "ESC-1 需求登記"),

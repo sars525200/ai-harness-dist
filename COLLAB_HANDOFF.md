@@ -90,10 +90,7 @@
 
 ## 不是這條線的（不要一起做、不要一起 commit）
 
-工作區可能還髒著（以你開對話時 `git status` 為準）。2026-08-25 預期：
-
-- 看板 IA 線：`DASHBOARD_IA_PLAN.md`、`gen_task_flow.py`、`gen_roles_topology.py`、`harness-dashboard.html`、結構測試——**不要 sweep 進本輪 commit**
-- `TODOS.md` 可能多一列 Skill 清冊徽章 28 vs 18
+工作區以你開對話時 `git status` 為準。2026-08-25 **§10 經營五問側欄**已進版控（含 `open_in_ide.py`、結構測試改數兩層 skill）。
 
 glob 三份 `.mdc` 引號已在 `a421dbc`。**未獲指示不要 rebase／amend／reset。**
 
