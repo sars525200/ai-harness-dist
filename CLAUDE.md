@@ -18,5 +18,6 @@
 
 ## 協作時
 
+- 完整交接文：`COLLAB_HANDOFF.md`（本檔只放地圖）。
 - 改共用檔前跑 `tools/peek_sessions.py`，commit 只 stage 自己的 hunk。
 - 換部門不成立的東西不准寫進本 repo。路徑從設定讀，讀不到就拒跑。
