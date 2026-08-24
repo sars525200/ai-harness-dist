@@ -147,6 +147,9 @@ alwaysApply: false
   並且不還原**。踩過兩次：先用 `io.StringIO()`（沒有 `.reconfigure`，換一種
   AttributeError）、再改成「import 時暫時換、用完還原」（`collect()` 執行到一半
   又 import 了 `gen_layers`，那時已經還原成 `None`）。
+- **pythonw 父行程仍會閃黑窗**：子行程若是 `python.exe` 且沒 `CREATE_NO_WINDOW`，每次重生就開一個 console。一律走 `dashboard/win_subprocess.py`（`refresh_dashboard.py` 與 `serve_dashboard.py` 的 watcher 都要）。
+- **watcher 驗證失敗要 backoff**：失敗不寫雜湊、每 10 秒 `force=True` 全量重生會連閃。`next_watch_sleep` 失敗 10→20→40…上限 120 秒，成功回到 10 秒。根因（例如徽章數字對不上）要另修，backoff 只降頻率。
+- **診斷黑窗不要先猜 8099**：`pyw -3 tools/console_flash_probe.py`（禁止再用 cmd／powershell 起探針）。Cursor SCM 的 `git.exe` 與 third-party hook 的 `powershell.exe` 也會生 conhost。
 - **服務端注入不要動到 HTML 檔本體**：自動重載與新鮮度徽章都是 serve 時才加，
   寫進檔案會同時污染結構驗證與產生器冪等（而且是靜靜地污染）。
 - **新鮮度要顯示「多久沒檢查」，不要只顯示「最新」**：服務掛掉時，靜態的「最新」

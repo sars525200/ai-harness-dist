@@ -102,7 +102,21 @@
       "PowerShell(git add:*)",
       "PowerShell(git commit:*)",
       "PowerShell(ssh <VM-HOST>:*)",
-      "PowerShell(scp:*)"
+      "PowerShell(scp:*)",
+      "PowerShell(Write-Host:*)",
+      "Bash(journalctl -u:*)",
+      "PowerShell(Get-ScheduledTask:*)",
+      "Bash(systemctl show:*)",
+      "PowerShell(Test-NetConnection:*)",
+      "PowerShell(ConvertTo-Json:*)",
+      "PowerShell(Get-WinEvent:*)",
+      "Bash(tasklist:*)",
+      "Bash(systemctl cat:*)",
+      "PowerShell(journalctl -u:*)",
+      "PowerShell(Compare-Object:*)",
+      "PowerShell(systemctl show:*)",
+      "PowerShell(systemctl cat:*)",
+      "PowerShell(tasklist:*)"
     ],
     "deny": [
       "Bash(git commit --no-verify:*)",

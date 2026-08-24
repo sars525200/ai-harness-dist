@@ -16,3 +16,5 @@ alwaysApply: true
 - 看板綁 127.0.0.1、不對外發布。`HOST` 改 `0.0.0.0` 就對外了，畫面上沒差別。
 - **角色派工（Cursor）**：流程同 Claude。內建：`explore`／`generalPurpose`／`cursor-guide`／Plan 模式／主 session。查詢＝`explore`。自訂五個見 `cursor-agents/`（同步 `~\.cursor\agents`）；規範真相 `agents/*.md`。截圖＝Browser。
 - **模型（僅 Cursor）**：主＝Grok 4.6 High。自訂五個＝`composer-2.5[fast=false]`。explore／shell／guide 能指定則 Composer。Opus Extra High 只主 session 卡關。不用 Auto 派自代理。
+- **選擇題**：一律 `AskQuestion`（Questions 面板）。不是 `AskUserQuestion`、不是聊天列、不是 HTML。細節 `.cursor/rules/ask-choices.mdc`。全域通道＝Cursor User Rules。
+- **打字閃黑窗**：先 `pyw -3 tools/console_flash_probe.py` 看 conhost 的父行程，不要先猜 8099。常見：Cursor.exe→git.exe（SCM）；Cursor.exe→powershell→`hooks/dispatch.py`（third-party Claude hooks，外層一定有 conhost）。看板子行程走 `dashboard/win_subprocess.py`。本工作區已關 `git.autoRefresh`／`git.autofetch`，需 Reload Window。

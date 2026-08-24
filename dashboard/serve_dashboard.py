@@ -17,7 +17,8 @@ user 2026-08-06 定：**完全不對外**。artifact 是 claude.ai 上一個可�
 
 三件事一起做，缺一件就會出現「看起來正常但其實是舊的」：
 
-1. **背景每 10 秒真的重生一次**（`refresh_dashboard.py --quiet`，來源沒變 10ms 秒退）。
+1. **背景每 10 秒檢查一次**（`refresh_dashboard.py --quiet`，來源沒變約 10ms 秒退）。
+   重生失敗則拉長間隔（上限 120 秒），避免 Windows 每 10 秒開一串 `python.exe` 閃黑窗。
    不是等下一次 Stop hook，也不是只有開頁才跑。
 2. **右下角常駐即時徽章**：幾秒前檢查過、這次成功還是失敗、服務還在不在。
    點一下立刻重查。**看得到「多久沒檢查」比看到一個「最新」字樣誠實** ——
@@ -29,9 +30,12 @@ user 2026-08-06 定：**完全不對外**。artifact 是 claude.ai 上一個可�
 
 ## 刻意不做的事
 
-- **不做靜態目錄服務**：只認 `/`、`/index.html`、`/_state`、`/_recheck` 四條路由，其餘 404。
+- **不做靜態目錄服務**：只認 `/`、`/index.html`、`/_state`、`/_recheck`、
+  `/_open-catalog`，寫入／開檔走 POST `/_done`、`/_open`，其餘 404。
   沒有任何路徑會被拼進檔案系統，所以不存在路徑穿越（`..\..\` 那類）的攻擊面。
-- **不自己寫檔**：重生一律交給 `refresh_dashboard.py`（它有鎖，多 session 並行安全）。
+  `/_open` 只收 kind＋id，白名單由 `open_in_ide.catalog()` 重算。
+- **不自己寫檔**（`/_open` 只叫 Cursor 開已在白名單的檔）：重生一律交給
+  `refresh_dashboard.py`（它有鎖，多 session 並行安全）。
 
 【核心層】服務與注入邏輯跟被服務的專案無關。
 """
@@ -45,7 +49,6 @@ import os
 import re
 import secrets
 import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -75,10 +78,15 @@ HARNESS = DASHBOARD.parent
 HTML_PATH = DASHBOARD / "harness-dashboard.html"
 REFRESH = DASHBOARD / "refresh_dashboard.py"
 LOG_PATH = HARNESS / "state" / "dashboard_server.log"
+if str(DASHBOARD) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD))
+import open_in_ide  # noqa: E402
+import win_subprocess  # noqa: E402
 
 HOST = "127.0.0.1"          # ⚠ 不要改成 0.0.0.0：那一改就對外了，而畫面上看不出差別
 DEFAULT_PORT = 8099
 WATCH_INTERVAL = 10.0       # 秒。背景重生檢查的節奏
+FAIL_BACKOFF_CAP = 120.0    # 秒。連續失敗時最長等到下次再試
 MIN_GAP = 2.0               # 秒。手動重查與開頁重生的最小間隔，防連點打爆
 
 _lock = threading.Lock()
@@ -156,9 +164,9 @@ def do_refresh(force: bool = False) -> dict:
             return dict(_state)
         before = _stat()
         try:
-            r = subprocess.run([sys.executable, str(REFRESH), "--quiet"],
-                               capture_output=True, text=True, encoding="utf-8",
-                               errors="replace", timeout=120)
+            r = win_subprocess.run([sys.executable, str(REFRESH), "--quiet"],
+                                   capture_output=True, text=True, encoding="utf-8",
+                                   errors="replace", timeout=120)
             ok = r.returncode == 0
             out = ((r.stdout or "") + (r.stderr or "")).strip()
             note = "已是最新" if ok else f"重生失敗（exit {r.returncode}）"
@@ -291,15 +299,35 @@ def _stat() -> tuple:
         return (0, 0)
 
 
+def next_watch_sleep(ok: bool, current: float,
+                     base: float = WATCH_INTERVAL,
+                     cap: float = FAIL_BACKOFF_CAP) -> float:
+    """成功回到基準間隔；失敗則加倍，上限 cap。"""
+    if ok:
+        return base
+    doubled = (current if current > 0 else base) * 2
+    return min(max(doubled, base * 2), cap)
+
+
 def watcher(interval: float) -> None:
     # **先檢查再睡**：先睡的話開機後第一個 interval 內徽章會顯示「尚未檢查」，
     # 而那看起來跟「服務壞了」一樣。
+    sleep_for = interval
     while True:
         try:
-            do_refresh(force=True)
+            state = do_refresh(force=True)
+            ok = bool(state.get("ok"))
+            nxt = next_watch_sleep(ok, sleep_for, interval)
+            if not ok and nxt != sleep_for:
+                _log("重生失敗，下次 %d 秒後再試（避免每 %d 秒開一串 Python）"
+                     % (int(nxt), int(interval)))
+            elif ok and sleep_for != interval:
+                _log("重生恢復成功，檢查節奏回到 %d 秒" % int(interval))
+            sleep_for = nxt
         except Exception as exc:            # 背景執行緒死掉＝新鮮度靜靜停擺，一定要留痕跡
             _log(f"背景檢查例外：{exc!r}")
-        time.sleep(interval)
+            sleep_for = next_watch_sleep(False, sleep_for, interval)
+        time.sleep(sleep_for)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +404,91 @@ LIVE_UI = """
 </script>
 """
 
+# Skill／角色「在 IDE 開檔」：鈕由服務注入，磁碟 HTML 不動（產生器 10 秒重生也不會洗掉）。
+OPEN_IDE_UI = """
+<style>
+#hd-open-toast{ position:fixed; right:16px; bottom:16px; z-index:9997;
+  max-width:28rem; padding:8px 12px; border-radius:8px;
+  background:var(--surface,#fff); color:var(--text,#1B1F26);
+  border:1px solid var(--line-strong,rgba(20,24,31,.28));
+  font:12.5px/1.45 -apple-system,'Segoe UI','Noto Sans TC',sans-serif;
+  box-shadow:0 2px 12px rgba(0,0,0,.16); }
+#hd-open-toast[hidden]{ display:none; }
+button.hd-open{
+  appearance:none; margin-left:8px; padding:2px 8px; cursor:pointer;
+  font:11px/1.3 -apple-system,'Segoe UI',sans-serif;
+  color:var(--accent-ink,var(--accent,#1E8F88));
+  background:var(--accent-wash,rgba(30,143,136,.10));
+  border:1px solid var(--line,rgba(20,24,31,.13)); border-radius:4px; }
+button.hd-open:hover{ border-color:var(--accent,#1E8F88); }
+button.hd-open:focus-visible{ outline:2px solid var(--accent,#1E8F88); outline-offset:2px; }
+.rt-dh button.hd-open{ margin-left:auto; flex-shrink:0; }
+</style>
+<div id="hd-open-toast" hidden role="status"></div>
+<script>
+(function(){
+  var toast = document.getElementById('hd-open-toast');
+  var hideT;
+  function say(msg){
+    toast.hidden = false;
+    toast.textContent = msg;
+    clearTimeout(hideT);
+    hideT = setTimeout(function(){ toast.hidden = true; }, 4000);
+  }
+  function openIde(kind, id){
+    var token = window.__hdToken;
+    if (!token){ say('沒有權杖：請從 http://127.0.0.1:8099/ 開這一頁'); return; }
+    fetch('/_open', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({token: token, kind: kind, id: id})
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(x){ say((x.j && x.j.msg) || (x.ok ? '已開檔' : '開檔失敗')); })
+      .catch(function(){ say('開檔請求失敗（服務是否還在？）'); });
+  }
+  function btn(kind, id, label){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hd-open';
+    b.textContent = label || '在 IDE 開檔';
+    b.setAttribute('data-hd-open', kind + ':' + id);
+    b.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      openIde(kind, id);
+    });
+    return b;
+  }
+  document.querySelectorAll('.cmdname').forEach(function(el){
+    if (el.querySelector('[data-hd-open]')) return;
+    var m = (el.textContent || '').match(/\\/[a-z0-9_-]+/i);
+    var id = m ? m[0].slice(1) : '';
+    if (!id) return;
+    el.appendChild(btn('skill', id, '開檔'));
+  });
+  var head = document.getElementById('rt-dhead');
+  var body = document.getElementById('rt-dbody');
+  if (head && body && window.MutationObserver){
+    new MutationObserver(function(){
+      var old = head.querySelector('[data-hd-open]');
+      if (old) old.remove();
+      var id = '';
+      body.querySelectorAll('dt').forEach(function(dt){
+        if (/subagent_type/i.test(dt.textContent || '')) {
+          var dd = dt.nextElementSibling;
+          if (dd) id = (dd.textContent || '').trim();
+        }
+      });
+      if (!id) return;
+      var close = document.getElementById('rt-close');
+      if (close) head.insertBefore(btn('agent', id, '在 IDE 開角色檔'), close);
+      else head.appendChild(btn('agent', id, '在 IDE 開角色檔'));
+    }).observe(body, {childList:true, subtree:true});
+  }
+})();
+</script>
+"""
+
 STALE_BANNER = """
 <div style="position:fixed;left:0;right:0;top:0;z-index:9999;padding:9px 16px;
             background:#A9762E;color:#fff;font:13px/1.5 -apple-system,'Segoe UI',sans-serif">
@@ -393,7 +506,7 @@ def page_bytes() -> bytes:
     # 權杖只塞進**服務吐出去的那一份**：直接開檔案看的時候沒有它，
     # 「完成」按下去會說「請從 127.0.0.1 開這一頁」，而不是靜靜沒反應。
     token = '<script>window.__hdToken=%s;</script>' % json.dumps(TOKEN)
-    return (html + token + LIVE_UI).encode("utf-8")
+    return (html + token + LIVE_UI + OPEN_IDE_UI).encode("utf-8")
 
 
 def state_bytes() -> bytes:
@@ -442,17 +555,22 @@ class Handler(BaseHTTPRequestHandler):
             do_refresh(force=True)
             self._send(200, state_bytes(), "application/json")
             return
+        if path == "/_open-catalog":
+            body = json.dumps(open_in_ide.catalog(), ensure_ascii=False).encode("utf-8")
+            self._send(200, body, "application/json")
+            return
         # 其餘一律 404：**不接任何路徑到檔案系統**，所以沒有路徑穿越可言
         self._send(404, b"not found", "text/plain; charset=utf-8")
 
     do_HEAD = do_GET
 
     def do_POST(self) -> None:  # noqa: N802
-        """`/_done`：標記完成（會改來源檔）。四道守門見檔頭 `TOKEN` 那段。"""
+        """`/_done` 改來源檔；`/_open` 只開白名單 skill／角色檔。守門同 TOKEN。"""
         if self.client_address[0] not in ("127.0.0.1", "::1"):
             self._send(403, b"local only", "text/plain; charset=utf-8")
             return
-        if self.path.split("?", 1)[0] != "/_done":
+        route = self.path.split("?", 1)[0]
+        if route not in ("/_done", "/_open"):
             self._send(404, b"not found", "text/plain; charset=utf-8")
             return
         # 跨站防護：①Content-Type 必須是 json（逼出 preflight，簡單請求送不了）
@@ -477,9 +595,12 @@ class Handler(BaseHTTPRequestHandler):
                 "application/json")
             return
         try:
-            res = complete(payload, bool(payload.get("dry")))
+            if route == "/_open":
+                res = open_in_ide.open_item(payload.get("kind") or "", payload.get("id") or "")
+            else:
+                res = complete(payload, bool(payload.get("dry")))
         except Exception as exc:                  # 任何沒想到的例外都要回成訊息，
-            _log("完成處理例外：%r" % (exc,))     # 讓畫面說得出話，而不是靜靜失敗
+            _log("完成／開檔處理例外：%r" % (exc,))
             res = {"ok": False, "msg": "處理時出錯：%r" % (exc,)}
         self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"),
                    "application/json")

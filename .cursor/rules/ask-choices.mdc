@@ -7,9 +7,12 @@ alwaysApply: true
 
 需要使用者**決定或釐清**時：
 
-- **必須呼叫 `AskQuestion`**（2–4 個選項）。不要只在正文寫「請選 1/2/3」就停——那樣沒有選項 UI。
+- **必須呼叫 `AskQuestion`**（2–4 個選項，Questions 面板）。不要只在正文寫「請選 1/2/3」就停——那樣沒有選項 UI。
+- `AskQuestion` 是 Cursor **第一方**工具。`GetDynamicTools` 掃 MCP namespace 找不到，不算沒有；不要改成聊天列 A/B，也不要做 HTML 假彈窗。不是 Claude 的 `AskUserQuestion`。
 - 第一個選項標 **(推薦)** 並附一句理由。
 - **事實可查證的直接查完再做**，不問。
 - 禁止開放式問句（「你覺得呢？」「要怎麼處理？」）和「兩件事留給你決定」然後空等。
+
+**載入通道**：全工作區靠 Settings → Rules（User Rules）。本檔只覆蓋本工作區。`~\.cursor\rules\*.mdc` 在 2026-08-25 實測**沒被注入**，不能當全域規則。注入的 User Rules **通常沒有標題、只有正文**——不要用標題字串測「有沒有載到」。
 
 Claude Code 另有 Stop hook AWC-1（認 `AskUserQuestion`）。Cursor 沒有對等 hook；這條規則是 Cursor 側的載入點。

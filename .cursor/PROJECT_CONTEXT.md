@@ -61,3 +61,4 @@ Harness 待辦用 `TODOS.md` 的分類欄（閘門／看板／角色／流程／
 - 產生器改完驗冪等（同一輸入跑兩次雜湊不變）與「解析不到要拒跑」。
 - 看板視覺：Chrome headless，不用這台機器的 Edge；`file:///` 路徑用 `Path.resolve().as_uri()`。
 - 核心層硬編碼專案路徑：`tests/test_harness_config.py::test_u1_debt_does_not_grow`（台帳只准變少）。
+- 打字閃黑窗：`pyw -3 tools/console_flash_probe.py`，看 `state/console_flash_probe.ndjson` 裡 conhost 的父行程；不要先猜 8099。

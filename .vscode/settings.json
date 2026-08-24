@@ -1,0 +1,12 @@
+{
+  // Cursor 每次檔案變動會生 git.exe → conhost，打字／看板重生時閃黑窗。
+  // 探針 2026-08-25：Cursor.exe → git status -z -uall。此二開關只影響本工作區 SCM 自動刷新。
+  "git.autoRefresh": false,
+  "git.autofetch": false,
+  "files.watcherExclude": {
+    "**/dashboard/harness-dashboard.html": true,
+    "**/dashboard/.refresh.lock": true,
+    "**/state/**": true,
+    "**/dashboard/__pycache__/**": true
+  }
+}

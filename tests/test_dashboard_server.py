@@ -103,6 +103,27 @@ def run() -> "tuple[int, list]":
     _new, _how = m.plan_edit("prose", "- ✅ 這條已經標過了")
     check("粗抓：已標過的不重複加", _new is not None and _new.count("✅") == 1, f"{_new!r}")
 
+    check("失敗後檢查間隔會拉長（10→20→40…上限 120）",
+          m.next_watch_sleep(False, 10.0) == 20.0
+          and m.next_watch_sleep(False, 80.0) == 120.0
+          and m.next_watch_sleep(False, 120.0) == 120.0,
+          "next_watch_sleep 沒有在失敗時加倍／封頂")
+    check("成功後回到基準間隔",
+          m.next_watch_sleep(True, 80.0) == m.WATCH_INTERVAL,
+          f"成功後仍是 {m.next_watch_sleep(True, 80.0)}")
+    src = open(_SRV, encoding="utf-8").read()
+    check("重生子行程走 win_subprocess（Windows 不閃黑窗）",
+          "win_subprocess.run" in src,
+          "do_refresh 仍直接 subprocess.run python.exe")
+    _ref = open(os.path.join(_ROOT, "dashboard", "refresh_dashboard.py"), encoding="utf-8").read()
+    check("產生器子行程也走 win_subprocess",
+          "win_subprocess.run" in _ref,
+          "refresh_dashboard.run 仍直接 subprocess.run")
+    _ws = open(os.path.join(_ROOT, "dashboard", "win_subprocess.py"), encoding="utf-8").read()
+    check("win_subprocess 使用 CREATE_NO_WINDOW",
+          "CREATE_NO_WINDOW" in _ws,
+          "藏黑窗的旗標不在 helper 裡")
+
     # ---- CRLF：這個 repo 有 CRLF 檔，改一行不能把整檔翻成 LF ----
     # （`feedback-python-write-crlf-preserve` 記過這個坑：翻行尾會產生巨量假 diff）
     _crlf = "| 項目 | 狀態 |\r\n| A | ⏳ 待產出 |\r\n| B | 別動我 |\r\n"

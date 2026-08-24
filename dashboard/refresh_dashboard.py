@@ -31,7 +31,6 @@ import hashlib
 import io
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -56,6 +55,7 @@ if str(DASHBOARD) not in sys.path:
     sys.path.insert(0, str(DASHBOARD))
 from check_freshness import ops_dirs as _ops_dirs, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
 import refresh_lock  # noqa: E402
+import win_subprocess  # noqa: E402
 
 # 看板內容的上游。動到這些才需要重生 —— 清單刻意列明，
 # 不用「整個目錄」：那會把 state/*.ndjson（每次工具呼叫都在長）也算進來，
@@ -200,8 +200,8 @@ def diff_sources(old: dict, new: dict) -> list:
 
 
 def run(script: Path) -> "tuple[int, str]":
-    r = subprocess.run([sys.executable, str(script)], capture_output=True,
-                       text=True, encoding="utf-8", errors="replace")
+    r = win_subprocess.run([sys.executable, str(script)], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace")
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 

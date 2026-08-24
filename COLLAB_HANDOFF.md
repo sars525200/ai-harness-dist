@@ -74,6 +74,8 @@
 4. 看板規範三邊本文必須相同（YAML 可不同）：IT `.claude/rules`、IT `.cursor/rules`、harness `.cursor/rules/dashboard-generators.mdc`。
 5. 路徑從 `harness.config.json`／專案 `PROJECT_CONTEXT.md` 讀；讀不到就拒跑，禁止 fallback 到某個預設專案。
 6. **Cursor path-scoped glob 不把規則本文注入模型**（2026-08-24 實測）。開／改 `dashboard/*.py`、globs 拿掉引號、新開對話都沒進。`alwaysApply: true` 探針有進，已改回 `false`。改看板用 `@dashboard-generators` 或手動 Read，不要假設 glob 會帶進來。
+7. **選擇題走 `AskQuestion`**（Questions 面板），不是 `AskUserQuestion`、不是聊天列 A/B、不是 HTML 假彈窗。全工作區通道是 Cursor User Rules；`~\.cursor\rules\*.mdc` 2026-08-25 實測沒注入。模型看不到 User Rule 標題。
+8. **打字閃黑窗先跑探針**（`pyw -3 tools/console_flash_probe.py`），看 conhost 的父行程，不要先猜 8099。常見是 Cursor SCM 的 `git.exe`，以及 third-party Claude hooks 的 `powershell.exe`（外層一定有 conhost）。看板子行程必須 `dashboard/win_subprocess.py`。
 
 ---
 
@@ -88,11 +90,10 @@
 
 ## 不是這條線的（不要一起做、不要一起 commit）
 
-工作區可能還髒著（以你開對話時 `git status` 為準）。2026-08-24 晚預期：
+工作區可能還髒著（以你開對話時 `git status` 為準）。2026-08-25 預期：
 
-- 未追蹤 `DASHBOARD_HTML_GIT_PLAN.md`、`.cursor/HANDOFF.md` 可能有交接增補
-- `TODOS.md` 多一列看板產物／git
-- `dashboard/harness-dashboard.html` 產生器重填（不要跟計畫書同一顆 commit）
+- 看板 IA 線：`DASHBOARD_IA_PLAN.md`、`gen_task_flow.py`、`gen_roles_topology.py`、`harness-dashboard.html`、結構測試——**不要 sweep 進本輪 commit**
+- `TODOS.md` 可能多一列 Skill 清冊徽章 28 vs 18
 
 glob 三份 `.mdc` 引號已在 `a421dbc`。**未獲指示不要 rebase／amend／reset。**
 
