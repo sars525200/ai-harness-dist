@@ -2,6 +2,9 @@
 # （含其他 session 的內容，絕不進版控）
 state/
 
+# 換則交接等 session 暫存（skills/chat-handoff 寫 .scratch/handoff/，不進版控）
+.scratch/
+
 # harness 層設定（2026-08-13·CONTEXT_HEALTH_PLAN C-11／覆核 F-8）：
 # 內容是**這台機器的專案路徑**，跨機器沒有意義；進版控等於把 `D:\IT-department`
 # 當成別的部門的預設值出貨 —— 而 `discover_projects()` 對 currentProject 是無條件插入，
