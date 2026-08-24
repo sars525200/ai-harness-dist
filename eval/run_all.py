@@ -80,7 +80,24 @@ def main() -> int:
         print("  ❌ 零樣本 —— 拒跑（§5.1）")
         rc["L3"] = 1
     else:
-        print(f"  樣本 {total} 題（正例 {pos} / 反例 {neg}）覆蓋 {len(files)} 支 skill")
+        # A-7：**覆蓋率要跟 skill 總數對帳並印出缺的名字**。只印「覆蓋 N 支」
+        # 而不講分母，會被讀成「都測過了」——那正是 §5.4 禁止的不揭露略過項。
+        try:
+            sys.path.insert(0, os.path.dirname(HERE))
+            import config as _cfg
+            all_names = {n for n, _ in _cfg.iter_skill_paths()[0]}
+        except Exception:
+            all_names = set()
+        covered = {os.path.splitext(os.path.basename(f))[0] for f in files}
+        missing_samples = sorted(all_names - covered)
+        denom = f"/{len(all_names)}" if all_names else ""
+        print(f"  樣本 {total} 題（正例 {pos} / 反例 {neg}）覆蓋 {len(files)}{denom} 支 skill")
+        if missing_samples:
+            print(f"  ⚠ NOT COVERED：{len(missing_samples)} 支**沒有任何觸發樣本** —— "
+                  f"它們的 description 品質完全沒被測到：")
+            print(f"      {'、'.join(missing_samples)}")
+            print("      （補樣本每支 3 正 2 反＋why，不在 SKILL_EVAL_PLAN §9 案 A 範圍，"
+                  "已登記為待辦）")
         # 反例不可省：只有正例的觸發測試恆真（§3.1）
         if neg == 0:
             print("  ❌ 零反例 —— 只有正例的觸發測試恆真，視為未驗證")

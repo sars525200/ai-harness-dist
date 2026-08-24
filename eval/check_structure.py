@@ -37,13 +37,14 @@ try:
 except Exception:
     pass
 
-SKILL_DIRS = [
-    r"d:\IT-department\.claude\skills",
-]
-MEMORY_SOURCES = [
-    r"d:\IT-department\CLAUDE.md",
-    r"d:\IT-department\.aimemory",
-]
+# A-2：路徑一律從 harness 設定讀（U-1）。**缺設定拒跑不猜**（U-2）——
+# import 這一行本身就會在設定壞掉時 SystemExit。
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config as _cfg                                            # noqa: E402
+
+SKILL_DIRS = [str(p) for p in _cfg.SKILL_DIRS]
+MEMORY_SOURCES = [str(p) for p in _cfg.MEMORY_SOURCES]
+MEMORY_DIR = str(_cfg.PROJECT_MEMORY_DIR)                        # wikilink 解析用
 BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "baseline.json")
 
 TOKEN_SURGE_RATIO = 1.50   # Q1：較上次量測突增 50% 即警示
@@ -52,18 +53,34 @@ DUP_WARN_RATIO = 0.15      # 重複片段佔比 >=15% 即警示
 
 
 # ── 讀取 ────────────────────────────────────────────────────────────────
-def load_skills() -> list[dict]:
+def load_skills() -> tuple[list[dict], list[str]]:
+    r"""回 `(skills, 同名衝突)`。跨兩層、realpath 去重（A-3），並拆 text/full_text（A-5）。
+
+    **`text` 與 `full_text` 是兩個不同的東西，消費點不可混用**：
+      - `text`      ＝ 只有 `SKILL.md`。給 frontmatter／`split_steps`／`tokens`／
+                       邊界檢查／完成判準計數用。
+      - `full_text` ＝ `SKILL.md` ＋ 全部 `references/*.md`。給 wikilink／重複偵測用。
+
+    為什麼一定要拆：把 references 併進 `tokens` ⇒ 拆分前後量不到降幅（案 B 的 VB-3 廢掉）；
+    不併進重複偵測與契約檢查 ⇒ 內容搬進 `references/` 之後**覆蓋靜默消失而數字反而變好看**
+    （`asset-data-rules` 現在 5% 重複率會變 0%，內容一個字沒少）。
+    """
+    entries, conflicts = _cfg.iter_skill_paths()
     out = []
-    for root in SKILL_DIRS:
-        if not os.path.isdir(root):
-            continue
-        for name in sorted(os.listdir(root)):
-            path = os.path.join(root, name, "SKILL.md")
-            if os.path.isfile(path):
-                with open(path, encoding="utf-8") as fh:
-                    out.append({"name": name, "path": path, "text": fh.read(),
-                                "mtime": os.path.getmtime(path)})
-    return out
+    for name, p in entries:
+        path = str(p)
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        refs = sorted((p.parent / "references").glob("*.md")) \
+            if (p.parent / "references").is_dir() else []
+        extra = "".join("\n" + r.read_text(encoding="utf-8") for r in refs)
+        out.append({
+            "name": name, "path": path, "text": text, "full_text": text + extra,
+            "refs": [str(r) for r in refs],
+            # A-6 的同源判準：references 改了也算這支 skill 動過。
+            "mtime": max([os.path.getmtime(path)] + [os.path.getmtime(r) for r in refs]),
+        })
+    return out, conflicts
 
 
 def load_memory_corpus() -> str:
@@ -185,14 +202,46 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
         kind = "流程" if steps else "參考"
         sk["kind"] = kind
 
-        # ③ 完成判準（只對流程型）
+        # ③ 完成判準（A-4：**逐步驟判定已停用，降級為全檔至少一處**）
+        #
+        # 為什麼降級：「一個步驟從哪裡到哪裡」機械判不出來。17 支至少用了四種
+        # 慣例（`## 步驟 N：`／`### N.`／`## 流程`+`###`／`## 八步`），兩次嘗試都被實測打掉：
+        #   ·收緊 chunk 邊界到下一個 `##` → audit 3/4→4/4、visual-check 5/6→6/6，假 WARN 變多
+        #   ·改認「全檔最淺的一級標題」→ 17 支全部只有 1 個 H1，退化成每支 1 步，
+        #    audit/codebase-health/verify-rules/visual-check 四個 WARN **靜默轉綠**
+        # 現行逐步驟結果裡 5 個 WARN 有 3 個是假的（audit/verify-rules/visual-check
+        # 都有完成判準，只是不在每個 `###` 底下）。
+        #
+        # ⚠ **這是有代價的降級，不是無損重構**：會失去 codebase-health 步驟 4 那個真 WARN。
+        # 帳：假 3→0、真 2→1。恢復條件＝案 B 逐支動 SKILL.md 時統一步驟標題慣例。
+        #
+        # ⚠ 判準吃 `body`（不是 `text`、更不是 `full_text`）：吃 `text` ⇒ design-spec／
+        # shougong 的 frontmatter description 裡就含這四個字，等於用常駐層那句宣傳詞
+        # 滿足 L1 判準；吃 `full_text` ⇒ 案 B 後任一 references 出現一次就能讓 SKILL.md 全綠。
+        #
+        # ⚠ **型別閘門保留**：參考型（純規則資料，沒有步驟要完成）套這條就是假 WARN
+        # ——§5.5「假 FAIL 比沒有 eval 更糟」。降級**不是**拿掉分流的藉口。
         if kind == "流程":
-            missing = [t for t, chunk in steps if "完成判準" not in chunk]
-            if missing:
+            if "完成判準" not in body:
                 r.add(name, "完成判準", "WARN",
-                      f"{len(missing)}/{len(steps)} 步驟缺完成判準：{'、'.join(missing)[:60]}")
+                      "全檔沒有任何一處「完成判準」——這支 skill 跑完了沒有辦法判斷")
         else:
-            r.not_covered.append(f"{name}：參考型，不套用「每步驟需完成判準」（刻意，見 §1.1）")
+            r.not_covered.append(
+                f"{name}：參考型，不套用完成判準判準（刻意，見 §1.1）")
+
+        # ③b 邊界節（A-9）——**兩型都必填**
+        #
+        # 為什麼邊界比步驟更該檢查：這個平台的 skill **有副作用**
+        # （deploy-prod 推正式、shougong 三 repo commit、dry-run-migrate 改正式資料），
+        # 而經驗上「不得做的事」比「要做的事」更容易被略過。
+        # 流程型寫「這支不做什麼、什麼情況該改走別支」；
+        # 參考型寫「這份規則不涵蓋什麼、什麼情況不適用」。
+        #
+        # ⚠ 只認 `##` 級以上的標題（`^##+ .*邊界`），不認內文出現「邊界」二字
+        #   ——現況 17 支裡有 4 支內文提到邊界但不是標題，抓它們是假 WARN。
+        if not re.search(r"^#{2,}[ \t].*邊界", body, re.M):
+            r.add(name, "邊界", "WARN",
+                  "沒有「## 邊界」節——這支 skill 不得做的事沒有寫下來")
 
         # ④ token 趨勢（Q1：不設硬上限）
         tok = approx_tokens(text)
@@ -206,14 +255,16 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
         else:
             r.not_covered.append(f"{name}：無 baseline，本次僅記錄 {tok} tok，下次才比得出趨勢")
 
-        # ⑤ wikilink 目標存在
-        for link in set(re.findall(r"\[\[([^\]]+)\]\]", text)):
-            target = os.path.join(r"d:\IT-department\.aimemory", link + ".md")
+        # ⑤ wikilink 目標存在（A-5：吃 full_text——搬進 references 的連結也要驗）
+        for link in set(re.findall(r"\[\[([^\]]+)\]\]", sk["full_text"])):
+            target = os.path.join(MEMORY_DIR, link + ".md")
             if not os.path.isfile(target):
                 r.add(name, "wikilink", "WARN", f"[[{link}]] 找不到對應記憶檔")
 
-        # ⑥ 與記憶庫重複（Q1 的主判準）
-        sents = sentences(body)
+        # ⑥ 與記憶庫重複（Q1 的主判準・A-5：吃 full_text）
+        #    不吃 full_text 的話，案 B 把規則本體搬進 references/ 之後重複率會從
+        #    5% 變 0%——內容一個字沒少，只是搬到偵測器看不見的地方，而**數字變好看**。
+        sents = sentences(parse_frontmatter(sk["full_text"])[1])
         if not sents:
             r.not_covered.append(f"{name}：無足夠長度的片段可做重複偵測")
         else:
@@ -274,11 +325,19 @@ def main() -> int:
     if "--self-test" in sys.argv:
         return 1 if self_test(load_memory_corpus()) else 0
 
-    skills = load_skills()
+    skills, conflicts = load_skills()
 
     # 假綠燈防護①：零目標一律失敗
     if not skills:
         print("❌ 找不到任何 skill —— 這是設定錯誤（路徑不對？），不是「全部通過」。")
+        return 1
+
+    # A-3：realpath 去重之後仍同名 ⇒ 兩個不同的檔搶同一個 skill 名。
+    # 「哪一個才是 Claude Code 真正載入的」無法從檔案系統推斷 ⇒ 不猜，直接 FAIL。
+    if conflicts:
+        print(f"❌ 兩層有同名但不同檔的 skill：{conflicts}")
+        print("   —— 無法判斷哪一個會被實際載入，之後所有以 name 當 key 的統計"
+              "（baseline／L4 台帳）都會拿錯檔比對。請先改名。")
         return 1
 
     corpus = load_memory_corpus()
@@ -294,6 +353,12 @@ def main() -> int:
             pass
 
     r = check_all(skills, corpus, baseline)
+    # A-4 的揭露（§5.4：略過的項必須出現在輸出裡）。**一行帶過而非逐支重複**——
+    # 17 行一模一樣的字會把真正的 NOT COVERED 項淹掉，那也是一種不揭露。
+    r.not_covered.insert(0, (
+        "全部流程型：**逐步驟**完成判準判定已停用（步驟邊界無法機械判定——17 支至少四種"
+        "標題慣例），本次只驗「全檔至少一處」。代價：失去 codebase-health 步驟 4 那個真 WARN。"
+        "恢復條件＝案 B 統一步驟標題慣例後（SKILL_EVAL_PLAN §9・A-4）"))
 
     print("=" * 74)
     print("L1 結構檢查　（skill 機械層 eval）")

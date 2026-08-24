@@ -26,6 +26,17 @@
 | **看板資料源綁單一專案** | ~~`gen_layers` 掃專案清單~~ **✅ 2026-08-13 已解**（`harness.config.json` 兩層設定·見 D-2）。**`subagent_stats.PROJECT_DIR` 寫死 `d--IT-department` 仍在**，且同日實掃發現核心層**共 7 檔 11 處**同型債（`capability_checks`／`check_freshness`／`gen_cost_panel`／`gen_roles_topology`／`refresh_dashboard`／`subagent_stats`／`budget1_daily_usage`）——**比原本登記的多** | 多部門並用時看板只看得到其中一個。⚠ 現有 `tests/test_harness_config.py::test_u1_debt_does_not_grow` 把這 11 處**凍結成台帳只准變少**，新增即紅 |
 | **安裝流程沒被驗過** | `task-memory-model\scripts\bootstrap.ps1` 只在自己這台跑過 | 「新機器首次」這條路徑目前是**未驗狀態**（見 §4 D-4） |
 
+> **2026-08-16 補**：`eval\` 底下有 **4 檔 9 處**同型硬編碼（`check_structure.py`4／`check_contracts.py`3／
+> `check_acceptance.py`1／`run_triggers.py`1），副作用是**全域層 2 支 skill 從未被任何一層 eval 檢查過**。
+> 這**不是台帳漏登**——`tests\test_harness_config.py:394` 的 `_DEBT_SCAN_SKIP` 明文含 `"eval"`，
+> `:406` 註明「性質不同（換部門時它們本來就要跟著換），另案處理」。
+> **本補註登記的就是那個「另案」開工了**：還債規格在 `SKILL_EVAL_PLAN.md` §9（W-1／S-4），
+> 完成後 `eval` 移出 `_DEBT_SCAN_SKIP`，改由既有的 AST 檢查長期納管。
+>
+> ⚠ 連帶提醒：`test_u1_debt_does_not_grow` 的保護範圍是「`_KNOWN_U1_DEBT` 台帳 ∩ 未被 skip 的目錄」。
+> 被 skip 的目錄（`tests`／`eval`／`state`／`參考`／`SkillViewer`）**連 `repaid` 提醒都不會印**——
+> 往那些目錄新增硬編碼不會有任何紅燈。這是刻意的，但要記得它刻意到什麼程度。
+
 ## §2 分層原則（核心決策）
 
 harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？**

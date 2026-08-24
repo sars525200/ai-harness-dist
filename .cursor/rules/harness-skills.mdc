@@ -1,0 +1,13 @@
+---
+description: Harness global skills live in skills/; do not junction or triplicate them
+globs: "**/skills/**"
+alwaysApply: false
+---
+
+# 全域 skill（核心層 `skills/`）
+
+- **git 真相是 `skills/<name>/`**。家目錄 `~\.claude\skills` 用 junction 接過來。Cursor 已會載入那條 junction，不要在 `.cursor/skills/` 再做一份。
+- **禁止 `npx skills update`**：它會靜默覆寫本地改動，還把資料夾掉包成 junction，讓 skill 檔離開本 repo。
+- skill 裡要找 harness 工具時，用 `Path(__file__).resolve()` 跟隨 junction；不要寫 `${CLAUDE_SKILL_DIR}/../../tools`（展開的是 symlink 側，會指到不存在的 `~\.claude\tools`）。
+- 新增／改 skill 後跑 `eval/run_all.py`；新建 eval 先證明它會叫再信全綠。
+- `skills/_meta/manifest.json` 是內容基準。刻意改過就跑 `tools/skill_manifest.py --accept`。

@@ -248,6 +248,42 @@ def _print_empty_globs() -> None:
           "括號說明會變成 glob 的一部分。")
 
 
+# 登記簿有分類欄、那一列卻空白（2026-08-24）。表頭是選配、值域不做白名單，
+# 所以「漏填」在解析端完全無害 —— 它只會靜靜掉進「未分類」桶。而分類的用途
+# 是篩選與統計，沒填的那幾筆等於**篩不到也統計不到**，跟不存在很接近。
+# 實際發生過：8/23 標完 20 列之後，別的 session 照舊四欄形狀又加了 4 列，
+# 而沒有任何東西會發現 —— 所以這裡要點名，比照 `_print_empty_globs`。
+def missing_cat(buckets: dict) -> list:
+    """登記簿有分類欄、那一列卻空白的項目。
+
+    只念 `registry`：其餘三類的來源檔本來就沒有分類欄，念它們等於要求
+    每個專案都改表格結構 —— 而那不是這條守門要達成的事。
+    """
+    out = []
+    for scope in sorted(buckets):
+        for it in buckets[scope]:
+            if it["kind"] == "registry" and it.get("cat_col") and not it.get("cat"):
+                out.append(it)
+    return sorted(out, key=lambda i: (i["src"], i["line"]))
+
+
+def _print_missing_cat(rows: list) -> None:
+    """`--check` 與正式產出都會叫。抽成函式的理由同 `_print_dropped`：
+    空分支印的句子自己就含關鍵字，內嵌在 main() 的話斷言穿不透。"""
+    if not rows:
+        print()
+        print("登記簿分類欄：沒有漏填的列。")
+        return
+    print()
+    print("⚠ 登記簿有分類欄、卻沒填的列（%d 筆）：" % len(rows))
+    print("  沒填不會報錯，只會掉進「未分類」桶——篩不到也統計不到，跟不存在很接近。")
+    for r in rows:
+        print("  ✗ [%s] %s:%d　%s"
+              % (r["scope"] if r["scope"] != "__global__" else "全域",
+                 r["src"], r["line"], _clip(r["title"], 56)))
+    print("  值域見 TODOS.md 檔頭那張表；欄位順序不限，用表頭找。")
+
+
 def _load_layers():
     """借 gen_layers 的專案探索 —— 專案清單只能有一份真相，
     兩份會漂到「下拉列得到、待辦列不到」那種最難查的形狀。"""
@@ -318,6 +354,9 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
             "detail": plain(cells[1]), "next": plain(cells[2]), "who": plain(cells[3]),
             "src": src, "line": lineno, "sha": line_sha(ln),
             "prio": prio, "prio_manual": prio is not None, "cat": cat,
+            # 這張表**有沒有分類欄**與「這一列填了沒」是兩件事：沒有欄的表
+            # （PENDING_VERIFY 那類）不該被念，有欄卻空白的才是漏填。
+            "cat_col": cat_idx is not None,
         })
     return out
 
@@ -611,6 +650,7 @@ def collect() -> dict:
     for scope in buckets:
         for it in buckets[scope]:
             it.setdefault("added", 0)
+            it.setdefault("cat_col", False)   # 計畫／散文兩類沒有表頭可看
             if not it.get("prio"):
                 it["prio"] = derive_priority(it)      # 手填優先，沒填才推導
         # 排序：優先度 → 新的在前 → 來源檔 → 行號。
@@ -727,11 +767,29 @@ def _item_html(item: dict, root: str, uid: str, pcls: dict) -> str:
     return "\n".join(b for b in bits if b)
 
 
+# 「未分類」桶的哨兵。真分類不可能長這樣，所以拿它當 data-cat 不會撞。
+# JS 端有同一個字串（`byCat[c0 || '__none__']`）—— 兩邊必須一致。
+_CAT_NONE = "__none__"
+
+
 def _filter_bar(items: list) -> str:
-    """分類列。外觀沿用子分頁（`.subtabs`／`.subtab`），但**語意是篩選不是分頁** ——
+    """來源類型篩選列 —— **只在一個分類都沒填時才出現**（2026-08-24 起）。
+
+    畫面上原本兩條列並排（來源／領域），user 兩次反映看不出差別：
+    「為什麼有 2 個子頁籤」→ 標了軸名之後仍是「還是沒有變」。
+    兩條正交篩選在版面上就是長得一樣，加標籤解決不了，所以收成一條。
+    留下的是**領域**（回答「要動哪一塊」，一批做得完），來源退成每一列尾端的
+    小字徽章（`.todo-kind`）—— 資訊還在，只是不能拿來篩。
+
+    ⚠ **它仍然是 fallback，不是死碼**：新部門導入時 `分類` 欄還沒填，
+    `_cat_bar` 會回空字串 ⇒ 整個待辦頁一條篩選列都沒有。那是核心層不該有的
+    退化（`UNIVERSAL_HARNESS_PLAN`：換一個部門還要成立）。
+
+    外觀沿用子分頁（`.subtabs`／`.subtab`），但**語意是篩選不是分頁** ——
     所以用 `role="group"` ＋ `aria-pressed`，不是 tablist／tabpanel：
-    這裡沒有「另一塊內容」，只是同一張清單少顯示幾列。"""
-    btns = ['      <div class="subtabs todo-filters" role="group" aria-label="待辦分類">',
+    這裡沒有「另一塊內容」，只是同一張清單少顯示幾列。
+    """
+    btns = ['      <div class="subtabs todo-filters" role="group" aria-label="待辦來源">',
             '        <button type="button" class="subtab" data-kind="all" aria-pressed="true">'
             '全部<span class="count">%d</span></button>' % len(items)]
     for k in KIND_ORDER:
@@ -744,30 +802,49 @@ def _filter_bar(items: list) -> str:
 
 
 def _cat_bar(current: list, everything: list) -> str:
-    """分類篩選列（2026-08-23）。與上面那條「來源類型」是**兩道獨立的篩選**。
+    """領域篩選列（2026-08-23）—— **看板唯一的那條篩選列**（2026-08-24 起）。
+
+    原本它上面還有一條「來源」列。兩條是正交的（來源＝從哪個檔撈來的，
+    領域＝要動哪一塊），正交本來是留兩條的理由，但**版面上它們長得一模一樣**：
+    user 先問「為什麼有 2 個子頁籤，可以簡化合併嗎」，加了軸名之後仍回
+    「為什麼還是沒有變」。⇒ 這不是標示問題，是**兩條一樣的列本身**。
+    user 定案拿掉來源那條（`_filter_bar` 退成沒有分類時的 fallback）。
+
+    **代價寫在這裡**：專案層四種來源都非零（待驗 186 是主力），少了那條列就
+    不能「只看待驗」。來源仍看得到 —— 每一列尾端的 `.todo-kind` 徽章。
 
     ⚠ **按鈕集合取自 `everything`、數字取自 `current`**：分類目前只有全域那張
     登記簿在填，而預設層別是「本專案＋全域關」⇒ 若按鈕也跟著 current 生，
     載入時整條列會是空的，切到全域才突然長出來 —— 那看起來像壞掉。
-    數字由 JS 在切層時重算（同 kind 那條）。
+    數字由 JS 在切層時重算（同來源那條）。
+
+    **「全部領域」＝這一層的全部項目**（2026-08-24 修）。原本只數「有填分類的」，
+    於是畫面上並排兩顆「全部」寫著 41 與 20，而少掉的 21 筆沒有任何地方交代
+    去哪了 —— user 因此問「為什麼有 2 個子頁籤」。現在補一顆「未分類」把差額
+    顯式擺出來，各領域相加就等於總數：**算術對得起來，才看得出是「沒填」不是「掉了」**。
 
     分類全空時整條列不出現：一條全 0 的篩選列比沒有更吵。
     """
     cats = sorted({i.get("cat") for i in everything if i.get("cat")})
     if not cats:
         return ""
-    n_all = sum(1 for i in current if i.get("cat"))
     btns = ['      <div class="subtabs todo-filters todo-catfilters" role="group" '
             'aria-label="待辦領域分類">',
             '        <button type="button" class="subtab" data-cat="all" aria-pressed="true">'
-            '全部領域<span class="count">%d</span></button>' % n_all]
+            '全部<span class="count">%d</span></button>' % len(current)]
     for c in cats:
         n = sum(1 for i in current if i.get("cat") == c)
         btns.append('        <button type="button" class="subtab" data-cat="%s" '
                     'aria-pressed="false">%s<span class="count">%d</span></button>'
                     % (_html.escape(c, quote=True), _html.escape(c), n))
+    # 「未分類」只在真的有沒填的項目時才出現（同樣看 everything，理由同上）。
+    if any(not i.get("cat") for i in everything):
+        btns.append('        <button type="button" class="subtab" data-cat="%s" '
+                    'aria-pressed="false">未分類<span class="count">%d</span></button>'
+                    % (_CAT_NONE, sum(1 for i in current if not i.get("cat"))))
     btns.append("      </div>")
     return "\n".join(btns)
+
 
 def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: list) -> str:
     counts = " · ".join("%s %d" % (PRIO[p]["label"], sum(1 for i in items if i["prio"] == p))
@@ -777,6 +854,12 @@ def _group_html(scope: str, items: list, root: str, title: str, sub: str, seq: l
     # 印「分類 0」比不印更吵，而且會讓人以為那一區的分類壞掉了。
     _cats = collections.Counter(i.get("cat") for i in items if i.get("cat"))
     cat_counts = " · ".join("%s %d" % (c, n) for c, n in _cats.most_common())
+    if cat_counts:
+        # 有人填了分類的區塊才補「未分類」——否則專案側那幾區會多出
+        # 一個「未分類 250」，那是雜訊不是資訊（2026-08-24，同篩選列那條理由）。
+        _n_none = sum(1 for i in items if not i.get("cat"))
+        if _n_none:
+            cat_counts += " · 未分類 %d" % _n_none
     head = [
         '      <div class="todo-gh">',
         '        <h3>%s<span class="todo-n-badge">%d</span></h3>' % (_html.escape(title), len(items)),
@@ -886,10 +969,12 @@ def main() -> None:
 
         _print_dropped()
         _print_empty_globs()
+        _print_missing_cat(missing_cat(buckets))
         return
 
     # 正式產出也要印：登記了卻拼錯的 glob，在 HTML 上跟「那個檔沒有待辦」長得一樣。
     _print_empty_globs()
+    _print_missing_cat(missing_cat(buckets))
 
     # 拒絕產出空表：空清單跟「正常但沒事要做」在畫面上長得一樣。
     if total == 0:
@@ -905,10 +990,8 @@ def main() -> None:
     # 同一個口徑；JS 會在切層時重算，兩邊語意必須一致。
     _cur = buckets.get(current, [])
     _all = [i for v in buckets.values() for i in v]
-    _bar = _filter_bar(_cur)
-    _cb = _cat_bar(_cur, _all)
-    if _cb:
-        _bar = _bar + chr(10) + _cb
+    # 領域是主篩選；一個分類都沒填時才退回來源列（見 _filter_bar 的 docstring）。
+    _bar = _cat_bar(_cur, _all) or _filter_bar(_cur)
     out = inject(html, _bar, build_html(buckets, roots, current), len(_cur))
     with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
         f.write(out)

@@ -1,0 +1,15 @@
+---
+description: Harness hook gates; read dispatch_config before adding or moving rules
+globs: "**/hooks/**/*.py,**/hooks/**/*.json"
+alwaysApply: false
+---
+
+# Hook 閘門（核心層）
+
+動 `hooks/` 前先讀 `hooks/dispatch_config.json`（enforce／shadow 現況）與 `HARNESS_PLAN.md`。細節與踩雷在計畫書，不在這裡展開。
+
+- **新增規則先答「換部門還成立嗎」**。成立→核心層；不成立→部門專案的 `.claude/rules`。答不出來一律當專案層。
+- **核心層禁寫死專案路徑字面值**。要路徑從 `harness.config.json`／專案 `PROJECT_CONTEXT.md` 讀；讀不到拒跑。
+- 業務規則（雙改、DB_PATH、平台資源預設值）不進 `hooks/rules/`。
+- 改規則本體後跑對應測試與變異；只綠沒紅過的測試不算數。
+- 唯讀角色（稽核／查詢）的 Bash 走 `hooks/agent_readonly_gate.py`，不要在角色檔裡手寫一份過期的白名單。

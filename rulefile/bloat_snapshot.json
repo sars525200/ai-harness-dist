@@ -187,8 +187,8 @@
       }
     },
     "IT-department\u0001CLAUDE.md": {
-      "bytes": 23756,
-      "entry_count": 69,
+      "bytes": 24334,
+      "entry_count": 72,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001CLAUDE.md\u0001完成倉位政策：配發有座位→座位+清slot；回收": 39,
@@ -208,7 +208,7 @@
         "IT-department\u0001CLAUDE.md\u0001**資料不見/被覆寫/跑回舊值→先跑`/data": 110,
         "IT-department\u0001CLAUDE.md\u0001**新增/改skill後跑`D:\\.ai-har": 109,
         "IT-department\u0001CLAUDE.md\u0001**新增/改skill·角色·規則後跑`/aud": 78,
-        "IT-department\u0001CLAUDE.md\u0001**補「未登入不打API」守門前先讀**：回傳值": 107,
+        "IT-department\u0001CLAUDE.md\u0001**補「未登入不打API」守門前先讀**：回傳值": 118,
         "IT-department\u0001CLAUDE.md\u0001`<td>`禁display:flex/over": 79,
         "IT-department\u0001CLAUDE.md\u0001多層flex捲軸：最深overflow:auto": 103,
         "IT-department\u0001CLAUDE.md\u0001boot期函式禁裸引用後段let/const（T": 62,
@@ -232,7 +232,9 @@
         "IT-department\u0001CLAUDE.md\u0001認證守門只擋/api/*→檔案路由會繞過；app": 90,
         "IT-department\u0001CLAUDE.md\u0001任務工單統一表`repair_tickets`；": 91,
         "IT-department\u0001CLAUDE.md\u0001**動harness設計前先讀**：目標＝通用化": 99,
-        "IT-department\u0001CLAUDE.md\u0001動harness看板先開`dashboard-g": 114,
+        "IT-department\u0001CLAUDE.md\u0001動harness看板先手動讀`dashboard": 114,
+        "IT-department\u0001CLAUDE.md\u0001叫`/wayfinder`／`/to-ticke": 95,
+        "IT-department\u0001CLAUDE.md\u0001領域詞彙查root`CONTEXT.md`（di": 85,
         "IT-department\u0001CLAUDE.md\u0001診斷資產狀態查`assets`表/dump`it": 86,
         "IT-department\u0001CLAUDE.md\u0001IP設備連線監測：探測結果存獨立側表禁寫回`it": 107,
         "IT-department\u0001CLAUDE.md\u0001設定UI必有讀取消費者才算功能；移除面板必查re": 106,
@@ -246,7 +248,8 @@
         "IT-department\u0001CLAUDE.md\u0001自研EXE受管機被擋有兩機制：SAC／**Def": 119,
         "IT-department\u0001CLAUDE.md\u0001擷取器檔集中`collector/`（gitig": 96,
         "IT-department\u0001CLAUDE.md\u0001跳轉高亮一律`focus*InList`五步；抽": 70,
-        "IT-department\u0001CLAUDE.md\u0001app.js/styles.css/index.": 103,
+        "IT-department\u0001CLAUDE.md\u0001三個前端檔是CRLF；Python／`sed-i": 120,
+        "IT-department\u0001CLAUDE.md\u0001**一個狀態有多個觸發入口時，收斂成一個入口，別": 108,
         "IT-department\u0001CLAUDE.md\u0001電腦主機/配件模組（架構·邊界·設備↔進出庫連接": 52,
         "IT-department\u0001CLAUDE.md\u0001任務工單（報修＋指派）→`REPAIR_TICK": 119,
         "IT-department\u0001CLAUDE.md\u0001軟體授權/訂閱管理→`SOFTWARE_LICE": 87,
@@ -263,8 +266,8 @@
       }
     },
     "IT-department\u0001MEMORY.md": {
-      "bytes": 17502,
-      "entry_count": 90,
+      "bytes": 17811,
+      "entry_count": 91,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001MEMORY.md\u0001[feedback-closure-scope-": 70,
@@ -356,7 +359,8 @@
         "IT-department\u0001MEMORY.md\u0001[reference-flash-toast](": 55,
         "IT-department\u0001MEMORY.md\u0001[reference-writing-rules": 115,
         "IT-department\u0001MEMORY.md\u0001[reference-visual-check-": 90,
-        "IT-department\u0001MEMORY.md\u0001[reference-skillviewer-t": 64
+        "IT-department\u0001MEMORY.md\u0001[reference-skillviewer-t": 64,
+        "IT-department\u0001MEMORY.md\u0001[reference-external-skil": 114
       }
     }
   }

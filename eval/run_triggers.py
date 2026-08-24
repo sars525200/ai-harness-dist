@@ -31,15 +31,17 @@ except Exception:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TRIGGER_DIR = os.path.join(HERE, "triggers")
-SKILL_ROOT = r"d:\IT-department\.claude\skills"
+# A-2：路徑從 harness 設定讀（U-1）；缺設定拒跑不猜（U-2）。
+sys.path.insert(0, os.path.dirname(HERE))
+import config as _cfg                                            # noqa: E402
 
 
 def load_descriptions() -> dict[str, str]:
+    """跨兩層（A-2）。**只讀 description 不讀正文**——實際觸發判斷本來就只看
+    description，餵內文等於考一份跟現實不同的題目（見檔頭）。"""
     out = {}
-    for name in sorted(os.listdir(SKILL_ROOT)):
-        p = os.path.join(SKILL_ROOT, name, "SKILL.md")
-        if not os.path.isfile(p):
-            continue
+    for name, path in _cfg.iter_skill_paths()[0]:
+        p = str(path)
         with open(p, encoding="utf-8") as fh:
             head = fh.read(2000)
         m = re.search(r"^description:\s*(.+)$", head, re.M)

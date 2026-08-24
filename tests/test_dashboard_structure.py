@@ -49,7 +49,11 @@ check(not orphan, "無孤兒 panel（點不到的面板）：%s" % (sorted(orpha
 # 主頁籤驗完還不夠：子分頁是**第二套**同形機制，壞掉的方式一模一樣
 # （點得到但打不開、或一開頁兩節同時顯示）。同一組屬性各驗一次。
 print("\n子分頁 ↔ 子面板配對")
-_subbars = re.findall(r'<div class="subtabs".*?</div>', html, re.S)
+# ⚠ 綁 `role="tablist"`，不要只綁 class：`.subtabs` 這個 class 被**兩種東西**共用
+# ——真的子分頁列，以及待辦的篩選列（外觀一樣、語意是篩選）。原本這裡靠
+# `class="subtabs"` 的收尾引號把篩選列擋在外面，那是巧合不是判準：篩選列的 class
+# 多接了兩個字所以沒被匹配到。role 才是真的分野（子分頁 JS 也是照它取捨）。
+_subbars = re.findall(r'<div class="subtabs" role="tablist".*?</div>', html, re.S)
 _subpanels = set(re.findall(r'<div class="subpanel" id="(sp-[\w-]+)"', html))
 _sublab = dict(re.findall(r'<div class="subpanel" id="(sp-[\w-]+)"[^>]*aria-labelledby="(st-[\w-]+)"', html))
 check(bool(_subbars), "至少有一組子分頁（沒有的話這一整套機制等於沒上）")
@@ -179,23 +183,59 @@ check("__global__" in _secs, "有全域層分區")
 # 不是 JS 重排。順序錯了畫面上不會報錯，只是全域待辦跑到專案上面。
 check(_secs[-1] == "__global__", "全域區排在最後（專案在上、全域在下）：%s" % _secs)
 _rows = re.findall(r'<li class="todo-row" data-kind="(\w+)" data-prio="(\w+)"', _todo)
-# 分類列（來源類型）：全部＋四類，用 aria-pressed（篩選語意）不是 aria-selected（分頁語意）
-_fb = re.search(r'<div class="subtabs todo-filters".*?</div>', _todo, re.S)
-check(_fb is not None, "有分類列")
+# 篩選列：用 aria-pressed（篩選語意）不是 aria-selected（分頁語意）。
+# ⚠ class 後面用 `[^"]*` 收尾，**不要寫死 `todo-filters"`** —— 領域列的 class 是
+# `subtabs todo-filters todo-catfilters`，寫死收尾引號會整條抓不到，而抓不到在
+# 斷言上長得像「篩選列不見了」（2026-08-24 收成一列時當場咬到）。
+_fb = re.search(r'<div class="subtabs todo-filters[^"]*".*?</div>', _todo, re.S)
+check(_fb is not None, "有篩選列")
 # 位置：**貼在面板標題正下方**，跟平台每一個分頁的子頁籤同一個位置。
 # 2026-08-06 user 回報「跟平台不統一」，量下來按鈕樣式完全相同 —— 差的就是位置
 # （原本被壓在說明文字底下）。所以要釘的是順序，不是顏色。
-check(_todo.index('class="subtabs todo-filters"') < _todo.index('class="lead"'),
-      "分類列在說明文字之前（＝貼著面板標題，與其他分頁一致）")
+check(_todo.index('class="subtabs todo-filters') < _todo.index('class="lead"'),
+      "篩選列在說明文字之前（＝貼著面板標題，與其他分頁一致）")
 # 間距不得另外覆寫：同一套元件差 4px 就會被讀成兩套
 check(".todo-filters{ margin-bottom" not in html,
-      "分類列沒有自訂 margin（沿用 .subtabs 的間距）")
+      "篩選列沒有自訂 margin（沿用 .subtabs 的間距）")
+# 2026-08-24：原本兩條列並排（來源／領域）。兩條是正交的，但**版面上長得一模一樣** ——
+# user 先問「為什麼有 2 個子頁籤，可以合併嗎」，加了軸名之後仍回「為什麼還是沒有變」。
+# 收成一條：留領域，來源退成 `_filter_bar` 的 fallback（新部門還沒填分類時才出現）。
+# 所以兩種形狀都合法，**但不可以兩條同時在**。
+check(len(re.findall(r'<div class="subtabs todo-filters', _todo)) == 1,
+      "待辦頁只有一條篩選列（兩條並排正是 user 兩次反映看不出差別的東西）")
 if _fb:
     _kinds = re.findall(r'data-kind="(\w+)"', _fb.group(0))
-    check(_kinds == ["all", "registry", "pending", "plan", "prose"],
-          "分類列涵蓋全部＋四類來源：%s" % _kinds)
+    _cats = re.findall(r'data-cat="([^"]+)"', _fb.group(0))
+    check(bool(_cats) != bool(_kinds),
+          "篩選列只有一根軸：cats=%s kinds=%s" % (_cats, _kinds))
+    if _cats:
+        check(_cats[0] == "all", "領域列第一顆是「全部」：%s" % _cats)
+        # 「未分類」桶存在的理由是算術：沒有它，各領域相加會少掉沒填的那些，
+        # 而少掉的部分在畫面上沒有任何地方交代（8/24 之前就是這樣，
+        # 症狀是兩顆「全部」並排寫著 41 與 20）。
+        _has_uncat = 'data-cat=""' in _todo
+        check((not _has_uncat) or "__none__" in _cats,
+              "有未填分類的列時，領域列要有「未分類」桶：%s" % _cats)
+    else:
+        check(_kinds == ["all", "registry", "pending", "plan", "prose"],
+              "fallback 來源列涵蓋全部＋四類：%s" % _kinds)
     check(_fb.group(0).count('aria-pressed="true"') == 1,
-          "分類列恰好一個選中（多個或零個都會讓畫面跟數字對不上）")
+          "篩選列恰好一個選中（多個或零個都會讓畫面跟數字對不上）")
+    # ---- 篩選列不可被子分頁 JS 接管（2026-08-24 實際壞過）----
+    # 症狀：點任何一顆分類，**八顆全部亮起來**，看起來像配色做壞了。
+    # 真因：子分頁 IIFE 原本抓所有 `.subtabs`，把篩選列也當成分頁列；而篩選鈕
+    # **沒有 id**，`pick()` 的 `on = (b.id === id)` 就變成 `'' === ''` ⇒ 每一顆都
+    # 判成「就是被選中的那顆」，全部蓋上 `aria-selected="true"`，CSS 那條
+    # `.subtab[aria-selected="true"]` 再把它們一起點亮。
+    # 兩套選中語意（tab 的 aria-selected／filter 的 aria-pressed）共用同一個容器
+    # class，就得靠 role 分流 —— 所以下面兩條各釘一端。
+    check('role="group"' in _fb.group(0),
+          "篩選列用 role=group（篩選語意），不是 tablist —— role 是子分頁 JS 的取捨依據")
+    check('id="st-' not in _fb.group(0), "篩選鈕沒有 st- id（它們不是分頁）")
+    check('''document.querySelectorAll('.subtabs[role="tablist"]')''' in html,
+          "子分頁 JS 只收 role=tablist 的列（收全部就會接管篩選列）")
+    check("""filter(function (b) { return b.id; })""" in html,
+          "子分頁 JS 濾掉沒有 id 的按鈕（`'' === ''` 會讓每一顆都判成被選中）")
 # 兩層列（user 2026-08-06）：上半定位資訊、下半一行描述可展開
 check(len(re.findall(r'class="todo-l1"', _todo)) == len(_rows), "每列都有上半（優先｜專案｜標題｜時間）")
 check(len(re.findall(r'class="todo-l2"', _todo)) == len(_rows), "每列都有下半（可點展開的描述）")

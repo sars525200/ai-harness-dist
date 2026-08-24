@@ -181,6 +181,38 @@ def run() -> "tuple[int, list]":
         total = sum(len(v) for v in buckets.values())
         check("總數在合理量級（10–500）", 10 <= total <= 500, f"共 {total} 項")
 
+    # ---- 9. 分類欄漏填守門（2026-08-24）----
+    # 這條守門存在的理由：分類值域**刻意不做白名單**，所以「沒填」在解析端完全無害，
+    # 只會靜靜掉進「未分類」桶 —— 篩不到也統計不到，跟不存在很接近。
+    # 實際發生過：8/23 標完 20 列之後，別的 session 照舊四欄形狀又加了 4 列，
+    # 而沒有任何東西會發現，是 user 看畫面「兩顆全部數字不一樣」才問出來的。
+    reg = "\n".join([
+        "| 項目 | 現況 | 下一步 | 誰 | 分類 | 優先 |", "|---|---|---|---|---|---|",
+        "| **有填的** | x | y | 我 | 閘門 | 高 |",
+        "| **空著的** | x | y | 我 |  | 高 |",
+        "| **整列短掉的** | x | y | 我 |",
+    ])
+    ritems = m.parse_table_todos(reg, "TODOS.md", "registry", "__global__")
+    miss = [i["title"] for i in m.missing_cat({"__global__": ritems})]
+    check("分類欄空白的列被點名", "空著的" in miss, f"點名了 {miss}")
+    # 這一列連欄位數都不夠 —— 那正是實際踩到的形狀（照舊四欄格式往下加）
+    check("整列比表頭短的也被點名", "整列短掉的" in miss, f"點名了 {miss}")
+    check("填了的不被點名", "有填的" not in miss, f"點名了 {miss}")
+
+    # 表本身沒有分類欄（PENDING_VERIFY 那類）不該被念 —— 念它等於要求每個專案
+    # 都改表格結構，而那不是這條守門要達成的事。
+    nocol = "\n".join([
+        "| 項目 | 為何沒驗 | 驗證指令 | 誰跑 |", "|---|---|---|---|",
+        "| **沒有分類欄的表** | x | y | user |",
+    ])
+    nitems = m.parse_table_todos(nocol, "PENDING_VERIFY.md", "registry", "p")
+    check("表本身沒有分類欄時不點名", not m.missing_cat({"p": nitems}),
+          "沒有分類欄的表被誤念了")
+    # 只念登記簿：其餘三類的來源檔本來就沒有分類欄
+    check("非登記簿的類型不點名",
+          not m.missing_cat({"p": [dict(i, kind="pending") for i in ritems]}),
+          "pending 類不該被念")
+
     return passed, failed
 
 

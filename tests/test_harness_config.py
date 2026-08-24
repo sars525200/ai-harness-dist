@@ -52,6 +52,15 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 _DRIVE_RE = __import__("re").compile(r"[A-Za-z]:[\\/]?")
 _PATH_FUNCS = {"Path", "expanduser", "expandvars", "join", "abspath", "normpath"}
+# v7（`SKILL_EVAL_PLAN` §9 A-8-前）：第五類上下文＝賦值給「名字就是路徑」的模組層常數。
+# ⚠ **只補 `BASES`、刻意不補 `ROOTS`**：實測補 `ROOTS` 會多抓 4 處，全是
+#   `dashboard/subagent_stats.py:92-96 _ROOTS` 的**顯示標籤**（其中一個值是
+#   `"C:\\Users（家目錄）"`，一望即知不是路徑），從未被拿去建 Path。
+#   而那個檔已是 `_KNOWN_U1_DEBT` 的 key ⇒ 閘門會紅，且兩條轉綠的路都違規：
+#   寫進台帳＝把債務台帳變成可接受清單；改標籤＝**被誤報逼著改不該改的地方**
+#   ——正是本檔 docstring (a)/(b) 那段記著要避開的那條路。
+_PATH_NAME_RE = __import__("re").compile(
+    r"(ROOT|DIR|DIRS|PATH|PATHS|FILE|BASE|BASES|SOURCES)$")
 
 
 def _known_project_names() -> set:
@@ -81,12 +90,24 @@ def _hardcoded_path_exprs(source: str) -> list:
     `Path("D:")` 拆碟號／`SOME_ROOT / "專案名"`。
     **判準只擋得住我當初想到的那一種寫法，等於沒擋。**
 
-    現在涵蓋四類上下文（**只看路徑上下文，不掃全檔字串**——掃全檔會把
+    現在涵蓋五類上下文（**只看路徑上下文，不掃全檔字串**——掃全檔會把
     HTML 說明與錯誤訊息範本算成違規，然後逼人去刪說明）：
       ①`Path()`／`expanduser()`／`join()` 等路徑函式的字面值參數
       ②`/` 運算子兩側的字面值（`Path.home() / "d--X"` 這種組合）
       ③`os.environ.get(key, <字面值>)` 的 default（U-2 禁的 fallback）
-      ④以上任一含：碟號、`d--` 前綴、或設定檔裡的專案目錄名
+      ④**賦值給名字符合 `_PATH_NAME_RE` 的常數**（v7 新增，見下）
+      ⑤以上任一含：碟號、`d--` 前綴、或設定檔裡的專案目錄名
+
+    ## v7 擴大（`SKILL_EVAL_PLAN` §9・A-8-前）：第四類補的是「模組層純賦值」
+
+    覆核實測：`SKILL_ROOT = r"d:\\IT-department\\.claude\\skills"` 這種**最常見**的寫法
+    在 ①～③ 底下**全部回空**——它不是 Call、不是 BinOp、不是 environ fallback。
+    於是 `eval/check_acceptance.py`／`eval/run_triggers.py` 今天各自都是「0 命中」，
+    而它們正是寫死路徑的重災區。**判準在什麼都還沒做的時候就是綠的。**
+
+    為什麼用「名字像路徑」而不是「所有字串常數」：後者實測 **165 處 / 34 檔**，
+    絕大多數是 docstring 裡的用法說明 —— 那就是下面 (a)/(b) 那段講的第 (a) 條路。
+    只看 `Assign`／`AnnAssign` 的右手邊常數，docstring 在 AST 上是 `Expr`，**結構性不可能命中**。
 
     ## 首版（v5）的教訓：量的是「路徑上下文」不是「檔案裡的所有字串」
 
@@ -138,6 +159,19 @@ def _hardcoded_path_exprs(source: str) -> list:
                 if isinstance(side, ast.Constant) and isinstance(side.value, str) \
                         and _suspicious(side.value):
                     bad.append((getattr(node, "lineno", -1), side.value))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            # ④ 賦值給「名字就是路徑」的常數。行號取**字面值自己**的，
+            #    否則多行 list/dict 會全部歸到賦值那一行，台帳對不上實際位置。
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if not any(isinstance(t, ast.Name) and _PATH_NAME_RE.search(t.id)
+                       for t in targets):
+                continue
+            if node.value is None:
+                continue
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str) \
+                        and _suspicious(sub.value):
+                    bad.append((getattr(sub, "lineno", -1), sub.value))
     # 同一個節點可能被兩條路徑各記一次
     return sorted(set(bad))
 
@@ -160,19 +194,27 @@ E = Path('D:') / 'SomeProj'
 F = Path(_CFG['currentProject'])
 G = Path(__file__).resolve().parent
 H = 'HTML 說明裡提到 D: 這個碟，但不是路徑用法'
+I_ROOT = r'D:\SomeProj\probe-i'
+J_DIRS = [r'D:\SomeProj\probe-j']
+K_LABELS = [r'D:\SomeProj\probe-k']
 """
     hits = _hardcoded_path_exprs(probe)
     vals = [v for _, v in hits]
     # ⚠ v6 擴大後這五種**都**要抓到（覆核 F-3 實測它們原本全部漏抓）
-    want = ["A:Path 字面值", "B:BinOp 組合", "C:expanduser", "D:environ fallback", "E:拆碟號"]
+    #   v7 再加 I/J 兩種模組層純賦值（A-8-前；沒有它們的話新分支寫壞成
+    #   永遠回 [] 也會全綠——現有 probe 變數 A~H 無一符合 _PATH_NAME_RE）
+    want = ["A:Path 字面值", "B:BinOp 組合", "C:expanduser", "D:environ fallback", "E:拆碟號",
+            "I:模組層純賦值(*_ROOT)", "J:賦值給 list(*_DIRS)"]
     got = [
         any("SomeProj\\.claude" in v for v in vals),
         any(v == "d--SomeProj" for v in vals),
         any("expanduser" not in v and "d--SomeProj" in v for v in vals),
         any(v == r"D:\SomeProj" for v in vals),
         any(v == "D:" for v in vals),
+        any(v.endswith("probe-i") for v in vals),
+        any(v.endswith("probe-j") for v in vals),
     ]
-    check("偵測器抓得到全部五種寫死形式（自我驗證·正向）", all(got),
+    check("偵測器抓得到全部七種寫死形式（自我驗證·正向）", all(got),
           f"漏抓 {[w for w, g in zip(want, got) if not g]}；hits={vals}")
     # ⚠ 這條原本寫成 `all("SomeProject" in v for _, v in hits)`，**hits 為空時恆真**
     #   ——偵測器整支壞掉時它自己也是綠的。改成正面列舉不該出現的東西。
@@ -180,6 +222,11 @@ H = 'HTML 說明裡提到 D: 這個碟，但不是路徑用法'
           hits and not any("currentProject" in v or "__file__" in v or "HTML" in v
                            for v in vals),
           f"誤抓：{[v for v in vals if 'HTML' in v or 'currentProject' in v]}")
+    # v7 反向第二條：名字**不像路徑**的賦值不得被抓（這正是刻意不補 `ROOTS`
+    # 的那條界線——`subagent_stats._ROOTS` 裝的是顯示標籤不是路徑）。
+    check("偵測器不誤抓「名字不像路徑」的賦值（自我驗證·反向·v7）",
+          not any(v.endswith("probe-k") for v in vals),
+          f"誤抓 K_LABELS：{[v for v in vals if v.endswith('probe-k')]}")
 
 
 def test_no_project_literals() -> None:
@@ -383,15 +430,37 @@ _KNOWN_U1_DEBT = {
     "dashboard/gen_roles_topology.py": {r"D:\IT-department": 1},
     "dashboard/refresh_dashboard.py": {r"D:\IT-department": 1},
     "dashboard/subagent_stats.py": {"d--IT-department": 1},
-    "hooks/rules/budget1_daily_usage.py": {r"~\.claude\projects\d--IT-department": 1},
+    "hooks/rules/budget1_daily_usage.py": {
+        r"~\.claude\projects\d--IT-department": 1,
+        r"D:\.ai-harness\state\budget_state.json": 1},        # v7 新見（④分支）
+
+    # ── v7 凍結（`SKILL_EVAL_PLAN` §9・A-8-前）───────────────────────────
+    # `eval/` 四支曾在這裡有 **13 處**（`eval` 移出 `_DEBT_SCAN_SKIP` 後才看得見），
+    # **已於同一輪由 A-2 全數償還**（改走 `config.py`），故不留在台帳裡。
+    # ⚠ 那 13 處裡有一處特別值得記著：`check_contracts.SEARCH_BASES` 的第一個元素
+    #   是**裸的 list 字面值**，舊偵測器（只看 `os.path.join` 的參數）看不見它
+    #   ——只改後面三個 `os.path.join(...)` 會讓該檔顯示「全部償還」而實際還躺著
+    #   一個寫死的 harness root。第④類上下文就是為了看見這種寫法而補的。
+    #
+    # 以下 `hooks/` 四支的 harness root 是第④類新抓到的，**不在案 A 範圍**：
+    # 它們指的是 harness 自己的 `state/`，換部門時會跟著 harness 走，
+    # 優先度低於專案路徑；先凍結留痕，另案處理。
+    "hooks/dispatch.py": {r"D:\.ai-harness\state": 1},
+    "hooks/report.py": {r"D:\.ai-harness\state": 1},
+    "hooks/spike.py": {r"D:\.ai-harness\state\spike": 1},
+    "hooks/rules/disp1_dispatch_discipline.py": {r"D:\.ai-harness\state": 1},
 }
 
 # 掃描範圍＝**全 harness 扣掉這些**，不是白名單三個目錄。
 # ⚠ 白名單的失效形狀：在 `tools/`／`reviewer/`／新目錄新增寫死路徑，閘門看不見
 #   （Round 4 自驗：未納管的頂層目錄有 9 個）。
-# `tests/`／`eval/` 排除的理由不同——那裡的字面值是**測試素材與被測目標的路徑**
+# `tests/` 排除的理由不同——那裡的字面值是**測試素材與被測目標的路徑**
 #   （本檔自己就有一堆 probe 字串），性質上換部門時本來就要跟著換。
-_DEBT_SCAN_SKIP = {"tests", "eval", "state", "__pycache__", ".git", "參考", "SkillViewer"}
+# ⚠ **`eval` 於 v7 移出**（`SKILL_EVAL_PLAN` §9・A-8-前）：它原本跟 `tests` 同組排除，
+#   理由是「測試素材」。但實測 `eval/` 底下四支腳本的 `SKILL_ROOT`／`MEMORY_SOURCES`
+#   是**真的拿去開檔的專案路徑**，不是素材——副作用是全域層 2 支 skill 從未被任何一層
+#   eval 檢查過。移出後先把現況凍進台帳（下方 eval 四筆），再由 §9 案 A 的 A-2 逐一償還。
+_DEBT_SCAN_SKIP = {"tests", "state", "__pycache__", ".git", "參考", "SkillViewer"}
 
 
 def test_u1_debt_does_not_grow() -> None:

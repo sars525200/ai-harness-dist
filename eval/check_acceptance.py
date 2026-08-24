@@ -32,7 +32,9 @@ except Exception:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEDGER = os.path.join(HERE, "acceptance.json")
-SKILL_ROOT = r"d:\IT-department\.claude\skills"
+# A-2：路徑從 harness 設定讀（U-1）；缺設定拒跑不猜（U-2）。
+sys.path.insert(0, os.path.dirname(HERE))
+import config as _cfg                                            # noqa: E402
 
 
 def load_ledger() -> dict:
@@ -51,13 +53,17 @@ def save_ledger(d: dict) -> None:
 
 
 def skill_mtimes() -> dict[str, float]:
+    r"""跨兩層（A-2），且 mtime 取 `max(SKILL.md, references/*.md)`（A-6）。
+
+    ⚠ **為什麼要含 references**：§7 Q3 定案是「檔案 mtime 變動 ⟶ 驗收過期」。
+    案 B 把規則本體搬進 `references/` 之後，**改一條硬規則不會動到 SKILL.md**
+    ⇒ L4 對搬走的那 80% 內容永遠顯示「有效」，Q3 整條失效。
+    """
     out = {}
-    if not os.path.isdir(SKILL_ROOT):
-        return out
-    for name in sorted(os.listdir(SKILL_ROOT)):
-        p = os.path.join(SKILL_ROOT, name, "SKILL.md")
-        if os.path.isfile(p):
-            out[name] = os.path.getmtime(p)
+    for name, p in _cfg.iter_skill_paths()[0]:
+        refdir = p.parent / "references"
+        refs = list(refdir.glob("*.md")) if refdir.is_dir() else []
+        out[name] = max([p.stat().st_mtime] + [r.stat().st_mtime for r in refs])
     return out
 
 

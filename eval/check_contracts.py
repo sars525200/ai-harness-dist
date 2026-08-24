@@ -38,10 +38,21 @@ try:
 except Exception:
     pass
 
-SKILL_ROOT = r"d:\IT-department\.claude\skills"
-MEMORY_ROOT = r"d:\IT-department\.aimemory"
-PROJECT_ROOT = r"d:\IT-department"
-FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+# A-2：路徑一律從 harness 設定讀（U-1）；缺設定拒跑不猜（U-2）。
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_HERE))
+import config as _cfg                                            # noqa: E402
+
+MEMORY_ROOT = str(_cfg.PROJECT_MEMORY_DIR)
+PROJECT_ROOT = str(_cfg.PROJECT_ROOT)
+HARNESS_ROOT = str(_cfg.HARNESS_ROOT)
+FIXTURE_DIR = os.path.join(_HERE, "fixtures")
+
+#: 名稱 → SKILL.md 路徑（跨兩層）。**`SKILL_ROOT` 原本有三種語意**——列檢查對象／
+#: 組「這是不是真 skill」的集合／把 `/xxx` 解析成檔案——單根版本在兩層之後會讓
+#: 指向另一層的引用**靜默降級成 NOT COVERED**（實測：只換一處，context-health
+#: 立刻吐 `unresolved: ['shougong']`）。所以三處共用同一份對照表。
+_SKILL_INDEX = dict(_cfg.iter_skill_paths()[0])
 
 # 內文裡看起來像專案檔案路徑的樣子（含副檔名，排除純網址）
 PATH_RE = re.compile(r"`([A-Za-z0-9_./\\-]+\.(?:py|js|md|json|ps1|sh|css|html|sqlite))`")
@@ -53,15 +64,25 @@ BUILTIN_COMMANDS = {"clear", "compact", "usage", "config", "help", "model",
 
 
 def load_skills() -> list[dict]:
+    """跨兩層（A-2/A-3）＋ 併入 `references/*.md`（A-5）。
+
+    ⚠ **契約抽取一律吃 `full_text`**：不併的話，案 B 把路徑／wikilink／skill 引用
+    搬進 `references/` 之後，契約數會從 `verify-rules` 7 項、`asset-data-rules` 14 項
+    掉到接近 0 並印 `✅`，而 `check_acceptance.contract_status()` 直接吃這份 `--json`
+    ⇒ **L4 跟著綠**。覆蓋消失而數字變好看，是本專案已經踩過三次的同一個坑。
+    """
     out = []
-    if not os.path.isdir(SKILL_ROOT):
-        return out
-    for name in sorted(os.listdir(SKILL_ROOT)):
-        p = os.path.join(SKILL_ROOT, name, "SKILL.md")
-        if os.path.isfile(p):
-            with open(p, encoding="utf-8") as fh:
-                out.append({"name": name, "path": p, "text": fh.read(),
-                            "mtime": os.path.getmtime(p)})
+    for name, p in _SKILL_INDEX.items():
+        path = str(p)
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        refdir = p.parent / "references"
+        refs = sorted(refdir.glob("*.md")) if refdir.is_dir() else []
+        extra = "".join("\n" + r.read_text(encoding="utf-8") for r in refs)
+        out.append({"name": name, "path": path,
+                    "text": text, "full_text": text + extra,
+                    "mtime": max([os.path.getmtime(path)]
+                                 + [os.path.getmtime(r) for r in refs])})
     return out
 
 
@@ -75,10 +96,13 @@ SEARCH_BASES = [
     os.path.join(PROJECT_ROOT, "SOP_PROD", "05_UI_Demo", "docs"),
     os.path.join(PROJECT_ROOT, "SOP_PROD", "05_UI_Demo", "db"),
     os.path.join(PROJECT_ROOT, ".aimemory"),
-    r"D:\.ai-harness",
-    os.path.join(r"D:\.ai-harness", "hooks"),
-    os.path.join(r"D:\.ai-harness", "tests"),
-    os.path.join(r"D:\.ai-harness", "eval"),
+    # ⚠ 這四個原本寫死 `D:\.ai-harness`。**第一個是裸的 list 元素**，
+    #   舊偵測器（只看 os.path.join 的參數）看不見它——只改後三個會讓這支檔
+    #   在 U-1 閘門上顯示「全部償還」而實際還躺著一個寫死的 harness root。
+    HARNESS_ROOT,
+    os.path.join(HARNESS_ROOT, "hooks"),
+    os.path.join(HARNESS_ROOT, "tests"),
+    os.path.join(HARNESS_ROOT, "eval"),
 ]
 
 
@@ -113,7 +137,8 @@ def _resolve_path(raw: str) -> str | None:
 
 def auto_contracts(sk: dict) -> list[dict]:
     """從 skill 內文自動抽出可機械驗證的契約項。"""
-    text, out, seen = sk["text"], [], set()
+    # A-5：三個抽取（PATH_RE／WIKILINK_RE／SKILLREF_RE）一律吃 full_text。
+    text, out, seen = sk["full_text"], [], set()
 
     for m in PATH_RE.findall(text):
         if m in seen:
@@ -127,7 +152,7 @@ def auto_contracts(sk: dict) -> list[dict]:
     for m in set(WIKILINK_RE.findall(text)):
         out.append({"kind": "memory", "value": m, "source": "auto"})
 
-    known = {d for d in os.listdir(SKILL_ROOT)} if os.path.isdir(SKILL_ROOT) else set()
+    known = set(_SKILL_INDEX)          # 語意②：兩層都算「真的有這支 skill」
     for ref in set(SKILLREF_RE.findall(text)):
         if ref == sk["name"] or ref in BUILTIN_COMMANDS:
             continue
@@ -164,8 +189,8 @@ def verify(c: dict) -> tuple[str, str]:
         p = os.path.join(MEMORY_ROOT, val + ".md")
         return ("OK", p) if os.path.isfile(p) else ("MISSING", "找不到記憶檔")
     if kind == "skill":
-        p = os.path.join(SKILL_ROOT, val, "SKILL.md")
-        return ("OK", p) if os.path.isfile(p) else ("MISSING", "找不到該 skill")
+        p = _SKILL_INDEX.get(val)       # 語意③：跨兩層解析 /xxx → SKILL.md
+        return ("OK", str(p)) if p else ("MISSING", "找不到該 skill")
     if kind == "cli":
         try:
             r = subprocess.run(["where", val], capture_output=True, text=True, timeout=15)

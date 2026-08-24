@@ -54,6 +54,26 @@ MUTATIONS = [
         '<div class="panel has-layers" id="panel-tools"',
         '<div class="panel has-layers" id="panel-tools"><h2>Skill Eval（EDD 四層）</h2>',
     ),
+    (
+        # 2026-08-24 真的發生過：症狀是「點一顆分類，八顆全部亮」，看起來像配色壞掉。
+        # 子分頁 IIFE 抓所有 `.subtabs` ⇒ 待辦的篩選列也被當成分頁列；而篩選鈕沒有
+        # id，`pick()` 的 `on = (b.id === id)` 變成 `'' === ''` ⇒ 每一顆都判成被選中。
+        "子分頁 JS 收回全部 .subtabs（篩選列被當成分頁列 ⇒ 點一顆全亮）",
+        """document.querySelectorAll('.subtabs[role="tablist"]')""",
+        """document.querySelectorAll('.subtabs')""",
+    ),
+    (
+        # 第二道防線：真的 tablist 少填 id 時，不可以退化成「全選」。
+        "子分頁 JS 不再濾掉沒有 id 的按鈕（`'' === ''` 讓每一顆都判成被選中）",
+        """filter(function (b) { return b.id; })""",
+        """filter(function (b) { return true; })""",
+    ),
+    (
+        # role 是兩套選中語意（tab 的 aria-selected／filter 的 aria-pressed）的分野。
+        "待辦篩選列改標 role=tablist（於是又被子分頁 JS 收走）",
+        '''todo-catfilters" role="group"''',
+        '''todo-catfilters" role="tablist"''',
+    ),
 ]
 
 all_red = True
@@ -74,5 +94,7 @@ for i, (name, old, new) in enumerate(MUTATIONS, 1):
     os.remove(mutant)
 
 print("\n" + "=" * 56)
-print("三個變異全部被抓到，驗證器可信" if all_red else "有變異沒被抓到，驗證器需補強")
+# 數字從清單長度來，不要寫死 —— 寫死的那個從 3 條時代一路留到 7 條都沒人改。
+print("%d 個變異全部被抓到，驗證器可信" % len(MUTATIONS)
+      if all_red else "有變異沒被抓到，驗證器需補強")
 sys.exit(0 if all_red else 1)

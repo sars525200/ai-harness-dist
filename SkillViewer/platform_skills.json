@@ -562,7 +562,7 @@
   },
   "generatedBy": "tools/skill_inventory.py",
   "officialCrossCheck": {
-    "capturedAt": "2026-08-24T02:28+0800",
+    "capturedAt": "2026-08-24T02:51+0800",
     "missingLocally": [
       "batch",
       "debug",
