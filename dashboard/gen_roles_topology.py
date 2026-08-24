@@ -82,7 +82,10 @@ if str(HARNESS_ROOT) not in sys.path:
 import config  # noqa: E402
 
 PROJECT_ROOT = config.PROJECT_ROOT
-SKILLS_DIR = PROJECT_ROOT / ".claude" / "skills"
+# 專案層（舊常數名留給徽章／測試覆寫）。namedSkills 的清單走 SKILL_DIRS：
+# 全域 harness/skills ＋ 專案 .claude/skills。只掃專案層會漏 visual-check。
+SKILLS_DIR = config.PROJECT_SKILLS_DIR
+SKILL_DIRS = list(config.SKILL_DIRS)
 
 MARK_START = "<!-- ROLES_TOPOLOGY_START"
 MARK_END = "<!-- ROLES_TOPOLOGY_END -->"
@@ -153,13 +156,24 @@ def skill_mentioned(text: str, skill: str) -> bool:
 
 
 def available_skills() -> list:
-    """本專案有哪些 skill 可被呼叫。用來把角色正文提到的名字對回真實存在的 skill。
+    """角色正文能對上的 skill 名：全域層 ＋ 當前專案層。
 
-    ⚠ 角色是**全域**的、skill 是**專案**的 —— 所以這兩個目錄不再互為鄰居，
-    各走各的常數。這裡回的是「當前專案有哪些 skill」，跨專案會不同。
+    角色是全域的，會點名 harness 層 skill（例如 visual-designer → `visual-check`）。
+    只掃 `SKILLS_DIR`（專案 `.claude/skills`）會讓那層永遠空白。
+    junction 指向同一實體的，用 resolve() 去重，避免同名出現兩次。
     """
-    return (sorted(p.parent.name for p in SKILLS_DIR.glob("*/SKILL.md"))
-            if SKILLS_DIR.exists() else [])
+    seen_real: set[str] = set()
+    names: set[str] = set()
+    for root in SKILL_DIRS:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*/SKILL.md")):
+            real = str(path.resolve()).lower()
+            if real in seen_real:
+                continue
+            seen_real.add(real)
+            names.add(path.parent.name)
+    return sorted(names)
 
 
 def parse_agents() -> list:
@@ -867,9 +881,9 @@ def sync_tab_badge(html: str, n_roles: int) -> str:
     第四次發作就是 Skill 徽章沒跟上）。
     """
     html = _sync_badge(html, "st-orch-0", "角色編制", n_roles)
-    n_skills = len(list(SKILLS_DIR.glob("*/SKILL.md"))) if SKILLS_DIR.exists() else 0
+    n_skills = len(available_skills())
     if n_skills == 0:
-        raise SystemExit(f"數不到任何 skill（{SKILLS_DIR}）—— 零目標拒跑，不把徽章寫成 0。")
+        raise SystemExit(f"數不到任何 skill（{SKILL_DIRS}）—— 零目標拒跑，不把徽章寫成 0。")
     return _sync_badge(html, "st-orch-1", "Skill 清冊", n_skills)
 
 

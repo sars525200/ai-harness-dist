@@ -279,6 +279,7 @@ def _case_named_skills_not_substring(fails):
             encoding="utf-8",
         )
         m = _load()
+        m.SKILL_DIRS = [skills]
         m.SKILLS_DIR = skills
         m.AGENTS_DIR = agents
         parsed = m.parse_agents()
@@ -290,6 +291,45 @@ def _case_named_skills_not_substring(fails):
             fails.append(f"子字串誤配 audit：namedSkills={named}")
         if "verify-rules" not in named:
             fails.append(f"真提到的 verify-rules 沒配上：namedSkills={named}")
+
+
+def _case_named_skills_include_global_layer(fails):
+    """namedSkills 的清單必須含 harness 層 skill，不能只掃專案 `.claude/skills`。
+
+    visual-designer 正文寫 `visual-check`，該檔在 `<harness>/skills/`。
+    只掃 IT 專案層時看板技能層空白，看起來像沒接上。
+    """
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        glob_skills = root / "global-skills"
+        (glob_skills / "visual-check").mkdir(parents=True)
+        (glob_skills / "visual-check" / "SKILL.md").write_text(
+            "---\nname: visual-check\n---\n", encoding="utf-8")
+        proj_skills = root / "proj-skills"
+        (proj_skills / "audit").mkdir(parents=True)
+        (proj_skills / "audit" / "SKILL.md").write_text(
+            "---\nname: audit\n---\n", encoding="utf-8")
+        agents = root / "agents"
+        agents.mkdir()
+        (agents / "visual-designer.md").write_text(
+            "---\nname: visual-designer\n---\n\n"
+            "截圖流程見 skill `visual-check`，不在此重複。\n",
+            encoding="utf-8",
+        )
+        m = _load()
+        m.SKILL_DIRS = [glob_skills, proj_skills]
+        m.SKILLS_DIR = proj_skills
+        m.AGENTS_DIR = agents
+        parsed = m.parse_agents()
+        if len(parsed) != 1:
+            fails.append(f"應解析出 1 個角色，得到 {len(parsed)}")
+            return
+        named = parsed[0]["namedSkills"]
+        if "visual-check" not in named:
+            fails.append(f"全域層 visual-check 沒配上：namedSkills={named}")
+        if "audit" in named:
+            fails.append(f"不該配上沒提到的 audit：namedSkills={named}")
 
 
 def _case_caps_table_matches_agents(fails):
@@ -323,6 +363,7 @@ def run() -> "tuple[int, list]":
         ("徽章色 CSS 與 GROUP_CLS 對得上（含深色）", _case_badge_css_present),
         ("能力邊界表列數 == 角色檔數", _case_caps_table_matches_agents),
         ("namedSkills 不被子字串誤配（audit vs project-auditor）", _case_named_skills_not_substring),
+        ("namedSkills 含全域層 skill（visual-check）", _case_named_skills_include_global_layer),
     ]
     passed = 0
     failures: list = []
