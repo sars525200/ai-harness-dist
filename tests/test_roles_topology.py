@@ -256,6 +256,42 @@ def _case_badge_css_present(fails):
         fails.append("徽章色沒有深色模式那一套")
 
 
+def _case_named_skills_not_substring(fails):
+    """namedSkills 必須配完整 skill 名，不能是別的連字詞的一段。
+
+    2026-08-25 實測：IT 專案有 skill `audit`，而 `harness-auditor.md` 正文寫
+    `project-auditor` → `s in body` 把 `audit` 算進去。看板技能層亮「已接上 /audit」是假的。
+    """
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        skills = root / "skills"
+        (skills / "audit").mkdir(parents=True)
+        (skills / "audit" / "SKILL.md").write_text("---\nname: audit\n---\n", encoding="utf-8")
+        (skills / "verify-rules").mkdir()
+        (skills / "verify-rules" / "SKILL.md").write_text(
+            "---\nname: verify-rules\n---\n", encoding="utf-8")
+        agents = root / "agents"
+        agents.mkdir()
+        (agents / "harness-auditor.md").write_text(
+            "---\nname: harness-auditor\n---\n\n"
+            "專案文件漂移派 `project-auditor`。Skill：`verify-rules`。\n",
+            encoding="utf-8",
+        )
+        m = _load()
+        m.SKILLS_DIR = skills
+        m.AGENTS_DIR = agents
+        parsed = m.parse_agents()
+        if len(parsed) != 1:
+            fails.append(f"應解析出 1 個角色，得到 {len(parsed)}")
+            return
+        named = parsed[0]["namedSkills"]
+        if "audit" in named:
+            fails.append(f"子字串誤配 audit：namedSkills={named}")
+        if "verify-rules" not in named:
+            fails.append(f"真提到的 verify-rules 沒配上：namedSkills={named}")
+
+
 def _case_caps_table_matches_agents(fails):
     """沙盒頁的能力邊界表列數 == 角色檔數。
 
@@ -286,6 +322,7 @@ def run() -> "tuple[int, list]":
         ("每個部門都對得到職能群（有顏色）", _case_every_dept_has_group),
         ("徽章色 CSS 與 GROUP_CLS 對得上（含深色）", _case_badge_css_present),
         ("能力邊界表列數 == 角色檔數", _case_caps_table_matches_agents),
+        ("namedSkills 不被子字串誤配（audit vs project-auditor）", _case_named_skills_not_substring),
     ]
     passed = 0
     failures: list = []

@@ -141,6 +141,17 @@ def _esc(t: str) -> str:
             .replace(">", "&gt;").replace('"', "&quot;"))
 
 
+def skill_mentioned(text: str, skill: str) -> bool:
+    """skill 名必須自成一詞；連字號算詞的一部分。
+
+    所以 `audit` 撞不上 `project-auditor`／`harness-auditor`，
+    但正文寫 `` `verify-rules` `` 或 `/verify-rules` 仍算提到。
+    """
+    if not skill:
+        return False
+    return re.search(rf"(?<![\w-]){re.escape(skill)}(?![\w-])", text) is not None
+
+
 def available_skills() -> list:
     """本專案有哪些 skill 可被呼叫。用來把角色正文提到的名字對回真實存在的 skill。
 
@@ -196,8 +207,10 @@ def parse_agents() -> list:
             "gate": gate,
             "builtin": False,
             "bodyLines": len([ln for ln in body.splitlines() if ln.strip()]),
-            # 正文有沒有指名該呼叫哪幾支 skill（技能層真的接上了沒）
-            "namedSkills": [s for s in skills if s in body],
+            # 正文有沒有指名該呼叫哪幾支 skill（技能層真的接上了沒）。
+            # 必須是完整詞：`s in body` 會把 `audit` 配進 `project-auditor`／
+            # `harness-auditor`（2026-08-25 實測看板亮假的 /audit）。
+            "namedSkills": [s for s in skills if skill_mentioned(body, s)],
             # V-E 機制：碰到邊界要回報「需要但沒有」。有沒有寫進正文是可查的。
             "boundaryReport": "【需要但沒有】" in body,
         })
