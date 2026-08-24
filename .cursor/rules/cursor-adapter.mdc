@@ -5,10 +5,12 @@ alwaysApply: true
 
 # Cursor 適配（harness）
 
-這是核心層 repo，不是部門業務專案。對照表見 `.cursor/README.md`。設計決策先讀 `UNIVERSAL_HARNESS_PLAN.md` §0／§2。
+這是核心層 repo，不是部門業務專案。對照表見 `.cursor/README.md`。設計決策先讀 `UNIVERSAL_HARNESS_PLAN.md` §0／§2。**共用契約在 repo 根 `CLAUDE.md`。**
 
 - **換部門還成立嗎？** 不成立的東西不准寫進本 repo 的規則／hook／產生器。路徑從設定讀，讀不到就拒跑並說缺什麼，禁止 fallback 到某個預設專案。
 - **不要在本 repo 建 `.claude/`**。`discover_projects()` 靠 `.claude\` 認部門專案，建了會把地基誤認成一號專案。
 - **skill 真相在 `skills/`**。`~\.claude\skills` 是 junction。禁止拷進 `.cursor/skills/`，禁止 `npx skills update`（會把資料夾掉包成 junction、檔離開 git）。
+- **主要規則只改 `global/CLAUDE.md`**。不要貼成 `AGENTS.md`（user rules 是載入通道，不是第二份本文）。
+- **本平台知識**在 `.cursor/PROJECT_CONTEXT.md`（產生器不掃）。Claude 側契約是根目錄 `CLAUDE.md`，不要互拷。
 - **看板規範**在 `.cursor/rules/dashboard-generators.mdc`。工作區根不是本 repo 時 glob 不觸發，要手動 Read。改這份本文還要同步 IT 專案 `.claude/rules` 與 `.cursor/rules` 那兩份。
 - 看板綁 127.0.0.1、不對外發布。`HOST` 改 `0.0.0.0` 就對外了，畫面上沒差別。

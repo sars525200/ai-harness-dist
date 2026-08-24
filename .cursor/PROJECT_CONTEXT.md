@@ -1,6 +1,6 @@
 # 專案脈絡（harness 核心層·給 Cursor 讀）
 
-> **這份只存在 `.cursor/`。** 不要搬去 `.claude/PROJECT_CONTEXT.md`——產生器的 `discover_projects()` 把帶 `.claude\` 的目錄當成部門專案，harness 自己不能當一號專案。
+> **這份只存在 `.cursor/`，是 Cursor 的平台知識。** 共用契約在 repo 根 `CLAUDE.md`；主要規則在 `global/CLAUDE.md`。不要搬去 `.claude/PROJECT_CONTEXT.md`——產生器的 `discover_projects()` 把帶 `.claude\` 的目錄當成部門專案，harness 自己不能當一號專案。
 >
 > 角色的作用對象若是「某個部門」，仍讀那個部門的 `.claude/PROJECT_CONTEXT.md`。本檔回答的是：**正在改地基本身時，東西在哪。**
 
@@ -20,6 +20,7 @@ AI 工作站 harness。Hook 閘門、event log、看板產生器、eval、全域
 
 | 類型 | 位置 |
 |---|---|
+| 共用契約 | repo 根 `CLAUDE.md` |
 | 全域常駐規則 | `global/CLAUDE.md`（安裝到 `~\.claude\CLAUDE.md`） |
 | Cursor path-scoped | `.cursor/rules/*.mdc` |
 | 全域 skill | `skills/*/SKILL.md`（junction → `~\.claude\skills`） |
