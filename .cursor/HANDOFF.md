@@ -2,7 +2,7 @@
 
 > **下一則對話請開在 `D:\.ai-harness`（Agents 視窗那列 `git-mirrors/ai-harn…`）。**
 > 不要用 `move_agent_to_root` 從 IT 專案把舊對話搬過來。
-> 開工先 Read 本檔＋`.cursor/README.md`＋`UNIVERSAL_HARNESS_PLAN.md` §0／§2。
+> 開工先 Read 本檔＋`DASHBOARD_HTML_GIT_PLAN.md`（若要接看板產物／git 那條）＋`.cursor/README.md`＋`UNIVERSAL_HARNESS_PLAN.md` §0／§2。
 
 前一則對話在 `D:\IT-department`，標題「架構編輯」，repo 身分是 `srv/git/it-asset`。
 user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾。
@@ -26,14 +26,9 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 - 28 檔：`.cursor/README.md`、`PROJECT_CONTEXT.md`、10 條 `.mdc`（含常駐 `cursor-adapter`）、16 支 skill 拷貝。
 - 記憶仍共用 `.aimemory/`，沒複製。
 
-### IT-department（未 commit，跟這次任務有關）
+### IT-department（指路 4 檔）
 
-改看板規範的**指路**（告訴人 harness 側 glob 才打得到檔）：
-
-- `.cursor/README.md`
-- `.cursor/rules/cursor-adapter.mdc`
-- `.cursor/rules/dashboard-generators.mdc`（只改檔頭說明，本文其餘應與 Claude 那份同步）
-- `.claude/rules/dashboard-generators.md`（同上，檔頭加 Cursor 載入點）
+**已在 `master`（`f31194b5` 之後工作區乾淨）**，不必再開 agent 重提。內容是「IT 工作區 glob 打不到 `D:\.ai-harness`，手動 Read `.claude/rules/dashboard-generators.md`」。
 
 **不要**把下面這些一起提交，它們不是這次任務：
 
@@ -42,7 +37,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 - `.claude/settings.json`
 - `SOP_PROD/ops/nginx/it-asset.conf`
 
-### Harness（磁碟上有 `.cursor/`，但 git 狀態不乾淨）
+### Harness（`.cursor/` 已在 `a421dbc`；工作區仍可能髒）
 
 檔案：
 
@@ -103,20 +98,39 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 
 ---
 
+## 2026-08-24 晚這則做了什麼
+
+契約／glob 線已收（HEAD `89395a6`）：
+
+- `a421dbc`：記錄 glob 不注入模型；三份 `.mdc` glob 拿掉引號；`alwaysApply` 探針已改回 `false`
+- `89395a6`：根 `CLAUDE.md` 指向 `COLLAB_HANDOFF.md`
+- 探針對話：[Dashboard generator context check](91bac0f4-d113-49a1-93cb-3f2a8e7dd987)（alwaysApply 能進）
+
+看板 html **不是即時檔**：8099 服務層 ~10 秒重生＋角章；git 裡的 html 是快照。今晚工作區 `dashboard/harness-dashboard.html` 仍髒（產生器重填，約兩千行，多為待辦行號 +1），**未還原、未提交**。
+
+產物不進 git：計畫書 `DASHBOARD_HTML_GIT_PLAN.md`（未追蹤）、`TODOS.md` 加一列（未提交）。**§8 已決、程式未動、user 說先停：**
+
+1. 時間戳／nav 徽章只由 8099 注入，不寫進產物檔
+2. Clone 未 refresh：啟動時自動從 shell 複製並填
+3. CI 只測 fixture
+
+---
+
 ## 下一則建議做的（選）
 
-未做、等 user 點頭：
-
-1. **IT**：只提交上面「未 commit，跟這次任務有關」那 4 個指路檔。
-2. **Harness**：跟 user 討論 `6f98816` 要留、改訊息、還是拆 commit。
-3. ~~在 harness 工作區改一個 `dashboard/*.py` 看看板規範會不會自動進 context。~~ **已驗、glob 未過**（2026-08-24）：開檔／改 glob 寫法／新開對話都沒注入；`alwaysApply: true` 探針有進，已改回 `false`。改看板用 `@dashboard-generators` 或手動 Read。
+1. **看板 html／git（規格已鎖）**：user 明確說開工才照 `DASHBOARD_HTML_GIT_PLAN.md` 拆 shell／gitignore／測試。先把計畫書＋`TODOS.md` 那列單獨 commit；**不要**把髒 html 塞進同一顆。
+2. 髒 `harness-dashboard.html`：還原或放著（8099 仍會再寫髒）。
+3. **Harness**：討論 `6f98816` 要留、改訊息、還是拆 commit。**未獲指示不要 rebase／amend／reset。**
 4. 不要把 `~\.claude\skills` 再 junction 一份到 `.cursor/skills/`。
+
+IT 指路 4 檔、glob 驗收、CLAUDE.md 地圖：已完成，不要重做。
 
 ---
 
 ## 新對話建議第一句（可直接貼）
 
 ```
-接 Cursor 專屬資料夾。先讀 D:\.ai-harness\.cursor\HANDOFF.md。
-工作區必須是 D:\.ai-harness。不要 move_agent_to_root，不要加 origin，不要建 .claude/。
+接 harness。工作區 D:\.ai-harness。先讀 .cursor/HANDOFF.md 與 DASHBOARD_HTML_GIT_PLAN.md。
+§8 已決。不要開工拆 shell，除非我明確說開工。不要把髒的 harness-dashboard.html 跟計畫書一起 commit。
+不要 move_agent_to_root，不要加 origin，不要建 .claude/。改看板用 @dashboard-generators。
 ```

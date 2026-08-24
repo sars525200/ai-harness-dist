@@ -3,7 +3,7 @@
 > 給**另一個平台上的新對話**讀。工作區必須是 `D:\.ai-harness`。
 > 短契約（always-on）是根目錄 `CLAUDE.md`。本檔是交接：現況、禁做、怎麼一起改。
 
-**HEAD（契約線）**：`49f4152` `docs(cursor): 新增 Claude 與 Cursor 共用契約，平台知識維持分檔`（2026-08-24）
+**HEAD（契約線）**：`89395a6` `docs: 根 CLAUDE.md 指向 COLLAB_HANDOFF`（2026-08-24；其前 `a421dbc` 記 glob 不注入）
 
 ---
 
@@ -88,13 +88,13 @@
 
 ## 不是這條線的（不要一起做、不要一起 commit）
 
-工作區可能還髒著（以你開對話時 `git status` 為準），例如：
+工作區可能還髒著（以你開對話時 `git status` 為準）。2026-08-24 晚預期：
 
-- `.cursor/rules/dashboard-generators.mdc`、`harness-hooks.mdc`、`harness-skills.mdc`（多半是 glob 引號）
-- `dashboard/harness-dashboard.html`
-- 未追蹤 `.cursor/HANDOFF.md`（那是「給 Cursor 做專屬資料夾」舊交接，不是本檔）
+- 未追蹤 `DASHBOARD_HTML_GIT_PLAN.md`、`.cursor/HANDOFF.md` 可能有交接增補
+- `TODOS.md` 多一列看板產物／git
+- `dashboard/harness-dashboard.html` 產生器重填（不要跟計畫書同一顆 commit）
 
-那些要另核對。**未獲指示不要 rebase／amend／reset。**
+glob 三份 `.mdc` 引號已在 `a421dbc`。**未獲指示不要 rebase／amend／reset。**
 
 方向與分層仍以 `UNIVERSAL_HARNESS_PLAN.md` §0／§2 為準。本題未指定前，不要自己開個人層／閘門／看板的大工。
 
