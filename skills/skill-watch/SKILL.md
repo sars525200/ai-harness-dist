@@ -23,7 +23,7 @@ description: 檢查你使用的 AI 平台有沒有推出新技能、改名、或
 py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
 ```
 
-一律走 `run.py`（步驟 1）。它會印「要查的平台」與「定義裡有、你還沒勾」。
+一律走 `skills/skill-watch/run.py`（步驟 1）。它會印「要查的平台」與「定義裡有、你還沒勾」。
 
 1. **有沒勾的就用選擇題問 user 這次要不要勾**。不要自己替他決定。
 2. **要改就走旗標，不要自己用 Edit 改那個 JSON**：
@@ -35,7 +35,7 @@ py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
 
    寫回要保留其他鍵；邏輯有 `tests/test_skill_watch_platforms.py` 守著。
 
-**一個平台都沒勾**時 `run.py` 會自己拒跑：exit 2、不呼叫擷取器、**不前進 lastSuccessAt**。
+**一個平台都沒勾**時 `skills/skill-watch/run.py` 會自己拒跑：exit 2、不呼叫擷取器、**不前進 lastSuccessAt**。
 看板 `_p_skill_watch_alive` 只讀 lastSuccessAt，「什麼都沒查」被記成成功會永遠綠。
 勾了沒有擷取實作的平台也一樣拒跑。
 
@@ -45,9 +45,9 @@ py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
 py -3 "${CLAUDE_SKILL_DIR}/run.py"
 ```
 
-⚠ **一定要走 `run.py`**。`~/.claude/skills` 是指向 harness 的 symlink，
+⚠ **一定要走 `skills/skill-watch/run.py`**。`~/.claude/skills` 是指向 harness 的 symlink，
 `${CLAUDE_SKILL_DIR}` 展開在 symlink 側；自己拼 `../../tools/` 會走到不存在的
-`~/.claude/tools/`。`run.py` 用 `Path(__file__).resolve()` 跟隨 symlink。
+`~/.claude/tools/`。`skills/skill-watch/run.py` 用 `Path(__file__).resolve()` 跟隨 symlink。
 
 預設會更新基準、有變動寫進 `TODOS.md`。只看一眼加 `--dry-run`。
 不掛排程、不接收工。每次跑完都要講基準日期。
@@ -158,7 +158,7 @@ exit：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗拒跑
 
 ## 換一個部門要改什麼
 
-- **路徑自己解析**：`run.py` 從自身位置往上三層找 harness 根，沒有寫死絕對路徑。
+- **路徑自己解析**：`skills/skill-watch/run.py` 從自身位置往上三層找 harness 根，沒有寫死絕對路徑。
 - **設定從 `harness.config.json` 讀**：讀不到會拒跑並說缺什麼。
 - **基準檔**在 `<harness>/SkillViewer/platform_skills.json`。
   ⚠ **缺基準時它是拒跑（exit 2），不是「自己建一份」**——訊息會說
@@ -170,4 +170,4 @@ exit：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗拒跑
 **缺開關檔＝全關**。用步驟 0 的旗標勾選。
 
 **目前定義裡只有 Claude Code**。加第二個平台還要有 adapter 實作——
-`platforms.json` 裡放一個沒有 adapter 的平台，等於埋一個勾了就爆的選項。
+`skills/skill-watch/platforms.json` 裡放一個沒有 adapter 的平台，等於埋一個勾了就爆的選項。
