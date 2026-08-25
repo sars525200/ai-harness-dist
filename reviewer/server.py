@@ -85,6 +85,23 @@ TOOLS = [
         "probe": "codex",
         "supports_model": False,
     },
+    # ── cursor-cli 的操作細節（2026-08-25/26 SG-084 四輪實測）──────────────────
+    # 放在這裡而不是 skill 檔：skill 有一次「不再寫死會過期的值」的精簡，把這些一起帶走了。
+    # 下面每一條都是實跑撞出來的、不是推論，重跑一次的成本遠高於留著。
+    #
+    #   1. **一律背景執行**。一輪 10 分鐘以上（Grok xhigh），前景會撞工具逾時被砍，
+    #      而且 PowerShell 的 `Out-File` **一個 byte 都不會 flush** ⇒ 只留下一個
+    #      0 byte 的假 reply 檔，交換守門會把它誤判成「有回覆」。
+    #   2. **`Out-File -Encoding utf8` 會加 BOM**，`ask-sha256` 那行會被守門認不出 ⇒
+    #      落檔時用 `utf-8-sig` 讀、`utf-8` 寫。
+    #   3. **唯讀靠 `--mode ask` 且不給 `--force`**。給了 `--force` 它就能改任何檔，
+    #      而沙箱的 junction 指向的是真的程式碼目錄。
+    #      （`--force` 那條路 2026-08-26 被 auto mode classifier 擋下，不要繞。）
+    #   4. **審查者不一定照格式輸出 hash 行**：Grok 連兩輪都寫成 ``ask-sha256=`<hash>` ``
+    #      （markdown code 標記），即使 prompt 明寫「不要用反引號包起來」。
+    #      守門的正則已放寬到容許標記字元，**值本身仍逐字比對**。
+    #   5. **沙箱的父目錄也要乾淨**：`D:\AI-Projects` 與 `D:\.ai-harness` 底下都有
+    #      `CLAUDE.md`，把沙箱開在它們底下等於白做。實際落點 `D:\reviewer-sandbox`。
     {
         "id": "cursor-cli",
         "name": "Cursor CLI（全自動）",
