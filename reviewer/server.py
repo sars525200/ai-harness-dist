@@ -105,6 +105,40 @@ def load_config() -> dict:
     return cfg
 
 
+def config_load_issues() -> list:
+    """設定**沒讀到**的時候要出聲（2026-08-25 覆核 R1-1）。
+
+    `config_warnings()` 只在「值有填但不是已知值」時出聲。檔案不存在、JSON 壞掉、
+    欄位缺、值是空字串——這四種都會安靜地落回 `DEFAULTS`，也就是 `claude-code`。
+    畫面印「審查者：claude-code（可用）」、warnings 空、exit 0，
+    **看起來完全就像「本來就選了 Claude」**。
+
+    後果正是這支 skill 存在的理由的反面：設定原本是 cursor，檔一壞就退回自己審自己，
+    而且沒有任何一個訊號會讓人或模型發現曾經是 cursor。
+
+    所以這四種一律出聲並讓 `--check` 非零。這不是「設定檔壞掉就不讓覆核跑」——
+    非零的意思是「停下來問人」，不是崩潰。
+    """
+    issues = []
+    if not os.path.exists(CONFIG_PATH):
+        return [f"設定檔不存在：{CONFIG_PATH} —— 現在用的是預設值 "
+                f"{DEFAULTS['tool']}，那是 Claude 審 Claude。先建檔或跑設定頁。"]
+    try:
+        with open(CONFIG_PATH, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except Exception as exc:
+        return [f"設定檔讀不了（{type(exc).__name__}）—— 現在用的是預設值 "
+                f"{DEFAULTS['tool']}，那是 Claude 審 Claude。修好它，不要就這樣跑下去。"]
+    if not isinstance(data, dict):
+        return ["設定檔最外層不是物件 —— 全部欄位都會落回預設。"]
+    for k in DEFAULTS:
+        if k not in data:
+            issues.append(f"缺欄位 {k} —— 已落回預設「{DEFAULTS[k]}」")
+        elif not data[k]:
+            issues.append(f"欄位 {k} 是空的 —— 已落回預設「{DEFAULTS[k]}」")
+    return issues
+
+
 def config_warnings(cfg: dict) -> list:
     """未知設定值不得靜默吞掉（2026-08-25 對抗式覆核 R1-3）。
 
@@ -130,10 +164,20 @@ def config_warnings(cfg: dict) -> list:
     return out
 
 
-def save_config(cfg: dict) -> None:
+def save_config(cfg: dict) -> list:
+    """寫設定，並**回報哪些欄位被正規化掉了**（2026-08-25 覆核 R1-2）。
+
+    正規化本身是對的（不該把垃圾寫進檔案），錯的是**不出聲**：
+    未知值進來時 `--check` 本來會 exit 2，存一次之後值變合法、警告消失、exit 0
+    —— 證據被自己抹掉了。回傳的清單讓呼叫端能把「我改了你的輸入」講出來。
+    """
     valid_tools = {t["id"] for t in TOOLS}
     valid_models = {m["id"] for m in MODELS}
     valid_efforts = {e["id"] for e in EFFORTS}
+    rejected = [f"{k}=「{cfg.get(k)}」不是已知值，已寫成預設「{DEFAULTS[k]}」"
+                for k, allowed in (("tool", valid_tools), ("model", valid_models),
+                                   ("effort", valid_efforts))
+                if cfg.get(k) is not None and cfg.get(k) not in allowed]
     out = {
         "tool": cfg.get("tool") if cfg.get("tool") in valid_tools else DEFAULTS["tool"],
         "model": cfg.get("model") if cfg.get("model") in valid_models else DEFAULTS["model"],
@@ -145,6 +189,9 @@ def save_config(cfg: dict) -> None:
     with open(CONFIG_PATH, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
+    for r in rejected:
+        print(f"  ✘ 存檔時正規化：{r}")
+    return rejected
 
 
 def tool_available(tool: dict) -> bool:
@@ -190,8 +237,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             n = int(self.headers.get("Content-Length") or 0)
             payload = json.loads(self.rfile.read(n).decode("utf-8") or "{}")
-            save_config(payload)
-            return self._send(200, json.dumps({"ok": True, "config": load_config()},
+            rejected = save_config(payload)
+            return self._send(200, json.dumps({"ok": True, "config": load_config(),
+                                               "rejected": rejected},
                                               ensure_ascii=False))
         except Exception as exc:
             return self._send(400, json.dumps({"error": str(exc)}, ensure_ascii=False))
@@ -209,8 +257,7 @@ def print_state() -> None:
           f"（{tool['name']}·{'可用' if tool['available'] else '⚠ 這台機器上找不到'}）"))
     print(f"  模型　：{cfg['model']}")
     print(f"  effort：{cfg['effort']}")
-    warns = config_warnings(cfg)
-    for w in warns:
+    for w in config_load_issues() + config_warnings(cfg):
         print(f"  ✘ {w}")
     if cfg["tool"] == "cursor":
         print("  ℹ Cursor 是**人工通道**：可用性不等於「裝了沒」，而是「這一輪有沒有合格的回覆檔」。"
@@ -225,7 +272,8 @@ def main() -> int:
         print_state()
         # 設定值不合法時要**非零退出**，不只是印一行（2026-08-25 覆核 R1-3／V1）：
         # 「明講」是散文、擋不住抄近路；exit code 才是別的腳本與 skill 步驟能檢查的東西。
-        return 2 if config_warnings(load_config()) else 0
+        # 讀不到／欄位空掉也算（R1-1）——那會安靜地退回 claude-code，也就是自己審自己。
+        return 2 if (config_load_issues() or config_warnings(load_config())) else 0
     print_state()
     url = f"http://{HOST}:{PORT}/"
     print(f"\n設定頁：{url}　（Ctrl+C 結束）")
