@@ -1,0 +1,57 @@
+{
+  "name": "PR-1 落檔交換：ask 與合格 reply 都在 → ALLOW",
+  "why": "反向那一半。交換齊全時不得再擋，否則加了這條就等於把所有 cursor 覆核卡死。",
+  "workspace": {
+    "files": {
+      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n把 X 改成 Y，交付一份可執行的規格。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=<HASH> rounds=2 at=2026-08-22T12:00:00Z -->\n",
+      ".scratch/test-effort/round-1-ask.md": "# Round 1 題目\n\n請對抗式審查這份規劃圖，找出會讓規則靜默失效的具體缺陷。\n\nask-sha256=95747b48d2928baf79f4dc5a8660709370547e867f162b39da2d6edfb0bbf43e\n",
+      ".scratch/test-effort/round-1-reply.md": "ask-sha256=95747b48d2928baf79f4dc5a8660709370547e867f162b39da2d6edfb0bbf43e\n\n# 回覆\n\nR1-1（高）某個判斷在特定輸入下會靜默失效，而且整條路徑都不會報錯，\n所以人與模型都不會發現自己走到了錯的那一邊。\n具體失效情境：設定值是未知字串時，程式落到第一個有寫的分支而不出聲，\n而那個分支剛好是預設值，看起來就像本來就選了它。\n查證：實際跑過那支腳本，exit code 為 0，畫面只印出裸 id。信心：高。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "繼續解票"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/.scratch/test-effort/map.md",
+                "old_string": "x",
+                "new_string": "y"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "edited"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-map-exch-allow",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "ALLOW"
+  },
+  "rule": "pr1_plan_review_marker"
+}

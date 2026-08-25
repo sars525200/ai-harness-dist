@@ -100,6 +100,12 @@ import hashlib
 import json
 import os
 import re
+import subprocess
+import sys
+
+# 這支 hook 自己推 harness 根（同 esc1 的作法）：不從設定讀，因為設定讀不到時
+# 這條規則該做的是「照常判 marker」，而不是連 PR-1 一起停擺。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from contract import allow, block, bypassed, iter_turn_tool_uses, warn
 
@@ -423,6 +429,44 @@ def _inflight_key(path: str) -> str:
     return os.path.normcase(os.path.abspath(path)).replace("\\", "/")
 
 
+def _exchange_gate_verdict(map_path: str):
+    """map 同目錄若有 `round-N-ask.md`，落檔交換必須齊全才准蓋章。
+
+    2026-08-25 對抗式覆核 R1-3：`/adversarial-review` 用 `tool: cursor` 時走落檔交換
+    （skill 寫題目檔、人貼進 Cursor、Cursor 寫回發現）。那條路徑上的每一步都能被跳過
+    而不出聲——不貼給任何人、reply 空白、reply 是上一輪的複製。
+    `tools/adversarial_exchange_gate.py` 會判這些，但**沒有任何東西強制它被跑**：
+    skill 正文寫的「非零就不准蓋章」是散文，而 PR-1 只驗 marker 的 hash。
+    結果是「寫了 ask、自己蓋章」照樣 ALLOW —— 這支 hook 的檔頭註解自己說過，
+    它存在的目的就是把「有沒有被獨立審查者看過」從模型的自由裁量變成結構性無法跳過。
+
+    **開火條件刻意收得很窄**：目錄裡要有 `round-N-ask.md` 才檢查。
+    沒有 ask 檔＝這輪不是落檔交換（`claude-code` 分支、或還沒派出）⇒ 行為與改之前
+    一模一樣。這是為了不讓一個 cursor 專屬的規則去擋所有專案的所有覆核。
+
+    回 `(ok, 輸出)`。**這條 fail-closed**：有 ask 檔卻連守門都跑不起來時擋下來，
+    因為那個狀態下「放行」等於把 R1-3 的洞原封不動留著。
+    """
+    d = os.path.dirname(os.path.abspath(map_path))
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return True, ""          # 目錄讀不到：不是這條規則該處理的問題
+    if not any(re.match(r"^round-\d+-ask\.md$", n, re.I) for n in names):
+        return True, ""          # 不是落檔交換 ⇒ 這條不適用
+
+    gate = os.path.join(_HARNESS_ROOT, "tools", "adversarial_exchange_gate.py")
+    if not os.path.exists(gate):
+        return False, f"找不到守門腳本：{gate}"
+    try:
+        r = subprocess.run([sys.executable, gate, "--check", d],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
+    except Exception as exc:      # noqa: BLE001
+        return False, f"守門腳本跑不起來：{type(exc).__name__}: {exc}"
+    return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
+
+
 def _inflight_matches(path: str, text: str) -> dict | None:
     """有相符的覆核進行中便箋就回那筆，否則 None。**讀不到一律當沒有**（fail-closed
     到 BLOCK，與 PR-1 其餘判斷 fail-open 的方向相反 —— 這裡放行才是壞的那一邊）。"""
@@ -634,6 +678,24 @@ def check(ctx):
         # 先擋「沒被審」再擋「沒寫怎麼驗」，一次只給一件事做，
         # 否則 BLOCK 訊息會同時要人做兩件不相干的事。
         if is_map:
+            # 落檔交換（`tool: cursor`）的話，marker 的 hash 對得上**不代表有人看過**：
+            # ask／reply 不在 PR-1 的視野裡，寫了 ask、自己蓋章照樣過（覆核 R1-3）。
+            # 只在同目錄真的有 round-N-ask.md 時才檢查 ⇒ 其他覆核行為完全不變。
+            ok, gate_out = _exchange_gate_verdict(path)
+            if not ok:
+                return block(
+                    f"{name} 的 marker 有效，但**同目錄的落檔交換不齊全**——"
+                    f"marker 的 hash 只證明「這份文件沒被改過」，"
+                    f"證明不了「有人真的看過它」。\n\n"
+                    f"{gate_out.strip()}\n\n"
+                    f"處置：把 `round-N-ask.md` 貼進 Cursor、讓它把發現寫回 "
+                    f"`round-N-reply.md`，再跑一次：\n"
+                    f"  py -3 {os.path.join(_HARNESS_ROOT, 'tools', 'adversarial_exchange_gate.py')} "
+                    f"--check {os.path.dirname(os.path.abspath(path))}\n"
+                    f"⚠ 這支守門**防遺忘、不防作弊**：自己代筆的 reply 與真的回覆同形。"
+                    f"它擋的是「忘了貼」與「貼了但沒回」，不是「決心造假」。"
+                )
+
             gap = _verification_gap(_review_scope(probe))
             if gap:
                 return _verification_gap_block(name, path, gap)

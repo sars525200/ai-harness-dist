@@ -1,0 +1,57 @@
+{
+  "name": "PR-1 落檔交換：map 的 marker 有效但只有 ask 沒有 reply → BLOCK",
+  "why": "R1-3：marker 的 hash 只證明「文件沒被改過」，證明不了「有人真的看過」。ask／reply 不在 PR-1 的視野裡，所以「寫了題目、自己蓋章」原本照樣 ALLOW。只在同目錄真的有 round-N-ask.md 時才檢查 ⇒ 其他覆核行為完全不變。",
+  "workspace": {
+    "files": {
+      ".scratch/test-effort/map.md": "# 測試 effort 的規劃圖\n\n## Destination\n\n把 X 改成 Y，交付一份可執行的規格。\n\n## Notes\n\n領域：測試。\n\n## 驗證方式\n\n每張票關閉前要答得出「怎麼證明它會紅」。\n\n<!-- REVIEW_SCOPE_IGNORE_START -->\n## Decisions so far\n\n（尚無）\n<!-- REVIEW_SCOPE_IGNORE_END -->\n\n## Out of scope\n\n（無）\n\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=<HASH> rounds=2 at=2026-08-22T12:00:00Z -->\n",
+      ".scratch/test-effort/round-1-ask.md": "# Round 1 題目\n\n請對抗式審查這份規劃圖，找出會讓規則靜默失效的具體缺陷。\n\nask-sha256=95747b48d2928baf79f4dc5a8660709370547e867f162b39da2d6edfb0bbf43e\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "繼續解票"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Edit",
+              "input": {
+                "file_path": "<DIR>/.scratch/test-effort/map.md",
+                "old_string": "x",
+                "new_string": "y"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "edited"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-map-exch-block",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "落檔交換"
+  },
+  "rule": "pr1_plan_review_marker"
+}
