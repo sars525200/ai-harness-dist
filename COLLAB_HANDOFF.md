@@ -3,7 +3,7 @@
 > 給**另一個平台上的新對話**讀。工作區必須是 `D:\.ai-harness`。
 > 短契約（always-on）是根目錄 `CLAUDE.md`。本檔是交接：現況、禁做、怎麼一起改。
 
-**HEAD（契約線）**：`89395a6` `docs: 根 CLAUDE.md 指向 COLLAB_HANDOFF`（2026-08-24；其前 `a421dbc` 記 glob 不注入）
+**HEAD（契約線）**：`5734e36`（2026-08-25）。本檔當日的兩個增修：`c4c69c5` 加 `COLLAB_NOW.md` 宣告機制、`095a27e` 記 `peek_sessions` 看不到 Cursor。
 
 ---
 
