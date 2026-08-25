@@ -52,6 +52,21 @@ TOOLS = [
         "supports_model": True,
     },
     {
+        "id": "cursor",
+        "name": "Cursor（落檔交換）",
+        "desc": "另一個 IDE 上的另一個模型——這台機器上唯一真正不共用推理脈絡的審查者。"
+                "程式叫不到它（ListAgents 看不見 Cursor），所以走落檔交換："
+                "skill 寫題目檔、人貼進 Cursor、Cursor 把發現寫回檔、skill 讀回來逐項處置。"
+                "⚠ 它需要人動手貼一次，不是全自動。",
+        # probe 刻意留 None：cursor 的「可用」**不是**「這台機器裝了沒」。
+        # 2026-08-25 實測 `shutil.which("cursor")` 在 Cursor 自己的 process 有值、
+        # 在 Claude 這側是 None —— 同一個判準對不同的提問者給不同答案，
+        # 拿它當可用性會製造假訊號（一側顯示可用、另一側靜默退回自己審自己）。
+        # 真正的可用性判準是「這一輪有沒有合格的回覆檔」，那由 skill 步驟驗，不在這裡。
+        "probe": None,
+        "supports_model": False,
+    },
+    {
         "id": "codex",
         "name": "Codex CLI",
         "desc": "外部 CLI，與 Claude 完全不同的模型族。跨模型族的異質性是它唯一的優勢——同族審同族容易共享盲點。",
@@ -88,6 +103,31 @@ def load_config() -> dict:
     except Exception:
         pass
     return cfg
+
+
+def config_warnings(cfg: dict) -> list:
+    """未知設定值不得靜默吞掉（2026-08-25 對抗式覆核 R1-3）。
+
+    原本 `load_config()` 只補缺欄位、**不驗值**，而 `save_config()` 驗不過就塞回預設。
+    兩者合起來的效果是：**手改成未知值活得下來**（`--check` 只印裸 id，看起來一切正常），
+    **經設定頁存一次就被靜默改寫成 claude-code**（畫面上看起來像選了別的）。
+    兩條路徑都不出聲，而它們的後果是「以為找了外部審查者、其實在自己審自己」。
+
+    這支只回警告不改值——設定檔壞掉不該讓覆核跑不動，但也不該安靜。
+    """
+    valid = {
+        "tool": {t["id"] for t in TOOLS},
+        "model": {m["id"] for m in MODELS},
+        "effort": {e["id"] for e in EFFORTS},
+    }
+    out = []
+    for key, allowed in valid.items():
+        val = cfg.get(key)
+        if val not in allowed:
+            out.append(f"設定檔的 {key}=「{val}」不是已知值"
+                       f"（已知：{'／'.join(sorted(allowed))}）"
+                       f"——skill 必須拒跑並說出來，不得挑一個分支兜底。")
+    return out
 
 
 def save_config(cfg: dict) -> None:
@@ -169,6 +209,12 @@ def print_state() -> None:
           f"（{tool['name']}·{'可用' if tool['available'] else '⚠ 這台機器上找不到'}）"))
     print(f"  模型　：{cfg['model']}")
     print(f"  effort：{cfg['effort']}")
+    warns = config_warnings(cfg)
+    for w in warns:
+        print(f"  ✘ {w}")
+    if cfg["tool"] == "cursor":
+        print("  ℹ Cursor 是**人工通道**：可用性不等於「裝了沒」，而是「這一輪有沒有合格的回覆檔」。"
+              "skill 會寫題目檔，需要人貼進 Cursor 一次。")
     for t in st["tools"]:
         if not t["available"]:
             print(f"  ⚠ {t['name']} 未安裝——選了它，skill 會回報找不到並改用可用的審查者")
@@ -177,7 +223,9 @@ def print_state() -> None:
 def main() -> int:
     if "--check" in sys.argv:
         print_state()
-        return 0
+        # 設定值不合法時要**非零退出**，不只是印一行（2026-08-25 覆核 R1-3／V1）：
+        # 「明講」是散文、擋不住抄近路；exit code 才是別的腳本與 skill 步驟能檢查的東西。
+        return 2 if config_warnings(load_config()) else 0
     print_state()
     url = f"http://{HOST}:{PORT}/"
     print(f"\n設定頁：{url}　（Ctrl+C 結束）")
