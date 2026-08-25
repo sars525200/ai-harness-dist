@@ -119,6 +119,38 @@
 
 ---
 
+## Cursor 是對抗式覆核的審查者（2026-08-25 起）
+
+`/adversarial-review` 的審查者由 `reviewer/reviewer_config.json` 決定，現值 **`cursor`**。
+
+**為什麼**：它只認 `claude-code` / `codex`，而 Codex 這台機器**沒裝** ⇒ 不管設哪個，
+實際跑起來都是 Claude 開一個 subagent 審自己。那支 skill 的正文自己寫著
+「以為找了外部 AI 覆核、其實是自己審自己，比沒覆核更危險」——它一直在那個狀態。
+Cursor 是這台機器上**唯一真正跨模型族**的審查者。
+
+**怎麼運作（落檔交換·人是通道）**：程式叫不到 Cursor（`ListAgents` 看不見它，
+`shutil.which("cursor")` 在 Cursor 自己的 process 有值、在 Claude 這側是 `None`
+——同一個判準對不同的提問者給不同答案）。所以：
+
+1. Claude 寫 `<effort>/round-N-ask.md`，跑 `tools/adversarial_exchange_gate.py --stamp-ask` 凍結它
+2. **人把題目貼進 Cursor**
+3. Cursor 把發現寫回 `round-N-reply.md`，檔頭帶回同一個 `ask-sha256=`
+4. Claude 跑 `--check`（exit 2 → 0）才准處置與蓋章
+
+**PR-1 會強制這件事**：這輪動過 `.scratch/**/map.md` 且同目錄有 `round-N-ask.md` 時，
+`_exchange_gate_verdict()` 會呼叫守門，非零就 BLOCK。沒有 ask 檔＝行為與接線前一模一樣。
+
+⚠ **它防遺忘、不防作弊**。檔案系統上「Claude 自己 Write 一份 reply」與「Cursor 真的寫回」
+**完全同形**，沒有機器能分辨。唯一的真防線是**人親手貼過一次**——所以設定是 `cursor` 時
+Claude 必須停下來等人，「等不到」不是換人的理由。
+
+⚠ **`cursor` 沒有「不可用」這個狀態，只有「還沒回」。** 別套用「工具不可用就換人」那條
+——人還沒貼之前它依定義永遠不可用，兩條規則合起來就是一張換人許可證。
+
+實跑紀錄：四輪覆核，Cursor 挑出 13 → 9（含兩個存活變異）→ 6 → 0 條，第四輪零改動收斂。
+機制與回歸網見 `skills/adversarial-review/SKILL.md`、`tools/adversarial_exchange_gate.py`、
+`tests/test_adversarial_exchange_gate.py`（24 條）、`tests/test_reviewer_config.py`（11 條）。
+
 ## 不是這條線的（不要一起做、不要一起 commit）
 
 工作區以你開對話時 `git status` 為準。2026-08-25 **§10 經營五問側欄**已進版控（含 `open_in_ide.py`、結構測試改數兩層 skill）。
