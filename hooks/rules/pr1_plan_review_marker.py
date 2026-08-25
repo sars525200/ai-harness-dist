@@ -432,9 +432,14 @@ def _inflight_key(path: str) -> str:
 def _exchange_gate_verdict(map_path: str):
     """map 同目錄若有 `round-N-ask.md`，落檔交換必須齊全才准蓋章。
 
-    2026-08-25 對抗式覆核 R1-3：`/adversarial-review` 用 `tool: cursor` 時走落檔交換
-    （skill 寫題目檔、人貼進 Cursor、Cursor 寫回發現）。那條路徑上的每一步都能被跳過
-    而不出聲——不貼給任何人、reply 空白、reply 是上一輪的複製。
+    ⚠ **觸發條件是「同目錄有 `round-N-ask.md`」，跟設定的是哪個審查者無關。**
+    這一段原本寫「用 `tool: cursor` 時」，而那個審查者已在 `f2d9a5f`（2026-08-26）移除
+    ⇒ 照字面讀會推出「這是死碼、可以刪」。實際上落檔交換已升為通用做法，
+    `cursor-cli` 一樣要走，這個函式一樣會觸發。
+
+    2026-08-25 對抗式覆核 R1-3：走落檔交換時（skill 寫題目檔、審查者寫回發現），
+    那條路徑上的每一步都能被跳過而不出聲——沒有真的送出去、reply 空白、
+    reply 是上一輪的複製。
     `tools/adversarial_exchange_gate.py` 會判這些，但在這個函式存在之前
     **沒有任何東西強制它被跑**：skill 正文寫的「非零就不准蓋章」是散文，
     而 PR-1 只驗 marker 的 hash ⇒「寫了 ask、自己蓋章」照樣 ALLOW。
@@ -706,9 +711,11 @@ def check(ctx):
         # 先擋「沒被審」再擋「沒寫怎麼驗」，一次只給一件事做，
         # 否則 BLOCK 訊息會同時要人做兩件不相干的事。
         if is_map:
-            # 落檔交換（`tool: cursor`）的話，marker 的 hash 對得上**不代表有人看過**：
+            # 走落檔交換時，marker 的 hash 對得上**不代表有人看過**：
             # ask／reply 不在 PR-1 的視野裡，寫了 ask、自己蓋章照樣過（覆核 R1-3）。
             # 只在同目錄真的有 round-N-ask.md 時才檢查 ⇒ 其他覆核行為完全不變。
+            # ⚠ 判準是這個檔在不在，**不是設定成哪個審查者**（原本寫 `tool: cursor`，
+            #   那個選項已於 f2d9a5f 移除；閘門本身沒有跟著移除，見 _exchange_gate_verdict）。
             ok, gate_out = _exchange_gate_verdict(path)
             if not ok:
                 return block(

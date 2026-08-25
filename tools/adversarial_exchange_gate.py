@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""落檔交換守門：`/adversarial-review` 用 `tool: cursor` 時，蓋章前必須跑這支。
+"""落檔交換守門：`/adversarial-review` **走落檔交換時**，蓋章前必須跑這支。
+
+⚠ **適用範圍跟設定的是哪個審查者無關。** 這一行原本寫「用 `tool: cursor` 時」，
+而那個審查者已在 `f2d9a5f`（2026-08-26）移除 ⇒ 照字面讀會推出「這支沒人用了」。
+實際上落檔交換已升為通用做法，`cursor-cli` 一樣要走，PR-1 也一樣會呼叫這支
+（`pr1_plan_review_marker._exchange_gate_verdict`，判準是同目錄有沒有 `round-N-ask.md`）。
 
 ## 為什麼需要它
 
-Cursor 是這台機器上唯一真正跨模型族的審查者，但程式叫不到它（`ListAgents` 看不見
-Cursor），所以走落檔交換：skill 寫 `round-N-ask.md`、人貼進 Cursor、Cursor 把發現寫回
-`round-N-reply.md`。
+跨模型族的審查者，其發現要進到蓋章流程只能靠落檔：skill 寫 `round-N-ask.md`、
+審查者把發現寫回 `round-N-reply.md`。
 
 問題是**這條路徑的每一步都能被跳過而不出聲**：不貼給任何人、reply 空白、reply 是上一輪
 的複製、派出後偷改題目——外形都一樣。marker 的 hash 只證明「文件沒被改過」，

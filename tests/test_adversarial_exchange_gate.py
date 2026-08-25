@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""落檔交換守門的回歸網（2026-08-25）。
 
-`tools/adversarial_exchange_gate.py` 是 `/adversarial-review` 用 `tool: cursor` 時
+`tools/adversarial_exchange_gate.py` 是 `/adversarial-review` **走落檔交換時**
 **唯一**會說「這一輪根本沒有交換過」的東西，而且 2026-08-25（`dc3000d`）起
 **PR-1 會呼叫它**（`_exchange_gate_verdict`）⇒ 它壞掉會直接改變 Stop 的判定。
 eval 掃不到它（那一層看的是 skill 的契約，不是工具的行為），所以這支測試是它的網。
