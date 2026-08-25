@@ -39,7 +39,6 @@ py -3 D:\.ai-harness\reviewer\server.py --check
 | `tool` | 執行方式 |
 |---|---|
 | `cursor-cli` | 跑 Cursor 官方 CLI；依下節的隔離與輸出守門 |
-| `cursor` | 人工落檔交換；寫 ask 後停下來等 user，沒回不是「不可用」 |
 | `claude-code` | 派唯讀 Plan 審查者，帶設定的 model／effort；回報同模型族限制 |
 | `codex` | 先看 `--help` 確認本機旗標；不可用時回報，不靜默換人 |
 
@@ -89,16 +88,7 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
 
 抓 exit code 時不要把管線末端工具的狀態當成 CLI 狀態。
 
-## 4. `cursor` 人工交換規則
-
-- ask stamp 完就停下來請 user 貼給 Cursor。
-- `round-N-reply.md` 由 Cursor 回寫；作者不得代筆。
-- reply 必須帶回相同 `ask-sha256=`，並有實質發現區；「沒有發現」也要寫查了什麼。
-- 還沒收到 reply 就等待。只有 user 能決定改用其他審查者。
-
-落檔守門防遺忘，不證明回覆一定由外部審查者產生。
-
-## 5. 驗證回覆
+## 4. 驗證回覆
 
 每輪完成後、蓋 marker 前都跑：
 
@@ -109,7 +99,9 @@ py -3 D:\.ai-harness\tools\adversarial_exchange_gate.py --check <effort 目錄>
 守門會檢查所有輪次的連續性、ask stamp、reply hash 與發現區。保留輸出與原始 exit code；
 非零不得蓋 `ADVERSARIAL_REVIEW_PASSED`。
 
-## 6. 逐項處置
+落檔守門防遺忘，不證明回覆一定由外部審查者產生。
+
+## 5. 逐項處置
 
 每個發現標一種：
 
@@ -128,7 +120,7 @@ py -3 D:\.ai-harness\tools\adversarial_exchange_gate.py --check <effort 目錄>
 
 計畫文件新增可回溯的「意見 → 處置 → 改動檔案」紀錄；map 寫進 IGNORE 區。
 
-## 7. 重跑直到收斂
+## 6. 重跑直到收斂
 
 每輪使用新審查呼叫，顯式帶入上一輪發現、處置與更新後文件，不假設審查者記得。
 
@@ -140,7 +132,7 @@ py -3 D:\.ai-harness\tools\adversarial_exchange_gate.py --check <effort 目錄>
 預設最多 4 輪。到上限仍有新且不重複的發現時，向 user 說明後再決定是否續跑。
 若收斂後又新增程式碼、資料或量測結果，視為新的可查證表面，必須重審。
 
-## 8. 零改動輪與 marker
+## 7. 零改動輪與 marker
 
 `reviewed=` 是派出最後一輪時的審查範圍 hash；`sha256=` 是蓋章時的現況 hash。
 兩者不同代表最後一輪後仍有未審改動。因此，所有需改內容處置完後，必須再跑一輪確認
@@ -158,7 +150,7 @@ marker 放在被審文件檔尾並獨佔一行：
 py -3 D:\.ai-harness\tools\review_inflight.py --clear <計畫檔或 map>
 ```
 
-## 9. 回報
+## 8. 回報
 
 只摘要：
 

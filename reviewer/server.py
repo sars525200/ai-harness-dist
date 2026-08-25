@@ -59,26 +59,6 @@ TOOLS = [
         "supports_model": True,
     },
     {
-        "id": "cursor",
-        "name": "Cursor（落檔交換）",
-        "desc": "另一個 IDE 上的另一個模型——這台機器上唯一真正不共用推理脈絡的審查者。"
-                "程式叫不到它（ListAgents 看不見 Cursor），所以走落檔交換："
-                "skill 寫題目檔、人貼進 Cursor、Cursor 把發現寫回檔、skill 讀回來逐項處置。"
-                "⚠ 它需要人動手貼一次，不是全自動。**它沒有「不可用」這個狀態，只有「還沒回」**"
-                "——還沒回就是等，不是改派別人。",
-        # probe 刻意留 None：cursor 的「可用」**不是**「這台機器裝了沒」。
-        # 2026-08-25 實測 `shutil.which("cursor")` 在 Cursor 自己的 process 有值、
-        # 在 Claude 這側是 None —— 同一個判準對不同的提問者給不同答案，
-        # 拿它當可用性會製造假訊號（一側顯示可用、另一側靜默退回自己審自己）。
-        # ⚠ 不要把這句寫成「可用＝有沒有合格的回覆檔」（2026-08-25 覆核 R2-6／R3-6）：
-        # 那個講法會讓「人還沒貼」被讀成「不可用」，而下面 Codex 的說明正好在教
-        # 「不可用就改用可用的審查者」——兩句合起來是一張換人許可證。
-        # **cursor 永遠算可用；它沒有「不可用」，只有「還沒回」。**
-        # 交換齊不齊全由 `tools/adversarial_exchange_gate.py` 判（PR-1 會呼叫它），不在這裡。
-        "probe": None,
-        "supports_model": False,
-    },
-    {
         "id": "codex",
         "name": "Codex CLI",
         "desc": "外部 CLI，與 Claude 完全不同的模型族。跨模型族的異質性是它唯一的優勢——同族審同族容易共享盲點。",
@@ -140,6 +120,9 @@ CURSOR_CLI_MODELS = [
     {"id": "cursor-grok-4.6-xhigh", "name": "Grok 4.6 Extra High", "family": "xAI",
      "desc": "跨模型族。2026-08-25 首次實跑（SG-084 四輪）：R2／R3／R4 各抓出 5／4／4 個新發現，"
              "且**沒有一輪重炒**——每一輪都打在作者上一輪剛寫下的處置上。"},
+    {"id": "cursor-grok-4.6-high", "name": "Grok 4.6 High", "family": "xAI",
+     "desc": "跨模型族、與 Extra High 同一顆模型，思考強度低一檔。爭點單純或想省成本時選它。"
+             "⚠ `effort` 欄位對 cursor-cli **不生效**——強度只由 slug 尾巴承載（high／xhigh）。"},
     {"id": "gpt-5.3-codex-xhigh", "name": "Codex 5.3 Extra High", "family": "OpenAI",
      "desc": "跨模型族、專攻程式碼。計畫的爭點在「這段程式會不會這樣壞」時選它。"},
     {"id": "gpt-5.6-sol-xhigh", "name": "GPT-5.6 Sol Extra High", "family": "OpenAI",
@@ -432,13 +415,6 @@ def print_state() -> None:
     print(f"  effort：{cfg['effort']}")
     for w in config_load_issues() + config_warnings(cfg):
         print(f"  ✘ {w}")
-    if cfg["tool"] == "cursor":
-        # ⚠ 這段措辭刻意不寫「可用＝有沒有回覆檔」（2026-08-25 覆核 R2-6）：
-        # 那個講法會把「還沒貼」讀成「不可用」，而下一行 Codex 的說明正好在教
-        # 「不可用就改用可用的審查者」。兩句合起來就是一張換人許可證。
-        print("  ℹ Cursor 是**人工通道**，永遠算可用。它沒有「不可用」這個狀態，只有「還沒回」。")
-        print("    skill 會寫題目檔然後**停下來等人貼**。等不到不是換人的理由——換人必須是人下的指令。")
-        print("    ⚠ 不想每輪都動手貼 → 改選 `cursor-cli`（同樣跨模型族，但全自動）。")
     if cfg["tool"] == "cursor-cli":
         _m = next((m for m in CURSOR_CLI_MODELS if m["id"] == cfg["model"]), None)
         _fam = _m["family"] if _m else "未知（不在推薦清單）"

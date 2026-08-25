@@ -82,7 +82,7 @@ def _check_exit(config_content):
     return r.returncode
 
 
-GOOD = json.dumps({"tool": "cursor", "model": "opus", "effort": "high"},
+GOOD = json.dumps({"tool": "claude-code", "model": "opus", "effort": "high"},
                   ensure_ascii=False)
 
 
@@ -134,13 +134,14 @@ def _case_save_reports_reject(fails):
         fails.append("未知值仍應被正規化（不把垃圾寫進檔案）")
 
 
-def _case_save_keeps_cursor(fails):
+def _case_save_keeps_cursor_cli(fails):
     mod, p = _with_config(GOOD)
-    rejected = mod.save_config({"tool": "cursor", "model": "opus", "effort": "high"})
+    rejected = mod.save_config({"tool": "cursor-cli", "model": "cursor-grok-4.6-high",
+                                "effort": "high"})
     if rejected:
-        fails.append("cursor 是合法值，不該被回報成 rejected：%s" % rejected[:1])
-    if json.load(open(p, encoding="utf-8"))["tool"] != "cursor":
-        fails.append("cursor 存不進去 —— 設定頁會把它打回 claude-code")
+        fails.append("cursor-cli 是合法值，不該被回報成 rejected：%s" % rejected[:1])
+    if json.load(open(p, encoding="utf-8"))["tool"] != "cursor-cli":
+        fails.append("cursor-cli 存不進去 —— 設定頁會把它打回 claude-code")
 
 
 # ── R1-3／V1：exit code 才是可檢查的東西 ─────────────────────
@@ -186,17 +187,6 @@ def _case_state_exposes_issues(fails):
     mod2, _ = _with_config(GOOD)
     if mod2.state().get("issues"):
         fails.append("合法設定時 issues 應為空 —— 會亂叫的警告等於沒有警告")
-
-
-def _case_cursor_is_a_tool(fails):
-    mod, _ = _with_config(GOOD)
-    ids = [t["id"] for t in mod.TOOLS]
-    if "cursor" not in ids:
-        fails.append("TOOLS 裡沒有 cursor，實得 %s" % ids)
-    cur = next((t for t in mod.TOOLS if t["id"] == "cursor"), None)
-    if cur and cur["probe"] is not None:
-        fails.append("cursor 的 probe 應為 None —— which cursor 的答案取決於誰在問"
-                     "（Cursor 自己的 process 有值、Claude 這側是 None）")
 
 
 def _case_model_set_per_tool(fails):
@@ -273,11 +263,10 @@ def run():
         ("空字串會出聲（R1-1）", _case_blank_value),
         ("合法設定不亂叫", _case_good_config_silent),
         ("save 回報被正規化的欄位（R1-2）", _case_save_reports_reject),
-        ("cursor 存得進去（R1-2）", _case_save_keeps_cursor),
+        ("cursor-cli 存得進去（R1-2）", _case_save_keeps_cursor_cli),
         ("save 回報沒送來的欄位（R2-4）", _case_save_reports_missing_key),
         ("state() 帶 issues 給設定頁（R2-5）", _case_state_exposes_issues),
         ("exit code 五種情境", _case_exit_codes),
-        ("cursor 在 TOOLS 且 probe 為 None", _case_cursor_is_a_tool),
         ("模型清單依 tool 而定（cursor-cli）", _case_model_set_per_tool),
         ("save 訊息宣稱值 == 磁碟實際值", _case_reject_msg_matches_disk),
     ]

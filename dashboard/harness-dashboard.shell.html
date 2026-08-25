@@ -2448,9 +2448,6 @@
           <label class="rv-opt on"><input type="radio" name="rv-tool" value="claude-code" checked>
             <span><b>Claude Code</b><span class="chip pass">預設</span>
             <i>獨立 subagent，有 Read/Grep/Bash 可查證、沒有 Edit/Write——只能挑錯不能動手</i></span></label>
-          <label class="rv-opt"><input type="radio" name="rv-tool" value="cursor">
-            <span><b>Cursor</b><span class="chip warn">落檔交換·要人貼一次</span>
-            <i>另一個 IDE 上的另一個模型——這台機器上唯一真正跨模型族的審查者。程式叫不到它，所以 skill 寫題目檔、人貼進 Cursor、Cursor 把發現寫回檔。它沒有「不可用」這個狀態，只有「還沒回」</i></span></label>
           <label class="rv-opt"><input type="radio" name="rv-tool" value="codex">
             <span><b>Codex CLI</b><span class="chip block">7/31 實測本機未安裝</span>
             <i>跨模型族的異質性是它唯一的優勢——同族審同族容易共享盲點</i></span></label>
@@ -2477,9 +2474,12 @@
               <span><b>Fable 5</b><span class="chip warn">§7 訂 &lt;5%</span><i>最硬的 audit 才用，燒獨立額度</i></span></label>
           </div>
           <div data-for="cursor-cli" hidden>
-            <label class="rv-opt on"><input type="radio" name="rv-model" value="cursor-grok-4.6-xhigh">
+            <label class="rv-opt"><input type="radio" name="rv-model" value="cursor-grok-4.6-xhigh">
               <span><b>Grok 4.6 Extra High</b><span class="chip pass">xAI·跨族</span>
               <i>2026-08-25 首次實跑（SG-084 四輪）：R2／R3／R4 各抓出 5／4／4 個新發現，且沒有一輪重炒</i></span></label>
+            <label class="rv-opt on"><input type="radio" name="rv-model" value="cursor-grok-4.6-high" checked>
+              <span><b>Grok 4.6 High</b><span class="chip pass">xAI·跨族</span>
+              <i>與 Extra High 同一顆模型、強度低一檔。爭點單純或想省成本時選它（<code>effort</code> 欄位對 cursor-cli 不生效，強度只由 slug 承載）</i></span></label>
             <label class="rv-opt"><input type="radio" name="rv-model" value="gpt-5.3-codex-xhigh">
               <span><b>Codex 5.3 Extra High</b><span class="chip pass">OpenAI·跨族</span>
               <i>專攻程式碼。爭點在「這段程式會不會這樣壞」時選它</i></span></label>
@@ -4837,7 +4837,7 @@
     }
 
     function render(flash) {
-      // `cursor`／`codex` 的模型與強度由它們自己決定 —— 把那兩組淡掉並停用，
+      // `codex` 的模型與強度由它自己決定 —— 把那組淡掉並停用，
       // 免得選了一個不會生效的值還以為設定好了。
       // ⚠ 判準不能是「是不是 claude-code」（2026-08-25 加 cursor-cli 時改）：
       // cursor-cli **也吃 --model**，只是吃的是 Cursor 的 slug 不是抽象檔位。
