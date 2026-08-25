@@ -706,7 +706,8 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 隊列的歷史 before anchor＝`044e7ca9774b0f51c7920d728b3e094f8dee886b`。第 0 列 candidate
 已在 `f2d9a5fcf2e1fac59a2968677a5edebe54266783`。第 1 列 content＋目標 key 在
 `930da0031ed2e9ef1096bb2997bb56987f47cff5`，第 2 列在
-`4ff488913fa8e16c0b97ca330c592f8adca08441`。`pending`＝尚未量，**不是通過**。
+`4ff488913fa8e16c0b97ca330c592f8adca08441`，第 3 列在
+`1dd7df85b1d0f63ac28e3846d9f4c21d1fd08192`。`pending`＝尚未量，**不是通過**。
 
 ⚠ **這個 repo 有別的 session 在動**：第 2 列施作途中 HEAD 被推進五個 commit
 （`930da00`→`7ae0742`）且 index 被清空。逐列的 parent SHA 只代表「該列動工當下的 HEAD」，
@@ -718,7 +719,7 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 | 0 | 校準樣本 | `adversarial-review` | 本地 | 流程 | 171 | before `044e7ca…`：subtree `49a0c8dd35db63d1349bbff51be6e4dd32ae2caa`、blob `550b232a91751588684b8b6558f0ab7a6430a0ce`；candidate `f2d9a5f…`：subtree `4b54d53789255a2b1e7f2d8ee94c975d5582d03e`、blob／WT `81318063e28aa2e0d3a6b34e1acc4e8b06a600ab`、164 行 | `skipped:user` | user 指示終止覆核並開工；不把未跑七格改寫成 verified | frozen candidate 正式七格、trigger、live、rollback 與 manifest reconciliation 均未做 | 無；保留既成內容，不再覆核 |
 | 1 | 校準短型 | `chat-handoff` | 本地 | 流程 | 40 | before `258dc1c…`：subtree `faf94a044aaf74833e7e307d2cf4f97ce3490094`、blob `a2f3dd77862b8151cc9ab0b33ad443accc2e9568`、40 行／977 字；candidate `930da00…`：subtree `00ed779c74fd52e067a00bf30b099bc5fbb40eeb`、blob `71d06f257ce0080d9d7cbec8d7ddb8d45711dfa2`、40 行／901 字 | `verified` | 見下方七格；commit locator `930da00`／subject「精簡 chat-handoff 交接契約」 | 無 L3 題庫（description 未改）；manifest 其餘缺 key 不在本列 | 無；下一支是 `visual-check` |
 | 2 | 校準中型 | `visual-check` | 本地 | 流程 | 87 | before `930da00…`（動工時 HEAD，內容錨仍成立）：subtree `10df2c25070294963bca71ed0070a00dcd988202`、blob `c2b00f57646bc9b1b11f9cb4314cb2066ff3bd63`、87 行／2250 字／L1 1140 tok；candidate `4ff4889…`：subtree `c6d688da7a9cf5201c93071f5dce8ee20ddf30f2`、blob `e0c113ffe0f2e211e8521bd5d7bee455fa721611`、97 行／2629 字／L1 1434 tok（**淨增 +10 行／+294 tok，不是縮減**） | `verified` | 見下方七格；commit locator `4ff488913fa8e16c0b97ca330c592f8adca08441`（parent `7ae0742ad7de98ed2495c2bef890fc51ac470e11`）／subject「補 visual-check 邊界節與深色假通過守門」；manifest `visual-check.tree` old `390adde0acc6c96b8ab3486f4a1fcb928af653bf`（**連 before subtree 都對不上的既有漂移**）→ new `c6d688da…` | ①硬規則 2 第三個出口「查證過這一塊沒有深色規則」**沒定義「怎麼算查證過」**（審查者判部分處置；要定方法得先有 live 證據，硬寫等於用推論補一條要求別人不要用推論的規則）②`cursor-agents\visual-designer.md` 那份宣稱照抄的副本沒跟上：新增的 hash 分流與步驟 3 機制分支它完全沒有、第 5 條仍漏「probe 檔」、L33 指錯節位——**該檔不在本列允許 path，只列不改** ③SKILL.md 仍無任何 Cursor 平台分支（before 就如此，§9.6a 處置優先序第 2 條的既有缺口）④`eval\baseline.json` 記 2401 是舊 `full_text` 口徑，與 1140／1434 都對不上，不可當趨勢證據 ⑤`dashboard\sources_state.json:441` 的 sha 快照會過期，由產生器自己重寫，不在允許 path ⑥無 `eval\triggers\visual-check.jsonl`（L3 缺樣本，屬案 A 範圍外清單） | 無；下一支是 `skill-watch`（第 3 列），**未經 user 指示不自行開列** |
-| 3 | 校準長型 | `skill-watch` | 本地 | 流程 | 173 | `pending` | `queued` | `pending` | `pending` | 先解正文與 `test_skill_watch_run.py` 耦合 |
+| 3 | 校準長型 | `skill-watch` | 本地 | 流程 | 173 | before `b60acd34…`：subtree `dc6b3efa45e6464950be5e8ab88e1d4d1a162c5e`、`SKILL.md` blob `324ebf0bdbd7252fd7120b9a89f9a8aa3aa806e7` 173 行／L1 2526 tok；同 bundle 的 `platforms.json`（`3a74eeaf67d340eb669655c954576aee0aac0678`·21 行）與 `run.py`（`c1e9be79c5ff42d51fe4aabbdc7bc90c0cd961aa`·42 行）**本輪未改**，`__pycache__/` 由 `.gitignore:20` 涵蓋不算 bundle；candidate `1dd7df8…`：subtree `0463c040e96a0e835d1136a61a60ccdaed2c7249`、blob `d4de62639a37c31a20f38ac4b9c695d2da8240b7`、169 行／L1 2477 tok | `verified` | 見下方七格；commit locator `1dd7df85b1d0f63ac28e3846d9f4c21d1fd08192`（parent `b60acd344236e08020f894fe59fbc4c790a6381b`）／subject「skill-watch 的「這支不做什麼」正名為邊界節，並拆掉一張解釋表的表」；manifest `skill-watch.tree` old `35357231e0c791e02073fb9af1a2aabf4034a233`（**連 before subtree 都對不上的既有漂移**）→ new `0463c040…`，`skill_manifest.py` 不符名單因此由 3 支降為 2 支 | ①**−49 tok 不得報成優化成果**：主要來自表格骨架折疊＋刪一個行號＋刪一個歷史分母，§9.6a 明文「不得把拆行、改表格當成果」⇒ 本列如實記為**實質零縮減** ②before 的 2526 tok **審查者無法獨立復算**（唯讀閘門同時擋掉 `\|` 管線與 `hash-object`，blob 落不了地），只有改寫者單方數字；after 2477 已由審查者實跑確認 ③`## 換一個部門要改什麼` 未外移——審查者指出比「動兩支測試」更強的理由：那一節裝的是三條拒跑條件＋一條假綠防線，屬 `KEEP_SAFETY`，處置優先序第 1 條高於任何外移，**就算測試不存在也不准搬** ④L66-67 兩個相似度實測值（0.706／0.700）依分類屬 `MOVE_PLAN`、可再省 25–30 tok，但那是讓人相信「0.7 也可能完全不相干」的唯一校準，採納審查者建議不動 ⑤無 `eval\baseline.json` 條目、無 `eval\triggers\skill-watch.jsonl`（皆屬案 A 範圍外清單） ⑥三支字面耦合測試**測不到**的改動範圍：標題層、折疊掉的三列語意、行號與歷史分母移除、步驟 0 指路句——**全綠不等於沒破**，本輪靠逐列人工比對確認 | 無；下一支是 `context-health`（第 4 列），**未經 user 指示不自行開列** |
 | 4 | 本地流程 | `context-health` | 本地 | 流程 | 110 | `pending` | `queued` | `pending` | `pending` | 外移沿革，保留五條硬規則與驗證表 |
 | 5 | 本地流程 | `escalate` | 本地 | 流程 | 84 | `pending` | `queued` | `pending` | `pending` | 盤輸出契約與升級邊界 |
 | 6 | 本地流程 | `design-spec` | 本地 | 流程 | 103 | `pending` | `queued` | `pending` | `pending` | 與 §3／PR-1 去重 |
@@ -766,10 +767,23 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 | live | `pass:manual` | 真跑 `probe.py`（切 `harness-dashboard.html` 的 `<style>`＋`SKILL_ROSTER` 區塊）→ `shot.py` 淺深各一張 → **兩張都用 `Read` 打開看過**，四個指令 exit 全 0。**當場抓到本 skill 自己的假通過**：`bodyClass: "dark"` 對 `:root[data-theme]` 型頁面無作用，兩張 PNG sha256 皆 `fdc8d957…`；改用 `script` 注入 `data-theme` 後才分歧（`6340559…`）。此發現已寫回 SKILL.md。產物已清 |
 | commit-rollback | `pass:mechanical` | `4ff48891` 只含兩 path（`git show --stat` 逐檔對過）；staged blob＝被審 candidate `e0c113ff…`；manifest 目標 key＝commit 後 subtree `c6d688da…`（`skill_manifest.py` 的不符名單因此由 4 支降為 3 支，其餘為他列債）；`git apply --reverse --check` 正反向皆通過。⚠ **本列途中另一個 session 推進 HEAD 五個 commit（`930da00`→`7ae0742`）並清掉我的 index**，重新 stage 前逐項確認其 commit 未碰 `skills/`、我的 WT 未回捲其 `TODOS.md` 改動（該行是 context 行） |
 
+**`skill-watch` 七格**
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pass:mechanical+manual` | bundle 三檔（`SKILL.md`／`platforms.json`／`run.py`），兩端 `git ls-tree` 一致，`__pycache__/` 由 `.gitignore:20` 排除。專用測試 2 支、L3 無樣本。引用者：`dashboard\capability_checks.py:387`（`_p_skill_watch_alive` 讀 `state\skill_watch_heartbeat.json`）、`dashboard\sources_state.json:439`、`skills\_meta\PROVENANCE.md:30`（本地表）、`manifest.json:50`、`HARNESS_PROGRESS.md:32`、`SKILL_WATCH_PLAN.md`（母計畫書）、`SkillViewer\platform_skills.json`。staged path 恰兩個 |
+| contract | `pass:manual` | 獨立審查者（新開、不共用改寫脈絡）逐段對帳，流程型七項齊全，**遺失 0／變義 0**。唯一實質改動是四欄規格表折成散文，四列語意逐列核過（含最易在折疊中掉的「不要 WebFetch 重寫」）。**`## 邊界` 是把既有 `## 這支不做什麼` 正名**，內容三條逐位元未動；審查者獨立判定為「補完不是糊弄」，並 grep 確認全 repo 無人把舊標題當字面依賴 |
+| safety-provenance | `pass:manual` | 三處拒跑條件（零平台／缺 `harness.config.json`／缺基準）、四條假綠防線、symlink 跨平台陷阱字面全未動；審查者另實跑 `run.py:24-29`、`config.py:54`、`tools\skill_watch_run.py:59` 確認這些拒跑宣稱**現在仍為真**、不是過期文案。本地自建、**無 upstream、無 `LOCAL EDIT`**，明寫「無」 |
+| references | `na:沒有且未新增` | 兩端皆無 `references/`；`## 換一個部門要改什麼` 經評估**不外移**（理由見隊列表沒做的③） |
+| metadata-trigger | `na:description 未改` | frontmatter 整塊逐位元未動（diff 首個 hunk 起於 `@@ -9,7 +9,7 @@`） |
+| live | `pass:manual` | 真跑 `py -3 skills\skill-watch\run.py --dry-run`，exit 0，實際輸出：抓到 28 支→濾掉自建 12→平台內建 16；官方標記 Skill 13 支＋Workflow 1 支；官方文件有、不在注入清單 6 支（batch／debug／design-sync／doctor／run-skill-generator／verify）；與 headless 基準比對**無變動**、未寫 `TODOS.md`。跑前跑後 `git status --porcelain` 逐字相同 ⇒ `--dry-run` 確實沒寫任何進版控的檔。另跑 `--platforms` 確認開關現況。⚠ 測試裡的 `[1/6]…[6/6]` 是注入替身、**不算 live** |
+| commit-rollback | `pass:mechanical` | `1dd7df85` 只含兩 path（`git show --stat` 逐檔對過）；staged blob＝被審 candidate `d4de6263…`（審查者要求主 session 代驗，已核）；manifest 目標 key＝commit 後 subtree `0463c040…`；`git diff --cached --check` 乾淨、`git apply --reverse --check` 正反向皆通過。專用測試 42/0 與 34/0 皆與基準相同 |
+
 **批次停止線**
 
-1. **`chat-handoff` 與 `visual-check` 皆 `verified`；目前沒有 active 列。第 0 列維持 `skipped:user`。**
-   下一支是 `skill-watch`（第 3 列，長型校準）——**要不要開由 user 說**，不自行接續。
+1. **短／中／長三種校準樣本（`chat-handoff`／`visual-check`／`skill-watch`）全部 `verified`；
+   目前沒有 active 列。第 0 列維持 `skipped:user`。** 停止線第 3 條（三種校準未齊不開本地流程批）
+   已解除，下一支是 `context-health`（第 4 列）——**要不要開由 user 說**，不自行接續。
 2. 第 0 列保留 frozen bundle 與 pending 七格，不補假證據、不補 manifest key。
 3. 短／中／長校準任一未 `verified`，不開本地流程批。
 4. 任何時候只准一列 active；前一支未 `verified`／`rolled-back`／經 user `skipped`，不開下一支。
