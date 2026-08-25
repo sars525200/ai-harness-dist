@@ -151,11 +151,17 @@ def main():
     proj = args.project or project_dir_from_cwd()
     path = os.path.join(ROOT, proj)
     if not os.path.isdir(path):
-        print("找不到專案目錄：%s" % path)
+        # ⚠ **這條路徑也要印工作區訊號**（2026-08-26 實測抓到）：原本這裡直接 `return 2`，
+        #   於是「Claude Code 沒開過的 repo」完全走不到 workspace_signal ——
+        #   而那正是平台無關訊號**最該在場**的情境（只有 Cursor 碰過的工作區）。
+        #   早退把唯一看得到對方的那段跳過了，症狀跟這支原本的病一模一樣。
+        print("Claude Code 沒有這個工作區的 transcript：%s" % path)
+        print("（＝這個資料夾沒被 Claude Code 開過，**不代表沒有人在動它**）")
         cands = sorted(glob.glob(os.path.join(ROOT, "*")), key=os.path.getmtime, reverse=True)[:10]
         print("\n最近活動過的專案目錄（用 --project 指定）：")
         for c in cands:
             print("  %s" % os.path.basename(c))
+        workspace_signal()
         return 2
 
     files = sorted(glob.glob(os.path.join(path, "*.jsonl")), key=os.path.getmtime, reverse=True)
