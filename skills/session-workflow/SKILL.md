@@ -6,7 +6,9 @@ description: 把一則任務從開場走到交付。當 user 下新任務、說�
 
 # 任務工作流（/session-workflow）
 
-> 規則本體在全域 `CLAUDE.md` §3 與 `WORKFLOW_5STAGE_PLAN.md`。不一致時以那兩處為準。
+> **兩層分工（2026-08-25 §15 定案）**：判準與硬規則（規模分級／交付物格式／交接契約）
+> 本體在全域 `CLAUDE.md` §3，本支不重寫；**步驟操作與平台對照**（走哪一步、派誰、
+> 哪個工具名）本體在**本支**，§3 只留指標句。沿革與踩雷 → `WORKFLOW_5STAGE_PLAN.md` §14·§15。
 > 本支只回答：**這一則現在該走哪一步、派誰、何時停下來等人**。
 
 ## 步驟
@@ -55,7 +57,12 @@ Review 清單每條 fixed 或 skipped（附理由）。人明確說才能推正�
 
 ## 邊界
 
-- **不重寫**規模判準、交付物格式、派工授權——那些在 `CLAUDE.md`。
+- **不重寫**規模判準、交付物格式、派工授權——那些在 `CLAUDE.md` §3。
+- **禁加 `disable-model-invocation`**：Cursor 是靠自動清單發現本支的
+  （`~\.claude\skills` 是它的相容掃描路徑，2026-08-25 Cursor 端實測確認）。
+  加了那個旗標本支會從模型清單消失，Cursor 就只剩 `cursor-adapter.mdc` 一句文字路由。
+- **全域 `CLAUDE.md` 對 Cursor 不是 always-loaded**（同日實測）。所以要 Cursor 也常駐的東西
+  放專案 `CLAUDE.md` 或 adapter，別只留在全域那份。
 - **不建階段順序 hook**（2026-08-25 W-9：先量測）。
 - **不**把 `/wayfinder`、`/to-tickets` 改成自動叫。
 - 參考型 skill（`/ui-rules`／`/verify-rules` 等）需要時 Read，不是本支的步驟。
