@@ -91,7 +91,7 @@ Phase 3 的立論是「有一批寫入者不經過 tool-call，閘門看不到�
    `dispatch.py` 的 precheck（每次 Bash/PowerShell 呼叫都跑），會給三條規則同時加上
    subprocess 成本。
 2. ~~`D:\.ai-harness` **無 remote**~~ —— ✅ **已解決 2026-07-30**。
-   鏡像位置 `C:\Users\<USER>\git-mirrors\ai-harness.git`（remote 名 `backup`）。
+   鏡像位置 `C:\Users\<USER>\git-mirrors\JEFF-Harness.git`（remote 名 `backup`）。
    **刻意跨實體磁碟**：來源在 Disk 0（ST1000DM010 SATA HDD），鏡像在 Disk 1
    （KINGSTON SNV2S500G NVMe）—— 同一顆磁碟上放兩份不算備份。
    本機無 NAS、無網路磁碟機對應，故未選網路位置。

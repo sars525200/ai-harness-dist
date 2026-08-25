@@ -1,6 +1,6 @@
 # 交接：給 Cursor 做專屬資料夾（IT + harness）
 
-> **下一則對話請開在 `D:\.ai-harness`（Agents 視窗那列 `git-mirrors/ai-harn…`）。**
+> **下一則對話請開在 `D:\.ai-harness`（Agents 視窗那列 `git-mirrors/JEFF-Harness`）。**
 > 不要用 `move_agent_to_root` 從 IT 專案把舊對話搬過來。
 > 開工先 Read 本檔＋`DASHBOARD_HTML_GIT_PLAN.md`（若要接看板產物／git 那條）＋`.cursor/README.md`＋`UNIVERSAL_HARNESS_PLAN.md` §0／§2。
 
@@ -65,7 +65,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 它把目標當成**同一個 repo 的 worktree**，沿用 IT 的分支名 `master`。Harness 實際是：
 
 - 工作樹 `D:\.ai-harness`，分支 **`main`**
-- 遠端叫 **`backup`** → `C:\Users\<USER>\git-mirrors\ai-harness.git`
+- 遠端叫 **`backup`** → `C:\Users\<USER>\git-mirrors\JEFF-Harness.git`
 - **沒有 `origin`**
 
 錯誤：`fatal: 'origin' does not appear to be a git repository`。
