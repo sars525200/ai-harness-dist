@@ -435,10 +435,15 @@ def _exchange_gate_verdict(map_path: str):
     2026-08-25 對抗式覆核 R1-3：`/adversarial-review` 用 `tool: cursor` 時走落檔交換
     （skill 寫題目檔、人貼進 Cursor、Cursor 寫回發現）。那條路徑上的每一步都能被跳過
     而不出聲——不貼給任何人、reply 空白、reply 是上一輪的複製。
-    `tools/adversarial_exchange_gate.py` 會判這些，但**沒有任何東西強制它被跑**：
-    skill 正文寫的「非零就不准蓋章」是散文，而 PR-1 只驗 marker 的 hash。
-    結果是「寫了 ask、自己蓋章」照樣 ALLOW —— 這支 hook 的檔頭註解自己說過，
-    它存在的目的就是把「有沒有被獨立審查者看過」從模型的自由裁量變成結構性無法跳過。
+    `tools/adversarial_exchange_gate.py` 會判這些，但在這個函式存在之前
+    **沒有任何東西強制它被跑**：skill 正文寫的「非零就不准蓋章」是散文，
+    而 PR-1 只驗 marker 的 hash ⇒「寫了 ask、自己蓋章」照樣 ALLOW。
+    **這個函式就是那條強制**——它把「有沒有被獨立審查者看過」從模型的自由裁量
+    變回結構性無法跳過，也就是這支 hook 檔頭寫的存在目的。
+
+    （原本這段用現在式寫「沒有任何東西強制它被跑」，讀起來像在描述現況；
+    2026-08-25 Round 4 覆核指出「容易讀岔」——它判定不構成靜默失效所以沒列成發現，
+    但那與 R3-5「註解說 PR-1 看不見這支守門」是同一類，一併改掉。）
 
     **開火條件刻意收得很窄**：目錄裡要有 `round-N-ask.md` 才檢查。
     沒有 ask 檔＝這輪不是落檔交換（`claude-code` 分支、或還沒派出）⇒ 行為與改之前

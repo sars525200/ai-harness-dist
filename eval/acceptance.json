@@ -1,4 +1,10 @@
 {
+  "adversarial-review": {
+    "file_mtime": 1787632970.6720803,
+    "note": "四輪真實落檔交換（審查者=Cursor/Grok 4.6 High）：--stamp-ask 凍結→人貼→reply 寫回→--check 由 exit 2 轉 0，四輪皆走完。Round1 抓 13 條、Round2 抓 9 條含兩個存活變異、Round3 抓 6 條、Round4 零發現收斂。證據 .scratch/cursor-gate-selftest/round-{1..4}-{ask,reply}.md",
+    "result": "pass",
+    "verified_at": "2026-08-25T14:18:26"
+  },
   "design-spec": {
     "file_mtime": 1786082482.685371,
     "note": "2026-08-22 M 級任務實跑（角色受阻升級協定）：步驟1判M→步驟2定落點HARNESS_ROLE_ARCH_PLAN.md §9（疊代不新建）→步驟3分岔E-1~E-6逐項AskUserQuestion→步驟4驗證表12項含變異紅燈條件→步驟5標待審核。步驟3的『討論中長出來的新分岔要補進表裡』實際觸發兩次：E-5/E-6（shadow與門檻數字），以及E-7（發現SubagentStop送不到訊息，補PostToolUse:Agent掛點）——靜態檢查照不到這條紀律，這輪證明它有效。",
