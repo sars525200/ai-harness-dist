@@ -162,11 +162,6 @@
       "D:\\.ai-harness"
     ]
   },
-  "statusLine": {
-    "type": "command",
-    "command": "npx ccusage@latest statusline --visual-burn-rate emoji-text",
-    "refreshInterval": 10
-  },
   "effortLevel": "xhigh",
   "theme": "dark",
   "switchModelsOnFlag": true,
@@ -182,6 +177,28 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_archive.py\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
+          }
+        ]
+      }
     ]
-  }
+  },
+  "cleanupPeriodDays": 180
 }
