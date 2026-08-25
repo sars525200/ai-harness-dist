@@ -168,7 +168,20 @@
     "refreshInterval": 10
   },
   "effortLevel": "xhigh",
+  "theme": "dark",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
+          }
+        ]
+      }
+    ]
+  }
 }
