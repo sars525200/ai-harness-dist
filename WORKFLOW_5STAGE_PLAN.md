@@ -1,8 +1,9 @@
-# 五階段工作流計畫書（大綱）
+# 五階段工作流計畫書
 
 > 2026-08-05 立案。user 提出以**交付物**為核心的五階段工作流：
 > `Research → Design & Spec → Execute → Review → Fix & Deploy`，標題是**「關鍵在交接」**。
-> **本檔只做大綱**，四個維度（工具／規範／技能／人員）的逐項套用另開輪次，未討論前不動工。
+> W-1～W-6 已於 2026-08-06 定案並落地（§6／§11）。2026-08-25 對齊「全平台同一條」見 **§14**。
+> 檔頭舊句「只做大綱、未討論前不動工」已作廢，勿再當現況。
 
 ---
 
@@ -614,3 +615,71 @@ user 定案：**只擋「缺修改檔案欄」，WARN 級不擋動作**。理由
 
 與本檔的關係：五階段沒有變，變的是 **Design 階段的載體** ——
 規模待定或判不出來的仍走 `/design-spec`（安全預設），L／S 不變。
+
+---
+
+## §14 全平台同一條工作流（2026-08-25）
+
+> 狀態：執行中（疊代本檔，不另開計畫書）。舊檔不回頭標「待審核」（design-spec 步驟 5）。
+> 稽核：[harness-auditor](30e7b06a-093c-40cb-a512-b00a8ce5a6fa)／[project-auditor](c1d67962-532d-461d-8fed-4595b364eb70)／[explore](98b9d91e-c85e-4474-8ea7-5dfe740c5689)。
+
+### 14.1 現況（2026-08-25 探測）
+
+使用者要的流程＝評估派工（自動查詢＋規劃）→ 寫作法確認 → 施作 → 檢查評估到完成 → 交付；作法錯回第二步。
+
+| 層 | 已有 | 缺口 |
+|---|---|---|
+| 全域 `CLAUDE.md` §3 | 五階段＋規模＋交付物＋查詢員前置＋同意才執行 | 無「開場必派規劃」；無「作法錯回 Design」 |
+| 技能 | `/design-spec` 只在 IT-department；`/wayfinder` slash-only | 無階段編排執行器；Cursor 自動清單看不到 design-spec（專案層才有） |
+| 角色 | 六支有「輸出」空缺欄 | Cursor Task 沒有 `locator`／`Plan` 型別 |
+| hook | DECL-1 缺修改檔案欄 WARN 已 enforce（18 次） | **沒有**「沒 Research 就 Execute」閘門（本輪維持不建） |
+| 量測 | 遵循度 244/577（42%）；Design 宣告 9%；Execute 前無 Research 4 條 | 只量不擋（本輪維持） |
+| 專案 `CLAUDE.md` §2 | 轉述全域 | 仍寫「三階段」；查詢員誤指 `/verify-rules` |
+| 計畫書本檔 | §6／§11 已完成 ①–⑤、DECL-1 | 檔頭／§3 仍寫大綱、Design 0 支（過期） |
+
+### 14.2 目標
+
+換專案、換 Claude／Cursor，**開場都走同一條**：評估 → 自動查詢規劃 → 寫作法等人點頭 → 施作 → 檢查（錯回寫作法、沒好回施作）→ 交付。規則一份在全域 §3；步驟在 `/session-workflow`；規格在全域 `/design-spec`。
+
+### 14.3 分岔定案（2026-08-25 AskQuestion）
+
+| # | 分岔 | 決定 |
+|---|---|---|
+| **W-7** | 編排器 | ✅ **新建薄 skill `/session-workflow`**（組合既有零件，不重寫規則） |
+| **W-8** | Cursor 強制力 | ✅ **全域常駐＋adapter 最短路由**；wayfinder／to-tickets 維持 slash-only |
+| **W-9** | 階段順序閘門 | ✅ **這次不做**（先量測；Design 宣告 9%，現在擋誤擋大） |
+| **W-10** | `/design-spec` 位置 | ✅ **搬進 `D:\.ai-harness\skills`**，專案層刪副本（兩份會漂） |
+
+### 14.4 做法（一次補齊清單）
+
+1. 全域 `CLAUDE.md` §3 各加一句（≤120 字）：開場必派查詢＋規劃；Review 作法錯回 Design、沒好回 Execute。
+2. 新建 `skills/session-workflow/SKILL.md`（**不要** `disable-model-invocation`）。Claude 派 `locator`＋`Plan`；Cursor 派 `explore`／主則規劃（Task 沒有 locator／Plan 型別——寫進 skill，不准假裝有）。
+3. 移動 `/design-spec`：harness 為真相；選擇題寫「Claude＝`AskUserQuestion`／Cursor＝`AskQuestion`」。
+4. 專案 `CLAUDE.md` §2：三階段→五階段指標；查詢員不再指向 verify-rules；路由補 `/session-workflow`。
+5. `cursor-adapter.mdc` 加一條工作流路由（不拷 skill）。
+6. `skills/_meta/PROVENANCE.md` 本地表加兩列。DECL-1／階段順序閘門本輪不動。
+
+### 14.5 驗證（怎麼證明會紅）
+
+| 驗什麼 | 怎麼驗 | 會紅的條件 |
+|---|---|---|
+| provenance | `py -3 D:\.ai-harness\dashboard\capability_checks.py` 含 `_p_skill_provenance` | 新 skill 目錄沒進 PROVENANCE 表 |
+| eval 結構 | `py -3 D:\.ai-harness\eval\run_all.py` | 新 skill 缺 frontmatter／完成判準；design-spec 雙份撞名 |
+| 專案不再有副本 | `Test-Path D:\IT-department\.claude\skills\design-spec` | 仍存在＝兩份會漂 |
+| 常駐句子 | grep 全域 §3「開場必派」「回 Design」 | 零命中＝沒寫進去 |
+| adapter | grep `session-workflow` in `.cursor/rules/cursor-adapter.mdc` | 零命中＝Cursor 仍無路由 |
+| 不誤做閘門 | grep hooks/rules 無新 RULE_ID 擋階段順序 | 多出來＝違反 W-9 |
+| wayfinder 仍 slash-only | `wayfinder/SKILL.md` 仍有 `disable-model-invocation: true` | 被拿掉＝違反 W-8 |
+
+**兩支自己寫的實作互相比對不算獨立驗證。** 遵循度百分比本輪不當完成判準（分母每則對話都在長）。
+
+### 14.6 刻意不做
+
+- 「沒 Research 就 Execute」WARN／BLOCK（W-9）。
+- 拿掉 wayfinder／to-tickets 的 `disable-model-invocation`（W-8）。
+- `.cursor/skills/` 複本。
+- 把本檔整份標「待審核」（舊計畫不回頭補標）。
+
+### 14.7 狀態
+
+2026-08-25 **已落地**（W-7～W-10）。驗證：`eval/run_all.py` L1–L4 PASS（0 FAIL）；`_p_skill_provenance`＝`14 支全有來歷登記：外部 6／自建 8`；專案 `.claude/skills/design-spec` 已刪；`wayfinder` 仍 `disable-model-invocation: true`。L4 實跑與 Cursor 自動清單見 IT-department `PENDING_VERIFY.md` 8/25 兩列。

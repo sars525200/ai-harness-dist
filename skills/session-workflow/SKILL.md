@@ -1,0 +1,65 @@
+---
+name: session-workflow
+display_name: 任務工作流
+description: 把一則任務從開場走到交付。當 user 下新任務、說開工、要改東西、要修 bug、要寫計畫、或你正要自我宣告時使用。它只編排既有零件（查詢、規格、施作、檢查），不另立一套規則。
+---
+
+# 任務工作流（/session-workflow）
+
+> 規則本體在全域 `CLAUDE.md` §3 與 `WORKFLOW_5STAGE_PLAN.md`。不一致時以那兩處為準。
+> 本支只回答：**這一則現在該走哪一步、派誰、何時停下來等人**。
+
+## 步驟
+
+### 1. 評估＋自動派查詢規劃
+
+自我宣告（模式／任務／分類／階段／規模／修改檔案）。然後**立刻派**，不必問：
+
+| 平台 | 查現況 | 規劃 |
+|---|---|---|
+| Claude Code | `subagent_type: locator` | `Plan` |
+| Cursor | `Task` → `explore`（沒有 locator 型別） | 主則自己做；架構再派 `generalPurpose`。**不要假裝有 Plan 子代理** |
+
+L 級：查詢壓成一次 grep，規劃可省。S／M：查詢資料包三欄要有（命中／已排除／**沒找到的**）。
+
+**完成判準**：宣告已寫出；S／M 已派出查詢（或寫出「L 級、一次 grep」）；沒找到的欄非空或明寫「無」。
+
+### 2. 寫作法，等人點頭才准改檔
+
+- 規模待定或 M 但還沒 map → 走 `/design-spec`（L 可省 Design）。
+- 明確 M → **提醒人打** `/wayfinder`（模型叫不動；禁止自己發明第二套 map 格式）。
+- 分岔用選擇題：Claude ＝ `AskUserQuestion`；Cursor ＝ `AskQuestion`。掃不到工具不准改寫成聊天列選項。
+- **沒點頭＝還在這一步。** 禁止邊做邊問。
+
+**完成判準**：L 已聲明省 Design；其餘每個分岔都有人的決定，且驗證方式已寫出「會紅的條件」。
+
+### 3. 施作（照規格，不擴大）
+
+畫面 → `visual-designer`（Cursor／Claude 都有）。規格已鎖定只差改檔 → `executor`。前端雙目錄另派 `sync-checker`。主則只留判斷。
+
+**完成判準**：規格每一項都有對應改動或「沒做＋理由」。
+
+### 4. 檢查；錯了回步驟 2，沒好回步驟 3
+
+- **作法錯**（規格本身不對）→ 回步驟 2 改作法、再等人點頭。禁止把它當 Fix 硬改。
+- **還沒做完**（規格對、成品沒過）→ 回步驟 3。
+- 兩條都過才進步驟 5。高風險問要不要 `/adversarial-review`。稽核派 `harness-auditor`／`project-auditor`。難 bug `/diagnose-bug`。
+
+**完成判準**：逐項判定有證據；回退時宣告已改回 Design 或 Execute。
+
+### 5. 交付
+
+Review 清單每條 fixed 或 skipped（附理由）。人明確說才能推正式（`/deploy-prod`）。收工才 `/shougong`。
+
+**完成判準**：沒有未標的發現；部署若發生則有 served 版本實測，否則寫進 `PENDING_VERIFY.md`。
+
+## 邊界
+
+- **不重寫**規模判準、交付物格式、派工授權——那些在 `CLAUDE.md`。
+- **不建階段順序 hook**（2026-08-25 W-9：先量測）。
+- **不**把 `/wayfinder`、`/to-tickets` 改成自動叫。
+- 參考型 skill（`/ui-rules`／`/verify-rules` 等）需要時 Read，不是本支的步驟。
+
+## 交出什麼
+
+當下階段的交付物（研究資料包／工作規格／改動對照／判定＋證據／修復對照），欄位齊全到下一棒不必回頭問。

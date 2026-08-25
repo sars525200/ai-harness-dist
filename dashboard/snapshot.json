@@ -33,7 +33,7 @@
     "DB-1": 55,
     "ENC-1": 64,
     "AWC-1": 79,
-    "PR-1": 21,
+    "PR-1": 22,
     "DISP-1": 26,
     "DECL-1": 18,
     "BUDGET-1": 3,
@@ -44,6 +44,6 @@
     "R1": 0,
     "R3": 0
   },
-  "skill_count": 29,
+  "skill_count": 30,
   "tool_raw_count": 85
 }
