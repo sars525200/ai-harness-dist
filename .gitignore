@@ -2,6 +2,11 @@
 # （含其他 session 的內容，絕不進版控）
 state/
 
+# 「正在改什麼」宣告檔（Claude ↔ Cursor 協作通道）。同 state/ 的理由：
+# 它是**這一刻誰在碰哪些檔**的執行期狀態，跨機器、跨時間都沒有意義，
+# 而且兩邊會同時寫 —— 進版控就變成新的同檔污染源，正好是它要防的那件事。
+COLLAB_NOW.md
+
 # 換則交接等 session 暫存（skills/chat-handoff 寫 .scratch/handoff/，不進版控）
 .scratch/
 
