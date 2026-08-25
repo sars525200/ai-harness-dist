@@ -14,7 +14,7 @@ alwaysApply: true
 - **本平台知識**在 `.cursor/PROJECT_CONTEXT.md`（產生器不掃）。Claude 側契約是根目錄 `CLAUDE.md`，不要互拷。
 - **看板規範**在 `.cursor/rules/dashboard-generators.mdc`。glob 不把本文注入模型（2026-08-24）；改看板用 `@dashboard-generators` 或手動 Read。改這份本文還要同步 IT 專案 `.claude/rules` 與 `.cursor/rules` 那兩份。
 - 看板綁 127.0.0.1、不對外發布。`HOST` 改 `0.0.0.0` 就對外了，畫面上沒差別。
-- **角色派工（Cursor）**：流程同 Claude。內建：`explore`／`generalPurpose`／`cursor-guide`／Plan 模式／主 session。查詢＝`explore`。自訂五個見 `cursor-agents/`（同步 `~\.cursor\agents`）；規範真相 `agents/*.md`。截圖＝Browser。
+- **角色派工（Cursor）**：流程同 Claude。內建：`explore`／`generalPurpose`／`cursor-guide`／Plan 模式／主 session。查詢＝`explore`。自訂五個正文照抄 `agents/*.md` 進 `cursor-agents/`，再複製到 `~\.cursor\agents`（那不是 junction；只改 git 裡那份＝Cursor 派工還是舊的十行指針）。Skill 仍只改 `skills/`，禁止拷進 `.cursor/skills/`。截圖＝Browser。
 - **模型（僅 Cursor）**：主＝Grok 4.6 High。自訂五個＝`composer-2.5[fast=false]`。explore／shell／guide 能指定則 Composer。Opus Extra High 只主 session 卡關。不用 Auto 派自代理。
 - **選擇題**：一律 `AskQuestion`（Questions 面板）。不是 `AskUserQuestion`、不是聊天列、不是 HTML。細節 `.cursor/rules/ask-choices.mdc`。全域通道＝Cursor User Rules。
 - **打字閃黑窗**：先 `pyw -3 tools/console_flash_probe.py` 看 conhost 的父行程，不要先猜 8099。常見：Cursor.exe→git.exe（SCM）；Cursor.exe→powershell→`hooks/dispatch.py`（third-party Claude hooks，外層一定有 conhost）。看板子行程走 `dashboard/win_subprocess.py`。本工作區已關 `git.autoRefresh`／`git.autofetch`，需 Reload Window。

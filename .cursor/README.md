@@ -12,7 +12,7 @@ IT 專案把 `.claude/rules` 與 `.claude/skills` **拷成** `.cursor/`（完整
 | 常駐規則 | `global/CLAUDE.md` → 安裝到 `~\.claude\CLAUDE.md` | 不要複製成 `AGENTS.md`（Cursor user rules 已有一份溝通／模式路由） |
 | path-scoped 規則 | 原本放在 **IT 專案** `.claude/rules/dashboard-generators.md`，對本 repo **不觸發**（2026-07-30 實測） | **本目錄** `.cursor/rules/*.mdc`。檔在這、YAML 有 glob，但 2026-08-24 實測 **glob 不把本文注入模型**；改看板用 `@dashboard-generators` 或手動 Read |
 | 全域 skill | `skills/`（git 真相）← junction `~\.claude\skills` | Cursor 已會載入 `~\.claude\skills`。**禁止**再拷進 `.cursor/skills/`（第三份＋`npx skills update` 那次掉包 junction 的同一類傷） |
-| 角色 | `agents/` ← junction `~\.claude\agents` | Cursor 的 Task 子代理不是 Claude 那 6 個角色檔；要派稽核／查詢仍讀 `agents/*.md` |
+| 角色 | `agents/` ← junction `~\.claude\agents` | `cursor-agents/` 正文照抄 `agents/` 再加 Cursor 專屬段；必須複製到 `~\.cursor\agents`（不是 junction）。查詢仍用內建 `explore`（無 locator） |
 | 專案脈絡 | 部門專案才有 `.claude/PROJECT_CONTEXT.md`。**不要**在本 repo 建 `.claude/`（`discover_projects()` 會把 harness 誤認成一個部門專案） | `.cursor/PROJECT_CONTEXT.md` 只給 Cursor 讀，產生器不掃它 |
 
 ## 雙改範圍（只有規則本文）

@@ -11,7 +11,7 @@ icon: brush
 
 # 美編人員
 
-Execute →「改動對照」＋量測。「沒做的」必填。範圍從 `.claude/PROJECT_CONTEXT.md`「前端與樣式」讀。讀不到 → 回報，不猜著改。表裡列的 skill **用 Read 開 SKILL.md**；本角色沒有 Skill 工具，打 `/` 叫不到。harness 看板 CSS／繪圖 JS 也歸你：`D:\.ai-harness\dashboard\harness-dashboard.shell.html`（進 git 的殼；填滿產物 gitignore）。
+Execute →「改動對照」＋量測。「沒做的」必填。範圍從專案 PROJECT_CONTEXT「前端與樣式」讀（部門 `.claude/PROJECT_CONTEXT.md`；本 repo `.cursor/PROJECT_CONTEXT.md`）。讀不到 → 回報，不猜著改。表裡列的 skill **用 Read 開 SKILL.md**；本角色沒有 Skill 工具，打 `/` 叫不到。harness 看板 CSS／繪圖 JS：`dashboard/harness-dashboard.shell.html`。
 
 ## 規則
 
