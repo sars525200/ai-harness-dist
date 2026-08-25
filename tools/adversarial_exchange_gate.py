@@ -57,7 +57,14 @@ REPLY_NAME = re.compile(r"^round-(\d+)-reply\.md$")
 # 「檔名不是正規形式」，把「靜默沒有守門」換成「一句看得懂的話」。
 ASK_LOOSE = re.compile(r"^round-\d+-ask\.md$", re.I)
 REPLY_LOOSE = re.compile(r"^round-\d+-reply\.md$", re.I)
-SHA_LINE = re.compile(r"^\s*ask-sha256\s*=\s*([0-9a-f]{64})\s*$")
+# ⚠ 容許 markdown 標記把值包起來（2026-08-25 實測）：Cursor CLI 上的 Grok
+# **連續兩輪**都輸出 ``ask-sha256=`<hash>` ``——它在 markdown 語境會自動把 hash
+# 當成 code 標記，即使 prompt 明寫「不要用反引號包起來」也照包。
+# 原本的正則要求整行只有 `ask-sha256=<hash>` ⇒ 那兩輪都被判成「沒有帶回 hash」，
+# 而**整輪內容其實完全有效**（值一字不差）。
+# 判準的本意是「這份回覆認不認得出是回哪一題」，那由 **hash 值**決定，不是由排版決定。
+# 值仍然必須是 64 hex 且逐字相符，防護一點沒少；放寬的只是它兩側的裝飾字元。
+SHA_LINE = re.compile(r"^\s*[`*_~\"']*\s*ask-sha256\s*=\s*[`*_~\"']*\s*([0-9a-f]{64})\s*[`*_~\"']*\s*$")
 
 # 發現區的下限。判準是「這份 reply 有沒有實質內容」，不是「寫得好不好」——
 # 後者機器判不了，前者判得了，而空白 reply 正是最容易發生的那種假綠。
