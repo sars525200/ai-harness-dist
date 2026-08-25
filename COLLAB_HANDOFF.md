@@ -95,6 +95,18 @@
    先 `git status --porcelain` 對帳「失敗點名的檔是不是我動的」，再決定要不要修。
    **修別人的紅燈＝把對方的在製品掃進自己的 commit。**
 2. Commit **只 stage 自己的 hunk**，不要 `git add -A`。
+   ⚠ **`git add <檔>` 也不夠**（2026-08-25 實測）：對方的改動可能就在**同一個檔**裡。
+   實測 `git add dashboard/gen_workflow_compliance.py` 之後，staged 內容混進了對方的
+   `from html_paths import HTML_PATH, ensure_product`。**commit 前逐行看 `git diff --cached`**，
+   不是只看 `--stat`——行數對不上才是唯一會叫的訊號。
+   ⚠ **`tools/filter_hunks.py --drop` 會留下裸刪除**（同日實測，比上面那條更壞）：
+   對方把 `-HTML_PATH = ...` 與 `+from html_paths import ...` 分在**兩個 hunk**，
+   `--drop html_paths` 丟掉了「加」那個、**保留了「刪」那個** ⇒ staged 出來是
+   「純刪除對方的行而沒有替代」，套下去直接弄壞檔案。而它回報 `kept hunks=5`，
+   **看起來是成功的**。
+   ⇒ **用 `--keep` 綁自己改動的字面，不要用 `--drop` 排除別人的**：
+   `--keep` 的失效方向是「少留了自己的東西」（commit 少一塊，看得出來）；
+   `--drop` 的失效方向是「多留了別人的半個改動」（檔案壞掉，而且訊號是綠的）。
 3. 改 skill／角色／`global/CLAUDE.md` 等於改 Claude **和** Cursor 的執行期——先 peek，再動。
 4. Cursor 的 Task 子代理 ≠ `agents/*.md`。派稽核／查詢仍 Read 那些角色檔當規格。
 
