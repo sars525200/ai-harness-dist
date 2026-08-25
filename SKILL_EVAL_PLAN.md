@@ -1,8 +1,8 @@
 # Skill Eval 計畫書（EDD：評估驅動開發）
 
-> **§9（2026-08-16 立案・v2 覆核後）狀態：待審核**　§1–§8 為既有內容，本輪未改動。
+> **B-4 規範覆核已由 user 明確終止並授權施工；不補 `ADVERSARIAL_REVIEW_PASSED`。現況與唯一下一步見 §9.6b。**
 >
-> 建立 2026-07-28　狀態：**§1–§7 待討論定案，尚未施工**
+> 建立 2026-07-28；**§1–§8 已施工，首跑數字保留為歷史基準；現行擴充與狀態見 §9。**
 > 目標讀者：日後接手 harness 的人（含未來的我）。與 `HARNESS_PLAN.md` 同層，該檔是閘門（hook）主線，本檔是 skill 品質主線。
 
 ---
@@ -109,10 +109,10 @@
 |---|---|
 | **定義** | 流程跑到某步做不到；或「完成判準」根本不可達成／可被含糊帶過 |
 | **怎麼發現** | 只有真的跑一遍才會現形（verify-skill 的實證） |
-| **判準** | ① 每個步驟都有可檢查的完成判準（機械可驗）② 最近一次實跑距今天數（機械可驗）③ 實跑本身能否跑完（**需人在場**） |
+| **判準** | ① 正文至少有一處可檢查的完成判準（降級機械門；逐步驟判定停用並明列 NOT COVERED）② 最近一次實跑是否在 skill／依賴改動後過期（機械可驗）③ 實跑本身能否跑完（**需人在場**） |
 | **資料來源** | verify-skill 的 dry-run 記錄 |
 
-**★ 這一項的自動化極限必須講白**：①②可機械化，③不行。
+**★ 這一項的自動化極限必須講白**：①目前只驗全檔下限、②可機械化，③不行。
 
 - ③ 需要人判斷「輸出品質夠不夠好」，那不是 pass/fail 能表達的。
 - **務實解＝驗收新鮮度**：不假裝能自動跑，改為記錄「上次實跑是什麼時候、結果是什麼」，
@@ -141,14 +141,15 @@
 
 | 層 | 對應失敗 | 產出 | 自動化程度 | 何時跑 |
 |---|---|---|---|---|
-| **L1 結構檢查** | 塞爆＋執行① | `eval/check_structure.py` | 全自動 | 收工時／改 skill 後 |
+| **L1 結構檢查** | 塞爆＋執行①（降級） | `eval/check_structure.py` | 全自動 | 收工時／改 skill 後 |
 | **L2 契約回歸** | 迴歸 | `eval/fixtures/*.json` + runner | 全自動 | 同上 |
 | **L3 觸發樣本** | 觸發 | `eval/triggers/*.jsonl`（正例＋**反例**） | 半自動（要跑模型） | 手動、定期 |
 | **L4 實跑驗收** | 執行③ | `eval/acceptance.json`（新鮮度台帳） | 記錄自動、執行人工 | 人工，過期才提醒 |
 
 **L1 具體檢查項**（全部機械可驗）：
 - frontmatter 可解析、`name` 與目錄名一致、`description` 非空
-- 流程型：每個 `### 步驟` 底下都有「完成判準」（現況已有 8/9 支符合，`codebase-health` 4 步驟只有 3 個判準）
+- 流程型：正文至少有一處「完成判準」；逐步驟判定已停用並在輸出列 NOT COVERED，
+  恢復條件見 §9 的 A-4／B-2
 - token 數在預算內（型別分開）
 - wikilink 目標檔案存在
 - 與 CLAUDE.md／記憶檔的重複片段比例
@@ -457,8 +458,8 @@ v4 把它記進「假」那一欄才湊出「真 WARN 不變」。**這是一次
 | 塊 | 動的檔 | 內容 |
 |---|---|---|
 | **B-1** | 4 支參考型 `SKILL.md` ＋各自 `references/*.md` | 正文只留判斷分支＋症狀端索引。**先做 `asset-data-rules` 探針**（理由：分節最清楚。⚠ 不是「最大」——最大的是 `verify-rules` 5,263 > 5,122，F-15） |
-| **B-2** | 15 支 `SKILL.md` | 補「## 邊界（不得做的事）」節，**一律 `##` 級**。與 B-1 有 4 支同檔 ⇒ **B-1 先** |
-| **B-3** | **11 檔 34 處** | `D:\.ai-harness\X` → `<harness>/X`。⚠ 含 `adversarial-review\SKILL.md:3` **description 裡的**路徑（L1 常駐、每輪都付）；改 description 必須重跑 L3 觸發樣本（§7 Q4）。⚠ 另有 5 處**專案**路徑（`audit:15`、`shougong:52,132,145,146`）不在這 34 處內——§9.2 目標③要嘛擴到那 5 處，要嘛改寫成「不再寫死 harness 磁碟代號」（R2-9） |
+| **B-2** | 部門專案層 15 支 `SKILL.md` | 補「## 邊界（不得做的事）」節，**一律 `##` 級**。與 B-1 有 4 支同檔 ⇒ **B-1 先**。共用層 14 支由 B-4 一次處理，不再回頭重改 |
+| **B-3** | 部門專案層與 `<harness>/skills/` 以外檔案（開工前重算） | 將寫死的 harness 磁碟路徑改成可移植入口。舊盤點的 **11 檔 34 處**只留作歷史基準；共用層 14 支全部由 B-4 負責，B-3 **不得改 `<harness>/skills/*`，不論隊列狀態** |
 
 **案 B 的驗證**（沿用 v2 的 V4／V6／V8／V9，V5 依 R2-3 重寫）
 
@@ -467,9 +468,9 @@ v4 把它記進「假」那一欄才湊出「真 WARN 不變」。**這是一次
 | VB-1 | **平台真的按需讀 `references/`**（S-2 全部收益的前提） | 檔案樹**保持完整**，在 references 埋一個只有那裡才有的 canary 事實，開 subagent 並**禁止它使用任何工具**直接作答 | 世界 B（一次全載）**答得出**；世界 A（按需）**答不出**——兩個世界觀測值不同。⚠ **v3 推翻 v2 的「改名後必須答不出來」**：提問前改名的話兩個世界都答不出來，且 subagent 會 `ls references/` 撿到改名檔照樣答對（R2-3）。另：`~\.claude\projects\*.jsonl` transcript **有記完整 tool input 含 `file_path`**，是比 harness event log 更好的第二儀器 |
 | VB-2 | 拆分沒有掉內容 | 開**不共用脈絡**的 subagent，餵 `git show HEAD:<原檔>` 與拆後 L2+L3，要它列「原檔有、新結構找不到」的條目（15 支 SKILL.md 皆 tracked，審查者已驗這條指令拿得到全文） | 故意漏一整段 → 它要指出來。⚠ **不可用 `run_triggers.py`**：它只餵 description 不餵正文（F-1） |
 | VB-3 | 主目標有數字 | B-1 前後各量 4 支的 **`text` 欄** tok（A-5 已把它與 `full_text` 分開），降幅落檔 | 降幅 ≤ 0。前置：先 `--update-baseline` 建當前基準，**必須在 B-1 前、且在 B-2 之前**（B-2 加邊界節會讓每支 token 上升，混進去分不清降幅來自誰，R2-12） |
-| VB-4 | 佔位符沒打斷流程 | 34 處逐處實跑 | `py -3` 找不到檔 |
+| VB-4 | 佔位符沒打斷流程 | B-3 開工前重算 `<harness>/skills/` 以外命中，逐處實跑；B-4 路徑由各支 live gate 驗 | `py -3` 找不到檔，或 B-3 diff 命中任何 `<harness>/skills/*` |
 | VB-5 | frontmatter `kind:` 相容性 | 在 1 支加 `kind:`，確認仍能被呼叫、`/` 選單仍列得出來 | 未知欄位造成載入失敗 → 退回「參考型正文不用 `###`」的慣例約定 |
-| VB-6 | 觸發樣本基準重測 | 重跑 `run_triggers.py` 前**先重建當前基準**；且必須在 B-3 改 `adversarial-review` description **之前** | 拿 7/28 的「32/32、18/18」當比較對象 → 那是 **10 支 roster** 的舊實驗，掉分會被誤讀成「拆分掉內容」而去改一個沒問題的拆分（F-14、R2-12） |
+| VB-6 | 觸發樣本基準重測 | 重跑 `run_triggers.py` 前**先重建當前 29 支 roster 基準**；共用層 description 由 B-4 各支 metadata gate 驗，B-3 不再改 | 拿 7/28 的「32/32、18/18」當比較對象 → 那是 **10 支 roster** 的舊實驗，掉分會被誤讀成「拆分掉內容」而去改一個沒問題的拆分（F-14、R2-12） |
 
 **已知副作用（預期內，先寫下來免得被當成做壞了）**：B-2 改 15 支 mtime ⇒ `acceptance.json` 兩筆全過期，
 L4 掉到 **0**（⚠ v4 訂正：現況是**有效 1、過期 1**，`shougong` 早已過期，不是原本寫的「有效 2」）。
@@ -478,13 +479,179 @@ L4 掉到 **0**（⚠ v4 訂正：現況是**有效 1、過期 1**，`shougong` 
 只讀 `*/SKILL.md`、`:196` 的 `_p_skills()` 只數專案層——**與 F-2 一模一樣的 references 失明**，而 A-5 只治 eval。
 案 B 一搬內容，`_p_red_first` 這類能力探針會**靜默翻 False**，重演該檔註解自己記的「第三次被同一個坑咬」。
 
+### §9.6a 共用 Skill 優化規範（B-4）
+
+> Roster 固定為 `<harness>/skills/*/SKILL.md` 的 14 支共用 Skill；不含部門專案 Skill、
+> Cursor 內建 `skills-cursor/` 與角色檔。每支的**改動單位是整個 skill bundle**：
+> 該目錄全部檔案、直接 trigger／acceptance／專用測試與 manifest 紀錄，不只 `SKILL.md`。
+> `skills/` 是唯一 git 真相；`~/.claude/skills` 是 junction，禁止另拷到 `.cursor/skills/`。
+
+#### 目標
+
+降低 Skill 被載入後的搜尋、判斷與上下文成本，同時保持或加強：
+
+1. description 的可發現性與觸發精度；
+2. 可執行流程、分支、停止條件與輸出契約；
+3. 安全不變量、拒跑條件與錯誤 fallback 防線；
+4. 外部 Skill 的 provenance、`LOCAL EDIT` 與可回退性。
+
+**不設統一行數、token 或縮減比例門檻。**短 Skill 可以零縮減；行數與 token 只記錄前後值，
+不得把拆行、改表格或無條件搬進 references 當成成果。
+
+#### 處置優先序
+
+同一段同時命中多類時，依序判：
+
+1. `KEEP_SAFETY`／`KEEP_MAIN` 高於任何刪除或外移。
+2. 跨平台可達性高於去重：Claude 與 Cursor 都能在採取動作前取得替代內容，才算有第二份單一真相。
+   全域 `CLAUDE.md` 對 Cursor 不是 always-loaded，不能單憑「那裡已有」刪掉 Skill 內的工具名、
+   平台分支、拒跑條件或步驟索引。
+3. 測試與 provenance 契約高於文案自由；要改字面契約時，來源與驗證資產同一單位更新。
+4. 無法證明替代內容完整、可達且仍屬現行契約時，預設保留。
+
+#### 內容處置分類
+
+每支動工前，SKILL.md 每一塊與 bundle 每一個檔都要歸入下列一類；不得有未分類內容：
+
+| 分類 | 去向 |
+|---|---|
+| `KEEP_MAIN` | description、前置、順序、分支、停止／失敗、輸出、完成判準、邊界 |
+| `KEEP_SAFETY` | 會阻止合理但危險做法的安全不變量；理由壓成貼近規則的一兩句 |
+| `KEEP_LOCAL_EDIT` | 外部 Skill 的在地差異標記與現行差異說明；保留在 skill bundle 並與 upstream 重對帳 |
+| `KEEP_BUNDLE` | 該 Skill 目錄的**全部檔案**，不以 SKILL.md 有沒有直接連結為準；納入 bundle hash、內容盤點與 rollback |
+| `KEEP_TEST_CONTRACT` | 被測試切片、probe 或 parser 依賴的標題／字串；若要改，測試與來源同一單位更新 |
+| `MOVE_REFERENCE` | 只有少見分支執行時才需要的穩定細節；移到單層 `references/*.md` |
+| `MOVE_PLAN` | 不承載現行契約的日期、事故數字、Round 紀錄、實驗證據、舊方案、設計推理 |
+| `DELETE_DUPLICATE` | 已由兩平台都可達的腳本、設定或單一真相完整承載的重複說明 |
+| `DELETE_OBSOLETE` | 已被現行機制取代且無執行價值；先查證後刪 |
+| `REWRITE` | 契約仍必要，但改成不依日期、案例或特定專案的現行條件 |
+
+日期不能機械刪除：若它代表版本邊界或相容條件，改寫成可判斷的現行條件，或指向承載該事實的
+程式／計畫。`LOCAL EDIT` 標記與現行差異說明不得送進 `MOVE_PLAN`；獨有資訊沒有落點時不得刪。
+
+#### SKILL.md 必留契約
+
+- Frontmatter：`name`、`description`，以及既有 `display_name`、`disable-model-invocation`、
+  `model`、`effort` 等平台欄位；不因瘦身改語意。
+- Description：同時回答 WHAT＋WHEN，保留 user 真會說的觸發詞與必要反觸發邊界。
+- 契約型別：以 §9.6b 固定隊列的「型別」欄為準；**不得用有沒有 `###` 標題推導**。
+- 流程型正文：前置、順序、分支、停止／拒跑、失敗處理、輸出、完成判準與 `## 邊界`。
+- 參考型正文：判斷分支、適用／不適用邊界、取得細節的索引；不強塞假的流程完成判準。
+- 高風險契約：錯誤 fallback、資料／權限／部署風險、空輸出、假 exit 0、跨平台工具差異。
+- 指令：只保留穩定入口與必要參數；腳本內部行為、實作歷史與完整 CLI 說明不重抄。
+
+#### 範圍與簡化原則
+
+1. B-4 只改目標 Skill bundle、必要的單支測試／trigger、manifest 目標 key 與隊列表該列。
+   不改 eval／dashboard／acceptance 工具；既有 L1～L4 缺陷留在 `TODOS.md`，不得攔路擴成前置工程。
+2. L1～L4 是**輔助證據**，不是總 gate。工具綠燈不代替內容對帳或 live；已知假紅要附原始輸出與
+   TODO 指標，改走本節人工／專用 probe，不順手修尺。
+3. 歷史、日期、事故數字與設計推理移到計畫書或刪除；不為了瘦身新增腳本、台帳或證據框架。
+4. 預設不新拆 references。只有穩定、少見分支且主檔能一層直接索引時才拆；既有 reference
+   與同目錄檔仍算完整 bundle。短 Skill 可以零縮減。
+5. 共用邏輯、跨平台工具名、拒跑條件與 `LOCAL EDIT` 寧可短寫保留；替代來源未證明兩平台都可達就不刪。
+
+#### 逐支流程
+
+一次只允許一支 active。一般列依序進 `inventory`／`rewriting`／`verifying`；第 0 列只走
+`inventory`／`verifying`，禁止進 `rewriting`：
+
+1. **錨定 before 與 candidate**：先跑 `tools/peek_sessions.py` 與 `git status`。一般列要求目標
+   bundle WT＝HEAD，記完整 parent commit、before subtree、檔案清單、行數／token、frontmatter、
+   直接引用者與專用測試；candidate 最終以本輪 staged bundle 為準。第 0 列是規範前既成校準例外，
+   candidate 已凍結，固定比較
+   `044e7ca9774b0f51c7920d728b3e094f8dee886b` →
+   `f2d9a5fcf2e1fac59a2968677a5edebe54266783`。
+2. **盤點**：將 bundle 每個檔、SKILL.md 每一段與字面耦合測試歸入 §9.6a 分類；每項獨有資訊
+   都要有目的地。測試同時驗多支或驗共用尺時只記錄，不納入單支 commit。
+3. **改寫**：一般列只動 bundle；只有來源字面契約確實改變時，才同步改只驗該支的測試。
+   description 改動先標記，等 metadata gate。不得改其他 Skill 或 eval／dashboard 工具。
+   第 0 列跳過改寫；現況缺新規範偏好的 `## 邊界` 等結構，列入「沒做的」且不阻擋本列，
+   強制契約從 `chat-handoff` 起生效。
+4. **獨立內容對帳**：不共用改寫脈絡的審查者比較 before 與 candidate，按契約矩陣列
+   「保留／改寫／遺失／變義」；遺失或變義未處置不得進下一步。第 0 列只對帳 frozen
+   candidate，不把 inventory 發現偷渡成改寫；若發現會造成錯誤行為的缺漏，標 `blocked`
+   並交由 user 決定是否另開修訂。對帳開始時記錄 candidate bundle digest；後續 staged
+   candidate 不同就使本次對帳失效，回到本步重驗。
+5. **實跑**：跑目標專用測試、現有 L1／L2 與至少一個真實呼叫或安全 dry-run。保留原始 exit code
+   與輸出摘要；語法檢查、grep、L4「有效」都不算 live。
+6. **metadata**：description 未改則以完整 hash 對帳；有改則由獨立審查者先依 before 寫
+   3 正＋2 近鄰反例。第 0 列 baseline roster 固定取 `044e7ca…` 的 29 支 description，
+   candidate 只把本支換成 `f2d9a5f…`；其後每列以該列進 `inventory` 時的 before commit
+   取 29 支 roster，candidate 只替換本支 staged description。兩份 prompt 使用相同 before
+   trigger 題庫；禁止沿用第 0 列 roster，也禁止用 candidate 題庫回頭證明 candidate。
+   近鄰反例只要求「不得答目標」；看過 candidate 後補的題不算本支通過證據。
+7. **封存 staged diff**：
+   - 一般列只 stage bundle、必要的單支測試／trigger 與 manifest 目標 key；先 stage bundle，
+     再以 `git write-tree` 取得 staged 目標 subtree。manifest 只新增或更新該支 key，使 `tree`
+     等於 staged subtree，其餘欄位由同一 staged bundle 與 `PROVENANCE.md` 推導。staged bundle
+     digest 必須等於步驟 4 被審 candidate；不等就撤銷本次對帳並回步驟 4。
+   - 第 0 列禁止 `git add skills/adversarial-review`；stage 前後都要核對 WT blob＝
+     `81318063e28aa2e0d3a6b34e1acc4e8b06a600ab`，只 stage manifest 的
+     `adversarial-review` key，其 `tree` 固定為 candidate subtree
+     `4b54d53789255a2b1e7f2d8ee94c975d5582d03e`。
+   - 隊列表另走 plan-only checkpoint。禁止 `git add -A`。B-4 禁跑會整份重寫的
+     `tools/skill_manifest.py --accept`；既有非目標 key 的缺漏／漂移不構成本列停線。
+     `git diff --cached` 不得含其他 path／key，並做 reverse-apply check。
+8. **commit／零縮減**：
+   - 有 bundle／專用測試／trigger diff，或目標 manifest key 缺漏／漂移時，做一顆原子 commit；
+     subject 固定含 Skill 名，隊列存完整 parent SHA、candidate subtree 與 subject 作 locator，
+     避免 commit 自我引用。只有 key 有債時，合法 commit 就是 target-key-only。
+   - 若內容零縮減且目標 key 已等於 HEAD subtree，禁止造空 commit；以 cached diff 為空、
+     before＝candidate subtree、目標 key 精確吻合通過 commit-rollback，隊列記
+     `commit locator=na:零縮減且 key 已吻合`。
+   - commit 後只驗 manifest 目標 key、專用測試與 rollback；全 14 支完成後才要求
+     `py -3 tools/skill_manifest.py` 全量 exit 0。失敗就停線，另做顯式 fix／revert，不 amend。
+     第 0 列不重做歷史 bundle commit，只允許一顆 target-key-only manifest reconciliation
+     commit；內容 rollback 仍用兩個 frozen anchors。queue／證據只可用不含 bundle／manifest
+     hunk 的 plan-only checkpoint 更新。`chat-handoff` 是第一個規範後 atomicity 樣本；
+     若它零縮減，就驗 target-key-only commit，第一個 content 原子樣本順延到首支有 content diff 的列。
+
+#### 七格 gate
+
+格值只准 `pending`／`pass:<方法＋證據>`／`na:<允許理由>`／`fail:<理由>`／`blocked:<理由>`。
+只有 `references=na:沒有且未新增`、`metadata-trigger=na:description 未改` 合法；其餘格禁止 `na`。
+
+| gate | 唯一可通過的方法 |
+|---|---|
+| scope | `pass:mechanical+manual`：完整 before／candidate subtree、bundle 清單、引用者、允許 path 齊全 |
+| contract | `pass:manual`：流程型的前置／順序／分支／停止失敗／輸出／完成／邊界，或參考型三項，逐項有 before→after 證據；型別取隊列表，不從標題推導 |
+| safety-provenance | `pass:manual` 或 `pass:probe`：安全不變量、fallback、跨平台差異、upstream／`LOCAL EDIT` 逐項對帳；即使確實沒有風險也要由獨立審查者明寫「無」 |
+| references | `pass:manual+probe`：有異動時驗主檔索引、實際可讀與 bundle 完整；沒有且未新增才可 `na` |
+| metadata-trigger | 未改 description 才可 `na`；有改只接受 `pass:probe`＋roster commit／5 題 baseline-candidate 輸出 |
+| live | 只接受 `pass:manual` 或 `pass:probe`＋真實輸出；`pass:mechanical` 非法 |
+| commit-rollback | 只接受 `pass:mechanical`：有 diff＝staged path、完整 parent／subtree、manifest 目標 key與 reverse-check；零縮減＝空 cached diff＋before/candidate subtree 相同＋key 吻合；第 0 列分驗兩個 content anchors 與 target-key-only metadata commit |
+
+`verified`＝七格全部是表中允許的 `pass` 或兩個白名單 `na`。任何 `pending`／`fail`／`blocked`、
+非法方法或缺證據都不通過；`skipped` 只由 user 決定。
+
+現有機械工具至少跑 `eval/check_structure.py`、`eval/check_contracts.py`、`git diff --check`
+與目標專用測試。manifest 在逐支階段只核對目標 key；其全量工具只記現況，最後一支後才須
+exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚合支數不翻譯成 B-4 成敗。
+`eval/check_acceptance.py`／L4 只記現況，不是 live 或 verified。
+
+#### 跨 session 狀態契約
+
+- 唯一進度真相是 §9.6b 固定 14 支隊列；`TODOS.md` 只指向唯一 active 列，不另寫可直接開工的步驟。
+- 一般列狀態：`queued` → `inventory` → `rewriting` → `verifying` → `verified`；第 0 列在
+  規範通過後走 `blocked` → `inventory` → `verifying` → `verified`，禁止 `rewriting`。
+  例外另有 `blocked`／`rolled-back`／user `skipped`。同時只准一列 active。
+- 每列必填完整 before／candidate subtree、行數／token、七格 gate、證據、沒做的、manifest
+  old→new、L3 roster commit/result、commit locator 與唯一 `next_action`。零縮減且 key 已吻合時，
+  locator 唯一合法例外是 `na:零縮減且 key 已吻合`；短 hash只可作旁註，不能取代完整值；
+  `pending` 不代表通過。
+- 開新 session 只接唯一 active 列；若無唯一列，先讀停止線，不自行挑下一支。
+- user 已拍板：共用 14 支、簡化規範、先覆核；每支有實際 diff 就做一個原子 commit，
+  零縮減不造空 commit。第 0 列是既成校準例外。
+
 ### §9.6b 狀態
 
 <!-- REVIEW_SCOPE_IGNORE_START -->
 
 - [x] 2026-08-16 立案，§9.1 現況實測
 - [x] S-1～S-4 user 逐項定案；**S-5 覆核後反轉**；**S-6 拆案定案（拆，先修 eval）**
-- [x] **對抗式覆核 Round 1（15）＋2（12）＋3（13）＋4（9）＝ 49 項全部接受**，見 §9.7。**收斂＝達輪數上限 4**
+- [x] **案 A 對抗式覆核（2026-08-16）Round 1（15）＋2（12）＋3（13）＋4（9）＝49 項全部接受**；
+  只覆蓋案 A，收斂理由是當時達輪數上限 4，**不是 B-4 通行證**
 - [x] A-8 的補法實測定案（寬版 165 處＝docstring 噪音；外科手術版 8 處；**`ROOTS` 補了又拿掉**，R4-6）
 - [x] **A-4 經兩次實測推翻後降級定案**（v4），**分帳於 v5 訂正為「淨損一個真 WARN」**
 **案 A**（序列，不可並行）
@@ -523,6 +690,109 @@ L4 掉到 **0**（⚠ v4 訂正：現況是**有效 1、過期 1**，`shougong` 
 - [x] **VB-1 已驗（2026-08-16）：`references/` 確認是按需讀，案 B 收益成立** ⇣
 - [ ] 案 B　B-1 ～ B-3
 - [ ] 案 B 驗　VB-2 ～ VB-6（VB-1 已完成）
+- [x] **B-4 規範草案與固定 roster 已落檔**
+- [x] **user 定案**：只做共用 14 支／每支有 diff 時一個原子 commit（零縮減不造空 commit）／先完成對抗式覆核
+- [x] **B-4 完整 gate 版覆核 Round 1～4**：10＋8＋4＋5＝27 項，Round 4 仍有 blocker，
+  未收斂；user 選擇縮減規範，見 §9.7 v6～v9
+- [x] **user 定案簡化**：保留逐支內容對帳／live／trigger／原子 commit；取消 T1～T7 全域台帳前置
+- [x] **B-4 簡化版覆核 Round 1**：4 項全部接受並處置，見 §9.7 v10
+- [x] **B-4 簡化版覆核 Round 2**：2 項全部接受並處置，見 §9.7 v11
+- [x] **B-4 規範覆核結束（user override）**：Round 3 已取消；不宣稱收斂、不補 marker，user 明確授權開工
+- [ ] **B-4 校準**：`adversarial-review` 完成正式 gate；短／中／長三種樣本各驗一支
+- [ ] **B-4 全量**：其餘 Skill 逐支 `verified`；最後跑全體回歸與跨平台發現驗證
+
+**B-4 共用 Skill 逐支隊列（唯一進度真相；行數用 Python `splitlines()`，只觀測）**
+
+隊列的歷史 before anchor＝`044e7ca9774b0f51c7920d728b3e094f8dee886b`。第 0 列 candidate
+已在 `f2d9a5fcf2e1fac59a2968677a5edebe54266783`。第 1 列 content＋目標 key 在
+`930da0031ed2e9ef1096bb2997bb56987f47cff5`，第 2 列在
+`4ff488913fa8e16c0b97ca330c592f8adca08441`。`pending`＝尚未量，**不是通過**。
+
+⚠ **這個 repo 有別的 session 在動**：第 2 列施作途中 HEAD 被推進五個 commit
+（`930da00`→`7ae0742`）且 index 被清空。逐列的 parent SHA 只代表「該列動工當下的 HEAD」，
+**不保證與前一列的 commit 相鄰**；開列前一定重跑 `git status` 與 `tools\peek_sessions.py`
+（⚠ 後者在 `7ae0742` 之前會給假的「沒有其他 session」訊號，本列就是被它咬到的）。
+
+| 順序 | 批次 | Skill | 來歷 | 型別 | 基準行數 | 基準 hash | 狀態 | gate／證據 | 沒做的 | next_action |
+|---:|---|---|---|---|---:|---|---|---|---|---|
+| 0 | 校準樣本 | `adversarial-review` | 本地 | 流程 | 171 | before `044e7ca…`：subtree `49a0c8dd35db63d1349bbff51be6e4dd32ae2caa`、blob `550b232a91751588684b8b6558f0ab7a6430a0ce`；candidate `f2d9a5f…`：subtree `4b54d53789255a2b1e7f2d8ee94c975d5582d03e`、blob／WT `81318063e28aa2e0d3a6b34e1acc4e8b06a600ab`、164 行 | `skipped:user` | user 指示終止覆核並開工；不把未跑七格改寫成 verified | frozen candidate 正式七格、trigger、live、rollback 與 manifest reconciliation 均未做 | 無；保留既成內容，不再覆核 |
+| 1 | 校準短型 | `chat-handoff` | 本地 | 流程 | 40 | before `258dc1c…`：subtree `faf94a044aaf74833e7e307d2cf4f97ce3490094`、blob `a2f3dd77862b8151cc9ab0b33ad443accc2e9568`、40 行／977 字；candidate `930da00…`：subtree `00ed779c74fd52e067a00bf30b099bc5fbb40eeb`、blob `71d06f257ce0080d9d7cbec8d7ddb8d45711dfa2`、40 行／901 字 | `verified` | 見下方七格；commit locator `930da00`／subject「精簡 chat-handoff 交接契約」 | 無 L3 題庫（description 未改）；manifest 其餘缺 key 不在本列 | 無；下一支是 `visual-check` |
+| 2 | 校準中型 | `visual-check` | 本地 | 流程 | 87 | before `930da00…`（動工時 HEAD，內容錨仍成立）：subtree `10df2c25070294963bca71ed0070a00dcd988202`、blob `c2b00f57646bc9b1b11f9cb4314cb2066ff3bd63`、87 行／2250 字／L1 1140 tok；candidate `4ff4889…`：subtree `c6d688da7a9cf5201c93071f5dce8ee20ddf30f2`、blob `e0c113ffe0f2e211e8521bd5d7bee455fa721611`、97 行／2629 字／L1 1434 tok（**淨增 +10 行／+294 tok，不是縮減**） | `verified` | 見下方七格；commit locator `4ff488913fa8e16c0b97ca330c592f8adca08441`（parent `7ae0742ad7de98ed2495c2bef890fc51ac470e11`）／subject「補 visual-check 邊界節與深色假通過守門」；manifest `visual-check.tree` old `390adde0acc6c96b8ab3486f4a1fcb928af653bf`（**連 before subtree 都對不上的既有漂移**）→ new `c6d688da…` | ①硬規則 2 第三個出口「查證過這一塊沒有深色規則」**沒定義「怎麼算查證過」**（審查者判部分處置；要定方法得先有 live 證據，硬寫等於用推論補一條要求別人不要用推論的規則）②`cursor-agents\visual-designer.md` 那份宣稱照抄的副本沒跟上：新增的 hash 分流與步驟 3 機制分支它完全沒有、第 5 條仍漏「probe 檔」、L33 指錯節位——**該檔不在本列允許 path，只列不改** ③SKILL.md 仍無任何 Cursor 平台分支（before 就如此，§9.6a 處置優先序第 2 條的既有缺口）④`eval\baseline.json` 記 2401 是舊 `full_text` 口徑，與 1140／1434 都對不上，不可當趨勢證據 ⑤`dashboard\sources_state.json:441` 的 sha 快照會過期，由產生器自己重寫，不在允許 path ⑥無 `eval\triggers\visual-check.jsonl`（L3 缺樣本，屬案 A 範圍外清單） | 無；下一支是 `skill-watch`（第 3 列），**未經 user 指示不自行開列** |
+| 3 | 校準長型 | `skill-watch` | 本地 | 流程 | 173 | `pending` | `queued` | `pending` | `pending` | 先解正文與 `test_skill_watch_run.py` 耦合 |
+| 4 | 本地流程 | `context-health` | 本地 | 流程 | 110 | `pending` | `queued` | `pending` | `pending` | 外移沿革，保留五條硬規則與驗證表 |
+| 5 | 本地流程 | `escalate` | 本地 | 流程 | 84 | `pending` | `queued` | `pending` | `pending` | 盤輸出契約與升級邊界 |
+| 6 | 本地流程 | `design-spec` | 本地 | 流程 | 103 | `pending` | `queued` | `pending` | `pending` | 與 §3／PR-1 去重 |
+| 7 | 本地編排 | `session-workflow` | 本地 | 流程 | 72 | `pending` | `queued` | `pending` | `pending` | 最後處理編排器，與前三支結果對齊 |
+| 8 | 外部短型 | `grilling` | 外部 | 流程 | 33 | `pending` | `queued` | `pending` | `pending` | 保留 upstream 差異，壓 LOCAL EDIT 沿革 |
+| 9 | 外部流程 | `research` | 外部 | 流程 | 36 | `pending` | `queued` | `pending` | `pending` | 先解「repo 慣例」與固定落點矛盾 |
+| 10 | 外部流程 | `prototype` | 外部 | 流程 | 29 | `pending` | `queued` | `pending` | `pending` | 保留禁 branch／commit 的在地 safety-red 契約 |
+| 11 | 外部流程 | `domain-modeling` | 外部 | 流程 | 79 | `pending` | `queued` | `pending` | `pending` | 保留 session 內挑詞／寫檔流程；與 CONTEXT／ADR format 去重 |
+| 12 | 外部流程 | `to-tickets` | 外部 | 流程 | 106 | `pending` | `queued` | `pending` | `pending` | 保留手動觸發；查失聯 issue-tracker 指標 |
+| 13 | 外部編排 | `wayfinder` | 外部 | 流程 | 129 | `pending` | `queued` | `pending` | `pending` | 最後處理上層編排器並與 to-tickets 對齊 |
+
+**`adversarial-review` 七格（簡化版覆核前）**
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pending` | 兩 anchor／subtree 已釘；bundle 清單、引用者與允許 path 待獨立盤點 |
+| contract | `pending` | 現有 L1 邊界 WARN、L2 動態檔名假紅只作輔助證據；七項語意契約待人工對帳；規範後新增的 `## 邊界` 格式缺額列未做，不阻擋 frozen 樣本 |
+| safety-provenance | `pending` | fallback、空輸出、hash 契約與本地來源列待逐項對帳 |
+| references | `pending` | 現況看似無 reference；須由 scope 清單確認後才可寫合法 `na` |
+| metadata-trigger | `pending` | description 已改；baseline＝`044e7ca…` 的 29 支 roster，candidate 只換本支為 `f2d9a5f…`；原 `fail:probe` 沒有答卷／輸出 hash，不採信 |
+| live | `pending` | 舊 L4 已過期且不算 live；cursor-cli 各分支待安全 dry-run |
+| commit-rollback | `pending` | 兩 content anchors 的 path-scoped reverse-check 與 target-key-only manifest reconciliation 尚未跑；本列不回溯證明歷史 content commit atomicity |
+
+**`chat-handoff` 七格**
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pass:mechanical+manual` | bundle 僅 `SKILL.md`；無 references／專用測試；引用者＝`PROVENANCE.md` 本地表、`.gitignore` `.scratch/`、L2 契約 4 項。staged path＝該檔＋manifest 目標 key |
+| contract | `pass:manual` | 獨立對帳：frontmatter／路徑／五欄／平台指令／完成判準全文保留；三條禁令改寫進 `## 邊界`，無行為級缺漏 |
+| safety-provenance | `pass:manual` | 本地自建、無 upstream／`LOCAL EDIT`；安全不變量＝禁 `/clear`、禁 commit 交接檔、分流 `/shougong`。獨立審查者明寫無額外風險 |
+| references | `na:沒有且未新增` | scope 確認無 `references/` |
+| metadata-trigger | `na:description 未改` | before／candidate description 逐字相同；sha256 `ea5d6b8e8e5a5e03173e0502f115a14d749e90143274ff69494023bfef976292` |
+| live | `pass:manual` | 寫 `.scratch/handoff/20260826-chat-handoff-probe.md`：五欄齊、gitignore 命中 `.scratch/`；探針檔已刪、未 commit |
+| commit-rollback | `pass:mechanical` | `930da00` 只含兩 path；manifest `chat-handoff.tree`＝staged subtree `00ed779c…`；fresh worktree `git apply --check` 正向通過；全量 `skill_manifest.py` 仍缺另外 3 key／4 支漂移，不構成本列停線 |
+
+**`visual-check` 七格**
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pass:mechanical+manual` | bundle 僅 `SKILL.md`（`git ls-tree` 兩端各一檔）；無 references、無專用測試。引用者 8 個：`agents\visual-designer.md:31`、`cursor-agents\visual-designer.md:16`（宣稱照抄硬規則）、`skills\_meta\manifest.json`、`PROVENANCE.md:29`（本地表）、`eval\baseline.json`、`dashboard\sources_state.json:441`、`SkillViewer\platform_skills.json`、`tests\test_roles_topology.py:299`（只用名字不耦合內容）。staged path 恰兩個 |
+| contract | `pass:manual` | 獨立審查者（不共用改寫脈絡）**三輪**對帳。流程型七項逐項有 before→after：前置／順序／分支／停止失敗／輸出／完成判準／`## 邊界`（**before 缺此節，本輪補上**）。before 87 行逐句都有落點，**遺失 0**；變義 1 條（完成判準例外由開放式收成清單）於第二輪處置，第三輪確認閉環 |
+| safety-provenance | `pass:manual` | before 12 條安全不變量全保留（4 條換節不換義），新增 4 條（不 commit／不改工具／工具失敗停線／深色假通過防線）。本地自建、**無 upstream、無 `LOCAL EDIT`**，審查者明寫「無」。跨平台差異：SKILL.md 兩端皆無 Cursor 分支，屬 before 既有缺口，本輪未刪任何平台分支 |
+| references | `na:沒有且未新增` | scope 兩端都確認無 `references/` |
+| metadata-trigger | `na:description 未改` | before／candidate description 逐字相同；sha256 `14e7bc3982cc1c84e4ae6d4125fa6035dc1b93ea05a7c850071c6b79fa739253`；frontmatter 整塊未動 |
+| live | `pass:manual` | 真跑 `probe.py`（切 `harness-dashboard.html` 的 `<style>`＋`SKILL_ROSTER` 區塊）→ `shot.py` 淺深各一張 → **兩張都用 `Read` 打開看過**，四個指令 exit 全 0。**當場抓到本 skill 自己的假通過**：`bodyClass: "dark"` 對 `:root[data-theme]` 型頁面無作用，兩張 PNG sha256 皆 `fdc8d957…`；改用 `script` 注入 `data-theme` 後才分歧（`6340559…`）。此發現已寫回 SKILL.md。產物已清 |
+| commit-rollback | `pass:mechanical` | `4ff48891` 只含兩 path（`git show --stat` 逐檔對過）；staged blob＝被審 candidate `e0c113ff…`；manifest 目標 key＝commit 後 subtree `c6d688da…`（`skill_manifest.py` 的不符名單因此由 4 支降為 3 支，其餘為他列債）；`git apply --reverse --check` 正反向皆通過。⚠ **本列途中另一個 session 推進 HEAD 五個 commit（`930da00`→`7ae0742`）並清掉我的 index**，重新 stage 前逐項確認其 commit 未碰 `skills/`、我的 WT 未回捲其 `TODOS.md` 改動（該行是 context 行） |
+
+**批次停止線**
+
+1. **`chat-handoff` 與 `visual-check` 皆 `verified`；目前沒有 active 列。第 0 列維持 `skipped:user`。**
+   下一支是 `skill-watch`（第 3 列，長型校準）——**要不要開由 user 說**，不自行接續。
+2. 第 0 列保留 frozen bundle 與 pending 七格，不補假證據、不補 manifest key。
+3. 短／中／長校準任一未 `verified`，不開本地流程批。
+4. 任何時候只准一列 active；前一支未 `verified`／`rolled-back`／經 user `skipped`，不開下一支。
+5. 第 0 列 WT 必須維持 `f2d9a5f…` candidate；不得再改 bundle，缺 `## 邊界` 等規範後格式
+   列「沒做的」且不阻擋。只可另做 target-key-only manifest reconciliation；其他 queued
+   列在 inventory 前必須 WT＝HEAD。
+6. 外部 Skill 必須先留 upstream 對照與 `LOCAL EDIT` 語意對帳，才能改寫。
+7. B-4 禁跑 `skill_manifest.py --accept`；非目標 manifest 債留給各自隊列列。全部完成後才跑
+   manifest 全量檢查與更新總體數字；不得把「已排程」寫成「已優化」。
+
+**B-4 範圍外、已知但不做的**（user 定案 2026-08-26：**等 14 支全做完再一次性收**，逐支階段不動 §9.6a 本文）
+
+- **§9.6a 步驟 4「candidate digest 一變就回本步重驗」在機器層不可執行**（`visual-check` 那列由獨立審查者提出）：
+  候選檔一旦被改寫覆蓋、而且從未 staged，前一版就**無法用任何唯讀手段取回**
+  （`git cat-file -p <blob>` 回 `Not a valid object name`）⇒ 那條規定實際上只能靠審查者的記憶執行。
+  **本列已當場繞過並驗證可行**：主 session 用 `git hash-object -w` 把前後兩個候選都寫進 object DB
+  （反向還原的前像 hash 與原值逐位元吻合），審查者才做得出 `git diff <blob-a> <blob-b>`。
+  ⇒ 後續 12 支照這個做法跑；規範補句（步驟 4 加「對帳開始前先讓 candidate 成為 git 物件」）
+  與其他規範傷痕**全部完成後一起收**。
+- **結構性弱點一併記著**：唯讀閘門缺 `git ls-tree`／`write-tree`／`hash-object`／`check-attr`
+  ⇒ 獨立審查者**無法自己完成步驟 4 要求的 digest 對帳，必須由被審方提供物件**。
+  對抗式覆核裡「前像的存否掌握在被審方手上」是分工缺陷，不只是便利性問題。
+  這一條是角色的 `【需要但沒有】`，登記在 `TODOS.md`「全域·需求」表，不在本清單重複。
 
 **VB-1 實測紀錄（這一項是案 B 全部收益的前提，故完整留痕）**
 
@@ -556,8 +826,6 @@ L4 掉到 **0**（⚠ v4 訂正：現況是**有效 1、過期 1**，`shougong` 
 - **`hooks/` 四支的 harness root 硬編碼**（A-8-前凍結時新見，**不在案 A 範圍**）：
   `dispatch.py:56`／`report.py:22`／`spike.py:18`／`disp1_dispatch_discipline.py:59`／`budget1_daily_usage.py:38`
   指的是 harness 自己的 `state/`，換部門時會跟著 harness 走，優先度低於專案路徑。已凍結留痕，另案處理。
-
-<!-- REVIEW_SCOPE_IGNORE_END -->
 
 **⚠ 不屬任一案的文件漂移**：`HARNESS_PROGRESS.md:106`「Skills（10 個）」→ 17 支；同檔 `:35` L1「≈2.7k」→ ~1.76k；
 `HARNESS_ROLE_ARCH_PLAN.md:642`「已建好只是全 shadow」→ `dispatch_config.json` 10 條全 `shadow:false`。
@@ -625,7 +893,7 @@ W-4 的佔位符不影響 L2 契約抽取（`PATH_RE` 字元類本來就不含 `
 
 #### ⚠ 停輪理由與框架問題（2026-08-16）
 
-**在 Round 2 停輪，不是因為收斂，是因為框架問題浮現**——`/adversarial-review` 步驟 5 寫的
+**在 Round 2 停輪，不是因為收斂，是因為框架問題浮現**——`/adversarial-review` 收斂判準寫的
 「超過通常代表計畫本身框架有問題，該回頭重想，不是繼續在細節裡繞」。
 
 證據：Round 2 的 12 項裡，**只有 R2-3／R2-5／R2-6／R2-9 這 4 項真的在講 skill 分層**；
@@ -695,7 +963,133 @@ A-6 縮成一處正確（`baseline.json` 的 `mtime` 零消費者）；A-8 的 5
 R3-7 的方向訂正為真；VA-1b 的前提事實屬實（`D:\AI-Projects` 有 `.claude\` 但無 `skills`）；
 junction 事實複驗；VA-4 v2 三條紅線方向正確（錯的是 A-4 的分帳不是 VA-4 本身）；A-9 的 15 支算術正確。
 
-**收斂判準**：`/adversarial-review` 步驟 5 的第三條——**達到輪數上限 4**。
+**收斂判準**：`/adversarial-review` 收斂判準的第三條——**達到輪數上限 4**。
 四輪合計 **49 個發現、全部接受**。R4-6／R4-7 兩個擋開工項已修，其餘七項亦已落檔。
 
-<!-- ADVERSARIAL_REVIEW_PASSED sha256=0a8530d23f2fd57a0221553d9cc4332c3ea2bad81f86f00d19707ad6ae0c55a8 rounds=4 at=2026-08-16 -->
+#### v6（2026-08-26・B-4 對抗式覆核 Round 1・10 個發現：9 接受／1 部分接受）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-xhigh`／`high`，與 `reviewer_config.json` 一致；
+設定檢查 exit 0，交換守門 exit 0。ask hash＝
+`3f4d63307bd354569ba0eacab53664a7c480502ca3e5fa1cb1d7b5b9008d42f1`，
+派出時審查範圍 hash＝`d6c42b066704322d153b5132575741eb9c98ea73efb4bda15b149c4ce15f898e`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| R1-1 | checklist 與第 0 列都叫「前置」，把改尺與第一支樣本綁在一起，違反 S-6 | **接受**：改名「尺子前置」／「校準樣本」，T1～T7 完成前禁止任何 Skill 進 rewriting／verifying／verified | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| R1-2 | contract／safety-red 宣稱 L1/L2 必叫，但現有工具驗不到六種語意契約 | **接受**：流程／參考型分開；逐 gate 標人工、機械或 probe；有安全風險但無負例不得通過 | 同上 |
+| R1-3 | `DELETE_DUPLICATE` 可能刪掉 Cursor 只靠 Skill 才取得的步驟與平台路由 | **接受**：新增處置優先序；兩平台都能在行動前取得替代內容才准去重，全域 `CLAUDE.md` 不視為 Cursor 可達證據 | 同上 |
+| R1-4 | 分類漏 `LOCAL EDIT`、bundle 檔與測試切片字面契約 | **接受**：新增 `KEEP_LOCAL_EDIT`／`KEEP_BUNDLE`／`KEEP_TEST_CONTRACT`；基準與 rollback 改綁整個 bundle | 同上 |
+| R1-5 | 8 個 gate 擠在一格，L4「有效」容易被抄成 B-4 verified | **接受**：固定狀態字彙與 8 格 ledger；L4 只算新鮮度，T3 要求 pass 必須附 dry-run 證據並修看板文案 | 同上 |
+| R1-6 | 29 支全量 exit 無法表示 14 支 delta；13 支共用 Skill 無 L3 樣本 | **部分接受**：接受逐支結構化 delta、14 支 token 基準與 description 改動必補 3 正 2 反；**不採「只餵目標＋近鄰」**，因完整 29 支才是實際競爭面，改以前後 roster 相同且只變目標 description 來歸因 | 同上 |
+| R1-7 | manifest 只吃 HEAD，與每支一個原子 commit 衝突 | **接受缺陷，改採另一修法**：T6 讓 manifest 從 staged index 算 subtree，Skill bundle、trigger、acceptance、manifest 與狀態列同一 commit；不採兩 commit | 同上 |
+| R1-8 | 短 hash、只綁 SKILL.md、queued 也有 next_action，跨 session 會誤 BLOCK 或接錯列 | **接受**：完整 subtree＋bundle digest；只接唯一 active 列；rewriting 後 WT≠HEAD 屬預期，只擋 inventory 未列檔案 | 同上 |
+| R1-9 | owning-directory、max mtime 與 haystacks 三個洞讓 references 刪掉後仍可能綠 | **接受**：列入 T2～T4；L2 以 Skill 目錄解路徑、L4 改內容指紋、haystacks 讀 references，三者各有刪檔紅線 | 同上 |
+| R1-10 | B-2／B-3 會再次修改 B-4 已 verified 的共用 Skill | **接受**：B-4 一次處理共用 14 支的邊界與路徑；B-2／B-3 收斂到部門專案層與非 B-4 檔，舊 11/34 只作歷史值 | 同上 |
+
+v6／v7 是歷史發現台帳，含當輪編號與後來已過期的中間修法。**施工只讀 §9.6a 現行表，
+不得從歷史處置表推導 before、步驟或 next action。**
+
+Round 1 判定「不可施工」；上述修正完成後開 Round 2，帶入本表與最新文件重新找新缺陷。
+
+#### v7（2026-08-26・B-4 對抗式覆核 Round 2・8 個發現全部接受）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-xhigh`／`high`。第一次呼叫遇服務端
+`resource_exhausted`，未產生報告；同一份凍結 ask 重試 exit 0，兩輪交換守門 exit 0。
+ask hash＝`71cfdb7bb0bbf31a9d60b62b0a47b0190744aa833ee264239381f7477456e469`，
+派出時審查範圍 hash＝`cc016141a2639a6dd282ebbf61405c1c585e35b9e6670288e00eaf5bf8d32777`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| R2-1 | T1 先抓基準、T2～T5 後改尺，會把尺的 delta 歸因給 Skill | **接受**：重排成 T1→T7 硬依賴，T7 永遠最後；任何尺後改都使 T7 作廢 | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| R2-2 | per-skill commit 混入共用 JSON／隊列表，staged index 與任意 rollback 仍不成立 | **接受**：區分私有 bundle、直接資產、共用 registry 目標 hunk；拒絕無關 staged path／`git add -A`；L4 證據分支存放；rollback 只保證最新 commit | 同上 |
+| R2-3 | 六個 gate 可用 `na` 假裝通過，`live=na` 仍可能 verified | **接受**：`na` 白名單只留 references／safety-red；明定 verified 真值表並加負測試 | 同上 |
+| R2-4 | L3 沒有凍結 roster／題庫或 candidate 注入，改寫者可自己出題自證 | **接受**：T5 由獨立脈絡先建並凍結題庫、29 支 description 與模型設定；candidate 只換目標；近鄰反例改成 forbid-target；事後題不算當次證據 | 同上 |
+| R2-5 | 第 0 列已改寫，T7 可能拿 WT 當 before，複製「先改再盤」 | **接受，並於 Round 3 前重錨**：before 固定為完整 commit `044e7ca9774b0f51c7920d728b3e094f8dee886b`；candidate 固定為完整 commit `f2d9a5fcf2e1fac59a2968677a5edebe54266783`；**禁止讀目前 HEAD 當 before** | 同上 |
+| R2-6 | 流程／參考型若從有沒有 `###` 推導，`grilling`／`prototype` 可少驗四項 | **接受**：固定隊列新增人工型別欄；contract 禁止從標題推導，兩支明列流程型 | 同上 |
+| R2-7 | provenance 只數 `LOCAL EDIT` 字樣；過期對帳句與未直接連結 bundle 檔都可漏 | **接受**：bundle＝整個目錄；T4 比 upstream tree、正規化 diff hash／路徑與 LOCAL EDIT 區塊 hash；敘述與實際 diff 不符要紅 | 同上 |
+| R2-8 | B-3 仍可改未 verified 共用 Skill；檔頭、隊列與請示句給出三個不同下一步 | **接受**：B-3 全禁 `<harness>/skills/*`；檔頭、停止線、active 列收斂成「規範覆核收斂後做 T1」；既有 user 授權寫成單一路徑 | 同上 |
+
+**Round 2 後的並行狀態變更**：另一則 session 於
+`f2d9a5fcf2e1fac59a2968677a5edebe54266783` 提交第 0 列 candidate，並把 reviewer model 改成
+`cursor-grok-4.6-high`。因此 Round 3 前已重錨為 `044e7ca…` before → `f2d9a5f…` candidate；
+WT 與 candidate 相同。這是外部狀態前進，不把目前 HEAD 改寫成「改前」。Round 3 依最新設定派
+`cursor-grok-4.6-high`。
+
+Round 2 仍判定「不可施工」；上述處置完成後開 Round 3，只驗失效情境是否封住並找新 blocker／high。
+
+#### v8（2026-08-26・B-4 對抗式覆核 Round 3・4 個發現全部接受）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-high`／`high`，與最新設定一致；設定檢查、
+model slug、CLI 與三輪交換守門皆 exit 0。ask hash＝
+`8ffb8d376e8f25c6e69427e1d5bc2057a27b0c081f028482db3185cb28d85af5`，
+派出時審查範圍 hash＝`c199208869ca6bc2f2b762538b55a50a7280423d3dfe43157509b356e222d0d8`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| R3-1 | 「任何 test 改動都使 T7 全廢」與逐支可改 dedicated test／隊列表互斥 | **接受**：新增 `ruler-files.json` 精確白名單；只含共用尺與 self-test。專用測試、ledger、acceptance、trigger、隊列排除，改動只使該支 gate 過期 | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| R3-2 | 單一 29 支 roster 無法同時量歷史 before 與目前競爭面 | **接受並補 rolling 面**：T5 凍 `legacy-before-29` 與 `head-29`；第 0／1 列分別使用，之後每支從當下已 verified HEAD 存本列 `before-29`，同列 candidate 只換目標 | 同上 |
+| R3-3 | 檔頭、案 A 的「收斂＝4」與舊 PASSED marker 形成三個 next action | **接受**：檔頭跟隨 B-4 當輪狀態且一律禁止施工；案 A 收斂明確限 scope；移除檔尾舊 marker，待 B-4 零改動輪後重蓋 | 同上 |
+| R3-4 | v7 中間修法仍寫 before＝HEAD，重錨後會把 candidate 當改前 | **接受**：v7 R2-5 改成兩個完整 commit anchor；歷史表全面標成不可施工，§9.6a 是唯一現行索引 | 同上 |
+
+Round 3 仍判定「不可施工」；四項處置後開 Round 4。Round 4 必須是零改動輪；
+若仍有 blocker／high，依 `/adversarial-review` 的 4 輪上限回報 user，不私自施工。
+
+#### v9（2026-08-26・B-4 完整 gate 版 Round 4・5 個發現成立・user 決定簡化）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-high`／`high`；CLI 與四輪交換守門 exit 0。
+ask hash＝`2cdd68842be8309a91c7c6c002551b1f2c97d4c450e336a9632ffdff031ba95e`，
+派出時審查範圍 hash＝`4f5ddb6b0bff2aaf95d23003ff5068b0beb76be29f88091e164137333da3fd95`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| R4-1 | ruler 白名單漏 `eval/acceptance.json`／manifest registry，第一支 commit 會使 14 支基準全過期 | **接受根因，改採簡化方案**：取消全域 ruler digest、acceptance registry 與 T1～T7；manifest 只在單支 staged diff 改目標 key | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| R4-2 | 零改動輪後不能更新 in-hash 檔頭／§9.7，仍會留下兩個 next action | **接受**：檔頭改成穩定條件句；§9.6b 狀態與 §9.7 全納入 `REVIEW_SCOPE_IGNORE`，現況只在停止線更新 | 同上 |
+| R4-3 | `TODOS.md` 高優先下一步會在覆核前叫人直接逐支 live／record | **接受**：TODO 只准指向 §9.6b 唯一 active 列；覆核未通過時明寫禁止逐支施工 | `TODOS.md` |
+| R4-4 | `verified=pass:*` 讓 live／rollback 可用錯誤方法假通過 | **接受**：簡化成七格，每格列唯一合法方法；live 禁 mechanical、commit-rollback 只收完整 staged 證據 | `SKILL_EVAL_PLAN.md` §9.6a |
+| R4-5 | 共用 `_baseline/` 沒有 owner，改動時不知道退哪列 | **接受根因，移除該層**：description 改動才在該支 inventory 產生 before roster／5 題，證據直接記該列，不建跨 14 支 baseline | 同上 |
+
+四輪發現數 10→8→4→5，最後仍有 blocker，符合「框架本身開始製造缺陷」的訊號。
+user 在結構化選擇題選擇「縮減規範後重新覆核」：保留內容分類、固定隊列、獨立對帳、
+真實 dry-run、必要 trigger 與一支一 commit；移除全域台帳與先修 eval 的前置工程。
+完整 gate 版到此封存為反例，不得施工；現行規範只讀 §9.6a 簡化版。
+
+#### v10（2026-08-26・B-4 簡化版 Round 1・4 個發現全部接受）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-high`／`high`；CLI 與簡化版第一輪交換守門 exit 0。
+ask hash＝`f70d5f63210b777fa832cc794d75a3c2be379042e1cb62ff14761072e8baf678`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| S1-1 | `TODOS.md` 仍可叫新 session 在覆核前直接逐支 live，與停止線互斥 | **接受**：下一步只指向 B-4 唯一 active 列；規範覆核未通過時明寫禁止逐支 live／`--record` | `TODOS.md` |
+| S1-2 | 第 0 列 frozen candidate、流程的「改寫」與必留 `## 邊界` 互斥，會被迫改 bundle 或永遠 blocked | **接受**：第 0 列跳過改寫，只盤點／對帳／驗證；缺規範後格式列「沒做的」且不阻擋，行為缺漏則停下請 user 決定；強制契約從 `chat-handoff` 起 | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| S1-3 | description 已改卻未釘 roster 來源，第 0 列可能 baseline＝candidate，後 13 支也可能沿用過期競爭面 | **接受**：第 0 列 roster 固定取 `044e7ca…`，candidate 只換本支為 `f2d9a5f…`；其後每列在 inventory 時取自己的 before commit，禁止沿用第 0 列 roster 或 candidate 題庫 | 同上 |
+| S1-4 | manifest 缺 4 key 且 4 支已漂移；`--accept` 會一次重寫全部，破壞單支原子性，global check 又會讓第一列假停線 | **接受**：B-4 禁 `--accept`；每列只增／改目標 key，tree 取 staged index；非目標債不阻擋本列，全 14 支完成後才要求全量 check exit 0 | 同上 |
+
+Round 1 仍判定「不可施工」；四項已處置。唯一下一步是以最新 §9.6a/b 與本表開簡化版
+Round 2，確認失效情境已封住並找新的 blocker／high；通過前不修改任何 Skill bundle。
+
+#### v11（2026-08-26・B-4 簡化版 Round 2・2 個發現全部接受）
+
+審查者：`cursor-cli`／`cursor-grok-4.6-high`／`high`；CLI exit 0，耗時 15 分 55 秒，
+兩輪交換守門 exit 0。ask hash＝
+`17c0fe843858e3750561f345c88b78d52f6af8986d2a0d748ff33148da25a19c`。
+
+| # | 發現 | 處置 | 改動檔案 |
+|---|---|---|---|
+| S2-1 | 第 0 列雖寫跳過改寫，狀態機仍必經 `rewriting`，staged 步驟也可能把 frozen bundle 加入 index 或改換行 | **接受**：第 0 列狀態固定 `inventory → verifying`；禁止 stage bundle，前後核對 frozen blob，只准 stage manifest 目標 key | `SKILL_EVAL_PLAN.md` §9.6a/b |
+| S2-2 | 規範允許零縮減，卻仍要求每支有 commit；若 bundle 與 manifest key 都吻合，無合法非空 diff，該列會永遠卡住 | **接受**：有實際 diff 才做一顆原子 commit；零縮減且 key 吻合時禁止空 commit，以空 cached diff＋before/candidate subtree＋key 對帳取得 mechanical pass，locator 使用唯一白名單字串 | 同上 |
+
+Round 2 仍判定「不可施工」；兩項已處置。唯一下一步是開簡化版 Round 3，確認 S1／S2
+全部封住並只找新的 blocker／high；通過前不修改任何 Skill bundle。
+
+#### v12（2026-08-26・user 終止覆核並授權施工）
+
+簡化版 Round 3 ask 已凍結並啟動；user 隨即明確指示「不用再覆核，可以開工」。
+執行程序已終止，沒有 Round 3 reply，也不把取消寫成通過。`review_inflight` 已清除，
+本計畫不補 `ADVERSARIAL_REVIEW_PASSED` marker。
+
+施工授權以 user 指示為準：第 0 列是對既成 candidate 的正式覆核，故記
+`skipped:user`，保留所有未驗欄且不改寫成通過；`chat-handoff` 轉為唯一 active。
+這段是跨 session 接手時唯一有效的覆核終止狀態。
+
+<!-- REVIEW_SCOPE_IGNORE_END -->
