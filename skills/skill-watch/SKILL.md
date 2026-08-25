@@ -9,7 +9,7 @@ description: 檢查你使用的 AI 平台有沒有推出新技能、改名、或
 只提報、不自動套用、不改任何 skill 檔。裝不裝由人決定。
 為什麼要這支、踩雷與決策票見 `SKILL_WATCH_PLAN.md`。
 
-## 這支不做什麼
+## 邊界
 
 - **不自動套用**。`npx skills update` 會靜默覆寫，還把資料夾掉包成 junction 讓檔離開版控。
 - **不下「可合併／可取代」的判定**。只把候選端到人面前。
@@ -23,7 +23,7 @@ description: 檢查你使用的 AI 平台有沒有推出新技能、改名、或
 py -3 "${CLAUDE_SKILL_DIR}/run.py" --platforms
 ```
 
-一律走 `skills/skill-watch/run.py`（步驟 1）。它會印「要查的平台」與「定義裡有、你還沒勾」。
+它會印「要查的平台」與「定義裡有、你還沒勾」。入口為什麼一定是這支見步驟 1。
 
 1. **有沒勾的就用選擇題問 user 這次要不要勾**。不要自己替他決定。
 2. **要改就走旗標，不要自己用 Edit 改那個 JSON**：
@@ -81,12 +81,9 @@ exit：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗拒跑
 | ✏ 改名? | `/review` → `/code-review` | Review the current diff… | 相似度 0.71・逐條自己看 |
 | ❌ 消失 | `/deep-research` | — | ☠ 你自建的 `/research` 就是代替它的 |
 
-| 欄 | 來源 | 注意 |
-|---|---|---|
-| 變動 | 工具印的 | 只有 🆕／✏ 改名?／❌ 消失 三種 |
-| 能力 | 工具印的 | 帶斜線寫成 `/name` |
-| 官方說明 | **工具已經壓成一句印出來了**，直接抄 | 不要 WebFetch 重寫 |
-| 用途／與誰重疊 | **這一欄要你動腦** | 去 `<harness>/SkillViewer/platform_skills.json` 的 `skills[]` 找相近的自建（`origin` 是 `global`／`project`） |
+前三欄照抄工具印的（變動只有 🆕／✏ 改名?／❌ 消失 三種；能力帶斜線寫成 `/name`；
+官方說明工具已壓成一句，**不要 WebFetch 重寫**）。**第四欄要你動腦**：去
+`<harness>/SkillViewer/platform_skills.json` 的 `skills[]` 找相近的自建（`origin` 是 `global`／`project`）。
 
 1. **不要貼整份清單**，只列差異。
 2. **「官方有、本機沒有」那批不要進表**——那是常態不是變動。要提就一行帶過。
@@ -104,8 +101,7 @@ exit：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗拒跑
 每筆有 `name`／`description`／`origin`／`kind`。
 `origin`＝`global`／`project` 是自建，`platform` 是官方。
 ⚠ **不要 WebFetch 重寫說明**，也**不要**從工具 stdout 抄官方說明——
-`officialCrossCheck.missingLocally` **只存名稱**（`skill_watch_run.py:529` 印的就是純名單），
-說明在 `skills[]` 裡。
+`officialCrossCheck.missingLocally` **只存名稱**（工具印的就是純名單），說明在 `skills[]` 裡。
 
 #### ① 我有什麼
 
@@ -124,7 +120,7 @@ exit：**0＝跑成功**（不論有無變動）、**2＝失敗**。失敗拒跑
 
 ⚠⚠ **這一段的標題絕對不能寫成「本機沒有」。**
 工具量的是「**不在注入清單**」，而注入清單**只裝 skill**：內建 slash command 不會進去。
-這條訊號到目前為止一次真缺口都沒抓到過（歷史命中率 0/6）。
+這條訊號歷來 0 命中，從沒抓到過真缺口。
 
 1. 標題寫「**官方文件有、不在注入清單**」，**不要**寫「本機沒有」。
 2. **預設當成「拿得到」**，要講缺口**必須先證明**：查 `claude --help` 的 `Commands:` 區，或請 user 打一個 `/` 看補完清單。
