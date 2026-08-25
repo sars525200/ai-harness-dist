@@ -446,22 +446,45 @@ def _exchange_gate_verdict(map_path: str):
 
     回 `(ok, 輸出)`。**這條 fail-closed**：有 ask 檔卻連守門都跑不起來時擋下來，
     因為那個狀態下「放行」等於把 R1-3 的洞原封不動留著。
+
+    ⚠ **開火條件保持 `re.I`，而守門那側改成「認得大小寫變體但拒絕它」**
+    （2026-08-25 覆核 R3-2 的修法，比它建議的再硬一階）：
+    原本這裡有 `re.I`、守門沒有 ⇒ `Round-1-ask.md` 讓 PR-1 開火、守門一個都認不得，
+    BLOCK 訊息寫「底下沒有任何 round-N-ask.md」——**檔就在那裡，訊息在說沒有**。
+    但把這裡改成區分大小寫會更糟：那樣兩邊都看不見那個檔，**等於完全沒有守門**，
+    而且是靜默的。所以兩邊都認得，由守門明講「檔名不是正規形式」。
     """
     d = os.path.dirname(os.path.abspath(map_path))
     try:
         names = os.listdir(d)
-    except OSError:
-        return True, ""          # 目錄讀不到：不是這條規則該處理的問題
+    except OSError as exc:
+        # R3-1：這裡原本 `return True`（放行），與上面自己寫的 fail-closed 相反，
+        # 而且不出聲。同一份未完成的交換會因為檔案系統當下的臉色決定出不出得去
+        # ——listdir 成功就 BLOCK、失敗就 ALLOW。守門的判斷不該取決於這種事。
+        return False, (f"讀不到 map 同目錄（{type(exc).__name__}: {exc}）——"
+                       f"無法判斷這輪是不是落檔交換，不當成通過。")
     if not any(re.match(r"^round-\d+-ask\.md$", n, re.I) for n in names):
         return True, ""          # 不是落檔交換 ⇒ 這條不適用
 
     gate = os.path.join(_HARNESS_ROOT, "tools", "adversarial_exchange_gate.py")
     if not os.path.exists(gate):
         return False, f"找不到守門腳本：{gate}"
+    kw = {}
+    if sys.platform == "win32":
+        # R3-4：`python.exe` 沒這個旗標會閃小黑窗、搶輸入法焦點。這是本 repo 記過的
+        # 老問題（`dashboard/win_subprocess.py` 是同一個旗標的另一份），
+        # 但 hook 不 import 那支——hooks 不該相依 dashboard/，而且 hook 必須自足：
+        # import 失敗會讓整個 Stop 判斷掛掉，代價遠大於重寫這三行。
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
     try:
         r = subprocess.run([sys.executable, gate, "--check", d],
                            capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=30)
+                           errors="replace", timeout=30, **kw)
+    except subprocess.TimeoutExpired:
+        return False, ("守門腳本 30 秒沒有回應（檔案被防毒／同步軟體鎖住時會這樣）。\n"
+                       "這**不是**你的計畫書有問題，也不是模型卡住——是 PR-1 新接的"
+                       "落檔交換檢查跑不完。手動跑一次看它卡在哪：\n"
+                       f"  py -3 {gate} --check {d}")
     except Exception as exc:      # noqa: BLE001
         return False, f"守門腳本跑不起來：{type(exc).__name__}: {exc}"
     return r.returncode == 0, (r.stdout or "") + (r.stderr or "")
@@ -688,10 +711,16 @@ def check(ctx):
                     f"marker 的 hash 只證明「這份文件沒被改過」，"
                     f"證明不了「有人真的看過它」。\n\n"
                     f"{gate_out.strip()}\n\n"
-                    f"處置：把 `round-N-ask.md` 貼進 Cursor、讓它把發現寫回 "
+                    f"處置**二選一**：\n"
+                    f"① 還在走落檔交換 → 把 `round-N-ask.md` 貼進 Cursor、讓它把發現寫回 "
                     f"`round-N-reply.md`，再跑一次：\n"
                     f"  py -3 {os.path.join(_HARNESS_ROOT, 'tools', 'adversarial_exchange_gate.py')} "
                     f"--check {os.path.dirname(os.path.abspath(path))}\n"
+                    f"② **已經不走了**（改用 claude-code／這輪不派 Cursor）→ "
+                    f"把那個沒人要回的 `round-N-ask.md` **刪掉**。\n"
+                    f"   開火條件是「同目錄有 ask 檔」而不是「設定是 cursor」——"
+                    f"刻意的（hook 不該再養一份設定真相），代價就是留著的半截 ask 會一直擋。\n"
+                    f"   ⚠ 已經配對齊全的舊 ask **不必刪**，那不是路障（守門會綠）。\n"
                     f"⚠ 這支守門**防遺忘、不防作弊**：自己代筆的 reply 與真的回覆同形。"
                     f"它擋的是「忘了貼」與「貼了但沒回」，不是「決心造假」。"
                 )

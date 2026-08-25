@@ -8,10 +8,17 @@ Cursor），所以走落檔交換：skill 寫 `round-N-ask.md`、人貼進 Curso
 `round-N-reply.md`。
 
 問題是**這條路徑的每一步都能被跳過而不出聲**：不貼給任何人、reply 空白、reply 是上一輪
-的複製、派出後偷改題目——外形都一樣。PR-1 幫不上忙，它只認 `.scratch/**/map.md`
-（`hooks/rules/pr1_plan_review_marker.py`），**看不見 ask 與 reply**。
+的複製、派出後偷改題目——外形都一樣。marker 的 hash 只證明「文件沒被改過」，
+證明不了「有人真的看過」。
 
 所以這支的職責只有一個：**讓「沒有真的交換過」變成一個 exit code**。
+
+⚠ **它已經被 PR-1 接走了**（2026-08-25 `dc3000d`，覆核 R1-3）：
+`hooks/rules/pr1_plan_review_marker.py` 的 `_exchange_gate_verdict()` 會在
+「這輪動過 `.scratch/**/map.md` 且同目錄有 `round-N-ask.md`」時呼叫 `--check`，
+非零就 BLOCK。所以**這不是一支只靠人記得跑的輔助工具**——改它的行為會直接改變
+Stop 的判定。（本檔早期版本寫著「PR-1 看不見 ask／reply」，那句話在 `dc3000d` 之後
+就是假的；覆核 R3-5 指出留著它會讓下一個人把接線當死碼刪掉。）
 
 ## 誠實界線
 
@@ -44,6 +51,12 @@ sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 ASK_NAME = re.compile(r"^round-(\d+)-ask\.md$")
 REPLY_NAME = re.compile(r"^round-(\d+)-reply\.md$")
+# 大小寫變體要**認得但拒絕**，不是視而不見（2026-08-25 覆核 R3-2）。
+# PR-1 的開火條件用 re.I：那邊若也改成區分大小寫，`Round-1-ask.md` 就會變成
+# 兩邊都看不見的檔 —— 等於完全沒有守門，而且是靜默的。所以這裡認得它，並明講
+# 「檔名不是正規形式」，把「靜默沒有守門」換成「一句看得懂的話」。
+ASK_LOOSE = re.compile(r"^round-\d+-ask\.md$", re.I)
+REPLY_LOOSE = re.compile(r"^round-\d+-reply\.md$", re.I)
 SHA_LINE = re.compile(r"^\s*ask-sha256\s*=\s*([0-9a-f]{64})\s*$")
 
 # 發現區的下限。判準是「這份 reply 有沒有實質內容」，不是「寫得好不好」——
@@ -199,7 +212,21 @@ def check_dir(effort: Path) -> int:
         print(f"✘ 找不到 effort 目錄：{effort}")
         return 2
 
-    asks = sorted((p for p in effort.iterdir() if ASK_NAME.match(p.name)),
+    entries = list(effort.iterdir())
+
+    # 大小寫變體：認得、但拒絕（R3-2）。放在最前面，因為它會讓下面每一條的
+    # 檔名配對都不可靠——先講清楚檔名不對，比讓人去讀一堆對不上的訊息好。
+    odd = sorted(p.name for p in entries
+                 if (ASK_LOOSE.match(p.name) and not ASK_NAME.match(p.name))
+                 or (REPLY_LOOSE.match(p.name) and not REPLY_NAME.match(p.name)))
+    if odd:
+        print(f"✘ 檔名不是正規形式（大小寫不符）：{odd}")
+        print("  請改成全小寫的 round-N-ask.md／round-N-reply.md。")
+        print("  ⚠ 這不是吹毛求疵：PR-1 的開火條件不分大小寫、這支的配對分，"
+              "留著會讓「檔在那裡」與「訊息說沒有」同時成立。")
+        return 2
+
+    asks = sorted((p for p in entries if ASK_NAME.match(p.name)),
                   key=lambda p: int(ASK_NAME.match(p.name).group(1)))
     if not asks:
         print(f"✘ {effort} 底下沒有任何 round-N-ask.md —— 沒有派出過題目，談不上覆核。")
@@ -229,7 +256,7 @@ def check_dir(effort: Path) -> int:
               " —— 中間輪的題目被刪掉或從未建立，那一輪等於沒被檢查過")
         bad += 1
     orphans = sorted(int(REPLY_NAME.match(p.name).group(1))
-                     for p in effort.iterdir()
+                     for p in entries
                      if REPLY_NAME.match(p.name)
                      and int(REPLY_NAME.match(p.name).group(1)) not in nums)
     if orphans:

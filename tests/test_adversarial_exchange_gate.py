@@ -2,8 +2,9 @@
 r"""落檔交換守門的回歸網（2026-08-25）。
 
 `tools/adversarial_exchange_gate.py` 是 `/adversarial-review` 用 `tool: cursor` 時
-**唯一**會說「這一輪根本沒有交換過」的東西。它自己壞掉的話沒有別人會發現——
-PR-1 不認識它，eval 也掃不到它（那一層看的是 skill 的契約，不是工具的行為）。
+**唯一**會說「這一輪根本沒有交換過」的東西，而且 2026-08-25（`dc3000d`）起
+**PR-1 會呼叫它**（`_exchange_gate_verdict`）⇒ 它壞掉會直接改變 Stop 的判定。
+eval 掃不到它（那一層看的是 skill 的契約，不是工具的行為），所以這支測試是它的網。
 
 守的是三類會**靜默**壞掉的事：
 
@@ -298,6 +299,74 @@ def _case_green_prints_findings_head(fails):
             fails.append("綠的時候應把發現區前幾行印出來 —— 否則 exit 0 看不出裡面是垃圾")
 
 
+def _load_pr1():
+    """載入 PR-1 hook 模組（需要 hooks/ 在 sys.path 上才 import 得到 contract）。"""
+    hooks = os.path.join(ROOT, "hooks")
+    if hooks not in sys.path:
+        sys.path.insert(0, hooks)
+    src_path = os.path.join(hooks, "rules", "pr1_plan_review_marker.py")
+    mod = types.ModuleType("pr1_under_test")
+    mod.__file__ = src_path
+    exec(compile(open(src_path, encoding="utf-8").read(), src_path, "exec"), mod.__dict__)
+    return mod
+
+
+def _case_pr1_fire_condition_agrees(fails):
+    """R3-2 的另一半：PR-1 開火了，守門就必須認得那個檔。
+
+    兩份判斷同一件事就會漂。這條把「開火」與「認得」釘在一起——
+    任一邊改了口徑，這裡就紅。
+    """
+    m = _load_pr1()
+    with tempfile.TemporaryDirectory() as d:
+        for name in ("round-1-ask.md", "Round-1-ask.md", "ROUND-2-ASK.MD"):
+            for f in os.listdir(d):
+                os.remove(os.path.join(d, f))
+            open(os.path.join(d, name), "w", encoding="utf-8").write("# q\n")
+            ok, out = m._exchange_gate_verdict(os.path.join(d, "map.md"))
+            if ok:
+                fails.append("%s 應該讓 PR-1 開火（開火了才輪得到守門說話）" % name)
+                return
+            if "沒有任何" in out:
+                fails.append("%s：開火了但守門說『沒有任何 ask』—— 兩邊口徑漂了" % name)
+                return
+
+
+def _case_pr1_listdir_failure_blocks(fails):
+    """R3-1：docstring 寫 fail-closed，`listdir` 失敗卻曾經放行。
+
+    同一份未完成的交換，會因為檔案系統當下的臉色決定出不出得去。
+    """
+    m = _load_pr1()
+    ok, out = m._exchange_gate_verdict(
+        os.path.join(tempfile.gettempdir(), "no-such-dir-r31", "map.md"))
+    if ok:
+        fails.append("讀不到 map 同目錄時應擋下來（fail-closed），不得靜默放行")
+    if not out.strip():
+        fails.append("擋下來時必須說明原因，否則人看不出守門為什麼沒跑")
+
+
+def _case_case_variant_rejected(fails):
+    """R3-2：大小寫變體要**認得但拒絕**，不是視而不見。
+
+    PR-1 的開火條件用 `re.I`、這支的配對不用 ⇒ `Round-1-ask.md` 曾讓 PR-1 開火、
+    這支一個都認不得，於是訊息寫「底下沒有任何 round-N-ask.md」——檔就在那裡。
+    把 PR-1 改成區分大小寫會更糟：兩邊都看不見＝完全沒有守門，而且是靜默的。
+    """
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "Round-1-ask.md")
+        open(p, "w", encoding="utf-8", newline="\n").write("# 題目\n\n請挑錯。\n")
+        r = _cli("--check", d)
+        if r.returncode != 2:
+            fails.append("大小寫變體應 exit 2（實得 %s）" % r.returncode)
+        out = r.stdout or ""
+        if "正規形式" not in out:
+            fails.append("訊息應明講檔名不是正規形式，而不是說「沒有任何 ask」：%s"
+                         % out.strip()[:120])
+        if "沒有任何" in out:
+            fails.append("不得在檔案確實存在時說「沒有任何 round-N-ask.md」")
+
+
 def _case_reply_sha_anywhere(fails):
     """hash 寫在 reply 檔尾也該算數 —— 「有沒有回對題」與它寫在第幾行無關。"""
     with tempfile.TemporaryDirectory() as d:
@@ -330,6 +399,9 @@ def run():
         ("round-01 檔名別名拒跑（R2-7）", _case_leading_zero_round),
         ("沒帶 sha 的訊息被釘住（R2-8）", _case_no_sha_message_pinned),
         ("綠的時候印出發現區前幾行（R1-8）", _case_green_prints_findings_head),
+        ("大小寫變體認得但拒絕（R3-2）", _case_case_variant_rejected),
+        ("PR-1 開火條件與守門同口徑（R3-2）", _case_pr1_fire_condition_agrees),
+        ("PR-1 讀不到目錄時擋下來（R3-1）", _case_pr1_listdir_failure_blocks),
         ("reply 的 hash 寫哪一行都算", _case_reply_sha_anywhere),
     ]
     passed = 0
