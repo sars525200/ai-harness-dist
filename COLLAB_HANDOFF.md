@@ -40,7 +40,7 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 接 Claude↔Cursor 協作。工作區 D:\.ai-harness。先讀 COLLAB_HANDOFF.md 與根目錄 CLAUDE.md。
 不要建 .claude/，不要拷 skills 到 .cursor/skills/，不要把 global/CLAUDE.md 貼成 AGENTS.md。
 不要 move_agent_to_root，不要加 origin，不要建 master。
-改共用檔前跑 tools/peek_sessions.py；commit 只 stage 自己的 hunk。
+改共用檔前跑 tools/check_before_start.py <要動的檔...>；commit 只 stage 自己的 hunk。
 ```
 
 ---
@@ -108,14 +108,18 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 
 ## 兩人同時改時怎麼做
 
-1. 開工前 `git status`；改共用檔前跑 `py -3 tools/peek_sessions.py`（必要時加 `PYTHONIOENCODING=utf-8`，cp950 會在 emoji 處整支中斷）。
-   ⚠ **`peek_sessions.py` 看不到 Cursor 那一側**（2026-08-25 實測）。它讀的是
+1. 改共用檔前跑 `py -3 tools/check_before_start.py <你要動的檔...>`。
+   exit `0` 可開工／`1` 那些檔有未提交改動／`2` 工具或設定出錯。
+   **一定要把檔當參數傳**——不傳只印全景，而「repo 有髒污」是常態不是阻礙，
+   拿它擋自己等於繞回「等全部安靜」那個永久阻塞（判準是**檔案層級不是 session 層級**）。
+   ⚠ **判準必須是平台無關的**（2026-08-25／08-26 兩次實地咬到）：`peek_sessions.py` 讀的是
    `~\.claude\projects\<專案>\<session-id>.jsonl` —— 那是 **Claude Code 的 transcript
-   目錄**，Cursor 不寫那裡。同一則對話實測：開工時 peek 說「沒有活躍 session」且
-   `git status` 乾淨；四十分鐘後 **35 個髒檔**（另一條線的 in-flight），peek **仍然**說
-   「沒有活躍 session」。**它防的正是它看不到的那個人。**
-   ⇒ 協作情境下 peek 只回答「**Claude 那側**有沒有人」。要知道 Cursor 在不在，靠：
-   `git status --porcelain`（髒檔數變多）＋ `find . -mmin -5`（誰在寫）＋ 對方計畫書的 mtime。
+   目錄**，Cursor 一個位元組都不寫進去。8/25 實測：開工時 peek 說「沒有活躍 session」，
+   四十分鐘後 **35 個髒檔**（另一條線的 in-flight），peek **仍然**說「沒有活躍 session」。
+   **它防的正是它看不到的那個人。** 8/26 再重現一次（11 個髒檔、6 筆兩分鐘內寫過）。
+   ⇒ 所以守門看的是 **`git status` ＋ mtime**，那對兩個平台一視同仁。
+   `peek_sessions.py` 2026-08-26 起會在清單後面補印同一個工作區訊號，
+   但它**只回答「Claude 那側有沒有人」**，要逐檔判定仍走 `check_before_start.py`。
    **開工時乾淨不代表接下來乾淨——動共用檔之前再看一次，不是只在開工看。**
 5. **對方的 in-flight 會讓回歸網變紅，別把它當成自己的。** 實測 `tests/run_hook_tests.py`
    的 3 個失敗全部來自另一條線未提交的新檔（`.scratch/*.py` 的 U-1 債、新模組沒標分層）。

@@ -26,6 +26,7 @@ import glob
 import json
 import os
 import re
+import sys
 import time
 
 ROOT = os.path.join(os.path.expanduser("~"), ".claude", "projects")
@@ -82,6 +83,61 @@ def summarize(rec):
     return None
 
 
+def workspace_signal():
+    r"""平台無關的「有沒有人在動這個工作區」訊號，補在 session 清單**之後**。
+
+    ⚠ **這一段修的是一個反向訊號**（2026-08-25 實地咬到）：上面那段只讀
+    `~\.claude\projects\**\*.jsonl` ＝ **Claude Code 的 transcript**，
+    Cursor 一個位元組都不寫進去。實測「沒有活躍 session」的當下，Cursor 正在改
+    28 個 `M` ＋ 5 個新檔。規則叫人跑這支來決定能不能動共用檔，
+    **它卻在最該擋的時候回報安全**——那比沒有工具更糟。
+
+    2026-08-26 再次實地重現：本檔回報「只有你」，同一時刻 `git status` 有 11 筆
+    未提交改動、其中 6 筆兩分鐘內寫過，全部是 Cursor 那側的在製品。
+
+    偵測邏輯**刻意不在這裡重寫**，直接用 `check_before_start` 的——這個 repo 反覆記過
+    「同一份邏輯有多份副本，只改一處等於沒改，而且不會報錯」。
+    """
+    try:
+        import check_before_start as cbs
+        from pathlib import Path
+        repo = cbs.find_repo(Path(os.getcwd()))
+        if repo is None:
+            return
+        rc, dirty = cbs.git_status(repo, [])
+        if rc != 0:
+            return
+    except Exception:
+        # 取不到就明說取不到，不要靜靜跳過——靜靜跳過又變回假的安全訊號。
+        print("\n⚠ 這支只看得到 Claude Code。工作區層級的訊號取不到，"
+              "請自己跑 tools/check_before_start.py")
+        return
+
+    print("\n" + "-" * 78)
+    if not dirty:
+        print("工作區：working tree 乾淨（平台無關訊號，涵蓋 Cursor）")
+        return
+
+    now = time.time()
+    ages = []
+    for rel in dirty:
+        try:
+            ages.append(now - os.path.getmtime(os.path.join(str(repo), rel)))
+        except OSError:
+            pass
+    newest = min(ages) if ages else None
+    if newest is not None and newest < cbs.HOT_SECONDS:
+        print("工作區：%d 個檔有未提交改動，最新一筆 %d 秒前寫過"
+              " —— **有人正在動這個工作區**（判不出是哪個平台）" % (len(dirty), int(newest)))
+    elif newest is not None:
+        print("工作區：%d 個檔有未提交改動，最新一筆 %.0f 分鐘前"
+              " —— 像是躺著的殘留，不是有人在改" % (len(dirty), newest / 60))
+    else:
+        print("工作區：%d 個檔有未提交改動" % len(dirty))
+    print("  要逐檔判定「我能不能動這幾個」跑："
+          "py -3 tools/check_before_start.py <你要動的檔...>")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=12, help="每個 session 顯示最後幾筆（預設 12）")
@@ -130,9 +186,17 @@ def main():
         for s in rows[-args.n:]:
             print(s)
     if not shown_any:
-        print("沒有 %d 秒內活躍的 session（用 --idle 放寬，或 --only 指定）" % args.idle)
+        print("Claude Code 沒有 %d 秒內活躍的 session（用 --idle 放寬，或 --only 指定）"
+              "—— 注意這**不等於**沒有人在動這個工作區，往下看。" % args.idle)
+    workspace_signal()
     return 0
 
 
 if __name__ == "__main__":
+    # cp950 主控台編不出 summarize() 印的 emoji ⇒ `UnicodeEncodeError` 會在印到
+    # **第二個** session 時整支中斷。危險的不是崩潰而是**半截輸出**：第一個
+    # session（常常剛好是自己）印完了才炸，看起來像「只有我一個在跑」。
+    # 這與 workspace_signal 修的是同一種病——都是假的安全訊號，所以一起修。
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     raise SystemExit(main())
