@@ -2,23 +2,25 @@
   "schema": 2,
   "files": {
     "__global__\u0001全域 CLAUDE.md": {
-      "bytes": 9623,
-      "entry_count": 38,
+      "bytes": 10870,
+      "entry_count": 42,
       "over_limit_count": 0,
       "entries": {
         "__global__\u0001全域 CLAUDE.md\u0001**全程繁體中文回覆**：不論任務內容、程式語言": 53,
         "__global__\u0001全域 CLAUDE.md\u0001**問題一律用選擇題**：需要使用者決定或釐清的": 88,
         "__global__\u0001全域 CLAUDE.md\u0001**說停就停**：user說「停／夠了／不用了／": 113,
         "__global__\u0001全域 CLAUDE.md\u0001**升級安全閥**：ASK/VERIFY→DEV": 53,
-        "__global__\u0001全域 CLAUDE.md\u0001每次任務開始自我宣告：`模式/任務分類/階段/規": 74,
+        "__global__\u0001全域 CLAUDE.md\u0001每次任務開始自我宣告：`模式/任務/任務分類/階": 80,
+        "__global__\u0001全域 CLAUDE.md\u0001**進度欄寫`進度60%`**＝整件事完成到哪、": 48,
+        "__global__\u0001全域 CLAUDE.md\u0001**任務欄＝這段工作的名字**：**繁體中文、≤": 92,
         "__global__\u0001全域 CLAUDE.md\u0001**階段欄五選一**＝Research／Desi": 107,
         "__global__\u0001全域 CLAUDE.md\u0001**規模欄三選一**＝L／S／M（判準見§3，動": 53,
-        "__global__\u0001全域 CLAUDE.md\u0001上兩欄「為什麼是這個形狀」＋兩次實測踩雷→`D:": 65,
+        "__global__\u0001全域 CLAUDE.md\u0001任務／階段／規模三欄「為什麼是這個形狀」＋實測踩": 70,
         "__global__\u0001全域 CLAUDE.md\u0001**「修改檔案」欄寫實際會動的檔**：不改任何檔": 95,
+        "__global__\u0001全域 CLAUDE.md\u0001**對話名稱由hook從宣告自動組**（不必手動": 111,
         "__global__\u0001全域 CLAUDE.md\u0001**M大型**＝資料遷移/DELETE・動角色·": 106,
         "__global__\u0001全域 CLAUDE.md\u0001**S標準**＝改**≥3檔**・碰硬規則區・改": 71,
         "__global__\u0001全域 CLAUDE.md\u0001**L輕量**＝以上都不命中→Research壓": 40,
-        "__global__\u0001全域 CLAUDE.md\u0001階段｜交付物｜必填欄位": 11,
         "__global__\u0001全域 CLAUDE.md\u0001Research｜研究資料包｜命中（`檔:行`）": 37,
         "__global__\u0001全域 CLAUDE.md\u0001Design｜工作規格｜做法／待決分岔（選項＋傾": 38,
         "__global__\u0001全域 CLAUDE.md\u0001Execute｜改動對照｜改了什麼／為什麼是這個": 36,
@@ -36,6 +38,7 @@
         "__global__\u0001全域 CLAUDE.md\u0001**session指令擋住派工時必須當場說**，": 117,
         "__global__\u0001全域 CLAUDE.md\u0001上兩條的實測數字（11.6倍／2.9倍）與環境細": 67,
         "__global__\u0001全域 CLAUDE.md\u0001派出去的任務要**自足**：內建Explore／": 89,
+        "__global__\u0001全域 CLAUDE.md\u0001**角色回報的`【需要但沒有】`必落檔**：抄進": 96,
         "__global__\u0001全域 CLAUDE.md\u0001**預設Sonnet**（日常維護／UI打磨／低": 36,
         "__global__\u0001全域 CLAUDE.md\u0001**升Opus的時機**：任務碰到**DB／邏輯": 91,
         "__global__\u0001全域 CLAUDE.md\u0001**最貴的模型<5%**：只留最硬的audit（": 49,
@@ -43,7 +46,8 @@
         "__global__\u0001全域 CLAUDE.md\u0001**skillfrontmatter的`mode": 93,
         "__global__\u0001全域 CLAUDE.md\u0001**做完要給結論＋成果落地**：規則寫進規範檔、": 46,
         "__global__\u0001全域 CLAUDE.md\u0001**改了沒當場驗到的**（需重啟／要真機／等排程": 79,
-        "__global__\u0001全域 CLAUDE.md\u0001報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就": 28
+        "__global__\u0001全域 CLAUDE.md\u0001報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就": 28,
+        "__global__\u0001全域 CLAUDE.md\u0001同一個repo可能有別的session在改：開工": 105
       }
     },
     "AI-Projects\u0001CLAUDE.md": {

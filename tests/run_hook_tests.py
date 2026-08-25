@@ -417,6 +417,7 @@ def main() -> int:
         import test_js_source_probe
         import test_adversarial_exchange_gate
         import test_reviewer_config
+        import test_session_title
         for run_fn, label in (
             # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
             # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
@@ -432,6 +433,7 @@ def main() -> int:
             # 而 eval 那一層看的是 skill 的契約、掃不到工具的行為。
             (test_adversarial_exchange_gate.run, "落檔交換守門（cursor 覆核）"),
             (test_reviewer_config.run, "審查者設定（未知值／缺檔不得靜默）"),
+            (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),

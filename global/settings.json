@@ -157,7 +157,6 @@
       "D:\\.ai-harness\\dashboard",
       "D:\\.ai-harness\\hooks\\rules",
       "D:\\.ai-harness\\tests",
-      "C:\\Users\\<USER>\\OneDrive - <COMPANY>股份有限公司\\「itadmit2」的檔案 - deploy\\# 離線版",
       "D:\\AI-Projects\\codebase-health-dashboard",
       "D:\\.ai-harness"
     ]
@@ -190,6 +189,16 @@
       }
     ],
     "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
       {
         "hooks": [
           {
