@@ -107,6 +107,20 @@ _NO_FILES = ("無", "待定", "")
 _MAX_TITLE = 48
 
 
+_TITLE_NAME_RE = re.compile(r"^【[^】]+】([^｜]+)")
+
+
+def previous_name(prev_title: str) -> str:
+    """從上一個標題抽出任務名（去掉分類標記與階段／進度）。
+
+    收尾那一輪的宣告寫的是「收工封存」，直接拿來當名字會變成
+    `【收尾】收工封存｜收尾` —— 那句話只說了「有件事收尾了」，**看不出是哪一件**。
+    收尾要沿用原本的任務名，而 memo 檔裡剛好存著上一個完整標題。
+    """
+    m = _TITLE_NAME_RE.match(prev_title or "")
+    return m.group(1).strip() if m else ""
+
+
 def classify(name: str, mode: str, files: str) -> str:
     """判定這一輪屬於哪一種命名。純函式，判定條件全部來自宣告欄位。
 
@@ -156,7 +170,7 @@ def _looks_like_declaration(head: str) -> bool:
     return sum(1 for f in _DECL_FIELDS if f in head) >= _DECL_MIN_FIELDS
 
 
-def _declared_task(texts: "list[str] | None") -> str:
+def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
     """從 assistant 文字裡取自我宣告的任務名；沒有回空字串。
 
     **從後往前找**：§2 允許中途轉向（`任務 舊名→新名`），一輪裡可能有兩次宣告，
@@ -178,6 +192,10 @@ def _declared_task(texts: "list[str] | None") -> str:
         if not name:
             continue
         kind = classify(name, _field(_MODE_RE, line), _field(_FILES_RE, line))
+        if kind == _KIND_CLOSE:
+            # 收尾沿用原任務名（宣告寫的是「收工封存」，那不是任務目標）。
+            # 抽不出來才退回宣告的字面，總比沒有名字好。
+            name = previous_name(prev_title) or name
         return compose(kind, name,
                        _field(_STAGE_RE, line), _field(_PROGRESS_RE, line))
     return ""
@@ -439,8 +457,9 @@ def main() -> int:
         # 於是名字停在上一輪。payload 這個欄位是記憶體裡的文字，不受 flush 時序影響。
         # 兩個來源都要：宣告可能寫在最終回覆（payload 拿得到），也可能寫在輪次開頭
         # 的某一則（那則早就 flush 了，掃 transcript 拿得到）。
-        declared = (_declared_task([payload.get("last_assistant_message") or ""])
-                    or _declared_task(iter_turn_assistant_texts(path)))
+        prev_title = _recall(session_id)
+        declared = (_declared_task([payload.get("last_assistant_message") or ""], prev_title)
+                    or _declared_task(iter_turn_assistant_texts(path), prev_title))
         existing, distance = _last_custom_title(path)
         title = decide(declared, existing, distance)
 
