@@ -199,6 +199,72 @@ def _case_cursor_is_a_tool(fails):
                      "（Cursor 自己的 process 有值、Claude 這側是 None）")
 
 
+def _case_model_set_per_tool(fails):
+    """模型清單必須依 tool 而定（2026-08-25 加 cursor-cli）。
+
+    `cursor-cli` 吃的是 Cursor 的 slug（`cursor-grok-4.6-xhigh`），
+    `claude-code` 吃的是抽象檔位（`opus`）。共用一組清單的話，
+    **兩邊必有一邊的合法值被判成未知值**而讓 `--check` exit 2 ——
+    而 skill 的規則是「非零就停下來問人」，等於每次都要人介入。
+    """
+    mod, _ = _with_config(GOOD)
+    ids = [t["id"] for t in mod.TOOLS]
+    if "cursor-cli" not in ids:
+        fails.append("TOOLS 裡沒有 cursor-cli，實得 %s" % ids)
+        return
+    cli_models = {m["id"] for m in mod.models_for("cursor-cli")}
+    cc_models = {m["id"] for m in mod.models_for("claude-code")}
+    if "cursor-grok-4.6-xhigh" not in cli_models:
+        fails.append("cursor-cli 的模型清單少了 grok slug，實得 %s" % sorted(cli_models))
+    if "opus" not in cc_models:
+        fails.append("claude-code 的模型清單少了 opus，實得 %s" % sorted(cc_models))
+    if cli_models == cc_models:
+        fails.append("兩個工具共用同一組模型清單 —— 那正是這條要防的事")
+    # family 欄位是選單能顯示「跨不跨族」的唯一依據，掉了就等於選單在憑感覺
+    missing_family = [m["id"] for m in mod.models_for("cursor-cli") if not m.get("family")]
+    if missing_family:
+        fails.append("cursor-cli 模型缺 family 欄位：%s —— "
+                     "少了它，選單就講不出「這個審查者跟我同不同族」" % missing_family)
+    # cursor-cli 沒填 model 時不得落回 opus（那是不存在的 slug）
+    mod2, _ = _with_config(json.dumps({"tool": "cursor-cli", "effort": "high"}))
+    got = mod2.load_config()["model"]
+    if got not in cli_models:
+        fails.append("cursor-cli 缺 model 時補成「%s」，不在它的清單裡 —— "
+                     "skill 會拿這個值去餵 CLI 而在第一輪中途才失敗" % got)
+
+
+def _case_reject_msg_matches_disk(fails):
+    """`save_config` 訊息宣稱的預設值，必須等於磁碟上真的寫進去的值。
+
+    由來：2026-08-25 加 per-tool 預設時，「沒有送 model」與「model 不是已知值」
+    是兩條分支，只改到一條 —— 訊息說「已寫成預設 opus」、磁碟實際是 grok slug。
+    訊息與行為不符比沒有訊息更糟：照著訊息去查的人會查錯方向。
+    """
+    import re
+    pat = re.compile(r"(?:沒有送 (?P<f1>\w+)|^(?P<f2>\w+)=).*?已寫成預設「(?P<claim>[^」]+)」")
+    mod, path = _with_config(GOOD)
+    payloads = [
+        {"tool": "cursor-cli", "effort": "high"},
+        {"tool": "claude-code", "effort": "high"},
+        {"tool": "claude-code", "model": "zzz", "effort": "high"},
+        {"tool": "cursor-cli"},
+        {},
+    ]
+    for p in payloads:
+        rejected = mod.save_config(p)
+        with open(path, encoding="utf-8") as fh:
+            disk = json.load(fh)
+        for msg in rejected:
+            m = pat.search(msg)
+            if not m:
+                continue
+            field = m.group("f1") or m.group("f2")
+            claim, actual = m.group("claim"), str(disk.get(field))
+            if claim != actual:
+                fails.append("payload=%s 的 %s：訊息宣稱「%s」但磁碟是「%s」"
+                             % (p, field, claim, actual))
+
+
 def run():
     cases = [
         ("檔不存在會出聲（R1-1）", _case_missing_file),
@@ -212,6 +278,8 @@ def run():
         ("state() 帶 issues 給設定頁（R2-5）", _case_state_exposes_issues),
         ("exit code 五種情境", _case_exit_codes),
         ("cursor 在 TOOLS 且 probe 為 None", _case_cursor_is_a_tool),
+        ("模型清單依 tool 而定（cursor-cli）", _case_model_set_per_tool),
+        ("save 訊息宣稱值 == 磁碟實際值", _case_reject_msg_matches_disk),
     ]
     passed = 0
     failures: list = []

@@ -41,6 +41,13 @@ CONFIG_PATH = os.path.join(HERE, "reviewer_config.json")
 HTML_PATH = os.path.join(HERE, "index.html")
 HOST, PORT = "127.0.0.1", 8899
 
+# Cursor CLI 的 Windows 原生安裝落點（官方安裝腳本 `irm 'https://cursor.com/install?win32=true' | iex`
+# 會把 agent.cmd／agent.ps1／cursor-agent.* 複製到這裡並寫進 User PATH）。
+# ⚠ 只靠 `shutil.which("agent")` 會漏判：安裝時寫的是 **User PATH**，
+# 已經開著的行程（含這支服務、含 Claude Code）不會拿到更新後的 PATH，
+# which 回 None 但東西其實裝好了 —— 那會讓選單顯示「未安裝」而誘導人改選別的審查者。
+CURSOR_AGENT_CMD = os.path.join(os.environ.get("LOCALAPPDATA", ""), "cursor-agent", "agent.cmd")
+
 # 審查者工具。`probe` 是「這台機器上裝了沒」的偵測方式 —— 選單要照實顯示可用性，
 # 讓人選之前就知道結果，而不是選了之後 skill 才回「沒裝，我用別的」。
 TOOLS = [
@@ -78,14 +85,80 @@ TOOLS = [
         "probe": "codex",
         "supports_model": False,
     },
+    {
+        "id": "cursor-cli",
+        "name": "Cursor CLI（全自動）",
+        "desc": "Cursor 官方 CLI（命令名 `agent`，Windows 原生、不需 WSL）。"
+                "**跟 `cursor` 的差別是它不需要人**：skill 直接跑 "
+                "`agent -p --mode ask --trust --workspace <沙箱> --model <slug>`，"
+                "收 stdout 落檔，一輪從頭到尾沒有人工步驟。"
+                "⚠ **一定要 `--workspace` 指到隔離沙箱**：CLI 會讀專案根的 `CLAUDE.md`、"
+                "並從 `.claude/skills` 發現 skills（官方文件明載），直接在本 repo 跑等於"
+                "讓審查者載入跟作者同一套脈絡，**「不共用推理脈絡」當場失效**。"
+                "沙箱作法＝乾淨目錄 + junction 連要查證的程式碼目錄，不連 `CLAUDE.md`／`.claude`。"
+                "⚠ 唯讀靠 `--mode ask` 且**不給 `--force`**；給了 `--force` 它就能改任何檔。",
+        "probe": "agent",
+        "probe_paths": [CURSOR_AGENT_CMD],
+        "supports_model": True,
+        "models_key": "cursor_cli",
+    },
 ]
 
+# claude-code 用的抽象模型檔位（由 Agent tool 的 model 參數承載）。
 MODELS = [
     {"id": "inherit", "name": "跟隨主線", "desc": "不覆寫，用當前 session 的模型。"},
     {"id": "opus", "name": "Opus 5", "desc": "最強推理。對抗式覆核屬 CLAUDE.md §7 明列該切 Opus 的情境（架構規劃／硬規則區）。"},
     {"id": "sonnet", "name": "Sonnet 5", "desc": "省。適合覆核範圍小、爭點單純的計畫。"},
     {"id": "fable", "name": "Fable 5", "desc": "最硬的 audit 才用。§7 訂 <5% 且燒獨立額度，日常勿選。"},
 ]
+
+# cursor-cli 吃的是 Cursor 自己的 model slug（`agent --list-models` 可列出當前帳號可用的）。
+# **`family` 欄位是這張表存在的理由**：對抗式覆核的價值來自「不共用推理脈絡」，
+# 而那件事由模型族決定，不是由「強不強」決定。選單要讓人一眼看到自己選的是不是同族。
+# ⚠ slug 會隨 Cursor 改版增減。這張表是「推薦清單」不是白名單——
+# 設定檔填了不在表上的 slug 時只警告、不判失敗（見 config_warnings），
+# 因為擋下一個其實可用的新 slug，比放行一個打錯的字串傷害更大：
+# 前者讓覆核跑不動（而人會改用預設＝自己審自己），後者 CLI 自己會報錯。
+CURSOR_CLI_MODELS = [
+    {"id": "cursor-grok-4.6-xhigh", "name": "Grok 4.6 Extra High", "family": "xAI",
+     "desc": "跨模型族。2026-08-25 首次實跑（SG-084 四輪）：R2／R3／R4 各抓出 5／4／4 個新發現，"
+             "且**沒有一輪重炒**——每一輪都打在作者上一輪剛寫下的處置上。"},
+    {"id": "gpt-5.3-codex-xhigh", "name": "Codex 5.3 Extra High", "family": "OpenAI",
+     "desc": "跨模型族、專攻程式碼。計畫的爭點在「這段程式會不會這樣壞」時選它。"},
+    {"id": "gpt-5.6-sol-xhigh", "name": "GPT-5.6 Sol Extra High", "family": "OpenAI",
+     "desc": "跨模型族、通用推理強。爭點在「這個方案本身對不對」而非程式碼細節時選它。"},
+    {"id": "gemini-3.1-pro", "name": "Gemini 3.1 Pro", "family": "Google",
+     "desc": "跨模型族。前兩個審查者意見打架時，可當獨立的第三票。"},
+    {"id": "claude-opus-5-thinking-high", "name": "Claude Opus 5 Thinking", "family": "Anthropic ⚠ 同族",
+     "desc": "⚠ **與主 session 同模型族，共享盲點**。除非你要的是「同族但不同 context」的第二意見，"
+             "否則選它等於削掉這支 skill 存在的理由。"},
+]
+
+MODEL_SETS = {"default": MODELS, "cursor_cli": CURSOR_CLI_MODELS}
+
+# 每個 tool 的預設模型。**不能共用一個全域預設**（2026-08-25 矩陣測試抓到）：
+# `DEFAULTS["model"]` 是 `opus`，那是 claude-code 的抽象檔位、對 cursor-cli 是不存在的 slug。
+# 有人把 tool 改成 cursor-cli 卻忘了改 model 時，skill 會拿 `opus` 去餵 CLI，
+# 錯誤會發生在第一輪覆核的中途、訊息還很難懂（模型不存在）。
+# 這裡選 grok 當預設是因為它跨模型族——預設值該落在「這支 skill 存在的理由」那一側。
+TOOL_DEFAULT_MODEL = {"cursor-cli": "cursor-grok-4.6-xhigh"}
+
+
+def default_model_for(tool_id: str) -> str:
+    return TOOL_DEFAULT_MODEL.get(tool_id, DEFAULTS["model"])
+
+
+def models_for(tool_id: str) -> list:
+    """哪個工具吃哪一組模型清單。
+
+    不能只有一組 `MODELS`（2026-08-25）：`cursor-cli` 吃的是 Cursor 的 slug
+    （`cursor-grok-4.6-xhigh`），`claude-code` 吃的是抽象檔位（`opus`）。
+    共用一組的話，兩邊必有一邊的合法值被判成「未知值」而讓 `--check` exit 2。
+    """
+    tool = next((t for t in TOOLS if t["id"] == tool_id), None)
+    if not tool or not tool.get("supports_model"):
+        return MODELS
+    return MODEL_SETS.get(tool.get("models_key", "default"), MODELS)
 
 EFFORTS = [
     {"id": "high", "name": "high", "desc": "預設。挑錯要夠深才有價值。"},
@@ -99,14 +172,20 @@ DEFAULTS = {"tool": "claude-code", "model": "opus", "effort": "high"}
 def load_config() -> dict:
     """讀設定；缺欄位用預設補齊。讀不到就回全預設 —— 這個檔壞掉不該讓覆核跑不動。"""
     cfg = dict(DEFAULTS)
+    given = set()
     try:
         with open(CONFIG_PATH, encoding="utf-8-sig") as fh:
             data = json.load(fh)
         for k in DEFAULTS:
             if data.get(k):
                 cfg[k] = data[k]
+                given.add(k)
     except Exception:
         pass
+    # model 沒填時要依 **tool** 補預設，不能一律落回 DEFAULTS["model"]（＝opus）：
+    # 那對 cursor-cli 是不存在的 slug。見 TOOL_DEFAULT_MODEL。
+    if "model" not in given:
+        cfg["model"] = default_model_for(cfg["tool"])
     return cfg
 
 
@@ -156,17 +235,39 @@ def config_warnings(cfg: dict) -> list:
     """
     valid = {
         "tool": {t["id"] for t in TOOLS},
-        "model": {m["id"] for m in MODELS},
+        # 模型的合法集合**依 tool 而定**（2026-08-25 加 cursor-cli 時發現）：
+        # claude-code 吃抽象檔位（opus），cursor-cli 吃 Cursor 的 slug（cursor-grok-4.6-xhigh）。
+        "model": {m["id"] for m in models_for(cfg.get("tool"))},
         "effort": {e["id"] for e in EFFORTS},
     }
     out = []
     for key, allowed in valid.items():
         val = cfg.get(key)
-        if val not in allowed:
-            out.append(f"設定檔的 {key}=「{val}」不是已知值"
-                       f"（已知：{'／'.join(sorted(allowed))}）"
-                       f"——skill 必須拒跑並說出來，不得挑一個分支兜底。")
+        if val in allowed:
+            continue
+        # cursor-cli 的 model 是「推薦清單」不是白名單：slug 會隨 Cursor 改版增減，
+        # 擋下一個其實可用的新 slug ⇒ 覆核跑不動 ⇒ 人改用預設（claude-code）＝自己審自己，
+        # 那比放行一個打錯的字串更糟（打錯的話 CLI 自己會報錯，而且是當場報）。
+        # 所以這一格只提醒、不列入 --check 的失敗條件。
+        if key == "model" and cfg.get("tool") == "cursor-cli":
+            out.append(f"ℹ 設定檔的 model=「{val}」不在推薦清單內。"
+                       f"這不算錯（Cursor 的 slug 會改版），但**沒人替你驗過它存在**——"
+                       f"跑 `agent --list-models` 確認，打錯的話 CLI 會在第一輪就失敗。")
+            continue
+        out.append(f"設定檔的 {key}=「{val}」不是已知值"
+                   f"（已知：{'／'.join(sorted(allowed))}）"
+                   f"——skill 必須拒跑並說出來，不得挑一個分支兜底。")
     return out
+
+
+def blocking_warnings(cfg: dict) -> list:
+    """`--check` 的**失敗**條件（把提醒排除在外）。
+
+    `config_warnings()` 現在同時裝「錯誤」與「提醒」（cursor-cli 的未知 slug 屬後者）。
+    exit code 只能由前者決定 —— 否則換一個新 slug 就讓 `--check` 紅掉，
+    而 skill 的規則是「看到非零就停下來問人」，等於每次改 slug 都要人介入一次。
+    """
+    return [w for w in config_warnings(cfg) if not w.startswith("ℹ")]
 
 
 def save_config(cfg: dict) -> list:
@@ -177,8 +278,22 @@ def save_config(cfg: dict) -> list:
     —— 證據被自己抹掉了。回傳的清單讓呼叫端能把「我改了你的輸入」講出來。
     """
     valid_tools = {t["id"] for t in TOOLS}
-    valid_models = {m["id"] for m in MODELS}
+    # 模型清單依 tool 決定（見 models_for）。先把 tool 正規化，再據以取模型集合——
+    # 否則「送了 cursor-cli + 它的 slug」會被舊的單一 MODELS 判成未知值而洗成 opus。
+    _tool = cfg.get("tool") if cfg.get("tool") in valid_tools else DEFAULTS["tool"]
+    valid_models = {m["id"] for m in models_for(_tool)}
+    # cursor-cli 的 slug 是開放集合（Cursor 改版會增減），存檔時不得因為「不在推薦清單」
+    # 就洗成預設 —— 那會把使用者剛選好的跨族審查者，靜靜換成同族的 opus。
+    _model_open = (_tool == "cursor-cli")
     valid_efforts = {e["id"] for e in EFFORTS}
+
+    def _dflt(k: str) -> str:
+        """訊息裡要報的「預設值」——model 那格依 tool 而定（見 TOOL_DEFAULT_MODEL）。
+
+        不能直接寫 `DEFAULTS[k]`：tool=cursor-cli 時它會說「已寫成預設 opus」，
+        但實際寫進去的是 grok 的 slug —— 訊息與行為不符比沒有訊息更糟。
+        """
+        return default_model_for(_tool) if k == "model" else DEFAULTS[k]
     # ⚠ 條件不能寫成 `cfg.get(k) is not None and ...`（2026-08-25 覆核 R2-4）：
     # 那樣「欄位根本沒送來」就不進 rejected，但下面照樣寫成 DEFAULTS。
     # 效果是 POST `{}` 或只送 model／effort，會把磁碟上的 cursor 洗成 claude-code
@@ -188,13 +303,27 @@ def save_config(cfg: dict) -> list:
     for k, allowed in (("tool", valid_tools), ("model", valid_models),
                        ("effort", valid_efforts)):
         if k not in cfg:
-            rejected.append(f"沒有送 {k}，已寫成預設「{DEFAULTS[k]}」"
+            rejected.append(f"沒有送 {k}，已寫成預設「{_dflt(k)}」"
                             f"（原本的值會被覆蓋掉）")
         elif cfg[k] not in allowed:
-            rejected.append(f"{k}=「{cfg[k]}」不是已知值，已寫成預設「{DEFAULTS[k]}」")
+            if k == "model" and _model_open and str(cfg[k]).strip():
+                # 開放集合：照收，但要出聲說「沒人替你驗過」。
+                rejected.append(f"model=「{cfg[k]}」不在 cursor-cli 的推薦清單內，已照原樣寫入"
+                                f"——請用 `agent --list-models` 確認它存在。")
+                continue
+            rejected.append(f"{k}=「{cfg[k]}」不是已知值，已寫成預設「{_dflt(k)}」")
+
+    def _model_out():
+        v = cfg.get("model")
+        if v in valid_models:
+            return v
+        if _model_open and str(v or "").strip():
+            return v
+        return default_model_for(_tool)
+
     out = {
         "tool": cfg.get("tool") if cfg.get("tool") in valid_tools else DEFAULTS["tool"],
-        "model": cfg.get("model") if cfg.get("model") in valid_models else DEFAULTS["model"],
+        "model": _model_out(),
         "effort": cfg.get("effort") if cfg.get("effort") in valid_efforts else DEFAULTS["effort"],
         "note": ("由 D:\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；"
                  "/adversarial-review 每次執行時讀這個檔。手改也可以，改完存檔即生效"
@@ -209,9 +338,13 @@ def save_config(cfg: dict) -> list:
 
 
 def tool_available(tool: dict) -> bool:
-    if not tool["probe"]:
+    if not tool.get("probe"):
         return True
-    return shutil.which(tool["probe"]) is not None
+    if shutil.which(tool["probe"]) is not None:
+        return True
+    # PATH 沒有不代表沒裝（見 CURSOR_AGENT_CMD 的註解：安裝寫的是 User PATH，
+    # 已開著的行程拿不到）。再看一次固定安裝落點才算數。
+    return any(p and os.path.exists(p) for p in tool.get("probe_paths", []))
 
 
 def state() -> dict:
@@ -223,7 +356,12 @@ def state() -> dict:
     # `issues` 是給設定頁看的（2026-08-25 覆核 R2-5）：警告原本只掛在 `--check`，
     # 走瀏覽器那條路的人看到的是「沒有 radio 被勾」而已，不像壞掉。
     # 按下儲存就落進正規化，cursor 被洗成 claude-code 而畫面全程沒說。
-    return {"config": cfg, "tools": tools, "models": MODELS, "efforts": EFFORTS,
+    return {"config": cfg, "tools": tools,
+            # `models` 是「當前 tool 對應的那組」，`model_sets` 讓設定頁在使用者切換
+            # 審查者時，不必重新請求就能換掉模型 radio —— 兩個工具的模型清單不同，
+            # 沿用上一個工具的清單會讓人選到一個對新工具無效的值。
+            "models": models_for(cfg.get("tool")), "model_sets": MODEL_SETS,
+            "efforts": EFFORTS,
             "config_path": CONFIG_PATH,
             "issues": config_load_issues() + config_warnings(cfg)}
 
@@ -283,6 +421,17 @@ def print_state() -> None:
         # 「不可用就改用可用的審查者」。兩句合起來就是一張換人許可證。
         print("  ℹ Cursor 是**人工通道**，永遠算可用。它沒有「不可用」這個狀態，只有「還沒回」。")
         print("    skill 會寫題目檔然後**停下來等人貼**。等不到不是換人的理由——換人必須是人下的指令。")
+        print("    ⚠ 不想每輪都動手貼 → 改選 `cursor-cli`（同樣跨模型族，但全自動）。")
+    if cfg["tool"] == "cursor-cli":
+        _m = next((m for m in CURSOR_CLI_MODELS if m["id"] == cfg["model"]), None)
+        _fam = _m["family"] if _m else "未知（不在推薦清單）"
+        print(f"  ℹ Cursor CLI 全自動，模型族＝{_fam}")
+        if _m and "同族" in _m["family"]:
+            print("    ⚠ **這個模型跟主 session 同族，共享盲點**——"
+                  "除非刻意要同族第二意見，否則換一個跨族的 slug。")
+        print("    ⚠ 跑的時候一定要 `--workspace` 指到隔離沙箱："
+              "CLI 會讀專案根 CLAUDE.md 與 .claude/skills，"
+              "在本 repo 直接跑＝審查者載入跟作者同一套脈絡。")
     for t in st["tools"]:
         if not t["available"]:
             print(f"  ⚠ {t['name']} 未安裝——選了它，skill 會回報找不到並改用可用的審查者"
@@ -295,7 +444,10 @@ def main() -> int:
         # 設定值不合法時要**非零退出**，不只是印一行（2026-08-25 覆核 R1-3／V1）：
         # 「明講」是散文、擋不住抄近路；exit code 才是別的腳本與 skill 步驟能檢查的東西。
         # 讀不到／欄位空掉也算（R1-1）——那會安靜地退回 claude-code，也就是自己審自己。
-        return 2 if (config_load_issues() or config_warnings(load_config())) else 0
+        # 用 blocking_warnings 而不是 config_warnings：後者現在也裝「提醒」
+        # （cursor-cli 的未知 slug），那不該讓 --check 紅掉 —— skill 的規則是
+        # 「非零就停下來問人」，每換一次 slug 就要人介入一次會逼人繞過這道檢查。
+        return 2 if (config_load_issues() or blocking_warnings(load_config())) else 0
     print_state()
     url = f"http://{HOST}:{PORT}/"
     print(f"\n設定頁：{url}　（Ctrl+C 結束）")

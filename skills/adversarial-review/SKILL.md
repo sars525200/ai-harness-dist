@@ -33,8 +33,12 @@ py -3 D:\.ai-harness\reviewer\server.py --check
 ```
 
 它會印出目前設定與**每個工具在這台機器上裝了沒**。三個欄位：
-`tool`（`claude-code`／`cursor`／`codex`）、`model`（`inherit`／`opus`／`sonnet`／`fable`）、
-`effort`（`high`／`medium`／`max`）。
+`tool`（`claude-code`／`cursor`／**`cursor-cli`**／`codex`）、`effort`（`high`／`medium`／`max`）、
+以及 `model` —— **`model` 的合法值依 `tool` 而定**（2026-08-25 起）：
+- `claude-code` 吃抽象檔位：`inherit`／`opus`／`sonnet`／`fable`
+- **`cursor-cli` 吃 Cursor 自己的 model slug**（`cursor-grok-4.6-xhigh`、`gpt-5.3-codex-xhigh`…），
+  那是開放集合（Cursor 改版會增減）⇒ 不在推薦清單的 slug **只提醒、不讓 `--check` 失敗**。
+- `cursor`／`codex` 的 `supports_model` 是 `False`，`model` 那格對它們是空轉的。
 
 **⚠ 先看 exit code，不要只讀畫面**（2026-08-25 起）：`--check` 在**未知設定值**、
 **檔案不存在**、**JSON 壞掉**、**欄位缺失或是空字串**時都會 **exit 2** 並印 `✘`。
@@ -59,6 +63,9 @@ py -3 D:\.ai-harness\reviewer\server.py --check
   ⚠⚠ **`cursor` 根本沒有「不可用」這個狀態，只有「還沒回」**（覆核 R1-4／R2-6）。
   不要把「這一輪還沒有回覆檔」讀成「Cursor 不可用」然後套用下面那條「不可用就換人」——
   人還沒貼之前它永遠是那個樣子，那樣等於自動獲得換人的授權。**還沒回就是等。**
+- **`cursor-cli`（2026-08-25 新增·跨模型族且全自動）** → 直接跑 Cursor 官方 CLI，
+  一輪從頭到尾沒有人工步驟。**它是 `cursor` 的升級路徑**：同樣跨模型族，但不必有人當傳話筒。
+  詳見步驟 1c。
 - **`codex`** → 先確認裝了沒（`--check` 會告訴你）。有裝就用非互動模式跑，跑之前先
   `codex --help` 或 `codex exec --help` 確認實際參數，不要憑記憶猜旗標（CLI 版本間常改）。
   **沒裝 → 改用 `claude-code` 並明講你換了**（見下）。
@@ -112,14 +119,57 @@ py -3 D:\.ai-harness\reviewer\server.py --check
 **所以：`cursor` 沒有「不可用」這個狀態，只有「還沒回」。還沒回就是等，不是換人。**
 真的要換（人明說不等了），必須是**人下的指令**，不是你判的。
 
-**要改設定**：`D:\.ai-harness\reviewer\Launch-Reviewer.bat`（本機設定頁，直接寫檔）。
-⚠ **不要走 harness 看板的選單**——它是 artifact、讀寫不了本機，而且 2026-08-25 查到
-它的 radio 只有 `claude-code`／`codex`、預設勾 Claude、**沒有 `cursor`**。
-照它下載覆蓋設定檔會把 `cursor` 洗成 `claude-code`（覆核 R1-5，尚未修）。
+**要改設定**：`D:\.ai-harness\reviewer\Launch-Reviewer.bat`（本機設定頁 8899，**直接寫檔**）。
+⚠ **不要走 harness 看板（8099）的選單**——**它存不了設定**，只能觸發瀏覽器下載或複製到剪貼簿，
+真相永遠是本機那個檔。按了它的「下載」再手動覆蓋，等於用畫面上那組值蓋掉磁碟上的值，
+而畫面預設勾的是 `claude-code`（＝自己審自己）。
+（2026-08-25 訂正：舊版這裡寫「它的 radio 只有 `claude-code`／`codex`、沒有 `cursor`」——
+**那句已過期**，看板 modal 現在有 `cursor`。不該走它的理由是「存不了」，不是「選項不全」。）
 
 **完成判準**：把 `--check` 的**實際輸出與 exit code 貼進回報**，並講出這輪用的是哪個審查者、
 哪個模型，以及**設定要的是不是就是這個**。
 只寫散文「我用了 X」不算——散文可以假綠，exit code 不行。
+
+### 1c. `cursor-cli` 的全自動協定（2026-08-25 新增）
+
+設定是 `cursor-cli` 時，**不寫題目給人貼，直接跑 CLI**。一輪長這樣：
+
+```bash
+agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<prompt>"
+```
+
+`agent.cmd` 在 `%LOCALAPPDATA%\cursor-agent\`（安裝：`irm 'https://cursor.com/install?win32=true' | iex`）。
+⚠ **安裝寫的是 User PATH，已開著的行程拿不到** ⇒ 用完整路徑呼叫，別依賴 `which`。
+
+**四條硬規則**：
+
+1. **`--workspace` 一定要指到隔離沙箱，不可以是本 repo。**
+   CLI **會讀專案根的 `CLAUDE.md`、並從 `.claude/skills` 發現 skills**（官方文件明載）。
+   在本 repo 直接跑 ⇒ 審查者載入跟作者同一套規則與技能，**「不共用推理脈絡」當場失效**，
+   而且沒有任何訊號會告訴你這件事發生了。
+   沙箱作法＝**乾淨目錄 ＋ junction 連要查證的程式碼目錄**，不連 `CLAUDE.md`／`.claude`：
+
+   ```powershell
+   New-Item -ItemType Junction -Path D:\reviewer-sandbox\SOP_PROD -Target <程式碼目錄>
+   New-Item -ItemType Junction -Path D:\reviewer-sandbox\effort   -Target <effort 目錄>
+   ```
+
+   ⚠ 沙箱的**父目錄**也要乾淨（`D:\AI-Projects` 與 `D:\.ai-harness` 底下都有 `CLAUDE.md`）。
+2. **唯讀靠 `--mode ask` 且不給 `--force`。** 給了 `--force` 它就能改任何檔——
+   而 junction 指向的是真的程式碼目錄。
+3. **要求它把回覆印到 stdout，由你落檔**（`--mode ask` 寫不了檔）。
+   ⚠ **PowerShell `Out-File -Encoding utf8` 會加 BOM**，`ask-sha256` 檔頭會被守門認不出 ⇒
+   落檔時用 `utf-8-sig` 讀、`utf-8` 寫。
+4. **一律背景執行。** 實測一輪 10 分鐘以上（Grok xhigh），前景會撞工具逾時被砍，
+   而且 `Out-File` **一個 byte 都不會 flush**——只留下一個 0 byte 的假 reply 檔，
+   那東西會讓交換守門誤判成「有回覆」。
+
+**落檔協定的差異（相對 1b）**：reply 檔由**你**從 stdout 落檔，不是審查者自己寫。
+1b 那條「你不得自己寫 reply 檔」的用意是防「自己代筆假裝有人審過」，
+在 CLI 模式下改由**更硬的證據**承擔：保留 `agent -p` 的**原始 stdout 與 exit code**
+（`_rN_raw.txt`）。那是人工貼上做不到的稽核痕跡。
+⚠ 但 `ask-sha256` 那行仍必須是**審查者自己輸出的**——
+你只做編碼轉換與落檔，**不得替它補上或修改那一行**。它沒照格式輸出就是這一輪不合格。
 
 ### 2. Round 1 prompt——給素材、給立場，不給我的推理過程
 
@@ -206,6 +256,20 @@ R2 讀票 05–10 的碼、R3 讀 R2 的改寫、R4 複驗 R3 的處置、R5 只
 上限的本意是擋「在細節裡繞」，不是擋「每輪都有新材料」。
 **達到上限時要判斷是哪一種**：前四輪的意見有沒有互相重複？沒有的話，
 上限應該讓路給「還有必須改的東西」——但**要跟 user 講，不要自己往下開**。
+
+**2026-08-25 SG-084 的第二個樣本（Cursor GUI R1 ＋ Grok 4.6 xhigh R2–R4）**：
+四輪共 19 個發現、**全數採納、沒有一輪重炒**，而且形狀非常一致——
+**R2 打 R1 的處置、R3 打 R2 的處置、R4 打 R3 的處置**。也就是說，
+這四輪抓的幾乎都不是原始計畫的錯，而是**作者修正意見時新造出來的錯**。
+（呼應步驟 3 那條警告：處置本身是最大的失效來源。）
+
+**這個樣本還帶出一個結構性的教訓**：連續三輪的新發現都指向同一個母題——
+**作者把「實作演算法」寫死在計畫書裡，每寫一次就製造一個新洞**
+（點名了一支做不到那件事的函式 → 換成一個 client 讀不到的集合 → 又把前綴 max 算錯）。
+⇒ **計畫書該規定的是不變量（invariant），不是演算法。**
+改成「先列 I1–I5 關票條件、演算法降級成參考實作」之後，
+下一輪的發現才從「你的演算法錯了」變成「你的不變量不完備」——那是能收斂的層次。
+遇到「每輪處置都被打穿」時，先問是不是寫錯了層，而不是再訂正一次演算法。
 
 **⚠ `reviewed=` 雙 hash 的結構代價：最後一輪必須是「零改動輪」**
 

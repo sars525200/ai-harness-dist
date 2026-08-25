@@ -1,9 +1,9 @@
 {
   "adversarial-review": {
-    "file_mtime": 1787632970.6720803,
-    "note": "四輪真實落檔交換（審查者=Cursor/Grok 4.6 High）：--stamp-ask 凍結→人貼→reply 寫回→--check 由 exit 2 轉 0，四輪皆走完。Round1 抓 13 條、Round2 抓 9 條含兩個存活變異、Round3 抓 6 條、Round4 零發現收斂。證據 .scratch/cursor-gate-selftest/round-{1..4}-{ask,reply}.md",
+    "file_mtime": 1787661649.8467295,
+    "note": "SG-084 實跑 4 輪：R1 Cursor GUI 6 個發現、R2-R4 Cursor CLI(grok-4.6-xhigh) 各 5/4/4 個，共 19 個全數採納且無一重炒；每輪都打在作者上一輪的處置上。同輪新增 cursor-cli 通道與隔離沙箱協定。",
     "result": "pass",
-    "verified_at": "2026-08-25T14:18:26"
+    "verified_at": "2026-08-25T20:44:16"
   },
   "design-spec": {
     "file_mtime": 1786082482.685371,

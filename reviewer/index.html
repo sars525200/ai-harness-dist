@@ -50,6 +50,12 @@
   .opt .body{min-width:0;flex:1}
   .opt .nm{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .opt .ds{color:var(--text-dim);font-size:12.5px;margin-top:3px}
+  /* 模型族徽章。這一頁唯一真正要回答的問題是「這個審查者跟我同不同源」，
+     所以它不是裝飾——狀態不靠顏色單獨承載，字面本身就寫著「同族／xAI／OpenAI」。 */
+  .fam{font-size:10.5px;font-weight:700;letter-spacing:.04em;padding:1px 7px;border-radius:999px;
+       border:1px solid currentColor;opacity:.85}
+  .fam.cross{color:var(--ok,#3fb950)}
+  .fam.same{color:var(--warn,#d29922)}
   .chip{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
         padding:2px 7px;border-radius:3px;white-space:nowrap}
   .chip.pass{background:var(--pass-wash);color:var(--pass)}
@@ -129,7 +135,7 @@
 </div>
 
 <script>
-const state = { tools: [], models: [], efforts: [], config: {}, issues: [] };
+const state = { tools: [], models: [], model_sets: {}, efforts: [], config: {}, issues: [] };
 
 function render() {
   const tool = state.tools.find(t => t.id === state.config.tool);
@@ -157,10 +163,14 @@ function render() {
     </label>`).join("");
 
   const dim = supportsModel ? "" : "off";
-  document.getElementById("models").innerHTML = state.models.map(m => `
+  // 模型清單要**跟著審查者換**（2026-08-25 加 cursor-cli）：cursor-cli 吃 Cursor 的
+  // slug、claude-code 吃抽象檔位。沿用載入當下那一組的話，切了工具還看到舊清單，
+  // 選下去就是一個對新工具無效的值 —— 而那個錯要到覆核跑到一半才會現形。
+  const models = modelsForTool(state.config.tool);
+  document.getElementById("models").innerHTML = models.map(m => `
     <label class="opt ${state.config.model === m.id ? "on" : ""} ${dim}">
       <input type="radio" name="model" value="${m.id}" ${state.config.model === m.id ? "checked" : ""} ${supportsModel ? "" : "disabled"}>
-      <span class="body"><span class="nm">${esc(m.name)}</span><span class="ds">${esc(m.desc)}</span></span>
+      <span class="body"><span class="nm">${esc(m.name)}${m.family ? `<span class="fam ${/同族/.test(m.family) ? "same" : "cross"}">${esc(m.family)}</span>` : ""}</span><span class="ds">${esc(m.desc)}</span></span>
     </label>`).join("");
 
   document.getElementById("efforts").innerHTML = state.efforts.map(e => `
@@ -178,9 +188,31 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** 這個工具吃哪一組模型清單（對應 server.py 的 models_for）。 */
+function modelsForTool(toolId) {
+  const t = state.tools.find(x => x.id === toolId);
+  const sets = state.model_sets || {};
+  if (!t || !t.supports_model) return sets["default"] || state.models || [];
+  return sets[t.models_key || "default"] || state.models || [];
+}
+
 document.addEventListener("change", e => {
-  if (e.target.name === "tool") state.config.tool = e.target.value;
-  else if (e.target.name === "model") state.config.model = e.target.value;
+  if (e.target.name === "tool") {
+    state.config.tool = e.target.value;
+    // 換工具之後，舊的 model 值可能對新工具無效（opus vs cursor-grok-…）。
+    // 不主動修正的話，畫面上「沒有任何一顆 model 被勾」而使用者不會注意到，
+    // 按儲存就走進 save_config 的正規化 —— 那正是 R1-2 那條規則在講的靜默改寫。
+    const valid = modelsForTool(state.config.tool).map(m => m.id);
+    if (valid.length && !valid.includes(state.config.model)) {
+      state.config.model = valid[0];
+      setStatus("模型已換成「" + valid[0] + "」——上一個值對這個審查者無效", "warn");
+    } else {
+      setStatus("");
+    }
+    render();
+    return;
+  }
+  if (e.target.name === "model") state.config.model = e.target.value;
   else if (e.target.name === "effort") state.config.effort = e.target.value;
   else return;
   setStatus("");
