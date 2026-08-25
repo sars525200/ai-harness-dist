@@ -45,3 +45,8 @@ dashboard/harness-dashboard.html
 # user 提供的參考圖（Model routing 等）：計畫書已把內容轉成文字，
 # 圖檔本身 8MB 且非程式資產，不進版控（要看原圖去本機這個目錄）
 參考/
+
+# /clear 時自動封存的 transcript 副本（hooks/session_archive.py）。
+# 同 state/ 的理由：內容是**其他 session 的完整對話**，動輒數 MB 到數十 MB，
+# 跨機器沒有意義，而且正是為了躲平台的 cleanupPeriodDays 才複製出來的。
+session-archive/

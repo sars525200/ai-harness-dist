@@ -32,9 +32,9 @@
   "would_block": {
     "DB-1": 60,
     "ENC-1": 64,
-    "AWC-1": 105,
+    "AWC-1": 106,
     "PR-1": 25,
-    "DISP-1": 32,
+    "DISP-1": 33,
     "HTML-1": 9,
     "DECL-1": 24,
     "BUDGET-1": 3,
