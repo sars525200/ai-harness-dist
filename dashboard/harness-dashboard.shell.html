@@ -224,12 +224,6 @@
   .tab .live-mark{
     width:6px; height:6px; border-radius:50%; background:var(--shadow-st); flex-shrink:0;
   }
-  #panel-deskbus{ min-height:0; }
-  #panel-deskbus:not([hidden]){ display:flex; flex-direction:column; }
-  .deskbus-frame{
-    flex:1; width:100%; min-height:70vh; border:1px solid var(--line);
-    background:var(--surface-2); border-radius:4px;
-  }
   @media (prefers-reduced-motion: no-preference){
     .tab .live-mark{ animation:pulse-sh 2.4s ease-in-out infinite; }
   }
@@ -1454,7 +1448,6 @@
       <button type="button" class="tab" role="tab" id="tab-obs" aria-controls="panel-obs" aria-selected="false" tabindex="-1" data-key="obs">成本效益<span class="count">—</span></button>
       <button type="button" class="tab" role="tab" id="tab-skills" aria-controls="panel-skills" aria-selected="false" tabindex="-1" data-key="skills">Skill<span class="count">—</span></button>
       <button type="button" class="tab" role="tab" id="tab-orch" aria-controls="panel-orch" aria-selected="false" tabindex="-1" data-key="orch">角色<span class="count">—</span></button>
-      <button type="button" class="tab" role="tab" id="tab-deskbus" aria-controls="panel-deskbus" aria-selected="false" tabindex="-1" data-key="deskbus">匯流排</button>
       <div class="sys-fold">
         <button type="button" class="sys-toggle" id="sys-toggle" aria-expanded="false" aria-controls="sys-menu">系統</button>
         <div class="sys-menu" id="sys-menu" hidden>
@@ -1792,15 +1785,6 @@
     <!-- ROLES_TOPOLOGY_END -->
     </div>
     
-  </div>
-
-  <div class="panel" id="panel-deskbus" role="tabpanel" aria-labelledby="tab-deskbus" hidden>
-    <div class="panel-title"><h2>匯流排<span class="pt-en">｜DeskBus</span></h2><p class="pt-desc">Claude Desktop 與 Cursor 在本機互傳訊息</p></div>
-    <p class="lead">頁面來自 <code>http://127.0.0.1:43147/</code>。沒開的話先在 <code>deskbus/</code> 跑 <code>npm run dev</code>。<button type="button" class="cv-info" data-note="note-deskbus-lead" aria-expanded="false" aria-controls="note-deskbus-lead" aria-label="匯流排怎麼開、MCP 寫到哪">!</button></p>
-    <div class="criteria cv-note" id="note-deskbus-lead" hidden>
-      <p>這不是產生器填的表，是另一個本機服務嵌進來。只綁 127.0.0.1。MCP 安裝：在 deskbus 目錄跑 npm run install:mcp，會寫這個專案的 .cursor/mcp.json 與 Claude Desktop 設定。步驟與兩邊提示詞見 deskbus/README.md。</p>
-    </div>
-    <iframe class="deskbus-frame" id="deskbus-frame" title="DeskBus" src="http://127.0.0.1:43147/?ui=20260825-2"></iframe>
   </div>
 
 

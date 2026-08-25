@@ -151,6 +151,40 @@ Claude 必須停下來等人，「等不到」不是換人的理由。
 機制與回歸網見 `skills/adversarial-review/SKILL.md`、`tools/adversarial_exchange_gate.py`、
 `tests/test_adversarial_exchange_gate.py`（24 條）、`tests/test_reviewer_config.py`（11 條）。
 
+## DeskBus 已移除（2026-08-26）
+
+**給 Cursor：`deskbus/` 沒有了，不要再找它、也不要重建。**
+
+**為什麼**：DeskBus 是 Claude Desktop ↔ Cursor 的本機匯流排（Next.js ＋ MCP server，
+嵌在全景看板的「匯流排」頁籤、跑在 `127.0.0.1:43147`）。它存在的理由是
+**對抗式覆核當時需要人在兩邊之間傳話**——那時的通道是人工落檔交換
+（Claude 寫題目檔 → 人貼進 Cursor → Cursor 寫回）。
+
+2026-08-25 起審查者改成 **`cursor-cli`**（`reviewer_config.json` 的 `tool`），
+直接跑 Cursor 官方 CLI，**一輪從頭到尾沒有人工步驟**。傳話筒不需要了，
+承載傳話的 UI 也就沒有用途 ⇒ user 指示移除。
+
+**移除了什麼**（8 類，全部已驗）：
+
+| 目標 | 處置 |
+|---|---|
+| `deskbus/`（34 個原始碼檔 ＋ 613 MB npm 產物） | **已刪**。原始碼封存在 `D:\AI-Projects\_archive\deskbus-20260826\`（不含 node_modules／.next） |
+| `.cursor/mcp.json` | **整檔刪**（裡面只有 deskbus 一項） |
+| Claude Desktop 的 `claude_desktop_config.json` | `mcpServers` 清空（原本也只有 deskbus）。備份 `.bak-20260826` |
+| `tests/test_deskbus.py` ＋ `run_hook_tests.py` 的註冊 | 已刪 2 行 |
+| `test_dashboard_structure.py`／`test_dashboard_shell.py` 的匯流排斷言 | 已刪 6 行 |
+| `dashboard/harness-dashboard.shell.html` 的 `#panel-deskbus` | CSS ＋ 頁籤 ＋ panel ＋ iframe 共 16 行 |
+| `.gitignore` 的 `deskbus/*` 三行 | 已刪 |
+| `agents/`／`cursor-agents/visual-designer.md`、`.cursor/PROJECT_CONTEXT.md` 的「DeskBus 儀表板歸你」 | 已刪 |
+
+⚠ **兩處刻意沒動**：
+- `TODOS.md` 那兩條**順帶提到** DeskBus 的待辦（雲端 agent 產物拉不到、escape 母題）——
+  它們講的不是 DeskBus 本身，是在做 DeskBus 時撞到的別的問題，**該留**。
+- `skills/adversarial-review/SKILL.md`——移除當下另一個 session 正在改它。
+
+**要復原的話**：封存目錄裡有完整原始碼（`npm install` 重建相依即可），
+MCP 註冊跑 `scripts/install-mcp.mjs` 會重寫回那兩個設定檔。
+
 ## 不是這條線的（不要一起做、不要一起 commit）
 
 工作區以你開對話時 `git status` 為準。2026-08-25 **§10 經營五問側欄**已進版控（含 `open_in_ide.py`、結構測試改數兩層 skill）。
