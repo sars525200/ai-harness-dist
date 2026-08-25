@@ -82,6 +82,18 @@
 ## 兩人同時改時怎麼做
 
 1. 開工前 `git status`；改共用檔前跑 `py -3 tools/peek_sessions.py`（必要時加 `PYTHONIOENCODING=utf-8`，cp950 會在 emoji 處整支中斷）。
+   ⚠ **`peek_sessions.py` 看不到 Cursor 那一側**（2026-08-25 實測）。它讀的是
+   `~\.claude\projects\<專案>\<session-id>.jsonl` —— 那是 **Claude Code 的 transcript
+   目錄**，Cursor 不寫那裡。同一則對話實測：開工時 peek 說「沒有活躍 session」且
+   `git status` 乾淨；四十分鐘後 **35 個髒檔**（另一條線的 in-flight），peek **仍然**說
+   「沒有活躍 session」。**它防的正是它看不到的那個人。**
+   ⇒ 協作情境下 peek 只回答「**Claude 那側**有沒有人」。要知道 Cursor 在不在，靠：
+   `git status --porcelain`（髒檔數變多）＋ `find . -mmin -5`（誰在寫）＋ 對方計畫書的 mtime。
+   **開工時乾淨不代表接下來乾淨——動共用檔之前再看一次，不是只在開工看。**
+5. **對方的 in-flight 會讓回歸網變紅，別把它當成自己的。** 實測 `tests/run_hook_tests.py`
+   的 3 個失敗全部來自另一條線未提交的新檔（`.scratch/*.py` 的 U-1 債、新模組沒標分層）。
+   先 `git status --porcelain` 對帳「失敗點名的檔是不是我動的」，再決定要不要修。
+   **修別人的紅燈＝把對方的在製品掃進自己的 commit。**
 2. Commit **只 stage 自己的 hunk**，不要 `git add -A`。
 3. 改 skill／角色／`global/CLAUDE.md` 等於改 Claude **和** Cursor 的執行期——先 peek，再動。
 4. Cursor 的 Task 子代理 ≠ `agents/*.md`。派稽核／查詢仍 Read 那些角色檔當規格。
