@@ -213,7 +213,7 @@ def _case_global_brief(fails):
       2. CSS 兩個方向都要寫（只寫顯示 brief、沒寫隱藏 full → 變成兩份都出來）
       3. 一行版要真的掛進 DOM（只定義字串不 append 等於沒做）
     """
-    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.shell.html")
     js = open(dash, encoding="utf-8").read()
     import re as _re
     n = js.count("        brief: '")

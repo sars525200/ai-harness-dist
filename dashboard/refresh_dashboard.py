@@ -56,6 +56,7 @@ if str(DASHBOARD) not in sys.path:
 from check_freshness import ops_dirs as _ops_dirs, HOOKS_DIR as _HOOKS_DIR  # noqa: E402
 import refresh_lock  # noqa: E402
 import win_subprocess  # noqa: E402
+import html_paths  # noqa: E402
 
 # 看板內容的上游。動到這些才需要重生 —— 清單刻意列明，
 # 不用「整個目錄」：那會把 state/*.ndjson（每次工具呼叫都在長）也算進來，
@@ -71,8 +72,10 @@ SOURCES = [
     DASHBOARD / "capability_checks.py",          # 檢查項清單本身
     DASHBOARD / "gen_progress_chart.py",
     DASHBOARD / "gen_roles_topology.py",
+    DASHBOARD / "gen_skill_roster.py",
     DASHBOARD / "gen_layers.py",
     DASHBOARD / "gen_todos.py",
+    html_paths.SHELL_PATH,                 # 殼改了要整份從殼重填，否則 CSS／JS 停在舊產物
     # 全域層設定 —— 兩層對照直接讀它。放進 SOURCES 的理由：全域 permissions
     # 改了（例如哪天終於把 227 條收斂）看板要跟著動，否則又是一個靜默過期的數字。
     Path(os.path.expanduser(r"~\.claude\settings.json")),
@@ -114,16 +117,24 @@ SOURCE_GLOBS = [
 # 所以改成**問產生器自己讀了什麼**（模組要提供 `watch_paths()`）。
 SOURCE_PROVIDERS = [
     (DASHBOARD / "gen_todos.py", "watch_paths"),
+    (DASHBOARD / "gen_skill_roster.py", "watch_paths"),
 ]
 
 GENERATORS = [
     ("兩層對照", DASHBOARD / "gen_layers.py"),
     ("角色拓樸", DASHBOARD / "gen_roles_topology.py"),
+    ("Skill 清冊", DASHBOARD / "gen_skill_roster.py"),
     ("計畫進度＋八大類", DASHBOARD / "gen_progress_chart.py"),
     # 待辦的上游是**人在編輯的檔**（TODOS.md／PENDING_VERIFY.md／計畫書），
     # 不是每回合都在長的 event log —— 所以它可以待在熱路徑。
     # 實測：盯 85 個檔的雜湊 10ms，真的要重生時 80ms。
     ("待辦", DASHBOARD / "gen_todos.py"),
+]
+OFFLINE_GENERATORS = [
+    ("任務動線", DASHBOARD / "gen_task_flow.py"),
+    ("遵循度", DASHBOARD / "gen_workflow_compliance.py"),
+    ("hook 規則", DASHBOARD / "gen_hook_rules.py"),
+    ("成本／mix", DASHBOARD / "gen_cost_panel.py"),
 ]
 # ⚠ `gen_cost_panel.py` 與 `gen_hook_rules.py` **刻意不在這裡**。
 #    它們的上游（transcript／state 的 event log）每個回合都在長，接進 Stop 熱路徑
@@ -200,8 +211,13 @@ def diff_sources(old: dict, new: dict) -> list:
 
 
 def run(script: Path) -> "tuple[int, str]":
-    r = win_subprocess.run([sys.executable, str(script)], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace")
+    env = os.environ.copy()
+    env[refresh_lock.HELD_BY_PARENT] = "1"
+    r = win_subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        env=env,
+    )
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
@@ -227,8 +243,12 @@ def main() -> int:
 
     new_state = current_state()
     reasons = diff_sources(load_state(), new_state)
+    prev = load_state()
+    shell_key = str(html_paths.SHELL_PATH)
+    shell_edited = bool(prev.get(shell_key)) and prev.get(shell_key) != new_state.get(shell_key)
+    need_copy = (not html_paths.HTML_PATH.is_file()) or shell_edited
 
-    if not reasons and not force:
+    if not reasons and not force and not need_copy:
         if not quiet:
             print("看板來源無變動，不重生。")
         return 0
@@ -239,6 +259,7 @@ def main() -> int:
         return 0
 
     try:
+        copied = html_paths.ensure_product(overwrite_from_shell=shell_edited)
         if not quiet:
             print("看板重生，原因：")
             for r in reasons[:8]:
@@ -256,6 +277,17 @@ def main() -> int:
                 return 1
             if not quiet:
                 print(f"✔ {label}：{line}")
+
+        if copied:
+            for label, script in OFFLINE_GENERATORS:
+                rc, out = run(script)
+                line = out.strip().splitlines()[-1] if out.strip() else ""
+                if rc != 0:
+                    print(f"✘ {label} 產生失敗（exit {rc}）：{line}")
+                    print("  剛從殼複製，離線產生器也要填滿，否則頁面是空 marker。")
+                    return 1
+                if not quiet:
+                    print(f"✔ {label}：{line}")
 
         rc, out = run(VERIFIER)
         if rc != 0:

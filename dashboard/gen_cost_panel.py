@@ -51,7 +51,6 @@ sys.stderr.reconfigure(encoding="utf-8")
 DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
 STATE_DIR = HARNESS_ROOT / "state"
-HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 
 # 看板 HTML 的寫入互斥鎖。這支是收工才跑的產生器，**不在 refresh_dashboard 的熱路徑
 # 清單裡**，但寫的是同一份 HTML —— 而 serve_dashboard.py 每 10 秒會重生一次。
@@ -59,6 +58,7 @@ HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 if str(DASHBOARD_DIR) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_DIR))
 import refresh_lock  # noqa: E402
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 COST_STATE = DASHBOARD_DIR / "cost_state.json"
 
 # 專案根一律走 harness 層設定，不寫死（UNIVERSAL_HARNESS_PLAN U-1）。
@@ -1083,6 +1083,7 @@ def main() -> None:
         return
 
     with refresh_lock.guard(who="gen_cost_panel.py"):
+        ensure_product()
         with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
             html = f.read()
         block = _wrap_subtabs(build_html(by_day, ev, cost, skills, agents, stage), len(by_day))

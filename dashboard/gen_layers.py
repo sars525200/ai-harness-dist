@@ -42,7 +42,6 @@ DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
 CONFIG_PATH = HARNESS_ROOT / "harness.config.json"
 CONFIG_SCHEMA = 1
-HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 GLOBAL_DIR = Path.home() / ".claude"
 
 # 維運腳本計數的單一真相。**要先確保本檔所在目錄在 sys.path 上**：
@@ -52,6 +51,7 @@ GLOBAL_DIR = Path.home() / ".claude"
 if str(DASHBOARD_DIR) not in sys.path:
     sys.path.insert(0, str(DASHBOARD_DIR))
 from check_freshness import count_tool_scripts  # noqa: E402
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 
 MARK_START = "<!-- LAYERS_GLOBAL_START"
 MARK_END = "<!-- LAYERS_GLOBAL_END -->"
@@ -475,6 +475,7 @@ def main() -> None:
         print(f"維運腳本  總計 {_t['total']} 支（ops/ {_t['ops']} ＋ hooks/ {_t['hooks']}）"
               f" —— 看板那一行由 sync_tool_counts() 寫，不手寫")
         return
+    ensure_product()
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     out = sync_tool_counts(sync_layer_counts(inject(html, build_html(s)), s))

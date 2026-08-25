@@ -55,7 +55,9 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 DASHBOARD = Path(__file__).resolve().parent
 HARNESS = DASHBOARD.parent
-HTML_PATH = DASHBOARD / "harness-dashboard.html"
+if str(DASHBOARD) not in sys.path:
+    sys.path.insert(0, str(DASHBOARD))
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 GLOBAL_REGISTRY = HARNESS / "TODOS.md"
 
 MARK_START = "<!-- TODOS_START"
@@ -914,7 +916,7 @@ def inject(html: str, bar: str, block: str, default_count: int) -> str:
     out = _fill(out, MARK_START, MARK_END, block, "    ")
     # 徽章＝**預設狀態（本專案＋全域關）下會顯示的項數**。JS 之後會依層同步，
     # 兩邊語意必須一致 —— 一顆徽章兩種意思是這個看板犯過的老病。
-    out2, n = re.subn(r'(id="tab-todo"[^>]*>待辦<span class="count">)\d+(</span>)',
+    out2, n = re.subn(r'(id="tab-todo"[^>]*>待辦<span class="count">)[^<]+(</span>)',
                       lambda m: m.group(1) + str(default_count) + m.group(2), out)
     if n != 1:
         raise SystemExit("找不到待辦頁籤徽章（id=\"tab-todo\" 的 .count）—— 拒絕只更新一半。")
@@ -984,6 +986,7 @@ def main() -> None:
             "這幾類一項都沒解析到：%s —— 判準或來源可能漂了，拒絕產出（要真的清空請先改本檔）。"
             % "、".join(KINDS[k]["label"] for k in empty_kinds))
 
+    ensure_product()
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     # 分類列的初始數字＝**預設狀態下看得到的那些**（本專案＋全域關），與頁籤徽章

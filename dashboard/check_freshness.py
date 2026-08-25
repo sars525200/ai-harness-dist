@@ -243,8 +243,8 @@ def main() -> None:
         print("  ② 維運腳本數 → 跑產生器，**不要手動改 HTML**：")
         print("     py -3 D:\\.ai-harness\\dashboard\\gen_layers.py")
     if _skill:
-        print("  ② skill 原始檔案數 → 看板上**沒有**對應的手寫數字（Skill 清冊徽章走")
-        print("     gen_roles_topology.sync_tab_badge，數的是專案那批）→ 跑角色拓樸產生器：")
+        print("  ② skill 原始檔案數 → 跑清冊產生器（徽章仍走 gen_roles_topology）：")
+        print("     py -3 D:\\.ai-harness\\dashboard\\gen_skill_roster.py")
         print("     py -3 D:\\.ai-harness\\dashboard\\gen_roles_topology.py")
     if not _tool and not _skill and not any("would-block" in r or "規則" in r for r in reasons):
         print("  ② 其餘差異 → 讀 dashboard/harness-dashboard.html，確認是哪個區塊在講這件事。")

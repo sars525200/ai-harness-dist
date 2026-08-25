@@ -13,7 +13,16 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-PATH = sys.argv[1] if len(sys.argv) > 1 else r"D:\.ai-harness\dashboard\harness-dashboard.html"
+_SHELL = Path(r"D:\.ai-harness\dashboard\harness-dashboard.shell.html")
+_PRODUCT = Path(r"D:\.ai-harness\dashboard\harness-dashboard.html")
+if len(sys.argv) > 1:
+    PATH = sys.argv[1]
+elif _PRODUCT.is_file():
+    PATH = str(_PRODUCT)
+else:
+    print("沒有產物檔（gitignore）。殼的結構請跑 test_dashboard_shell.py；"
+          "填滿驗證在 refresh／8099 產生產物之後才跑。")
+    sys.exit(0)
 with io.open(PATH, "r", encoding="utf-8", newline="") as f:
     html = f.read()
 
@@ -176,10 +185,9 @@ check(_badge is not None and int(_badge.group(1)) == len(rows),
       "「角色編制」子分頁徽章與自建角色數一致：徽章 %s vs 拓樸 %d"
       % (_badge.group(1) if _badge else "找不到", len(rows)))
 
-# Skill 徽章對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
-# （六大類卡片 → 角色表 → nav 角色徽章 → Skill 徽章）。這條讓它下次自己現形。
-# 只綁徽章不綁表格列數：清冊的分組是人工的，未來可能刻意不列某支。
-# Skill 徽章對產生器同一口徑：全域層 + 專案層、junction 去重。
+# Skill 徽章＋清冊列對 skills 目錄。7/30 新增 /audit 後看板停在 10 —— 同一個病第四次發作
+# （六大類卡片 → 角色表 → nav 角色徽章 → Skill 徽章）。2026-08-25 清冊表格也接進產生器，
+# 列數必須跟徽章同一口徑（全域層 + 專案層、junction 去重）。
 # 只數專案 `.claude/skills` 會把 harness 層 skill 從分母拿掉，徽章看起來像「寫錯了」。
 HARNESS = Path(r"D:\.ai-harness")
 if str(HARNESS) not in sys.path:
@@ -201,6 +209,14 @@ check(_skill_files > 0, "找得到 skills 目錄（找不到無從比對）")
 check(_sbadge is not None and int(_sbadge.group(1)) == _skill_files,
       "「Skill 清冊」子分頁徽章與 skills 目錄一致：徽章 %s vs 實際 %d 支"
       % (_sbadge.group(1) if _sbadge else "找不到", _skill_files))
+_roster_html = re.search(
+    r'id="sp-orch-1".*?<table class="roster".*?</table>', html, re.S)
+_cmds = re.findall(r'class="cmdname">/([^<]+)', _roster_html.group(0) if _roster_html else "")
+check(_roster_html is not None and len(_cmds) == _skill_files,
+      "Skill 清冊列數與 skills 目錄一致：表 %d vs 實際 %d 支" % (len(_cmds), _skill_files))
+check(html.count("SKILL_ROSTER_START") == 1 and html.count("SKILL_ROSTER_END") == 1,
+      "SKILL_ROSTER marker 各一、未拆")
+check("15 支 · L4 台帳" not in html, "清冊標題不再手寫「15 支」（那是 8/6 的凍結數字）")
 check("Explore" in roles and "omitClaudeMd" in html,
       "內建角色差異有交代（omitClaudeMd）"
       "——說明在彈窗 JS 裡，那段刻意放 body 直屬層，不在 panel-roles 區間內")

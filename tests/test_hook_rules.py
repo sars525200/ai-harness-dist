@@ -258,7 +258,7 @@ def _case_marker_and_idempotent(fails: list) -> None:
     if m.build_html(stats, {}) != m.build_html(stats, {}):
         fails.append("固定輸入連跑兩次結果不同 —— 不冪等")
     # 真實看板必須有 marker，否則這支永遠注入不進去
-    html = io.open(os.path.join(ROOT, "dashboard", "harness-dashboard.html"),
+    html = io.open(os.path.join(ROOT, "dashboard", "harness-dashboard.shell.html"),
                    encoding="utf-8", newline="").read()
     if m.MARK_START not in html or m.MARK_END not in html:
         fails.append("看板缺 HOOK_RULES marker —— 產生器注入不進去")

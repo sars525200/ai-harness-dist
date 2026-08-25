@@ -55,7 +55,6 @@ sys.stderr.reconfigure(encoding="utf-8")
 DASHBOARD = Path(__file__).resolve().parent
 HARNESS = DASHBOARD.parent
 AGENTS_DIR = HARNESS / "agents"
-HTML_PATH = DASHBOARD / "harness-dashboard.html"
 
 # 看板 HTML 的寫入互斥鎖。這支是收工才跑的產生器，**不在 refresh_dashboard 的熱路徑
 # 清單裡**，但寫的是同一份 HTML —— 而 serve_dashboard.py 每 10 秒會重生一次。
@@ -63,6 +62,7 @@ HTML_PATH = DASHBOARD / "harness-dashboard.html"
 if str(DASHBOARD) not in sys.path:
     sys.path.insert(0, str(DASHBOARD))
 import refresh_lock  # noqa: E402
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 LAYERS_PY = DASHBOARD / "gen_layers.py"
 # **所有**專案的 transcript 都在這底下，一個子目錄一個工作區。
 # 刻意不寫死某個專案（U-1）：規則在全域 `CLAUDE.md`，所以它對每個專案都生效，
@@ -1419,6 +1419,7 @@ def main() -> None:
         return
 
     with refresh_lock.guard(who="gen_workflow_compliance.py"):
+        ensure_product()
         with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
             html = f.read()
         out = inject(html, build_html(data))

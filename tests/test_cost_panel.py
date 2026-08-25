@@ -287,7 +287,7 @@ def _case_metric_switch(fails: list) -> None:
         if '<div class="cv-pane" data-cv-pane="mix-bar" hidden></div>' not in html:
             fails.append("長條圖那格沒有預設收起 —— 會同時顯示兩張圖")
     # JS 那一半：metricOf 與 boot 期 render 都要跟 HTML 對得上
-    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.shell.html")
     js = open(dash, encoding="utf-8").read()
     if "metricOf = { mix: 'token' }" not in js:
         fails.append("JS 的 metricOf 預設不是 token —— 會與按鈕亮起的那顆不一致")
@@ -345,7 +345,7 @@ def _case_notes_collapsed(fails: list) -> None:
             fails.append(f"{note_id} 在原始碼裡就是展開的（含未被 None 分支涵蓋的）")
         if f'id="{note_id}"' not in src:
             fails.append(f"{note_id} 沒有對應的浮窗容器 —— 點了會開空的")
-    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.shell.html")
     js = open(dash, encoding="utf-8").read()
     if ".cv-info[data-note]" not in js:
         fails.append("看板 JS 沒有 (!) 鈕的展開處理 —— 按鈕點了不會有反應")
@@ -366,7 +366,7 @@ def _case_chart_tip_and_unit(fails: list) -> None:
       2. 沒有整欄感應區 → 提示還在，但長條只有幾 px 寬，實際上滑不到
       3. 沒有單位標 → 金額到底是美元還台幣只能靠問人（這題被問過）
     """
-    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.html")
+    dash = os.path.join(ROOT, "dashboard", "harness-dashboard.shell.html")
     js = open(dash, encoding="utf-8").read()
     if "createElementNS(NS, 'title')" in js:
         fails.append("圖表又用回 SVG <title> —— 那是瀏覽器內建提示，樣式與動畫都管不到")

@@ -804,7 +804,9 @@ def _p_cost_dashboard():
     gen = HARNESS / "dashboard" / "gen_cost_panel.py"
     if not gen.exists():
         return False, "無成本儀表（目前靠 /usage 手動看 model 拆分）"
-    html = _read(HARNESS / "dashboard" / "harness-dashboard.html")
+    html = _read(HARNESS / "dashboard" / "harness-dashboard.shell.html")
+    if not html:
+        html = _read(HARNESS / "dashboard" / "harness-dashboard.html")
     if "COST_PANEL_START" not in html:
         return False, "有 gen_cost_panel.py 但看板沒有注入點 —— 產生器沒接上，等於沒有"
     cache = HARNESS / "dashboard" / "cost_state.json"

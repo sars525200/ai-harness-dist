@@ -37,10 +37,10 @@ sys.stderr.reconfigure(encoding="utf-8")
 DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
 PLAN_PATH = HARNESS_ROOT / "HARNESS_ROLE_ARCH_PLAN.md"
-HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 
 sys.path.insert(0, str(DASHBOARD_DIR))
 import capability_checks  # noqa: E402  八大類檢查項與進度圖共用同一支產生器
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 
 MARK_START = "<!-- PROGRESS_CHART_START"
 MARK_END = "<!-- PROGRESS_CHART_END -->"
@@ -411,6 +411,7 @@ def main() -> None:
                       f"{it['status']:<11} {it['desc'][:52]}")
         return
 
+    ensure_product()
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     if "\r\n" in html:

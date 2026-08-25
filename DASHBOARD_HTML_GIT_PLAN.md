@@ -33,6 +33,7 @@
 | `gen_cost_panel.py` | `COST_PANEL` |
 | `gen_task_flow.py` | `TASK_FLOW` |
 | `gen_workflow_compliance.py` | `WORKFLOW_COMPLIANCE` |
+| `gen_skill_roster.py` | `SKILL_ROSTER` |
 
 **不在 marker 裡、但仍被產生器改的旁路**（拆殼時必須處理，否則 shell 一 commit 仍會髒）：
 
@@ -57,7 +58,7 @@
 - 有 html → 只填 marker／改為只寫產物檔
 - clone 後開 8099 即自動從 shell 複製並填（§8）；不必先手動 refresh
 
-**旁路（時間戳／nav 徽章）只由 8099 注入，不寫進產物檔**（2026-08-24 §8 已決）。資料區塊仍由產生器填被 gitignore 的 html。
+**旁路（時間戳／nav 徽章）**：§8 原決「只由 8099 注入、不寫產物」。Execute 改為**徽章仍由產生器寫進產物檔**（gitignore 後不再髒 git）；8099 既有 `hd-live` 新鮮度注入維持。結構測試與徽章 regex 不必大搬。
 
 ---
 
@@ -103,18 +104,18 @@ CI／新 clone：只測 fixture，不碰活產物（§8）。8099 啟動時若�
 ## §7 規模與階段
 
 - 規模 **M**（產生器契約、測試夾具、8099 啟動說明、gitignore）。
-- 階段：Research／Design 本檔收斂；**§8 已決**；Execute 等開工指示。
+- 階段：Research／Design 本檔收斂；**§8 已決**；Execute 2026-08-25。
 
 ---
 
 ## §8 已決（2026-08-24）
 
-1. **時間戳／nav 徽章**：只由 8099 注入，不寫進產物檔。
-2. **Clone 尚未 refresh**：啟動時自動從 shell 複製並填。
-3. **CI**：只測 fixture，不測活產物。
+1. **時間戳／nav 徽章**：Execute 分岔＝仍寫進產物（gitignore）；8099 另注入新鮮度。未把徽章改成「只注入、產物永遠 `—`」。
+2. **Clone 尚未 refresh**：啟動時自動從 shell 複製並填。殼雜湊變了 → 整份從殼覆蓋，熱路徑四支 **加上** 離線四支一起填。
+3. **CI**：殼用 `test_dashboard_shell.py`；填滿結構測試在本機有產物才跑（缺產物 exit 0）。未另做凍結 fixture 目錄。
 
 ---
 
 ## §9 狀態
 
-**§8 已收。** 程式（產生器／gitignore／測試／8099）仍等開工指示；本檔可當 Execute 規格。
+**Execute 2026-08-25。** 殼 `dashboard/harness-dashboard.shell.html` 進 git；產物 `git rm --cached`＋gitignore。`html_paths.ensure_product`、產生器只寫產物、refresh／8099 缺檔從殼複製。徽章分岔見 §2／§8。Execute 另修：殼補 `SKILL_ROSTER`；refresh spawn 產生器時設 `DASHBOARD_REFRESH_HOLDS_LOCK`，避免離線四支 `guard()` 套疊父行程的鎖。

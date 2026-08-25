@@ -34,6 +34,9 @@ from pathlib import Path
 DASHBOARD = Path(__file__).resolve().parent
 LOCK_FILE = DASHBOARD / ".refresh.lock"
 LOCK_STALE_SEC = 120
+# refresh_dashboard 已取鎖後再 spawn 產生器；子行程若再 guard 會自己卡死。
+# 子行程看到這個變數就略過取鎖，鎖仍由父行程持有、finally 才放。
+HELD_BY_PARENT = "DASHBOARD_REFRESH_HOLDS_LOCK"
 
 
 def _try_acquire() -> bool:
@@ -87,6 +90,9 @@ def guard(wait: float = 30.0, who: str = ""):
     逾時丟 SystemExit 而不是回傳 False —— 呼叫端「忘了檢查回傳值」就會退化成
     現在這個沒有鎖的狀態，而那正是這個模組要修掉的東西。
     """
+    if os.environ.get(HELD_BY_PARENT) == "1":
+        yield
+        return
     if not acquire(wait=wait):
         raise SystemExit(
             f"取不到看板寫入鎖（{LOCK_FILE.name}，等了 {wait:g}s）——"

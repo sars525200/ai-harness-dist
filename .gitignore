@@ -38,6 +38,10 @@ dashboard/sources_state.json
 dashboard/cost_state.json
 dashboard/.refresh.lock
 
+# 填滿的看板是產物（8099／refresh 從殼複製再填）。進 git 的是
+# dashboard/harness-dashboard.shell.html。
+dashboard/harness-dashboard.html
+
 # user 提供的參考圖（Model routing 等）：計畫書已把內容轉成文字，
 # 圖檔本身 8MB 且非程式資產，不進版控（要看原圖去本機這個目錄）
 參考/

@@ -20,6 +20,10 @@ SRC = r"D:\.ai-harness\dashboard\harness-dashboard.html"
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERIFY = os.path.join(os.path.dirname(HERE), "test_dashboard_structure.py")
 
+if not os.path.isfile(SRC):
+    print("沒有產物檔（gitignore）。結構變異需要填滿稿；殼 JS 見 mutate_dashboard_js.py")
+    sys.exit(0)
+
 with io.open(SRC, "r", encoding="utf-8", newline="") as f:
     base = f.read()
 

@@ -31,6 +31,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_HERE)
 _SRV = os.path.join(_ROOT, "dashboard", "serve_dashboard.py")
 _HTML = os.path.join(_ROOT, "dashboard", "harness-dashboard.html")
+_SHELL = os.path.join(_ROOT, "dashboard", "harness-dashboard.shell.html")
 
 
 def _free_port() -> int:
@@ -67,14 +68,22 @@ def run() -> "tuple[int, list]":
     check("只綁 127.0.0.1（不對外）", m.HOST == "127.0.0.1",
           f"HOST={m.HOST} —— 這一改整個區網都連得到，而畫面上看不出差別")
 
-    # 注入的東西不可以出現在磁碟上的 HTML 裡
-    disk = open(_HTML, encoding="utf-8").read()
-    check("自動重載的 UI 不在 HTML 檔裡（只在服務端注入）",
-          "hd-live" not in disk and 'id="hd-live"' not in disk,
-          "看板檔本身含有注入標記 —— 結構驗證與冪等都會被污染")
-    check("開檔鈕不在 HTML 檔裡（只在服務端注入）",
-          "hd-open" not in disk and "data-hd-open" not in disk,
-          "開檔注入寫進磁碟 HTML 了")
+    # 注入的東西不可以出現在磁碟上的 HTML 裡（殼一定在；產物本機才有）
+    shell = open(_SHELL, encoding="utf-8").read()
+    check("殼裡沒有自動重載注入",
+          "hd-live" not in shell and 'id="hd-live"' not in shell,
+          "殼含有服務端注入標記")
+    check("殼裡沒有開檔鈕注入",
+          "hd-open" not in shell and "data-hd-open" not in shell,
+          "開檔注入寫進殼了")
+    if os.path.isfile(_HTML):
+        disk = open(_HTML, encoding="utf-8").read()
+        check("自動重載的 UI 不在產物檔裡（只在服務端注入）",
+              "hd-live" not in disk and 'id="hd-live"' not in disk,
+              "看板檔本身含有注入標記 —— 結構驗證與冪等都會被污染")
+        check("開檔鈕不在產物檔裡（只在服務端注入）",
+              "hd-open" not in disk and "data-hd-open" not in disk,
+              "開檔注入寫進磁碟 HTML 了")
 
     # pythonw 情境：sys.stdout 是 None 時 import 不能炸
     r = subprocess.run(
@@ -122,6 +131,10 @@ def run() -> "tuple[int, list]":
     check("產生器子行程也走 win_subprocess",
           "win_subprocess.run" in _ref,
           "refresh_dashboard.run 仍直接 subprocess.run")
+    _lock = open(os.path.join(_ROOT, "dashboard", "refresh_lock.py"), encoding="utf-8").read()
+    check("refresh 已取鎖時子行程不再套疊同一把鎖",
+          "HELD_BY_PARENT" in _ref and "DASHBOARD_REFRESH_HOLDS_LOCK" in _lock,
+          "從殼複製後跑離線產生器會自己卡死（取不到鎖）")
     _ws = open(os.path.join(_ROOT, "dashboard", "win_subprocess.py"), encoding="utf-8").read()
     check("win_subprocess 使用 CREATE_NO_WINDOW",
           "CREATE_NO_WINDOW" in _ws,

@@ -5,9 +5,9 @@ r"""對看板**內嵌 JS／CSS** 做變異，確認 test_layers 與 test_cost_pa
     py -3 D:\.ai-harness\tests\mutations\mutate_dashboard_js.py
 
 為什麼要跟 mutate_dashboard_structure.py 分開：那支把變異寫成**另一個檔**再餵給
-驗證器（驗證器吃 argv 路徑）。但這裡要驗的斷言是直接讀 `harness-dashboard.html`
-的 —— 產生器測試沒辦法把路徑換掉，所以只能像 mutate_cost_panel 那樣**改真檔、
-finally 還原、事後比雜湊**。改壞的期間不要中斷它。
+驗證器（驗證器吃 argv 路徑）。但這裡要驗的斷言是直接讀殼檔
+`harness-dashboard.shell.html` 的 —— CSS／殼 JS 在殼裡。產物是 gitignore 的填滿稿。
+所以只能像 mutate_cost_panel 那樣**改真檔、finally 還原、事後比雜湊**。改壞的期間不要中斷它。
 
 挑的四個都是「畫面還在、行為錯了」那一類：切層時兩份說明同時出現、一行版根本
 沒掛進 DOM、亮著的按鈕跟畫出來的圖不是同一件事、預設那格沒被畫。
@@ -20,7 +20,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\dashboard\harness-dashboard.html"
+TARGET = r"D:\.ai-harness\dashboard\harness-dashboard.shell.html"
 TESTS = [r"D:\.ai-harness\tests\test_layers.py",
          r"D:\.ai-harness\tests\test_cost_panel.py"]
 

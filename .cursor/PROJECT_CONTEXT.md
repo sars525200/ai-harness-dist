@@ -10,7 +10,7 @@ AI 工作站 harness。Hook 閘門、event log、看板產生器、eval、全域
 
 方向文件：`UNIVERSAL_HARNESS_PLAN.md`（要往哪、什麼不准做）。現況：`HARNESS_PLAN.md`（閘門）、`HARNESS_ROLE_ARCH_PLAN.md`（角色）、`HARNESS_PROGRESS.md`（易過期，以 probe 為準）。
 
-本機看板（現況全景）：`http://127.0.0.1:8099/`（`dashboard/serve_dashboard.py`，禁改 `HOST` 為 `0.0.0.0`）。查現況開這個網址；`dashboard/harness-dashboard.html` 是產生器快照，不是即時真相。
+本機看板（現況全景）：`http://127.0.0.1:8099/`（`dashboard/serve_dashboard.py`，禁改 `HOST` 為 `0.0.0.0`）。查現況開這個網址；進 git 的是殼 `dashboard/harness-dashboard.shell.html`，填滿的 `harness-dashboard.html` 是本機產物（gitignore），都不是即時真相。
 
 ## 雙目錄同步
 

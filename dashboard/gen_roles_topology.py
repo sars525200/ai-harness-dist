@@ -57,6 +57,7 @@ if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
 import subagent_stats  # noqa: E402  （必須在 sys.path 補上之後）
 import role_badges  # noqa: E402  角色徽章（icon 形狀＋職能群色）的單一真相
+from html_paths import HTML_PATH, ensure_product  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -64,7 +65,6 @@ sys.stderr.reconfigure(encoding="utf-8")
 DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
 STATE_DIR = HARNESS_ROOT / "state"
-HTML_PATH = DASHBOARD_DIR / "harness-dashboard.html"
 
 # 角色 2026-08-05 搬到 harness repo，`~/.claude/agents` 用 junction 接過來
 # ——**既是全域層（Claude 自動載入、跨專案）又留在版控**。實測 user 層角色
@@ -117,7 +117,9 @@ DEPT_UNSET = "未編組"
 # 資料來自平台的 agent 清單描述（2026-07-31 快照）—— 手寫的，所以標明日期。
 BUILTIN = [
     {"name": "Plan", "tools": "全部工具，除 Agent／Edit／Write／NotebookEdit",
-     "desc": "軟體架構規劃。對抗式覆核（/adversarial-review）預設派的就是它——有 Read/Grep/Bash 可查證、沒有寫入能力。",
+     "desc": "軟體架構規劃。對抗式覆核（/adversarial-review）在設定是 claude-code 時派的就是它"
+             "——有 Read/Grep/Bash 可查證、沒有寫入能力。⚠ 它與你同一個模型族、共享盲點，"
+             "所以 2026-08-25 起不是首選：有 Cursor 可用時走落檔交換。",
      "gate": "", "model": "inherit", "department": "規劃組", "boundary": "可執行",
      "display": "規劃師", "icon": "route",
      # 這個角色身上掛著一份**可編輯的技能設定**：`/adversarial-review` 派的就是
@@ -838,7 +840,7 @@ def build_html(agents: list, hist: dict, sess: dict, now: float) -> str:
 
 def _sync_badge(html: str, tab_id: str, label: str, n: int) -> str:
     pat = re.compile(
-        rf'(id="{re.escape(tab_id)}"[^>]*>{re.escape(label)}<span class="count">)\d+(</span>)')
+        rf'(id="{re.escape(tab_id)}"[^>]*>{re.escape(label)}<span class="count">)[^<]+(</span>)')
     out, cnt = pat.subn(rf"\g<1>{n}\g<2>", html, count=1)
     if cnt != 1:
         raise SystemExit(
@@ -1006,6 +1008,7 @@ def main() -> None:
                 agents + [{**b, "builtin": True} for b in BUILTIN]):
             print(f"  [{dept}] {'、'.join(m['name'] for m in members)}")
         return
+    ensure_product()
     with io.open(HTML_PATH, "r", encoding="utf-8", newline="") as f:
         html = f.read()
     out = sync_tab_badge(inject(html, build_html(agents, hist, sess, now)), len(agents))

@@ -1,6 +1,6 @@
 # 看板美術庫（盈透／PortfolioAnalyst 風）
 
-2026-08-25 立案。**不是第二份 CSS 真相**——token 仍只活在 `harness-dashboard.html` 的 `:root`。本目錄收的是：對照來源、版面契約、色相怎麼對既有 token。產生器 marker 區間不進這裡。
+2026-08-25 立案。**不是第二份 CSS 真相**——token 仍只活在 `harness-dashboard.shell.html` 的 `:root`。本目錄收的是：對照來源、版面契約、色相怎麼對既有 token。產生器 marker 區間不進這裡。
 
 官方畫面有版權，**不准把 IB 截圖檢進 git**。要對形狀就開下面的 URL。
 

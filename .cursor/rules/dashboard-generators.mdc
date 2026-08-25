@@ -47,6 +47,7 @@ alwaysApply: false
 
 ## 產生器契約
 
+- **進 git 的是殼 `dashboard/harness-dashboard.shell.html`（CSS、殼 JS、空 marker、徽章 `—`）。填滿的 `dashboard/harness-dashboard.html` gitignore。** 產生器只寫產物；改 CSS／殼 JS 改殼，不要手改產物。8099 仍只吐產物；缺產物或殼雜湊變了就從殼複製再填。徽章仍由產生器寫進產物（gitignore 後不再髒 git）；新鮮度由 8099 注入。
 - **位置由人決定一次、寫死成 HTML marker，產生器只填 marker 之間**（`PROGRESS_CHART_START/END`、`ROLES_TABLE_START/END`）。找不到 marker 要 `SystemExit`，**不准猜插入位置**——猜錯會塞進別的分頁。
 - **必須冪等**：同一份輸入重跑兩次，檔案雜湊不變。改完一定要驗這件事。
 - **解析不到東西要拒絕產出**，不能靜默出空表——空表看起來跟「正常但沒資料」一樣。

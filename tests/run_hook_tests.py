@@ -397,6 +397,9 @@ def main() -> int:
         import test_hook_rules
         import test_mutation_anchors
         import test_dashboard_server
+        import test_dashboard_shell
+        import test_html_paths
+        import test_skill_roster
         import test_open_in_ide
         import test_decl1
         import test_disp1
@@ -412,6 +415,8 @@ def main() -> int:
         import test_harness_config
         import test_context_health_skill
         import test_js_source_probe
+        import test_adversarial_exchange_gate
+        import test_reviewer_config
         for run_fn, label in (
             # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
             # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
@@ -422,6 +427,11 @@ def main() -> int:
             (test_harness_config.run, "harness 設定去專案化（P-12）"),
             (test_context_health_skill.run, "/context-health 可用性（V-14）"),
             (test_js_source_probe.run, "JS 原始碼探針（抽函式／變異）"),
+            # 這兩支守的是「對抗式覆核到底有沒有真的發生過」。PR-1 從 2026-08-25
+            # （`dc3000d`）起會呼叫落檔交換守門 ⇒ 守門壞掉會直接改變 Stop 的判定，
+            # 而 eval 那一層看的是 skill 的契約、掃不到工具的行為。
+            (test_adversarial_exchange_gate.run, "落檔交換守門（cursor 覆核）"),
+            (test_reviewer_config.run, "審查者設定（未知值／缺檔不得靜默）"),
             (test_warn_channel.run, "WARN 輸出通道"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
@@ -437,6 +447,9 @@ def main() -> int:
             (test_workflow_compliance.run, "工作流程遵循度產生器"),
             (test_todos.run, "待辦產生器"),
             (test_dashboard_server.run, "本機看板服務"),
+            (test_dashboard_shell.run, "看板殼（gitignore 產物）"),
+            (test_html_paths.run, "看板殼／產物路徑"),
+            (test_skill_roster.run, "Skill 清冊產生器"),
             (test_open_in_ide.run, "看板在 IDE 開檔"),
             (test_decl1.run, "DECL-1 宣告欄位"),
             (test_disp1.run, "DISP-1 派工紀律"),

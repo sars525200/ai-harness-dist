@@ -75,13 +75,14 @@ for _s in (sys.stdout, sys.stderr):
 
 DASHBOARD = Path(__file__).resolve().parent
 HARNESS = DASHBOARD.parent
-HTML_PATH = DASHBOARD / "harness-dashboard.html"
-REFRESH = DASHBOARD / "refresh_dashboard.py"
-LOG_PATH = HARNESS / "state" / "dashboard_server.log"
 if str(DASHBOARD) not in sys.path:
     sys.path.insert(0, str(DASHBOARD))
+import html_paths  # noqa: E402
 import open_in_ide  # noqa: E402
 import win_subprocess  # noqa: E402
+HTML_PATH = html_paths.HTML_PATH
+REFRESH = DASHBOARD / "refresh_dashboard.py"
+LOG_PATH = HARNESS / "state" / "dashboard_server.log"
 
 HOST = "127.0.0.1"          # ⚠ 不要改成 0.0.0.0：那一改就對外了，而畫面上看不出差別
 DEFAULT_PORT = 8099
@@ -610,8 +611,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int, once: bool = False, interval: float = WATCH_INTERVAL) -> int:
-    if not HTML_PATH.exists():
-        _log(f"找不到看板 HTML：{HTML_PATH} —— 不啟動")
+    try:
+        html_paths.ensure_product()
+    except SystemExit as exc:
+        _log(str(exc))
         return 2
     try:
         httpd = ThreadingHTTPServer((HOST, port), Handler)
