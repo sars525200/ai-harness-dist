@@ -3,7 +3,34 @@
 > 給**另一個平台上的新對話**讀。工作區必須是 `D:\.ai-harness`。
 > 短契約（always-on）是根目錄 `CLAUDE.md`。本檔是交接：現況、禁做、怎麼一起改。
 
-**HEAD（契約線）**：`5734e36`（2026-08-25）。本檔當日的兩個增修：`c4c69c5` 加 `COLLAB_NOW.md` 宣告機制、`095a27e` 記 `peek_sessions` 看不到 Cursor。
+**本檔不存放會變的值，只存放「去哪裡問」**——改本檔前先讀下一節。
+
+---
+
+## 本檔的保鮮規則（改本檔前先讀）
+
+**禁止把「現在的值」抄進本檔。** 抄下的那一刻就開始腐爛，而且**腐爛是靜默的**：
+讀的人不會知道該去對一次，只會照著過期的值行動。一律改成寫**取得該值的那一行指令**。
+
+判準是**時態**：
+
+- **描述過去某個事件**的可以寫死 → 「這批東西在 `49f4152` 落地」「glob 引號已在 `a421dbc`」
+- **宣稱現在是什麼**的一律改成怎麼問 → 契約線、審查者、版本、開關、檔案數
+
+兩次實例（都咬過，留著當證據，別再犯）：
+
+| 曾經寫死的 | 怎麼過期的 | 現在改成 |
+|---|---|---|
+| `HEAD（契約線）：5734e36` | 這份檔**住在它自己描述的那個 repo 裡**，任何一次 commit 都讓它過期。它自己的 commit 訊息記過「硬寫 hash 七小時過期兩次」，2026-08-26 再看已落後 **21 個 commit** | `git log --oneline -8`（見下） |
+| 「審查者現值 **`cursor`**」 | 值住在 `reviewer/reviewer_config.json`，一個網頁 GUI（`Launch-Reviewer.bat`）隨時能改。**同一份檔的後半段自己寫著已改成 `cursor-cli`**，前後矛盾了一整天沒人發現 | `py -3 reviewer/server.py --check` |
+
+**契約線＝你 clone 到的這個 repo 本身。** 想知道最近改了什麼：
+
+```
+git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
+```
+
+比任何寫在這裡的 hash 都新。
 
 ---
 
@@ -121,24 +148,30 @@
 
 ## Cursor 是對抗式覆核的審查者（2026-08-25 起）
 
-`/adversarial-review` 的審查者由 `reviewer/reviewer_config.json` 決定，現值 **`cursor`**。
+**派誰不寫在這裡**（會過期，見「本檔的保鮮規則」）。要知道現在派誰、模型族是什麼、
+這台機器裝了沒，跑這一行——它連「這個模型跟主 session 同族＝共享盲點」這種警告都會印：
 
-**為什麼**：它只認 `claude-code` / `codex`，而 Codex 這台機器**沒裝** ⇒ 不管設哪個，
-實際跑起來都是 Claude 開一個 subagent 審自己。那支 skill 的正文自己寫著
+```
+py -3 reviewer/server.py --check      # cp950 中斷就前面加 PYTHONIOENCODING=utf-8
+```
+
+值住在 `reviewer/reviewer_config.json`（`Launch-Reviewer.bat` 開網頁改，手改也生效、不快取）。
+四個工具各自的邊界與踩雷寫在 `reviewer/server.py` 的 `TOOLS`——**單一真相，不要抄到這裡來**。
+
+**為什麼是 Cursor**：原本只有 `claude-code` 與 `codex` 兩個選項，而 Codex 這台機器**沒裝**
+⇒ 不管設哪個，實際跑起來都是 Claude 開一個 subagent 審自己。那支 skill 的正文自己寫著
 「以為找了外部 AI 覆核、其實是自己審自己，比沒覆核更危險」——它一直在那個狀態。
-Cursor 是這台機器上**唯一真正跨模型族**的審查者。
+Cursor 是這台機器上**唯一真正跨模型族**的審查者，2026-08-25 補進選單，兩種形狀：
 
-**怎麼運作（落檔交換·人是通道）**：程式叫不到 Cursor（`ListAgents` 看不見它，
-`shutil.which("cursor")` 在 Cursor 自己的 process 有值、在 Claude 這側是 `None`
-——同一個判準對不同的提問者給不同答案）。所以：
+### `cursor`＝落檔交換·人是通道
+
+程式叫不到 Cursor（`ListAgents` 看不見它，`shutil.which("cursor")` 在 Cursor 自己的 process
+有值、在 Claude 這側是 `None`——同一個判準對不同的提問者給不同答案）。所以：
 
 1. Claude 寫 `<effort>/round-N-ask.md`，跑 `tools/adversarial_exchange_gate.py --stamp-ask` 凍結它
 2. **人把題目貼進 Cursor**
 3. Cursor 把發現寫回 `round-N-reply.md`，檔頭帶回同一個 `ask-sha256=`
 4. Claude 跑 `--check`（exit 2 → 0）才准處置與蓋章
-
-**PR-1 會強制這件事**：這輪動過 `.scratch/**/map.md` 且同目錄有 `round-N-ask.md` 時，
-`_exchange_gate_verdict()` 會呼叫守門，非零就 BLOCK。沒有 ask 檔＝行為與接線前一模一樣。
 
 ⚠ **它防遺忘、不防作弊**。檔案系統上「Claude 自己 Write 一份 reply」與「Cursor 真的寫回」
 **完全同形**，沒有機器能分辨。唯一的真防線是**人親手貼過一次**——所以設定是 `cursor` 時
@@ -147,9 +180,21 @@ Claude 必須停下來等人，「等不到」不是換人的理由。
 ⚠ **`cursor` 沒有「不可用」這個狀態，只有「還沒回」。** 別套用「工具不可用就換人」那條
 ——人還沒貼之前它依定義永遠不可用，兩條規則合起來就是一張換人許可證。
 
-實跑紀錄：四輪覆核，Cursor 挑出 13 → 9（含兩個存活變異）→ 6 → 0 條，第四輪零改動收斂。
-機制與回歸網見 `skills/adversarial-review/SKILL.md`、`tools/adversarial_exchange_gate.py`、
-`tests/test_adversarial_exchange_gate.py`（24 條）、`tests/test_reviewer_config.py`（11 條）。
+### `cursor-cli`＝同樣跨模型族，但全自動
+
+直接跑 Cursor 官方 CLI（命令名 `agent`，Windows 原生不需 WSL），收 stdout 落檔，
+一輪從頭到尾沒有人工步驟；上面那兩條 ⚠ 對它不適用（它有真的「不可用」＝這台沒裝）。
+⚠ 代價是**沙箱**：CLI 會讀專案根 `CLAUDE.md`、從 `.claude/skills` 發現 skills，
+在本 repo 直接跑＝審查者載入跟作者同一套脈絡，**「不共用推理脈絡」當場失效**。
+必須 `--workspace` 指到隔離沙箱、`--mode ask` 且**不給** `--force`。
+
+**PR-1 會強制交換齊全**：這輪動過 `.scratch/**/map.md` 且同目錄有 `round-N-ask.md` 時，
+`_exchange_gate_verdict()` 會呼叫守門，非零就 BLOCK。沒有 ask 檔＝行為與接線前一模一樣。
+
+實跑紀錄（`cursor` 人工通道時期）：四輪覆核，Cursor 挑出 13 → 9（含兩個存活變異）→ 6 → 0 條，
+第四輪零改動收斂。機制與回歸網見 `skills/adversarial-review/SKILL.md`、
+`tools/adversarial_exchange_gate.py`、`tests/test_adversarial_exchange_gate.py`、
+`tests/test_reviewer_config.py`。
 
 ## DeskBus 已移除（2026-08-26）
 
