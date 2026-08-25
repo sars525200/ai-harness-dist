@@ -57,7 +57,8 @@ TOOLS = [
         "desc": "另一個 IDE 上的另一個模型——這台機器上唯一真正不共用推理脈絡的審查者。"
                 "程式叫不到它（ListAgents 看不見 Cursor），所以走落檔交換："
                 "skill 寫題目檔、人貼進 Cursor、Cursor 把發現寫回檔、skill 讀回來逐項處置。"
-                "⚠ 它需要人動手貼一次，不是全自動。",
+                "⚠ 它需要人動手貼一次，不是全自動。**它沒有「不可用」這個狀態，只有「還沒回」**"
+                "——還沒回就是等，不是改派別人。",
         # probe 刻意留 None：cursor 的「可用」**不是**「這台機器裝了沒」。
         # 2026-08-25 實測 `shutil.which("cursor")` 在 Cursor 自己的 process 有值、
         # 在 Claude 這側是 None —— 同一個判準對不同的提問者給不同答案，
@@ -174,10 +175,19 @@ def save_config(cfg: dict) -> list:
     valid_tools = {t["id"] for t in TOOLS}
     valid_models = {m["id"] for m in MODELS}
     valid_efforts = {e["id"] for e in EFFORTS}
-    rejected = [f"{k}=「{cfg.get(k)}」不是已知值，已寫成預設「{DEFAULTS[k]}」"
-                for k, allowed in (("tool", valid_tools), ("model", valid_models),
-                                   ("effort", valid_efforts))
-                if cfg.get(k) is not None and cfg.get(k) not in allowed]
+    # ⚠ 條件不能寫成 `cfg.get(k) is not None and ...`（2026-08-25 覆核 R2-4）：
+    # 那樣「欄位根本沒送來」就不進 rejected，但下面照樣寫成 DEFAULTS。
+    # 效果是 POST `{}` 或只送 model／effort，會把磁碟上的 cursor 洗成 claude-code
+    # 而 API 回「rejected: []、ok: true」—— 修 R1-2 時把「未知值靜默」換成了
+    # 「缺欄位靜默」，同一個洞換個入口。
+    rejected = []
+    for k, allowed in (("tool", valid_tools), ("model", valid_models),
+                       ("effort", valid_efforts)):
+        if k not in cfg:
+            rejected.append(f"沒有送 {k}，已寫成預設「{DEFAULTS[k]}」"
+                            f"（原本的值會被覆蓋掉）")
+        elif cfg[k] not in allowed:
+            rejected.append(f"{k}=「{cfg[k]}」不是已知值，已寫成預設「{DEFAULTS[k]}」")
     out = {
         "tool": cfg.get("tool") if cfg.get("tool") in valid_tools else DEFAULTS["tool"],
         "model": cfg.get("model") if cfg.get("model") in valid_models else DEFAULTS["model"],
@@ -206,8 +216,12 @@ def state() -> dict:
     for t in TOOLS:
         tools.append({**{k: v for k, v in t.items() if k != "probe"},
                       "available": tool_available(t)})
+    # `issues` 是給設定頁看的（2026-08-25 覆核 R2-5）：警告原本只掛在 `--check`，
+    # 走瀏覽器那條路的人看到的是「沒有 radio 被勾」而已，不像壞掉。
+    # 按下儲存就落進正規化，cursor 被洗成 claude-code 而畫面全程沒說。
     return {"config": cfg, "tools": tools, "models": MODELS, "efforts": EFFORTS,
-            "config_path": CONFIG_PATH}
+            "config_path": CONFIG_PATH,
+            "issues": config_load_issues() + config_warnings(cfg)}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -260,11 +274,15 @@ def print_state() -> None:
     for w in config_load_issues() + config_warnings(cfg):
         print(f"  ✘ {w}")
     if cfg["tool"] == "cursor":
-        print("  ℹ Cursor 是**人工通道**：可用性不等於「裝了沒」，而是「這一輪有沒有合格的回覆檔」。"
-              "skill 會寫題目檔，需要人貼進 Cursor 一次。")
+        # ⚠ 這段措辭刻意不寫「可用＝有沒有回覆檔」（2026-08-25 覆核 R2-6）：
+        # 那個講法會把「還沒貼」讀成「不可用」，而下一行 Codex 的說明正好在教
+        # 「不可用就改用可用的審查者」。兩句合起來就是一張換人許可證。
+        print("  ℹ Cursor 是**人工通道**，永遠算可用。它沒有「不可用」這個狀態，只有「還沒回」。")
+        print("    skill 會寫題目檔然後**停下來等人貼**。等不到不是換人的理由——換人必須是人下的指令。")
     for t in st["tools"]:
         if not t["available"]:
-            print(f"  ⚠ {t['name']} 未安裝——選了它，skill 會回報找不到並改用可用的審查者")
+            print(f"  ⚠ {t['name']} 未安裝——選了它，skill 會回報找不到並改用可用的審查者"
+                  "（此規則不適用 Cursor，見上）")
 
 
 def main() -> int:

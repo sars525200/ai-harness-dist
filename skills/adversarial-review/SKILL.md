@@ -36,10 +36,16 @@ py -3 D:\.ai-harness\reviewer\server.py --check
 `tool`（`claude-code`／`cursor`／`codex`）、`model`（`inherit`／`opus`／`sonnet`／`fable`）、
 `effort`（`high`／`medium`／`max`）。
 
-**⚠ 先看 exit code，不要只讀畫面**（2026-08-25 起）：`--check` 遇到**未知設定值**會
-**exit 2** 並印 `✘`。看到非零就**停下來問人**，不要挑一個分支兜底——
-未知值落到「第一個有寫的分支」正好是 `claude-code`，那就是靜默的自己審自己。
-讀不到檔或欄位缺失（不是未知值）→ 用預設 `claude-code` + `opus` + `high`，**並說出來**。
+**⚠ 先看 exit code，不要只讀畫面**（2026-08-25 起）：`--check` 在**未知設定值**、
+**檔案不存在**、**JSON 壞掉**、**欄位缺失或是空字串**時都會 **exit 2** 並印 `✘`。
+
+**看到非零就停下來問人。不要自己挑一個分支繼續。**
+
+⚠⚠ 這裡**不再有**「讀不到檔就用預設 `claude-code` 並說出來」那條退路（2026-08-25 覆核 R2-2 移除）。
+那句話與 exit 2 直接打架，而且合起來剛好授權你：`--check` 紅了 → 依那句改派 Claude →
+講一句「檔讀不到我改用預設」→ 蓋章。**那正是這支 skill 要防的事，只是披了合規的外衣。**
+設定壞掉時正確的行為是**停**，不是換人——因為「預設」就是 `claude-code`，
+而你就是 Claude。
 
 - **`claude-code`（預設）** → `Agent` tool 開一個 `subagent_type: "Plan"` 的獨立 subagent，
   帶上設定的 `model` 與 `effort`（`inherit` 就不傳 `model`）。選 Plan 型是刻意的：
@@ -49,8 +55,10 @@ py -3 D:\.ai-harness\reviewer\server.py --check
   （`ListAgents` 看不見它），所以你寫題目檔、**停下來請人貼進 Cursor**、
   等回覆檔寫回來再繼續。**這是這台機器上唯一真正跨模型族的審查者。**
   ⚠ **不要用 `shutil.which("cursor")` 判斷它可不可用**：2026-08-25 實測，
-  同一個判準在 Cursor 自己的 process 有值、在 Claude 這側是 `None`——
-  答案取決於誰在問。cursor 的「可用」＝**這一輪有沒有合格的回覆檔**，不是「裝了沒」。
+  同一個判準在 Cursor 自己的 process 有值、在 Claude 這側是 `None`——答案取決於誰在問。
+  ⚠⚠ **`cursor` 根本沒有「不可用」這個狀態，只有「還沒回」**（覆核 R1-4／R2-6）。
+  不要把「這一輪還沒有回覆檔」讀成「Cursor 不可用」然後套用下面那條「不可用就換人」——
+  人還沒貼之前它永遠是那個樣子，那樣等於自動獲得換人的授權。**還沒回就是等。**
 - **`codex`** → 先確認裝了沒（`--check` 會告訴你）。有裝就用非互動模式跑，跑之前先
   `codex --help` 或 `codex exec --help` 確認實際參數，不要憑記憶猜旗標（CLI 版本間常改）。
   **沒裝 → 改用 `claude-code` 並明講你換了**（見下）。

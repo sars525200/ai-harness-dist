@@ -231,6 +231,73 @@ def _case_stamp_keeps_body_sha_line(fails):
             fails.append("stamp 把正文裡的示範 sha 行吃掉了 —— 協議說明被工具刪除且無痕")
 
 
+def _case_stamp_refuses_trailing_demo(fails):
+    """R2-1：示範 sha 行**剛好在檔尾**時，第一版修法還是把它吃掉。
+
+    「最後一個非空行」的口徑分不出「舊 stamp」與「檔尾的示範行」，
+    而兩者的正確處置相反。分不出來就不要猜——`--stamp-ask` 必須拒絕並說明。
+    """
+    with tempfile.TemporaryDirectory() as d:
+        demo = "ask-sha256=" + "0" * 64
+        p = _mkask(d, 1, "# 題目\n\n請把下一行抄回：\n%s\n" % demo)
+        before = open(p, encoding="utf-8").read()
+        r = _cli("--stamp-ask", p)
+        if r.returncode != 2:
+            fails.append("檔尾已有對不上的 sha 行時應拒絕 stamp（實得 %s）" % r.returncode)
+        if open(p, encoding="utf-8").read() != before:
+            fails.append("拒絕時不該改動檔案 —— 靜默刪掉示範行正是 R1-10／R2-1 的成因")
+
+
+def _case_stamp_bad_encoding(fails):
+    """R2-9：`stamp_ask` 曾直接 read_text，非 UTF-8 是 exit 1＋traceback。"""
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "round-1-ask.md")
+        open(p, "wb").write(b"# q\n\xff\xfe\xff")
+        r = _cli("--stamp-ask", p)
+        if r.returncode != 2:
+            fails.append("非 UTF-8 的 ask 應 exit 2（實得 %s）" % r.returncode)
+        if "Traceback" in (r.stderr or ""):
+            fails.append("非 UTF-8 的 ask 不該以 traceback 收場")
+
+
+def _case_leading_zero_round(fails):
+    """R2-7：`round-01-ask.md` 的 01 會被 int() 讀成 1，單獨存在時曾放行。"""
+    with tempfile.TemporaryDirectory() as d:
+        p = os.path.join(d, "round-01-ask.md")
+        open(p, "w", encoding="utf-8", newline="\n").write("# 題目\n\n請挑錯。\n")
+        sha = _stamp(p)
+        open(os.path.join(d, "round-01-reply.md"), "w", encoding="utf-8",
+             newline="\n").write("# 回覆\n\nask-sha256=%s\n\n%s" % (sha, GOOD_REPLY_BODY))
+        if _cli("--check", d).returncode != 2:
+            fails.append("round-01 這種檔名別名應 exit 2 —— 同一輪兩種寫法遲早變成兩輪")
+
+
+def _case_no_sha_message_pinned(fails):
+    """R2-8：`has_sha_line` 壞掉時 exit code 不變（`reply_carries` 會兜住），
+    所以要釘住**訊息**，否則那道檢查刪掉也沒人會知道。"""
+    with tempfile.TemporaryDirectory() as d:
+        _stamp(_mkask(d, 1))
+        open(os.path.join(d, "round-1-reply.md"), "w", encoding="utf-8",
+             newline="\n").write("# 回覆\n\n" + GOOD_REPLY_BODY)
+        out = _cli("--check", d).stdout or ""
+        if "沒有帶回" not in out:
+            fails.append("reply 完全沒有 sha 行時，訊息應是「沒有帶回」而不是「對不上」"
+                         "：%s" % out.strip()[:120])
+
+
+def _case_green_prints_findings_head(fails):
+    """R1-8 的收束：綠的時候要把發現區前幾行印出來，讓填充物跟著 exit 0 被看見。"""
+    with tempfile.TemporaryDirectory() as d:
+        sha = _stamp(_mkask(d, 1))
+        junk = "n/a\nn/a\n" + "x" * 130 + "\n"
+        _mkreply(d, 1, sha, body=junk)
+        r = _cli("--check", d)
+        if r.returncode != 0:
+            fails.append("這份填充 reply 仍會過門檻（那是已知上限），不該紅")
+        if "n/a" not in (r.stdout or ""):
+            fails.append("綠的時候應把發現區前幾行印出來 —— 否則 exit 0 看不出裡面是垃圾")
+
+
 def _case_reply_sha_anywhere(fails):
     """hash 寫在 reply 檔尾也該算數 —— 「有沒有回對題」與它寫在第幾行無關。"""
     with tempfile.TemporaryDirectory() as d:
@@ -258,6 +325,11 @@ def run():
         ("齊全的一輪放行", _case_happy_path),
         ("stamp→check 口徑穩定", _case_stamp_roundtrip_stable),
         ("stamp 不吃正文的 sha 行（R1-10）", _case_stamp_keeps_body_sha_line),
+        ("檔尾示範行時拒絕 stamp（R2-1）", _case_stamp_refuses_trailing_demo),
+        ("非 UTF-8 的 ask 也是 exit 2（R2-9）", _case_stamp_bad_encoding),
+        ("round-01 檔名別名拒跑（R2-7）", _case_leading_zero_round),
+        ("沒帶 sha 的訊息被釘住（R2-8）", _case_no_sha_message_pinned),
+        ("綠的時候印出發現區前幾行（R1-8）", _case_green_prints_findings_head),
         ("reply 的 hash 寫哪一行都算", _case_reply_sha_anywhere),
     ]
     passed = 0

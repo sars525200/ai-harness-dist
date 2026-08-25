@@ -58,23 +58,27 @@ def _with_config(content):
 
 
 def _check_exit(config_content):
-    """跑真正的 CLI `--check`，回 exit code。用子行程才驗得到 exit code。"""
+    """跑**真正的** `server.py --check`，回 exit code。
+
+    ⚠ 這裡刻意複製 `server.py` 到暫存目錄再跑，而不是在 shim 裡重算 exit 公式
+    （2026-08-25 覆核 R2-3）：第一版寫成
+    `sys.exit(2 if (config_load_issues() or config_warnings(...)) else 0)`，
+    那與 `main()` 裡那一行**同形但不是同一行**。把 `main()` 的 `return 2` 改成
+    `return 0`，真正的 CLI 對壞設定會綠，而這 9 條測試全部照樣通過——
+    **正是題目點名的那個變異，而它存活了。**
+
+    `CONFIG_PATH` 是 `os.path.join(HERE, "reviewer_config.json")`，所以把 server.py
+    複製過去、設定檔放旁邊，真實 CLI 就會讀到臨時設定，`main()` 也真的被執行。
+    """
     d = tempfile.mkdtemp()
-    p = os.path.join(d, "reviewer_config.json")
     if config_content is not None:
-        open(p, "w", encoding="utf-8").write(config_content)
-    shim = os.path.join(d, "shim.py")
-    open(shim, "w", encoding="utf-8").write(
-        "import runpy, sys, types\n"
-        "src = open(%r, encoding='utf-8').read()\n"
-        "mod = types.ModuleType('m'); mod.__file__ = %r\n"
-        "exec(compile(src, %r, 'exec'), mod.__dict__)\n"
-        "mod.CONFIG_PATH = %r\n"
-        "sys.exit(2 if (mod.config_load_issues() or "
-        "mod.config_warnings(mod.load_config())) else 0)\n"
-        % (SERVER, SERVER, SERVER, p))
-    r = subprocess.run([sys.executable, shim], capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
+        open(os.path.join(d, "reviewer_config.json"), "w",
+             encoding="utf-8").write(config_content)
+    copied = os.path.join(d, "server.py")
+    open(copied, "w", encoding="utf-8", newline="\n").write(
+        open(SERVER, encoding="utf-8").read())
+    r = subprocess.run([sys.executable, copied, "--check"], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
     return r.returncode
 
 
@@ -157,6 +161,33 @@ def _case_exit_codes(fails):
 
 # ── cursor 必須在合法清單裡 ───────────────────────────────────
 
+def _case_save_reports_missing_key(fails):
+    """R2-4：修 R1-2 時把「未知值靜默」換成了「缺欄位靜默」——同一個洞換入口。
+
+    POST `{}` 或只送 model／effort，會把磁碟上的 cursor 洗成 claude-code，
+    而 API 回 `rejected: []`、`ok: true`。
+    """
+    mod, p = _with_config(GOOD)
+    rejected = mod.save_config({"model": "opus", "effort": "high"})
+    if not rejected:
+        fails.append("沒送 tool 時必須列入 rejected —— 否則 cursor 被洗掉而 API 說沒拒絕")
+    if json.load(open(p, encoding="utf-8"))["tool"] != "claude-code":
+        fails.append("沒送 tool 仍應寫成預設（行為不變，變的是有沒有說）")
+
+
+def _case_state_exposes_issues(fails):
+    """R2-5：警告原本只掛在 --check，走瀏覽器的人只看到「沒有 radio 被勾」。"""
+    mod, _ = _with_config(json.dumps({"tool": "gpt", "model": "opus", "effort": "high"}))
+    st = mod.state()
+    if "issues" not in st:
+        fails.append("state() 應帶 issues 給設定頁 —— 實得 keys=%s" % sorted(st.keys()))
+    elif not st["issues"]:
+        fails.append("設定是未知值時 state()['issues'] 不該是空的")
+    mod2, _ = _with_config(GOOD)
+    if mod2.state().get("issues"):
+        fails.append("合法設定時 issues 應為空 —— 會亂叫的警告等於沒有警告")
+
+
 def _case_cursor_is_a_tool(fails):
     mod, _ = _with_config(GOOD)
     ids = [t["id"] for t in mod.TOOLS]
@@ -177,6 +208,8 @@ def run():
         ("合法設定不亂叫", _case_good_config_silent),
         ("save 回報被正規化的欄位（R1-2）", _case_save_reports_reject),
         ("cursor 存得進去（R1-2）", _case_save_keeps_cursor),
+        ("save 回報沒送來的欄位（R2-4）", _case_save_reports_missing_key),
+        ("state() 帶 issues 給設定頁（R2-5）", _case_state_exposes_issues),
         ("exit code 五種情境", _case_exit_codes),
         ("cursor 在 TOOLS 且 probe 為 None", _case_cursor_is_a_tool),
     ]

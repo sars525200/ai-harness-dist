@@ -128,9 +128,18 @@ def read_text_or_none(path: Path):
         return None
 
 
-def findings_size(text: str):
-    """數 reply 裡的實質內容行：跳過標題、空行、HTML 註解、表格分隔列、sha 行。"""
-    lines = chars = 0
+def findings_head(text: str, k: int = 3):
+    """回傳發現區的前 k 行實質內容。
+
+    2026-08-25 覆核 R1-8 的收束：門檻（3 行／120 字）量的是**長度**不是「有沒有發現」，
+    `n/a` 加 120 個 `x` 就過得了。把門檻改成語意判斷會變成軍備競賽，所以不改門檻——
+    改成**綠的時候把前三行印出來**。skill 已經要求把 `--check` 的輸出貼進回報，
+    於是填充物會跟著 exit 0 一起出現在人眼前。這是防遺忘的可視性，不是防作弊。
+    """
+    return [ln for ln in _content_lines(text)][:k]
+
+
+def _content_lines(text: str):
     for ln in text.splitlines():
         s = ln.strip()
         if not s or s.startswith("#") or s.startswith("<!--"):
@@ -139,16 +148,46 @@ def findings_size(text: str):
             continue
         if set(s) <= set("|-: "):      # markdown 表格分隔列
             continue
+        yield s
+
+
+def findings_size(text: str):
+    """數 reply 裡的實質內容行：跳過標題、空行、HTML 註解、表格分隔列、sha 行。
+
+    ⚠ 這量的是**長度**，不是「有沒有發現」——後者機器判不了（覆核 R1-8）。
+    可視性補在 `findings_head()`：綠的時候把前三行印出來給人看。
+    """
+    lines = chars = 0
+    for s in _content_lines(text):
         lines += 1
         chars += len(s)
     return lines, chars
 
 
 def stamp_ask(path: Path) -> int:
-    text = path.read_text(encoding="utf-8")
+    text = read_text_or_none(path)          # R2-9：非 UTF-8 不該以 traceback 收場
+    if text is None:
+        print(f"✘ {path.name} 不是合法的 UTF-8 —— 讀不了就不 stamp")
+        return 2
+
+    body, existing = _split_stamp(text)
+    if existing is not None and existing != hashlib.sha256(
+            body.rstrip().encode("utf-8")).hexdigest():
+        # R2-1：檔尾那行 sha 對不上本文 —— 它可能是「舊 stamp（題目被改過）」，
+        # 也可能是「題目正文最後一行剛好在示範這個格式」。**機器分不出來**，
+        # 而兩種的正確處置相反（前者該重 stamp、後者絕不能刪）。
+        # 原本無條件把它當 stamp 剝掉：示範行被靜默刪除、協議說明從檔案消失。
+        # 分不出來的時候就不要猜——出聲讓人決定。
+        print(f"✘ {path.name} 檔尾已經有一行 ask-sha256，但它對不上本文的雜湊。")
+        print("  兩種可能，機器分不出來：")
+        print("    ① 這是舊 stamp，而題目在 stamp 之後被改過 → 請開下一輪的 ask，不要重 stamp")
+        print("    ② 這是正文在示範這個格式 → 請把它移到不是最後一行的位置，或加一行本文在後面")
+        print("  沒有 --force：靜默猜錯的兩種後果都是「審查者看到的題目不是你以為的那份」。")
+        return 2
+
     digest = ask_hash(text)
-    body = _strip_sha_lines(text).rstrip("\n")
-    path.write_text(f"{body}\n\nask-sha256={digest}\n", encoding="utf-8", newline="\n")
+    path.write_text(f"{body.rstrip()}\n\nask-sha256={digest}\n",
+                    encoding="utf-8", newline="\n")
     print(f"已 stamp：{path.name}")
     print(f"  ask-sha256={digest}")
     print("  ⚠ 這份題目檔從現在起**凍結**。要改題目請開下一輪的 ask，不要改它。")
@@ -167,6 +206,15 @@ def check_dir(effort: Path) -> int:
         return 2
 
     bad = 0
+
+    # 檔名別名：`round-01-ask.md` 的 `01` 會被 int() 讀成 1，單獨存在時當合法的
+    # 第 1 輪放行（2026-08-25 覆核 R2-7）。實務上幾乎等價，但「同一輪有兩種寫法」
+    # 遲早會變成「兩個檔各自被當成一輪」。輪號只准正規十進位。
+    aliased = [p.name for p in asks
+               if ASK_NAME.match(p.name).group(1) != str(int(ASK_NAME.match(p.name).group(1)))]
+    if aliased:
+        print(f"  ✘ 輪號有前導零：{aliased} —— 請寫成 round-1-ask.md 這種正規形式")
+        bad += 1
 
     # ── 輪號必須是連續的 1..N（2026-08-25 覆核 R1-6）─────────────────
     # 原本只迭代「目錄裡找得到的 ask」，於是**刪掉中間那輪的 ask** 或根本不寫它，
@@ -236,6 +284,10 @@ def check_dir(effort: Path) -> int:
             continue
 
         print(f"  ✔ 第 {n} 輪：ask 已凍結、reply 對得上、發現區 {ln} 行／{ch} 字")
+        # 綠的時候也把前三行印出來（覆核 R1-8）：門檻只量長度，`n/a` 加一堆填充
+        # 也過得了。skill 要求把這段輸出貼進回報 ⇒ 填充物會跟著 exit 0 一起被看見。
+        for head in findings_head(rt):
+            print(f"       │ {head[:78]}")
 
     if bad:
         print(f"\n✘ 落檔交換不合格（{bad} 輪有問題）——**不得蓋 ADVERSARIAL_REVIEW_PASSED**。")

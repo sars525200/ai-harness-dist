@@ -66,9 +66,11 @@
   .status{font-size:13px;color:var(--text-dim);min-height:1.4em}
   .status.ok{color:var(--pass);font-weight:600}
   .status.err{color:var(--block);font-weight:600}
+  .status.warn{color:var(--warn);font-weight:600}
   .note{margin-top:26px;padding:13px 16px;background:var(--surface);border:1px solid var(--line);
         border-left:2px solid var(--accent);border-radius:4px;font-size:12.5px;color:var(--text-dim)}
   .note b{color:var(--text)}
+  .note.bad{border-left-color:var(--block);background:var(--block-wash);color:var(--text)}
   .note code{background:var(--surface-2);padding:1px 5px;border-radius:3px;font-family:var(--font-mono);font-size:11.5px}
   @media (prefers-reduced-motion:no-preference){
     .opt{transition:border-color .16s ease,background .16s ease,opacity .16s ease}
@@ -110,19 +112,36 @@
     <span class="status" id="status" role="status" aria-live="polite"></span>
   </div>
 
+  <!-- 設定檔壞掉時這裡會出現（2026-08-25 覆核 R2-5）。原本只有 `--check` 會說，
+       走瀏覽器的人只看到「沒有 radio 被勾」，不像壞掉；按下儲存就把 cursor 洗成
+       claude-code，全程沒有任何一句話。 -->
+  <div class="note bad" id="issues" hidden></div>
+
   <div class="note">
     <b>選了未安裝的工具會怎樣：</b>skill 會照實回報「設定指定 X 但這台機器上找不到」，
     然後改用可用的審查者並<b>明講它換了</b>——不會靜默替換。
     「以為找了外部 AI 覆核、其實是自己審自己」比沒覆核更危險。
+    <br><br>
+    <b>⚠ Cursor 例外</b>：它是<b>人工通道</b>，永遠顯示「可用」。它沒有「不可用」這個狀態，
+    只有「還沒回」——skill 會寫題目檔然後<b>停下來等人貼</b>。等不到<b>不是</b>換人的理由，
+    換人必須是人下的指令。
   </div>
 </div>
 
 <script>
-const state = { tools: [], models: [], efforts: [], config: {} };
+const state = { tools: [], models: [], efforts: [], config: {}, issues: [] };
 
 function render() {
   const tool = state.tools.find(t => t.id === state.config.tool);
   const supportsModel = tool ? tool.supports_model : true;
+
+  const box = document.getElementById("issues");
+  const issues = state.issues || [];
+  box.hidden = issues.length === 0;
+  box.innerHTML = issues.length
+    ? "<b>設定檔有問題（`--check` 會 exit 2）：</b><br>"
+      + issues.map(i => "• " + esc(i)).join("<br>")
+    : "";
 
   document.getElementById("tools").innerHTML = state.tools.map(t => `
     <label class="opt ${state.config.tool === t.id ? "on" : ""} ${t.available ? "" : "off"}">
@@ -187,9 +206,16 @@ document.getElementById("save").addEventListener("click", async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.status);
     state.config = d.config;
+    // 被正規化掉的欄位要說出來（2026-08-25 覆核 R1-2／R2-4）：不說的話，
+    // 畫面顯示「已儲存」而磁碟上的值跟你選的不是同一個。
+    state.issues = d.rejected || [];
     render();
     const tool = state.tools.find(t => t.id === state.config.tool);
-    setStatus("已儲存 —— 下次跑 /adversarial-review 就會用「" + (tool ? tool.name : state.config.tool) + "」", "ok");
+    if ((d.rejected || []).length) {
+      setStatus("已儲存，但有欄位被改寫成預設 —— 看上面那一塊", "warn");
+    } else {
+      setStatus("已儲存 —— 下次跑 /adversarial-review 就會用「" + (tool ? tool.name : state.config.tool) + "」", "ok");
+    }
     document.querySelectorAll(".opt.on").forEach(el => {
       el.classList.remove("saved-pulse");
       void el.offsetWidth;           // 強制 reflow，否則連按兩次不會重播
