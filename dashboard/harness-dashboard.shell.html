@@ -224,6 +224,12 @@
   .tab .live-mark{
     width:6px; height:6px; border-radius:50%; background:var(--shadow-st); flex-shrink:0;
   }
+  #panel-deskbus{ min-height:0; }
+  #panel-deskbus:not([hidden]){ display:flex; flex-direction:column; }
+  .deskbus-frame{
+    flex:1; width:100%; min-height:70vh; border:1px solid var(--line);
+    background:var(--surface-2); border-radius:4px;
+  }
   @media (prefers-reduced-motion: no-preference){
     .tab .live-mark{ animation:pulse-sh 2.4s ease-in-out infinite; }
   }
@@ -1448,6 +1454,7 @@
       <button type="button" class="tab" role="tab" id="tab-obs" aria-controls="panel-obs" aria-selected="false" tabindex="-1" data-key="obs">成本效益<span class="count">—</span></button>
       <button type="button" class="tab" role="tab" id="tab-skills" aria-controls="panel-skills" aria-selected="false" tabindex="-1" data-key="skills">Skill<span class="count">—</span></button>
       <button type="button" class="tab" role="tab" id="tab-orch" aria-controls="panel-orch" aria-selected="false" tabindex="-1" data-key="orch">角色<span class="count">—</span></button>
+      <button type="button" class="tab" role="tab" id="tab-deskbus" aria-controls="panel-deskbus" aria-selected="false" tabindex="-1" data-key="deskbus">匯流排</button>
       <div class="sys-fold">
         <button type="button" class="sys-toggle" id="sys-toggle" aria-expanded="false" aria-controls="sys-menu">系統</button>
         <div class="sys-menu" id="sys-menu" hidden>
@@ -1785,6 +1792,15 @@
     <!-- ROLES_TOPOLOGY_END -->
     </div>
     
+  </div>
+
+  <div class="panel" id="panel-deskbus" role="tabpanel" aria-labelledby="tab-deskbus" hidden>
+    <div class="panel-title"><h2>匯流排<span class="pt-en">｜DeskBus</span></h2><p class="pt-desc">Claude Desktop 與 Cursor 在本機互傳訊息</p></div>
+    <p class="lead">頁面來自 <code>http://127.0.0.1:43147/</code>。沒開的話先在 <code>deskbus/</code> 跑 <code>npm run dev</code>。<button type="button" class="cv-info" data-note="note-deskbus-lead" aria-expanded="false" aria-controls="note-deskbus-lead" aria-label="匯流排怎麼開、MCP 寫到哪">!</button></p>
+    <div class="criteria cv-note" id="note-deskbus-lead" hidden>
+      <p>這不是產生器填的表，是另一個本機服務嵌進來。只綁 127.0.0.1。MCP 安裝：在 deskbus 目錄跑 npm run install:mcp，會寫這個專案的 .cursor/mcp.json 與 Claude Desktop 設定。步驟與兩邊提示詞見 deskbus/README.md。</p>
+    </div>
+    <iframe class="deskbus-frame" id="deskbus-frame" title="DeskBus" src="http://127.0.0.1:43147/?ui=20260825-2"></iframe>
   </div>
 
 
@@ -2454,17 +2470,45 @@
           <label class="rv-opt"><input type="radio" name="rv-tool" value="codex">
             <span><b>Codex CLI</b><span class="chip block">7/31 實測本機未安裝</span>
             <i>跨模型族的異質性是它唯一的優勢——同族審同族容易共享盲點</i></span></label>
+          <label class="rv-opt"><input type="radio" name="rv-tool" value="cursor-cli">
+            <span><b>Cursor CLI</b><span class="chip pass">跨族·全自動</span>
+            <i>Cursor 官方 CLI（<code>agent -p</code>，Windows 原生）。跟上面那個 Cursor 同樣跨模型族，
+            但<b>不需要人當傳話筒</b>——skill 直接跑、收 stdout 落檔。
+            ⚠ 必須 <code>--workspace</code> 指到隔離沙箱：CLI 會讀專案根 CLAUDE.md 與 .claude/skills，
+            在本 repo 直接跑等於審查者載入跟作者同一套脈絡</i></span></label>
         </div>
+        <!-- 模型清單依審查者而定（2026-08-25）：cursor-cli 吃 Cursor 的 model slug、
+             claude-code 吃抽象檔位。兩組不能混——混了會選到對該工具無效的值。
+             `data-for` 決定哪一組要顯示，切換邏輯在下方 rv-tool 的 change handler。 -->
         <div class="rv-grp" role="radiogroup" aria-label="模型" id="rv-modelgrp">
           <div class="rv-lbl">模型</div>
-          <label class="rv-opt"><input type="radio" name="rv-model" value="inherit">
-            <span><b>跟隨主線</b><i>不覆寫，用當前 session 的模型</i></span></label>
-          <label class="rv-opt on"><input type="radio" name="rv-model" value="opus" checked>
-            <span><b>Opus 5</b><span class="chip pass">預設</span><i>對抗式覆核屬 §7 明列該切 Opus 的情境</i></span></label>
-          <label class="rv-opt"><input type="radio" name="rv-model" value="sonnet">
-            <span><b>Sonnet 5</b><i>覆核範圍小、爭點單純時夠用</i></span></label>
-          <label class="rv-opt"><input type="radio" name="rv-model" value="fable">
-            <span><b>Fable 5</b><span class="chip warn">§7 訂 &lt;5%</span><i>最硬的 audit 才用，燒獨立額度</i></span></label>
+          <div data-for="claude-code">
+            <label class="rv-opt"><input type="radio" name="rv-model" value="inherit">
+              <span><b>跟隨主線</b><i>不覆寫，用當前 session 的模型</i></span></label>
+            <label class="rv-opt on"><input type="radio" name="rv-model" value="opus" checked>
+              <span><b>Opus 5</b><span class="chip pass">預設</span><i>對抗式覆核屬 §7 明列該切 Opus 的情境</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="sonnet">
+              <span><b>Sonnet 5</b><i>覆核範圍小、爭點單純時夠用</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="fable">
+              <span><b>Fable 5</b><span class="chip warn">§7 訂 &lt;5%</span><i>最硬的 audit 才用，燒獨立額度</i></span></label>
+          </div>
+          <div data-for="cursor-cli" hidden>
+            <label class="rv-opt on"><input type="radio" name="rv-model" value="cursor-grok-4.6-xhigh">
+              <span><b>Grok 4.6 Extra High</b><span class="chip pass">xAI·跨族</span>
+              <i>2026-08-25 首次實跑（SG-084 四輪）：R2／R3／R4 各抓出 5／4／4 個新發現，且沒有一輪重炒</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="gpt-5.3-codex-xhigh">
+              <span><b>Codex 5.3 Extra High</b><span class="chip pass">OpenAI·跨族</span>
+              <i>專攻程式碼。爭點在「這段程式會不會這樣壞」時選它</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="gpt-5.6-sol-xhigh">
+              <span><b>GPT-5.6 Sol Extra High</b><span class="chip pass">OpenAI·跨族</span>
+              <i>通用推理強。爭點在「這個方案本身對不對」時選它</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="gemini-3.1-pro">
+              <span><b>Gemini 3.1 Pro</b><span class="chip pass">Google·跨族</span>
+              <i>前兩個審查者意見打架時，可當獨立的第三票</i></span></label>
+            <label class="rv-opt"><input type="radio" name="rv-model" value="claude-opus-5-thinking-high">
+              <span><b>Claude Opus 5 Thinking</b><span class="chip warn">Anthropic·同族</span>
+              <i>⚠ 與主 session 同模型族、共享盲點。除非刻意要同族第二意見，否則選它等於削掉這支 skill 的理由</i></span></label>
+          </div>
         </div>
         <div class="rv-grp" role="radiogroup" aria-label="思考強度" id="rv-effortgrp">
           <div class="rv-lbl">強度</div>
@@ -4809,14 +4853,40 @@
     }
 
     function render(flash) {
-      // Codex 不是 Claude，模型與強度由它自己決定 —— 把那兩組淡掉並停用，
+      // `cursor`／`codex` 的模型與強度由它們自己決定 —— 把那兩組淡掉並停用，
       // 免得選了一個不會生效的值還以為設定好了。
-      var isClaude = pick('rv-tool') === 'claude-code';
+      // ⚠ 判準不能是「是不是 claude-code」（2026-08-25 加 cursor-cli 時改）：
+      // cursor-cli **也吃 --model**，只是吃的是 Cursor 的 slug 不是抽象檔位。
+      // 沿用舊判準會把它的模型組整組停用，等於這個工具永遠只能用預設模型。
+      var tool = pick('rv-tool');
+      var MODEL_SETS = { 'claude-code': 'claude-code', 'cursor-cli': 'cursor-cli' };
+      var setKey = MODEL_SETS[tool] || null;     // null = 這個工具不吃 model
+      var takesModel = !!setKey;
+
+      // 只顯示這個工具那一組模型；另一組整組藏起來（不是淡化——
+      // 兩組的值互不通用，讓人看得到就會選到對這個工具無效的值）。
+      var modelGrp = document.getElementById('rv-modelgrp');
+      if (modelGrp) {
+        modelGrp.querySelectorAll('[data-for]').forEach(function (box) {
+          var show = takesModel && box.getAttribute('data-for') === setKey;
+          box.hidden = !show;
+        });
+        // 切過來之後若這一組裡沒有任何一顆被選中，就補選第一顆 ——
+        // 否則 text() 會產出 model:"" 而下載的設定檔缺值（存檔時會被正規化成預設，
+        // 而預設對這個工具可能是無效的 slug）。
+        if (takesModel) {
+          var box = modelGrp.querySelector('[data-for="' + setKey + '"]');
+          if (box && !box.querySelector('input:checked')) {
+            var first = box.querySelector('input');
+            if (first) first.checked = true;
+          }
+        }
+      }
       ['rv-modelgrp', 'rv-effortgrp'].forEach(function (id) {
         var grp = document.getElementById(id);
         if (!grp) return;
-        grp.querySelectorAll('.rv-opt').forEach(function (o) { o.classList.toggle('dim', !isClaude); });
-        grp.querySelectorAll('input').forEach(function (i) { i.disabled = !isClaude; });
+        grp.querySelectorAll('.rv-opt').forEach(function (o) { o.classList.toggle('dim', !takesModel); });
+        grp.querySelectorAll('input').forEach(function (i) { i.disabled = !takesModel; });
       });
       document.querySelectorAll('.rv-opt').forEach(function (o) {
         var input = o.querySelector('input');
