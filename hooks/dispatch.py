@@ -285,6 +285,17 @@ def _log_error(session_id: str, exc: BaseException, agent_id: str = "",
             # repr 才看得見控制字元與 U+FFFD（stdin 是 errors="replace" 解的）。
             # 截斷 200 字：夠認出形狀，又不把整段指令內容抄進 log。
             fh.write(f"  raw[{len(raw)}] head={raw[:200]!r}\n" if raw else "  raw=<空>\n")
+            # 2026-08-25：**head 200 字對 JSONDecodeError 不夠用**。實測 121 筆真失效
+            # （8/24 起、全是 Cursor 送來的 payload）的出錯位置落在 char 227～85837，
+            # **每一筆的現場都剛好在 head 之外** ⇒ log 看起來有記錄，實際查不下去：
+            # 前一輪研究就是卡在「那些解析失敗的是哪一類 payload」這個問題上。
+            # JSONDecodeError／UnicodeDecodeError 都帶 `.pos`，把現場切出來就不必重現。
+            # 只切前後 120 字，維持原本「不把整段指令內容抄進 log」的分寸。
+            pos = getattr(exc, "pos", None)
+            if raw and isinstance(pos, int) and 0 <= pos <= len(raw):
+                lo, hi = max(0, pos - 120), min(len(raw), pos + 120)
+                fh.write(f"  at[{pos}] before={raw[lo:pos]!r}\n")
+                fh.write(f"  at[{pos}] after ={raw[pos:hi]!r}\n")
             fh.write(traceback.format_exc())
             fh.write("\n")
     except Exception:
