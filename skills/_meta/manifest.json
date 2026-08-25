@@ -5,6 +5,12 @@
     "改動是刻意的就跑 tools/skill_manifest.py --accept 更新基準。"
   ],
   "skills": {
+    "chat-handoff": {
+      "tree": "00ed779c74fd52e067a00bf30b099bc5fbb40eeb",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
     "context-health": {
       "tree": "59c1afeb2fec5288dad824a8071464ef45632d18",
       "upstream": null,

@@ -8,15 +8,15 @@ description: 把當則對話寫成交接檔並給出新對話可貼的開場白�
 
 把**這則對話裡還沒進記憶／計畫書的臨時脈絡**寫成檔，讓下一則空對話接得上。
 
-**做不到的**：執行 Cursor／Claude 的 `/clear`。清對話是人打的指令。本 skill 只落檔＋給可貼的第一句。
+## 邊界
 
-**不要用這支**：user 說「收工／先到這／封存」且意思是補規範、待驗、多 repo commit → 部門專案的 `/shougong`（若有）。那不是換則。
+- `/clear` 只能由 user 執行；本 skill 只落檔並給出可貼的第一句。
+- 「收工／先到這／封存」若指補規範、待驗或多 repo commit，改用部門專案的
+  `/shougong`（若有）。
+- 交接檔是 session 暫存。不得以版控內的 `HANDOFF.md`／`*_PLAN.md` 代替，也不為交接
+  建 branch 或 commit。
 
-**不要**：把交接寫進版控裡的 `HANDOFF.md`／`*_PLAN.md` 來代替本步驟；那些是長駐文件。本 skill 的產物是 session 暫存。不要為交接建 branch、不要 commit 交接檔。
-
-## 步驟
-
-### 1. 寫交接檔
+## 1. 寫交接檔
 
 路徑：`.scratch/handoff/YYYYMMDD-<短 slug>.md`（目錄沒有就建）。不建 git 分支、不 commit。
 
@@ -30,7 +30,7 @@ description: 把當則對話寫成交接檔並給出新對話可貼的開場白�
 
 細節已在 `CLAUDE.md`、`.cursor/HANDOFF.md`、`*_PLAN.md` 的，寫「見某某檔」，不要把規則本文再抄一次。
 
-### 2. 回覆人怎麼清
+## 2. 回覆清除方式
 
 - Cursor：輸入框打 `/clear`（`/new` 相同）。只想壓短、留這則 → `/summarize`
 - Claude Code：`/clear`；進行中變長先 `/compact`
