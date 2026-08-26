@@ -53,6 +53,12 @@
       "diverged": true,
       "local_edit_marks": 3
     },
+    "session-workflow": {
+      "tree": "a736970f72f8840124c7d11d3a11dacc5c04a902",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
     "skill-watch": {
       "tree": "0463c040e96a0e835d1136a61a60ccdaed2c7249",
       "upstream": null,
