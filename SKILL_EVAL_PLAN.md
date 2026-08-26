@@ -1035,6 +1035,26 @@ skills/adversarial-review/SKILL.md
 2. 驗 served 看板時第一版檢查全 ✘，差點判「服務沒重載」。實際是 `AWC-1` 第一次出現在
    能力清單而非規則表，視窗落錯位置 ⇒ **紅燈先驗「驗證法自己對不對」**才是對的順序（這次做對了）。
 
+**收尾裁決二：`.scratch/` —— 審查者的前提被推翻**（2026-08-26 user 裁「不加 ignore，改發警語」）
+
+審查者判「專案端 `.scratch/` 不是 gitignored ⇒ 6 個檔正在曝露 ⇒ 不能等收尾」。**實查後前提不成立**：
+
+- 專案端 `.scratch/` 有 **53 個已追蹤檔**，`docs/agents/issue-tracker.md` 明訂票／spec 就住這裡；追蹤是**刻意的**。
+- 該檔 2026-08-21 那條定案原文寫「**兩個** repo 的 `.gitignore` 都不加 `.scratch/` 條目」，**對 harness 是錯的**——
+  `D:\.ai-harness\.gitignore:11` 就有，而且刻意（B-4 第 1 列 `chat-handoff` 的 live 判準逐字就是「gitignore 命中 `.scratch/`」）。
+- ⇒ **這句錯的描述正是審查者誤判的來源**。它把「兩端刻意相反」寫成「兩端一致」，於是實況看起來就像缺陷。
+- ⇒ 無條件加 ignore 會 ①打斷票的工作流 ②**把別條線 70 個未追蹤檔藏起來**（其中 51 個在三個看起來很正式的 effort 目錄）。
+
+**處置**：訂正專案文件寫實況＋補警語；共用層 `prototype` 補**不寫死專案路徑**的通則句（`dcc2cd9`）。
+
+⚠ **這動到了已 verified 的第 10 列，不藏**：`skills/prototype/SKILL.md` +2 行，manifest key 同步
+（`661c5c04` → `2ea06908`），閘門回 exit 0，L2 契約仍 ✅ 1/1，CRLF 保住。
+**L4 台帳因此轉「過期」——刻意留著不重新登記**：改完就重登會把「重算」變成反射動作，
+那正是 PR-1 檔頭警告的「偽造憑證的唯一動作」的同型。過期＝下次要用這支時該重跑一次，這個訊號是對的。
+
+**仍未釐清（交回 user／別條線）**：同型 effort 目錄追蹤慣例不一致——`sg084-hydrate-deadlock` 追蹤 16 檔、
+`sg083-evox-teams` 未追蹤 17 檔；`.scratch/research/` 是追蹤 3 ／未追蹤 6 混在一起。那是別條線的活。
+
 **⚠ live 協定（2026-08-26 第 13 列訂，B-4 之後仍適用）**
 
 **不得在 `D:\.ai-harness` 跑 `/wayfinder`。** 理由是順序不是能力：`wayfinder:26` 的 fail-stop
