@@ -146,6 +146,7 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - **預設 Sonnet**（日常維護／UI 打磨／低風險 additive）。
 - **升 Opus 的時機**：任務碰到 **DB／邏輯／硬規則區／多檔協調／根因診斷／架構規劃**
   → 起頭切 Opus、收尾切回 Sonnet。**錯誤成本高就升，門檻放低、別等「很複雜」。**
+- **Fable 5 燒獨立 Weekly Fable 桶＋2 倍權重**（與 Opus／Sonnet 不同池）。
 - **最貴的模型 <5%**：只留最硬的 audit（全平台安全掃描、大規模資料一致性稽核），日常勿碰。
 - **目標落點 Opus:Sonnet ≈ 4:6**，用 `/usage` 的 model 拆分看（不是 skill 歸因）。
 - **skill frontmatter 的 `model`／`effort` 只准往上調**；往下降一律手動切——
@@ -161,3 +162,13 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
   hunk 並對帳＝0 → `D:\.ai-harness\tools\peek_sessions.py`
+
+## 6. 動共用層（harness）
+
+> 共用地基（skills／agents／hooks／看板）在 harness repo。放全域是因為**換個部門一樣成立**，
+> 而犯的當下人通常在別的專案裡、不會想到去開那邊的規則。
+
+- **動 harness 設計前先讀 `UNIVERSAL_HARNESS_PLAN.md`**：核心層**禁寫死專案路徑**，
+  新規則先答「換部門還成立嗎」。
+- **改看板先手動讀 `dashboard-generators.md`**（它的 `paths:` 對 harness repo 自身不生效）·**禁對外發布**。
+- **新增/改 skill·角色·規則後跑 `eval/run_all.py` 與 `/audit`**；新建 eval 首跑**預設它自己有問題**。
