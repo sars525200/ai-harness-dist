@@ -573,6 +573,17 @@ L4 掉到 **0**（⚠ v4 訂正：現況是**有效 1、過期 1**，`shougong` 
    candidate，不把 inventory 發現偷渡成改寫；若發現會造成錯誤行為的缺漏，標 `blocked`
    並交由 user 決定是否另開修訂。對帳開始時記錄 candidate bundle digest；後續 staged
    candidate 不同就使本次對帳失效，回到本步重驗。
+   ⚠ **對帳開始前先讓 candidate 成為 git 物件**（`git hash-object -w <檔>`；2026-08-26 第 2 列實測補上）：
+   上一句「digest 一變就回本步重驗」在**機器層原本不可執行**——候選檔一旦被改寫覆蓋、而且從未 staged，
+   前一版就**無法用任何唯讀手段取回**（`git cat-file -p <blob>` 回 `Not a valid object name`），
+   那條規定實際上只能靠審查者的記憶執行，而記憶不是可驗證的證據。
+   先寫進 object DB 之後，審查者才做得出 `git diff <blob-a> <blob-b>`
+   （實測：反向還原的前像 hash 與原值逐位元吻合）。
+   ⚠ **唯讀閘門擋掉 `hash-object`／`write-tree` ⇒ 這一步只能由被審方做**，
+   而「前像的存否掌握在被審方手上」在對抗式覆核裡是**分工缺陷**，不只是便利性問題（已登記待辦）。
+   ⚠ 但**不要把它推廣成「審查者什麼都要人餵」**：第 13 列的審查者用
+   `git cat-file -p <tree>`＋`git diff --no-index`＋GNU `diff -u`＋`cmp` 四件組合，
+   **全程沒跟被審方要過任何物件**就完成了 byte-exact 對照。缺的是「白名單錯誤訊息沒告訴人有替代法」。
 5. **實跑**：跑目標專用測試、現有 L1／L2 與至少一個真實呼叫或安全 dry-run。保留原始 exit code
    與輸出摘要；語法檢查、grep、L4「有效」都不算 live。
 6. **metadata**：description 未改則以完整 hash 對帳；有改則由獨立審查者先依 before 寫
@@ -1105,6 +1116,33 @@ harness repo 兩個檔都沒有（實查），所以這條路徑是真的走得�
    manifest 全量檢查與更新總體數字；不得把「已排程」寫成「已優化」。
 
 **B-4 範圍外、已知但不做的**（user 定案 2026-08-26：**等 14 支全做完再一次性收**，逐支階段不動 §9.6a 本文）
+
+> **✅ 已收（2026-08-27 收尾第二批）** —— 下面清單保留原文不刪，這裡只記哪些已經落地：
+>
+> | 原記項目 | 處置 | commit |
+> |---|---|---|
+> | §9.6a 步驟 4 digest 對帳在機器層不可執行 | 步驟 4 補「對帳開始前先 `git hash-object -w`」＋分工缺陷與**替代法**兩則警語 | 本顆 |
+> | `WORKFLOW_5STAGE_PLAN.md:738`／`:756` 兩處措辭 | 已改（來源側不修，W-11 裁決就只活在 skill 裡） | `9ba0d4a` |
+> | `design-spec` 過期「M 級」5 處 | 判準換成「**落檔的那一份**」；3 個路由句刻意保留 | `9ba0d4a` |
+> | `design-spec:33` `CLAUDE.md §4` 指錯層 | **刪引用**（偏離原記修法：改指專案會讓共用層綁死專案路徑，違反 `UNIVERSAL_HARNESS_PLAN.md` §2） | `9ba0d4a` |
+> | `design-spec:78` 絕對路徑掉出 L2 | 雙形並列，**L2 對該支 5→6 項** | `9ba0d4a` |
+> | `check_contracts.py:58` `PATH_RE` 不含 `:` | **根因修掉**＋補網址負向前瞻（加 `:` 會讓網址也像路徑，原註解「排除純網址」靠的就是不含 `:`）＋self-test 5 案 | `43ae32b` |
+> | 完成判準／邊界是中文字面搜尋 | 中英雙語（對照詞**實查六支英文 skill 原文**）；WARN **23→20**；`domain-modeling` 仍紅＝判準沒被關掉；self-test 9 案＋變異注入證明有牙齒 | `43ae32b` |
+> | L2 兩條偽陽性 | `round-N-reply.md` 走 allowlist（`N` 是 metavariable、永不存在）；`restore_cjf.py` **改措辭從源頭移除**（歷史文物不合乎豁免標準） | `43ae32b` |
+> | 專案端 `.scratch/` | 前提被推翻，改發警語；根源是定案文把「兩端刻意相反」寫成「兩端一致」 | `dfc909ec` |
+> | `/wayfinder` 在 harness repo 會先生出 `CONTEXT.md` | live 協定落檔 | `ee8f883` |
+> | manifest 三個阻擋項 | 補齊 key，閘門 exit 0 | `091e199` |
+> | V-1 常駐層指標被刪 | 已補回專案 `CLAUDE.md` §8 | `6fad96fc` |
+>
+> **⇒ 目前 L1／L1-self／L2／L2-self／L3／L4 首次全 PASS。**
+>
+> **仍未收**：型別欄無交叉檢查（#7）／`check_contracts` 只 glob `references/*.md`（#9）／
+> allowlist 無 repo 維度（#10）／HITL 派工規則四個入口（#12·#13）／
+> `SkillViewer\platform_skills.json` 外部支標成自建（#14）／**LOCAL EDIT 復原真相產生器（#15·user 已定案要做）**／
+> `ec991f55` 那 6 條 path-scoped 落地率沒人查（#17）／`to-tickets:61` 缺 marker（#18）／
+> effort 目錄追蹤慣例不一致（交回 user）。
+
+
 
 - **§9.6a 步驟 4「candidate digest 一變就回本步重驗」在機器層不可執行**（`visual-check` 那列由獨立審查者提出）：
   候選檔一旦被改寫覆蓋、而且從未 staged，前一版就**無法用任何唯讀手段取回**
