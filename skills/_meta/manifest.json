@@ -5,6 +5,12 @@
     "改動是刻意的就跑 tools/skill_manifest.py --accept 更新基準。"
   ],
   "skills": {
+    "adversarial-review": {
+      "tree": "4b54d53789255a2b1e7f2d8ee94c975d5582d03e",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
     "chat-handoff": {
       "tree": "00ed779c74fd52e067a00bf30b099bc5fbb40eeb",
       "upstream": null,
@@ -12,7 +18,7 @@
       "local_edit_marks": 0
     },
     "context-health": {
-      "tree": "7d2c0f146fa015f327d831ae215101e3ced0f962",
+      "tree": "78da8c919c28795d4b5f8c615228254c50d1174d",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
@@ -72,7 +78,7 @@
       "local_edit_marks": 1
     },
     "visual-check": {
-      "tree": "c6d688da7a9cf5201c93071f5dce8ee20ddf30f2",
+      "tree": "8868e2b694d674f652e89faa31c5215ad592f6ea",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0

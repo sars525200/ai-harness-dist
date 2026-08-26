@@ -1014,7 +1014,12 @@ skills/adversarial-review/SKILL.md
    ⚠ **第 7 列要一併收兩筆前列留下的帳**：①W-11 真空（`design-spec` 步驟 1 重寫規模判準 vs
    `session-workflow:60` 已照做「skill 不得重寫」，user 拍板留到第 7 列）②`design-spec` 步驟 5
    `:68`／`:84`／`:106` 三處「M 級」是第 6 列改動後的過期標籤。
-2. 第 0 列保留 frozen bundle 與 pending 七格，不補假證據、不補 manifest key。
+2. 第 0 列保留 frozen bundle 與 pending 七格，**不補假證據**。
+   ⚠ **2026-08-26 收尾訂正（user 裁決）**：原文「不補 manifest key」與 §9.6a **步驟 8** 明文允許的
+   「第 0 列只做一顆 target-key-only manifest reconciliation commit」**直接打架**，而唯一逃生口
+   `--accept` 又被步驟 7 明文禁跑 ⇒ 收尾的「全量 exit 0」永遠達不到。
+   **這一條想擋的是「補假證據把第 0 列寫成 verified」，不是「補 key」**——key 只記錄 HEAD 的
+   subtree 是什麼，不代表任何 gate 通過。⇒ 依步驟 8 補齊，第 0 列仍是 `skipped:user`、七格仍 `pending`。
 3. 短／中／長校準任一未 `verified`，不開本地流程批。
 4. 任何時候只准一列 active；前一支未 `verified`／`rolled-back`／經 user `skipped`，不開下一支。
 5. ~~第 0 列 WT 必須維持 `f2d9a5f…` candidate；不得再改 bundle~~ **⚠ 2026-08-26 作廢（user 裁決）**：
