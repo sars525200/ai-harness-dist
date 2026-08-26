@@ -191,8 +191,8 @@
       }
     },
     "IT-department\u0001CLAUDE.md": {
-      "bytes": 16095,
-      "entry_count": 32,
+      "bytes": 13994,
+      "entry_count": 19,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001CLAUDE.md\u0001**前端硬規則**（動`app.js`／`ind": 119,
@@ -213,20 +213,7 @@
         "IT-department\u0001CLAUDE.md\u0001自研EXE受管機被擋有兩機制：SAC／**Def": 119,
         "IT-department\u0001CLAUDE.md\u0001擷取器檔集中`collector/`（gitig": 108,
         "IT-department\u0001CLAUDE.md\u0001**行尾逐檔量**（8/26訂正：舊寫的「ind": 112,
-        "IT-department\u0001CLAUDE.md\u0001**一個狀態有多個觸發入口時，收斂成一個入口，別": 111,
-        "IT-department\u0001CLAUDE.md\u0001電腦主機/配件模組（架構·邊界·設備↔進出庫連接": 52,
-        "IT-department\u0001CLAUDE.md\u0001任務工單（報修＋指派）→`REPAIR_TICK": 119,
-        "IT-department\u0001CLAUDE.md\u0001軟體授權/訂閱管理→`SOFTWARE_LICE": 87,
-        "IT-department\u0001CLAUDE.md\u0001資源總攬情境（帶標籤判定`assetHasUsa": 119,
-        "IT-department\u0001CLAUDE.md\u0001帳號總覽（4來源＋服務帳號群組·ISOdocx一": 115,
-        "IT-department\u0001CLAUDE.md\u0001**後台登入帳號管理**：真相在`app_use": 81,
-        "IT-department\u0001CLAUDE.md\u0001進出作業完成→Teams異動通知→`INOUT_": 92,
-        "IT-department\u0001CLAUDE.md\u0001異地備份/DR2h復原（GPG公鑰加密·還原`o": 106,
-        "IT-department\u0001CLAUDE.md\u0001系統排程總覽（timers+APSchedule": 65,
-        "IT-department\u0001CLAUDE.md\u0001共用帳號（it-shared-accountsk": 68,
-        "IT-department\u0001CLAUDE.md\u0001公司組織架構（公司＞部門＞課·人員`divisi": 83,
-        "IT-department\u0001CLAUDE.md\u0001攜帶版離線擷取器（**原始碼在`collecto": 70,
-        "IT-department\u0001CLAUDE.md\u0001網路孔位平面圖（唯一鍵＝區+交換機+埠+孔號·p": 96
+        "IT-department\u0001CLAUDE.md\u0001**一個狀態有多個觸發入口時，收斂成一個入口，別": 111
       }
     },
     "IT-department\u0001MEMORY.md": {
