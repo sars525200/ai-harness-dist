@@ -996,6 +996,45 @@ skills/adversarial-review/SKILL.md
 | live | `pass:manual`（**採用既有實跑·比照第 12 列**） | 本支 `disable-model-invocation: true`，主 session 叫不起來。採用 **2026-08-22 user 親自打 `/wayfinder`** 的實跑（`SKILL_IMPORT_WAYFINDER_PLAN.md` §7.2，記錄 commit `e2d1391` 19:26:34）。**適用性經機械證實**：`git log --follow` 全史只有兩顆 commit（`099f782` 匯入、`767e068`），而 `767e068` 的完整 patch 就是 **`+display_name` 一行、零刪除**、時間 22:06:37 **晚於實跑** ⇒ 那次跑的正文與 HEAD 逐位元相同，且**兩個 LOCAL EDIT 匯入時就在檔內、被實際走過**。⚠ **誠實標註覆蓋範圍（比第 12 列弱）**：§7.2 明寫該次**刻意沒開 map** ⇒ 只證到 `:26` 的 fail-stop 與指向路徑，**步驟 3～5（建 map、wire blocking、`:116` 的 K9 落點）完全沒被執行**。⚠ **不得為補強而在 harness repo 補跑**——見隊列「沒做的」③ |
 | commit-rollback | `pass:mechanical` | 零改動三條件實測全成立 ⇒ 禁造空 commit，locator `na` |
 
+### 收尾機械驗收（2026-08-26·user 裁「現在跑完機械驗收」）
+
+**⚠ 全程 WT 有另一條線的未 commit 改動**（`hooks/dispatch.py`、`global/CLAUDE.md`、`reviewer/server.py` 等 10+ 檔），
+下面每一條紅都先歸因再判，**沒有把別人的半成品算成 B-4 的帳**。
+
+| 項目 | 結果 | 說明 |
+|---|---|---|
+| manifest 全量 | **exit 0** | 補齊三個 key（手動逐 key，未跑 `--accept`）；14 支相符、6 支在地改過共 11 處 LOCAL EDIT |
+| eval L1-self／L1／L2-self／L3／L4 | **PASS** | — |
+| eval **L2** | **FAIL（2 條，皆非 B-4）** | 見下方偽陽性說明 |
+| eval **L4 台帳** | **有效 0 → 13** | 十四支的實跑早就做了卻從未登記——「做了沒說」 |
+| hook 全量回歸 | **1319 / 1323** | 4 紅全部歸因到別條線或測試範圍，見下表 |
+| capability_checks | 跑完 | ✘ 一項「大型工作計畫先行」判無紀律（probe 綁字面值的老問題，非本輪） |
+| `hooks/report.py` | 9 次例外 | **別條線的 Cursor payload 探測**（餵刻意壞掉的 JSON），hook 正確記錄、fail-open 沒擋人＝設計如預期 |
+| 看板新鮮度 | **綠** | 跑產生器 → 寫快照 → 回驗；**served 內容實測帶新數字** |
+
+**L2 兩條都是檢查器偽陽性，不是真斷線**（且兩支都不在 B-4 的 14 支裡）：
+
+- `adversarial-review:98` 的 `round-N-reply.md` ＝審查者**該產出**的檔名，不是既有依賴（第 0 列凍結 bundle，不動）
+- `data-incident:99` 的 `restore_cjf.py` ＝「實作參考**本次的**…」，過去某次事故的一次性腳本，全 repo 已無此檔（專案 skill）
+- ⇒ **檢查器分不出「必須存在的依賴」與「該被產出的檔名／歷史文物」**。這是精度缺口，已進待辦。
+
+**hook 回歸 4 紅歸因**：
+
+| 紅 | 真因 | 歸屬 |
+|---|---|---|
+| check_bloat CLI「只看 __global__」 | 別條線**未 commit** 的 `global/CLAUDE.md` 讓一條條目 **111 → 156 字**（超 120）⇒ 閘門正確開火，走「這次變大了」分支而非測試預期的「沒有新增膨脹」分支。**程式沒壞，內容真的胖了** | 別條線·進行中 |
+| P-12 U-1 債 | 4 個**已 gitignore** 的 `.scratch/*.py`（一個是當天 13:44 寫的）⇒ **測試掃了被忽略的暫存腳本** | 測試範圍缺口 |
+| 分層標註覆蓋率 ×2 | `dashboard/` 4 支 ＋ `agents/` 4 支角色檔未標層；血緣 `66a19dc`／`e54fc43` | 別條線 |
+
+**這一輪自己犯的兩個錯（都當場抓到並修）**：
+
+1. 一顆 commit 的訊息寫了「HITL 缺口擴成四個入口」，但那是 `1a20c0a` 早就做完的事，
+   該顆只動了 live 協定 10 行 ⇒ **把別顆的功勞算進自己這顆**。已 amend（未推 backup，安全）。
+   根因：腳本 assert 失敗（打錯目標檔）**擋下了寫入，卻沒擋下 commit** ——
+   ⇒ **多段腳本＋commit 串在一起時，assert 只保護檔案不保護訊息**。
+2. 驗 served 看板時第一版檢查全 ✘，差點判「服務沒重載」。實際是 `AWC-1` 第一次出現在
+   能力清單而非規則表，視窗落錯位置 ⇒ **紅燈先驗「驗證法自己對不對」**才是對的順序（這次做對了）。
+
 **⚠ live 協定（2026-08-26 第 13 列訂，B-4 之後仍適用）**
 
 **不得在 `D:\.ai-harness` 跑 `/wayfinder`。** 理由是順序不是能力：`wayfinder:26` 的 fail-stop
