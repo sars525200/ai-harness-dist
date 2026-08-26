@@ -5,17 +5,41 @@
     "result": "pass",
     "verified_at": "2026-08-25T20:44:16"
   },
-  "design-spec": {
-    "file_mtime": 1786082482.685371,
-    "note": "2026-08-22 M 級任務實跑（角色受阻升級協定）：步驟1判M→步驟2定落點HARNESS_ROLE_ARCH_PLAN.md §9（疊代不新建）→步驟3分岔E-1~E-6逐項AskUserQuestion→步驟4驗證表12項含變異紅燈條件→步驟5標待審核。步驟3的『討論中長出來的新分岔要補進表裡』實際觸發兩次：E-5/E-6（shadow與門檻數字），以及E-7（發現SubagentStop送不到訊息，補PostToolUse:Agent掛點）——靜態檢查照不到這條紀律，這輪證明它有效。",
+  "chat-handoff": {
+    "file_mtime": 1787697428.8264902,
+    "note": "B-4 第 1 列實跑：寫 .scratch/handoff/20260826-chat-handoff-probe.md，五欄齊、gitignore 命中 .scratch/；探針已刪未 commit",
     "result": "pass",
-    "verified_at": "2026-08-22T00:59:00"
+    "verified_at": "2026-08-26T23:50:28"
+  },
+  "context-health": {
+    "file_mtime": 1787750048.7657182,
+    "note": "B-4 第 4 列實跑：步驟 1 兩支工具 check_bloat.py 與 check_prose_blocks.py 皆 exit 0，輸出是真的量測。⚠ 實跑早於 3dd721c 漂移；該 commit 只加 §2.5 四層決策樹，未動步驟 1",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "design-spec": {
+    "file_mtime": 1787709076.119938,
+    "note": "B-4 第 6 列實跑：走了三個步驟並各有產物；步驟 2「先掃既有計畫書」實跑 grep -l 掃 *_PLAN.md exit 0",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
   },
   "domain-modeling": {
-    "file_mtime": 1787290294.7827032,
-    "note": "2026-08-21 實跑：從 junction 正常載入；套用其紀律稽核剛建的 root CONTEXT.md，抓到兩個真缺陷——①違反「glossary and nothing else」(混入 DEV/PROD 路徑、?v= 流程、gate 點數、待補清單)②從未做 Cross-reference with code。對程式碼查證後 app.js:13209 確認 division=部門/department=課，且 app.js:2567 揭露 division 是由課反查補回的衍生值(詞彙表原本沒寫)。CONTEXT.md 已重寫為純詞彙表，待補清單搬進 SKILL_IMPORT_WAYFINDER_PLAN §13。",
+    "file_mtime": 1787418221.698695,
+    "note": "B-4 第 11 列實跑：依審查者設計拆 A/B 兩半跑，三個地雷逐條避開；A 半唯讀對真材料",
     "result": "pass",
-    "verified_at": "2026-08-21T17:20:40"
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "escalate": {
+    "file_mtime": 1787706912.246146,
+    "note": "B-4 第 5 列實跑：真走過一次；步驟 5 完成判準「TODOS.md 列數增加」實測 11 → 12 列",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "grilling": {
+    "file_mtime": 1787418221.710333,
+    "note": "B-4 第 8 列實跑：user 明確要求真跑一輪、不接受 skipped。Skill 工具叫起 /grilling，題目＝第 9~13 列的 upstream 對照方法",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
   },
   "license-rules": {
     "file_mtime": 1785210169.0737507,
@@ -23,10 +47,52 @@
     "result": "pass",
     "verified_at": "2026-07-28T13:43:08"
   },
+  "prototype": {
+    "file_mtime": 1787746259.8843238,
+    "note": "B-4 第 10 列實跑：走 LOGIC 分支（UI 分支經審查者判定在兩個 repo 都沒有安全跑法），產出 .scratch/prototype-local-edit-truth/",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "research": {
+    "file_mtime": 1787740158.7175233,
+    "note": "B-4 第 9 列實跑：依步驟 1 逐字契約真派背景 agent，產出 .scratch/research/wayfinder-vendored-copy.md",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "session-workflow": {
+    "file_mtime": 1787724433.5089364,
+    "note": "B-4 第 7 列實跑：編排器的實跑＝驗路由表指得到東西，點名的 6 個角色全部存在（locator/visual-designer/executor/sync-checker/harness-auditor/project-auditor）",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
   "shougong": {
     "file_mtime": 1785230192.2982244,
     "note": "2026-07-28 完整跑完五步（清暫存→補規範分流→防膨脹量測→3.5 看板→兩 repo commit）；本次順帶把步驟 3 改成 check_bloat.py",
     "result": "pass",
     "verified_at": "2026-07-28T17:17:35"
+  },
+  "skill-watch": {
+    "file_mtime": 1787701360.6398816,
+    "note": "B-4 第 3 列實跑：py -3 skills/skill-watch/run.py --dry-run exit 0；抓 28 支 → 濾掉自建 12 → 平台內建 16",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:28"
+  },
+  "to-tickets": {
+    "file_mtime": 1787334088.6624444,
+    "note": "B-4 第 12 列：採用 2026-08-22 既有實跑（user 定案）。本支帶 disable-model-invocation: true，主 session 在工具層叫不起來",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
+  },
+  "visual-check": {
+    "file_mtime": 1787745100.6515353,
+    "note": "B-4 第 2 列實跑：probe.py 切 harness-dashboard.html 區塊 → shot.py 淺深各一張，兩張 hash 不同。⚠ 實跑早於 beda885 漂移；該 commit 只併入視覺爭議三態判準，未動截圖步驟",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:28"
+  },
+  "wayfinder": {
+    "file_mtime": 1787334088.6870227,
+    "note": "B-4 第 13 列：採用既有實跑，比照第 12 列（同樣 disable-model-invocation）。本列為零改動列",
+    "result": "pass",
+    "verified_at": "2026-08-26T23:50:29"
   }
 }
