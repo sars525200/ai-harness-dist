@@ -2,6 +2,7 @@
 name: context-health
 display_name: 常駐層健檢
 description: 量測並瘦身「每則對話都付」的常駐層檔案（CLAUDE.md／MEMORY.md）。當 user 說「常駐層太肥」「CLAUDE.md 太長」「記憶檔要瘦身」「context 成本太高」「規則太多找不到」，或收工要盤點常駐層時使用。它先量（兩支唯讀工具）→ 出候選 → **逐項讓人決定** → 才動檔 → 再驗證沒有東西失聯。跨專案通用，不綁特定專案。
+type: 流程
 ---
 
 # 常駐層健檢與瘦身（/context-health）

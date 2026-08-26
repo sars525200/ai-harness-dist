@@ -2,6 +2,7 @@
 name: design-spec
 display_name: 設計規格
 description: 把「要做什麼」寫成別人能接手的工作規格。規模待定、人要正式計畫書、或疊代既有 *_PLAN.md 時用。明確 M 級（資料遷移/DELETE、動角色·規則·hook、跨 repo、跨 session）改開 wayfinder map，提醒人打 /wayfinder。L 級單點不用。
+type: 流程
 ---
 
 # Design 階段執行器（/design-spec）

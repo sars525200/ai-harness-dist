@@ -219,8 +219,32 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
                 r.add(name, "frontmatter.description", "FAIL", "description 空白")
 
         # ② 型別判定（★ 判準分流的關鍵）
+        #
+        # **宣告優先於推導**（2026-08-27·user 定案）。原本純靠「有沒有 `### `」推導，
+        # 而那對 4 支是錯的：`grilling`（用輪次不用小標）／`research`／`prototype`／
+        # `chat-handoff` 全被判成參考型 ⇒ **完成判準檢查整個被跳過**。
+        # 症狀是「報表很乾淨」，跟「真的乾淨」長得一樣（工具有在 NOT COVERED 揭露，
+        # 所以不是靜默，但沒有人會去讀那一區）。
+        #
+        # ⚠ **宣告與推導不一致時，報出來但仍以宣告為準**：不一致有兩種可能，
+        #   ①宣告寫錯 ②推導的啟發式對這一支不適用。**後者才是常態**——
+        #   啟發式永遠會有下一個例外，所以讓人可以覆寫它，而不是一直修啟發式。
         steps = split_steps(body)
-        kind = "流程" if steps else "參考"
+        derived = "流程" if steps else "參考"
+        declared = (fm.get("type") or "").strip()
+        if declared and declared not in ("流程", "參考"):
+            r.add(name, "frontmatter.type", "FAIL",
+                  f"type 只接受「流程」或「參考」，讀到「{declared}」")
+            declared = ""
+        kind = declared or derived
+        if declared and declared != derived:
+            r.not_covered.append(
+                f"{name}：frontmatter 宣告「{declared}」但由步驟推導是「{derived}」"
+                f"（步驟數 {len(steps)}）—— 以宣告為準")
+        elif not declared:
+            r.not_covered.append(
+                f"{name}：frontmatter 未宣告 type，退回推導「{derived}」"
+                f"—— 推導錯了不會有人知道")
         sk["kind"] = kind
 
         # ③ 完成判準（A-4：**逐步驟判定已停用，降級為全檔至少一處**）

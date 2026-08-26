@@ -12,19 +12,19 @@
       "local_edit_marks": 0
     },
     "chat-handoff": {
-      "tree": "00ed779c74fd52e067a00bf30b099bc5fbb40eeb",
+      "tree": "18dddd012b75f87583304eab4fdc9b6e573f5ba8",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
     },
     "context-health": {
-      "tree": "78da8c919c28795d4b5f8c615228254c50d1174d",
+      "tree": "9f5a4172ebf62d66cf5fce045f119fc6c81a6e9e",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
     },
     "design-spec": {
-      "tree": "0861ae9402173cf357c19be2eef3747466f55f4a",
+      "tree": "2bc74bd2daaaae336867cc2624643c268f6afc8e",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
@@ -36,37 +36,37 @@
       "local_edit_marks": 1
     },
     "escalate": {
-      "tree": "873e7ec89df0869babcbc1418c2d2a3aa466ecac",
+      "tree": "c0b7563b3dc962bb83358a7f1c2e4d825f3da399",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
     },
     "grilling": {
-      "tree": "827b759e455060dca919f0cc60ac5934a36de718",
+      "tree": "fc04366242e0e2c29e83592f68d21b4c310865f0",
       "upstream": "f0732035b8b1b60ae39454e4191caef32fa91903",
       "diverged": true,
       "local_edit_marks": 1
     },
     "prototype": {
-      "tree": "2ea06908a6427f8d1bc270d7da45d8e977764fba",
+      "tree": "49c914e15b9c96399a9efc4cb19e4da8bc2cee67",
       "upstream": "e41d92e171f074a2b6887d8f6faca4a15c83d1ca",
       "diverged": true,
       "local_edit_marks": 3
     },
     "research": {
-      "tree": "04ec35b541cba303c26415720946d6614b30c729",
+      "tree": "b1b50c119e61e00db885b8f465ffe19bbfe3d11e",
       "upstream": "0a6796c5667e95ed2301ba7381c123b4acb2ae1a",
       "diverged": true,
       "local_edit_marks": 3
     },
     "session-workflow": {
-      "tree": "a736970f72f8840124c7d11d3a11dacc5c04a902",
+      "tree": "8a7832d25ea566d4152a2093913cf712fe399c58",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
     },
     "skill-watch": {
-      "tree": "0463c040e96a0e835d1136a61a60ccdaed2c7249",
+      "tree": "cad1c81bcd4db3666f4c476a0604ec7531f19bd0",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0
@@ -78,7 +78,7 @@
       "local_edit_marks": 1
     },
     "visual-check": {
-      "tree": "8868e2b694d674f652e89faa31c5215ad592f6ea",
+      "tree": "1ac21d17ef80652b9709c509a5fa90cb2fc50ef2",
       "upstream": null,
       "diverged": false,
       "local_edit_marks": 0

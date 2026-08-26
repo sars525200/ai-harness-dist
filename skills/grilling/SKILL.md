@@ -2,6 +2,7 @@
 name: grilling
 display_name: 逼問
 description: Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.
+type: 流程
 ---
 
 Interview the user relentlessly until you reach a shared understanding. Map this as a **design tree**: every decision branches into the decisions that hang off it.
@@ -30,4 +31,4 @@ The session is done when the frontier is empty: every branch of the design tree 
 
 ---
 
-**LOCAL EDIT (2026-08-23):** the frontmatter carries a `display_name` field that upstream does not have — `dashboard/gen_cost_panel.py` reads it to label this skill in the cost panel. Nothing else diverges from upstream; this note exists so the manifest's "diverged ⇔ marked" cross-check stays honest (`tools/skill_manifest.py`).
+**LOCAL EDIT (2026-08-23):** the frontmatter carries two fields that upstream does not have. `display_name` — `dashboard/gen_cost_panel.py` reads it to label this skill in the cost panel. `type: 流程` (2026-08-27) — `eval/check_structure.py` used to derive the type from whether the file has `### ` headings, and this skill works in rounds rather than headings, so it was classified as reference material and **its completion-criteria check was skipped entirely**. Declaring the type here overrides that derivation. Nothing else diverges from upstream; this note exists so the manifest's "diverged ⇔ marked" cross-check stays honest (`tools/skill_manifest.py`).

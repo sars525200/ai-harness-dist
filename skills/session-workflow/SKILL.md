@@ -2,6 +2,7 @@
 name: session-workflow
 display_name: 任務工作流
 description: 把一則任務從開場走到交付。當 user 下新任務、說開工、要改東西、要修 bug、要寫計畫、或你正要自我宣告時使用。它只編排既有零件（查詢、規格、施作、檢查），不另立一套規則。
+type: 流程
 ---
 
 # 任務工作流（/session-workflow）

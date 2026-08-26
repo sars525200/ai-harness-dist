@@ -2,6 +2,7 @@
 name: prototype
 display_name: 原型試作
 description: Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.
+type: 流程
 ---
 
 # Prototype
