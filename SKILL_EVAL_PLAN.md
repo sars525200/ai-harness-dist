@@ -996,6 +996,16 @@ skills/adversarial-review/SKILL.md
 | live | `pass:manual`（**採用既有實跑·比照第 12 列**） | 本支 `disable-model-invocation: true`，主 session 叫不起來。採用 **2026-08-22 user 親自打 `/wayfinder`** 的實跑（`SKILL_IMPORT_WAYFINDER_PLAN.md` §7.2，記錄 commit `e2d1391` 19:26:34）。**適用性經機械證實**：`git log --follow` 全史只有兩顆 commit（`099f782` 匯入、`767e068`），而 `767e068` 的完整 patch 就是 **`+display_name` 一行、零刪除**、時間 22:06:37 **晚於實跑** ⇒ 那次跑的正文與 HEAD 逐位元相同，且**兩個 LOCAL EDIT 匯入時就在檔內、被實際走過**。⚠ **誠實標註覆蓋範圍（比第 12 列弱）**：§7.2 明寫該次**刻意沒開 map** ⇒ 只證到 `:26` 的 fail-stop 與指向路徑，**步驟 3～5（建 map、wire blocking、`:116` 的 K9 落點）完全沒被執行**。⚠ **不得為補強而在 harness repo 補跑**——見隊列「沒做的」③ |
 | commit-rollback | `pass:mechanical` | 零改動三條件實測全成立 ⇒ 禁造空 commit，locator `na` |
 
+**⚠ live 協定（2026-08-26 第 13 列訂，B-4 之後仍適用）**
+
+**不得在 `D:\.ai-harness` 跑 `/wayfinder`。** 理由是順序不是能力：`wayfinder:26` 的 fail-stop
+（讀不到 `docs/agents/issue-tracker.md` 就停）排在**步驟 3**，而**步驟 1**（`:112`）已經先叫了
+`domain-modeling` 兩次，該支 `SKILL.md:63` 的寫入分支「update `CONTEXT.md` right there」
+**沒有任何同意閘門** ⇒ 會**先在地基 repo 根層生出一個 `CONTEXT.md`、然後才停**。
+harness repo 兩個檔都沒有（實查），所以這條路徑是真的走得到。
+⇒ 要跑只能在 `d:\IT-department`，且照第 12 列協定「跑完立刻驗兩個 repo 的 cached diff 仍為空」。
+⇒ **同一個順序問題對任何「先叫 `domain-modeling` 再做別的」的編排器都成立**，不只 wayfinder。
+
 **批次停止線**
 
 1. **🎯 B-4 十四支跑完：第 1～13 列全數 `verified`**（本地批 7 支＋外部批 6 支，其中 **4 支零改動**）；
