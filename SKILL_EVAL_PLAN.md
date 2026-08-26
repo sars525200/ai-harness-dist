@@ -1122,13 +1122,13 @@ harness repo 兩個檔都沒有（實查），所以這條路徑是真的走得�
 > | 原記項目 | 處置 | commit |
 > |---|---|---|
 > | §9.6a 步驟 4 digest 對帳在機器層不可執行 | 步驟 4 補「對帳開始前先 `git hash-object -w`」＋分工缺陷與**替代法**兩則警語 | 本顆 |
-> | `WORKFLOW_5STAGE_PLAN.md:738`／`:756` 兩處措辭 | 已改（來源側不修，W-11 裁決就只活在 skill 裡） | `9ba0d4a` |
-> | `design-spec` 過期「M 級」5 處 | 判準換成「**落檔的那一份**」；3 個路由句刻意保留 | `9ba0d4a` |
-> | `design-spec:33` `CLAUDE.md §4` 指錯層 | **刪引用**（偏離原記修法：改指專案會讓共用層綁死專案路徑，違反 `UNIVERSAL_HARNESS_PLAN.md` §2） | `9ba0d4a` |
-> | `design-spec:78` 絕對路徑掉出 L2 | 雙形並列，**L2 對該支 5→6 項** | `9ba0d4a` |
-> | `check_contracts.py:58` `PATH_RE` 不含 `:` | **根因修掉**＋補網址負向前瞻（加 `:` 會讓網址也像路徑，原註解「排除純網址」靠的就是不含 `:`）＋self-test 5 案 | `43ae32b` |
-> | 完成判準／邊界是中文字面搜尋 | 中英雙語（對照詞**實查六支英文 skill 原文**）；WARN **23→20**；`domain-modeling` 仍紅＝判準沒被關掉；self-test 9 案＋變異注入證明有牙齒 | `43ae32b` |
-> | L2 兩條偽陽性 | `round-N-reply.md` 走 allowlist（`N` 是 metavariable、永不存在）；`restore_cjf.py` **改措辭從源頭移除**（歷史文物不合乎豁免標準） | `43ae32b` |
+> | `WORKFLOW_5STAGE_PLAN.md:738`／`:756` 兩處措辭 | 已改（來源側不修，W-11 裁決就只活在 skill 裡） | `86ec5fb` |
+> | `design-spec` 過期「M 級」5 處 | 判準換成「**落檔的那一份**」；3 個路由句刻意保留 | `86ec5fb` |
+> | `design-spec:33` `CLAUDE.md §4` 指錯層 | **刪引用**（偏離原記修法：改指專案會讓共用層綁死專案路徑，違反 `UNIVERSAL_HARNESS_PLAN.md` §2） | `86ec5fb` |
+> | `design-spec:78` 絕對路徑掉出 L2 | 雙形並列，**L2 對該支 5→6 項** | `86ec5fb` |
+> | `check_contracts.py:58` `PATH_RE` 不含 `:` | **根因修掉**＋補網址負向前瞻（加 `:` 會讓網址也像路徑，原註解「排除純網址」靠的就是不含 `:`）＋self-test 5 案 | `5b45489` |
+> | 完成判準／邊界是中文字面搜尋 | 中英雙語（對照詞**實查六支英文 skill 原文**）；WARN **23→20**；`domain-modeling` 仍紅＝判準沒被關掉；self-test 9 案＋變異注入證明有牙齒 | `5b45489` |
+> | L2 兩條偽陽性 | `round-N-reply.md` 走 allowlist（`N` 是 metavariable、永不存在）；`restore_cjf.py` **改措辭從源頭移除**（歷史文物不合乎豁免標準） | `5b45489` |
 > | 專案端 `.scratch/` | 前提被推翻，改發警語；根源是定案文把「兩端刻意相反」寫成「兩端一致」 | `dfc909ec` |
 > | `/wayfinder` 在 harness repo 會先生出 `CONTEXT.md` | live 協定落檔 | `ee8f883` |
 > | manifest 三個阻擋項 | 補齊 key，閘門 exit 0 | `091e199` |
