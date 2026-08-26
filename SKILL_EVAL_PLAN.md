@@ -1133,6 +1133,10 @@ harness repo 兩個檔都沒有（實查），所以這條路徑是真的走得�
 > | `/wayfinder` 在 harness repo 會先生出 `CONTEXT.md` | live 協定落檔 | `ee8f883` |
 > | manifest 三個阻擋項 | 補齊 key，閘門 exit 0 | `091e199` |
 > | V-1 常駐層指標被刪 | 已補回專案 `CLAUDE.md` §8 | `6fad96fc` |
+> | **LOCAL EDIT 復原真相產生器**（#15·user 定案） | ✅ `tools/local_edits.py`＋輸出 `skills/_meta/LOCAL_EDITS.md`（該目錄不是 skill 資料夾 ⇒ update 碰不到）。6 支外部：3 支對真 upstream、3 支只能對匯入 commit 並明記。**第一版判準錯了、被自己的輸出抓出來**（鄰近 marker → 六支全假陽性 ⇒ 改逐檔且只在真 upstream 基準時做） | `9f3803a` |
+> | `check_contracts` 只 glob `references/*.md`（#9） | ✅ 三份副本收斂成 `eval/bundle.py`；補上 4 個零覆蓋的檔；**同一個洞的第二半**（L4 新鮮度也只看 references ⇒ `run.py`／`*.json` 改了不轉過期）一併修 | `059c65c` |
+> | ↳ 覆蓋率上升後浮出的三筆 | ✅ 兄弟檔解析（`_resolve_path` 加 `home`）／`PLACEHOLDER_RE` 認 `slug`＋孤立 N／連帶讓 `round-N-reply.md` 的 allowlist 條目變死條目**已移除**（機械層是更好的層） | 同上 |
+
 >
 > **⇒ 目前 L1／L1-self／L2／L2-self／L3／L4 首次全 PASS。**
 >
