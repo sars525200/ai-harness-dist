@@ -730,7 +730,7 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 | 7 | 本地編排 | `session-workflow` | 本地 | 流程 | 72 | before `08ef1ee…`：subtree `b8f5ed17b9087d81ae18117e2a58f5379959867b`、blob `5c01dd7b25ddb01f057cd6b6307db2ea236d59e1`、**72 行／L1 1117 tok**；candidate `4ecb32b…`：subtree `a736970f72f8840124c7d11d3a11dacc5c04a902`、blob `42b058f3c2e44970cfb9f12f20fa2c626178be3c`、**80 行／L1 1350 tok** ⇒ **淨 ＋8 行／＋233 tok：兩項皆增，契約強化與指標訂正，不是縮減，不得報成優化成果**。**＋233 由審查者五輪逐字元復算全額背書**（唯一一列不需要「只背書 ＋N」的分帳）。L2：12 → 11（R2 絕對路徑）→ **12 項 OK 12 缺 0**（R3 雙形並列補回） | `verified` | 見下方七格；commit locator `4ecb32b051b2b94a3422b5f289221e86b6a56f73`（parent `013734d2c38713a7ab9facebb85be6d2c4bbef36`）／subject「session-workflow 修兩條死路由、裁定 W-11 適用範圍、指標對齊」；manifest **原本缺 key**，本列**新增基準** `a736970f…` ⇒ 缺 key 名單降到 **1 支**（只剩第 0 列 `adversarial-review`·skipped）。⚠ **過程紀律照實記**：五輪覆核裡**兩輪被判 `contract` FAIL（R3／R4），失誤模式相同——同一個 hunk 內做了未宣告的刪除，且兩次刪掉的都是同一輪自己新增內容所依賴的前提**；兩次 L1／L2 皆 0 FAIL 且本支不在 WARN 名單 ⇒ **機器層對本列主要缺陷完全無感**。R5 起改「逐字宣告全部增刪＋審查者反向對 diff」才過 | ①`落檔` 是本支就地定義的術語，跨檔（`design-spec:26` 也用）無單一真相，目前語意一致但是會漂的形狀 ②`規模待定` 是四種規模裡唯一沒有專屬完成判準句的——**刻意且正確**（閘門委給 `/design-spec` 自己的判準，本支再寫會造第二份真相），記下免得下一輪為了湊對稱補上去 ③「產物軸」是全檔唯一出現一次的新造詞，靠緊鄰 bullet 反推定義 ④bullet 2 的兩個產物軸條件在軸優先序下多半被規模軸吸收（全域 §3 的 M 判準逐字含「user 說『計畫書／大型』」）⇒ 那半句實務上是**安全網**不是主路徑，**記下免得下一輪誤判成死分支而拆掉** ⑤**雙形並列的判準要傳承**：「反引號內只要有磁碟機代號就掉出 `PATH_RE`」——不寫下來第 8～13 列會再發現一次 ⑥本支**無專用測試、無 baseline、無 trigger 樣本** ⇒ 內容判定 100% 人工對帳 | 無；**本地批（第 1～7 列）全數 `verified`**。下一支是 `grilling`（第 8 列·外部批第一支），**未經 user 指示不自行開列** |
 | 8 | 外部短型 | `grilling` | 外部 | 流程 | 33 | before ＝ candidate（**零改動**）：subtree `827b759e455060dca919f0cc60ac5934a36de718`、`SKILL.md` blob `b4fe163112bcce173e26acaaa950da44cc043f86`（33 行／L1 583 tok／CRLF）、`agents/openai.yaml` blob `ddbdb96139c0c1dfe6bca698f39d0465674b8a39`（**bundle 首見子目錄**）。⇒ **±0 行／±0 tok** | `verified` | 見下方七格；**commit locator `na:零縮減且 key 已吻合`**（§9.6a 步驟 8 三條件實測全成立：cached diff 為空／before＝candidate subtree／manifest 目標 key 逐字相等 `827b759e…`）。⚠ **七列以來第一支 manifest 完全不必動的**（`tree` 吻合、`upstream: f0732035…` 與 PROVENANCE 一致、`diverged: True`、`local_edit_marks: 1` 全對） | ①**`## 邊界` 缺口判定為機械層**：四條禁令都寫在散文（`:9` 等答案再問下一輪／`:25` 未解鎖的問題屬 later round／`:27` 事實是我的事·決定是 user 的／`:29` 未確認前不得動手），審查者**答不出「加標題能防住哪種錯誤行為」**；且該尺是中文字面搜尋、英文檔結構上不可能通過。依 §9.6b 校準第 4 條（覆寫 §9.6a:538）判不改 ②**型別矛盾**：隊列寫流程、`check_structure.py` 因無 `###` 判參考 ⇒ **完成判準檢查被跳過**（工具有在 NOT COVERED 揭露、不是靜默）。14 支裡 **4 支對不上**（`chat-handoff` 第 1 列就發生過未記、`grilling`／`research`／`prototype`）——已記進範圍外清單 ③**缺「沒有可即時回答的活人就不要跑」這條拒跑條件**：`wayfinder:76`／`:80` 把本支標成 HITL 並寫了失效態（agent 自問自答），但守門在 wayfinder 不在本支；**可達性當場驗到**（審查者是 subagent，本支就在它的可用清單裡）。修法屬 harness 側派工規則，不動 bundle ④**AWC-1 衝突**：本支的 `❓ Q1…➡️` 純文字問法與硬規則「問題一律走 `AskUserQuestion`」相反，2026-08-21 被實際攔過；現況 AWC-1 enforce 但**只 WARN 不 BLOCK**（114 findings／263 applies 全 WARN）⇒ 不造成錯誤行為、不落在校準條② ⑤`SkillViewer\platform_skills.json:266` 把本支標成「全域自建」，與 `PROVENANCE.md` 的外部／自建分表矛盾（六支外部全中，不在允許 path） ⑥**無 baseline 條目、無 trigger 樣本** ⇒ 無趨勢證據 | 無；下一支是 `research`（第 9 列），**未經 user 指示不自行開列** |
 | 9 | 外部流程 | `research` | 外部 | 流程 | 36 | before `f8016f9…`：subtree `1074c93bf2380852aa9edbed26c4a9942dd8adce`、`SKILL.md` blob `8eb077ad4dc3b5aa7af02370874d79402e9d823a`（36 行／L1 694 tok）、`agents/openai.yaml` blob `e18b96ca…`（**本輪未改**）；candidate `e6a5a8e…`：subtree `04ec35b541cba303c26415720946d6614b30c729`、blob `d4bdbe7baa543213cea646c1caa9337e5bf849de`、**36 行／L1 741 tok** ⇒ **行數不變／＋47 tok**，兩處改動**都在已經是 LOCAL EDIT 的區塊內，upstream 原句一行未碰** | `verified` | 見下方七格；commit locator `e6a5a8eb9bc0fdd41976f09ff35f88f46ec02d2d`（parent `f8016f910b3e2aad179d53960aac6a907b0f8065`）／subject「research 解掉落點矛盾與一個指錯方向的指標」；manifest 目標 key `1074c93b…` → `04ec35b5…` | ①**upstream 對照只到匯入 commit**：匯入 subtree `70159d9c…` ≠ lock／PROVENANCE／manifest 三點同值的 `0a6796c5…` ⇒ **匯入當下就已帶在地改動，那一段本列驗不到**；本機亦無 `research` 的 vendored 副本（`~\.agents\skills\` 只有 `wayfinder`）。⇒ 「未碰 upstream」僅在「以 `099f782` 為基準」的意義下成立 ②**本輪新加的那句是 2026-08-26 寫的，卻掛在標著 2026-08-21 的段落裡**，且 `SKILL_IMPORT_WAYFINDER_PLAN.md` §13.2 的 LOCAL EDIT 對照表沒有它 ⇒ 日後靠那張表復原在地改動會少這一句。**刻意只用本列承載、不在檔裡再補日期戳**（那又是一筆 update 債） ③**HITL 可達性缺口（同型第二例）**：`wayfinder:116` 派 subagent 叫本支，而本支步驟 1 要活人打 `/deep-research`、fallback 又被「查證量小」夾住 ⇒ **subagent ＋ 查證量大**無合法路徑。已併進第 8 列那筆待辦（修法屬 harness 側派工規則） ④description 寫 `a Markdown file **in the repo**` 但實際落點 `.scratch/` 是 gitignored；**刻意不動**（改 description ＝新開 upstream 分歧＋觸發 metadata 五題 probe，且 L14／L30 已把真實落點講死） ⑤`check_structure.py` 判本支為**參考型**（無 `###`）⇒ **機器從未對本支驗過完成判準**，本列的完成判準結論 100% 人工（屬已登記的「隊列型別欄 vs 工具推導型別 4 支不符」那筆） ⑥無 baseline、無 trigger 樣本 ⇒ 無趨勢證據 | 無；下一支是 `prototype`（第 10 列），**未經 user 指示不自行開列** |
-| 10 | 外部流程 | `prototype` | 外部 | 流程 | 29 | `pending` | `queued` | `pending` | `pending` | 保留禁 branch／commit 的在地 safety-red 契約 |
+| 10 | 外部流程 | `prototype` | 外部 | 流程 | 29 | before `c8881ac…`：subtree `00e88ac00b358d01f338120452688c7e28790a5c`、`SKILL.md` blob `c92157292a7faabb995965625789e9326fdd88c9`（29 行／L1 843 tok）；同 bundle 另 3 檔**本輪未改**（`LOGIC.md` `af8a62cd…` 67 行／`UI.md` `aa68210a…` 114 行／`agents/openai.yaml` `1618b147…`）；candidate `73bc859…`：subtree `661c5c04bb67c6db5fe8a4f947488ef934af88b8`、blob `9d85f58a9d0fee4fea5969c7ff8257a2e166cc77`、**29 行／L1 876 tok** ⇒ 行數不變／**＋33 tok**（審查者字元級確認是**純插入、零刪除**） | `verified` | 見下方七格；commit locator `73bc85970859ec513cabe95f5546fed15f0327cb`（parent `c8881acad4aeea0668601713863fba2e837aa260`）／subject「prototype 補掉一個懸空指涉——ticketless 時結論沒有落點」；manifest `prototype.tree` `00e88ac0…` → `661c5c04…`（⚠ 本 key **原本沒有漂移**，`upstream`／`diverged`／`local_edit_marks: 3` 三欄未動） | ①**upstream 對照只到匯入 commit**：匯入 subtree `dba38286…` ≠ lock／PROVENANCE／manifest 三點同值的 `e41d92e1…` ⇒ **匯入當下就已帶在地改動、那一段本列驗不到**；本機無 vendored 副本 ②**本輪新句掛在標著 `LOCAL EDIT (2026-08-21)` 的段落內、`SKILL_IMPORT_WAYFINDER_PLAN.md` §13.2 對照表沒有它**——**與第 9 列同型第二例**；刻意只用本列承載，不在檔內補日期戳 ③`UI.md:102`／`:103` 的 `drop … from main` 是 upstream 分支模型的殘留，字面可讀成「刪檔」、與 SKILL.md:29「delete 是主 session 的決定」相反；**判不到條②**（`:105`「kept, not binned」＋`:107` LOCAL EDIT 兩層守門），且 §13.2 表也漏列這兩行——只列不改 ④`UI.md:75` 寫死 `/prototype/<name>` top-level 路徑，與同檔 `:28`／`SKILL.md:22`「don't invent a new top-level structure」打架；upstream 原文，判不到條② ⑤`SkillViewer` 把本支標「全域自建」（六支外部全中）、`AUDIT_FIX_PLAN_20260822.md:137` 與 §13.2 的行號已腐爛（`:26`／`:28` 皆舊值）——皆不在允許 path ⑥**無專用測試、無 baseline、無 trigger 樣本**；`check_structure` 判參考型 ⇒ 完成判準檢查被跳過（隊列型別不符的第 4 支）⇒ 內容判定 100% 人工 ⑦**本列 live 揭露一個更大的問題**：見下方「LOCAL EDIT 復原真相」一節 | 無；下一支是 `domain-modeling`（第 11 列·**閉得起來的另一支**），**未經 user 指示不自行開列** |
 | 11 | 外部流程 | `domain-modeling` | 外部 | 流程 | 79 | `pending` | `queued` | `pending` | `pending` | 保留 session 內挑詞／寫檔流程；與 CONTEXT／ADR format 去重 |
 | 12 | 外部流程 | `to-tickets` | 外部 | 流程 | 106 | `pending` | `queued` | `pending` | `pending` | 保留手動觸發；查失聯 issue-tracker 指標 |
 | 13 | 外部編排 | `wayfinder` | 外部 | 流程 | 129 | `pending` | `queued` | `pending` | `pending` | 最後處理上層編排器並與 to-tickets 對齊 |
@@ -909,9 +909,59 @@ shell `printf` 得 `43fb277f…`、Python text mode 得 `0e2f6725…`，**兩個
 它**唯一被裝過兩次**（第一次漏 `-a` fan-out 到那裡、之後 remove 沒清乾淨），其餘 5 支從未進去過。
 **結論對、理由錯**，進「等 14 支全做完一次性收」清單。
 
+**`prototype` 七格**（外部批第三支）
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pass:mechanical+manual` | bundle 4 檔；`git status --short -uall skills/prototype/` 只有 `M SKILL.md` 一列、無新檔無刪檔；`git diff 099f782 HEAD` 對另 3 檔輸出為空 ⇒ 自匯入起一字未動。staged path 恰兩個 |
+| contract | `pass:manual` | 獨立審查者**字元級 word-diff**：只有一個 `+` 區塊、**沒有任何 `-` 區塊** ⇒ 純插入、第二個增刪＝無。流程型七項在內容層全數保留、本輪未觸及任何一項 |
+| safety-provenance | `pass:manual` | safety-red 契約（`do NOT create a git branch and do NOT commit`／「delete 是主 session 的決定」）逐位元未動；三個 LOCAL EDIT 互不矛盾且兩個分支檔都指回 SKILL.md step 6 為單一真相；六條跨檔連結全有效。**風險：無**。⚠ 驗不到的那一段見隊列「沒做的」① |
+| references | `na:沒有且未新增` | 無 `references/` 目錄（`LOGIC.md`／`UI.md` 是 bundle 內的分支檔、`agents/` 是 Codex 介面檔） |
+| metadata-trigger | `na:description 未改` | frontmatter 未動 |
+| live | `pass:manual` | **走 LOGIC 分支**（審查者判定 UI 分支在本 repo 與 IT-department 都**沒有安全跑法**：它要求改既有 route，會撞專案 §6 雙改／§9 部署，而 harness 沒有 route-based app）。**ticketless 跑**（本輪改的就是 ticketless 時的落點）。產物：`.scratch\prototype-local-edit-truth\PROTOTYPE-local-edit-truth.html` 單檔自足、`git check-ignore` 確認命中 `.gitignore:11`。**約束前後快照兩個 repo 各 5 項＋2 項全同**（branch／HEAD／stash／status／`--cached` 為空／`skills/` index md5／`peek_sessions`）。**產物實際截圖並用 `Read` 打開確認跑得起來**（不是只有檔案存在）。**結論落 `VERDICT.md`，不只留在對話裡** ⇒ 本輪新增那句的自我驗證 |
+| commit-rollback | `pass:mechanical` | `73bc8597` 只含兩 path；staged blob＝被審 candidate；manifest 目標 key＝commit 後 subtree；`--check` 乾淨、正反向 `git apply --reverse --check` 皆過 |
+
+**第 10 列 live 產出的判定：LOCAL EDIT 的「復原真相」放哪**（原型＋`VERDICT.md` 在 `.scratch\prototype-local-edit-truth\`）
+
+| 候選 | 倖存 `npx skills update`？ | 跟得上新增？ | 判定 |
+|---|---|---|---|
+| **檔內 `LOCAL EDIT` marker** | **否** | — | ❌ **不能當真相**：它與在地改動住在同一個檔，update 覆寫時**兩者一起消失**（模型跑出來救回 0/8）。它是**標記**不是**備份** |
+| **§13.2 對照表** | 是（在別的檔） | **否** | ⚠ **倖存 ≠ 完整**：現況已漏 **4/8**（`research` 兩處、`prototype` 一處、`UI.md` 殘留），行號亦已腐爛 |
+| **隊列列（§9.6b）** | 是 | 是 | ✅ **目前唯一同時倖存又跟得上的**（只漏 1/8） |
+
+⚠ **原型答不了、要人決定的**：**隊列列是 B-4 的產物，B-4 十四支跑完之後誰維護？**
+沒人接就退回那張已漏 4 筆的 §13.2 表，而它**看起來還是完整的**——缺口長得跟已驗證一樣。
+三個方向（未定案）：①收尾時把隊列的 LOCAL EDIT 欄合併回 §13.2 並訂「新增必須同步」的規矩
+②改成機械產生（掃 `skills/**` 的 marker ＋ `git diff <匯入commit> HEAD`），讓表**不可能漏**
+③維持現狀、明認「update 之後要人工重讀 diff」。
+附帶查到：`manifest.local_edit_marks` **只數數量、不記內容與位置**——抓得到「marker 消失」，
+抓不到「marker 還在但內容被改」。
+
+
+⚠⚠ **第 0 列的凍結 bundle 已被另一條線在工作區改寫（2026-08-26 第 10 列施作時發現）**
+
+停止線第 5 條寫「第 0 列 WT 必須維持 `f2d9a5f…` candidate、**不得再改 bundle**」，但實測：
+
+```
+skills/adversarial-review/SKILL.md
+  HEAD blob = 81318063e28aa2e0d3a6b34e1acc4e8b06a600ab   （＝凍結 candidate）
+  WT   blob = b3da04a2db42b26b49f7c7068cc3ceca3785e7aa   （已改，尚未 commit）
+```
+
+改的是**實質功能**不是文字：加了一整套「**依作者平台覆寫同側審查者**」的機制
+（Cursor 作者 → `claude-code`；Claude 作者 → `cursor-cli`；設定檔只提供 model／effort，同平台時本輪覆寫）。
+從 `reviewer/reviewer_config.json` 同時被改、以及 `f2d9a5f`「改用 Grok 4.6 High」這條線來看，
+**那是另一條進行中的工作，不是誤觸**。
+
+**本列的處置**：**不動它、不 stage 它**（第 10 列的 staged diff 逐字確認只含自己的兩個 path）。
+這是兩條線的規則衝突，不該由施工者單方決定，**交回 user**。三個方向：
+①B-4 承認第 0 列的凍結已失效，把該列改記「凍結期間被另一條線改寫」並停止引用兩個 frozen anchor；
+②請那條線先停手、等 B-4 收尾；③兩條線並存，但 B-4 明記「第 0 列的 rollback anchor 只對 HEAD 有效，
+對 WT 無效」。**在 user 裁決前，B-4 不得引用「WT＝frozen candidate」當任何 gate 的證據。**
+
 **批次停止線**
 
-1. **第 1～9 列全數 `verified`**（本地批 7 支＋外部批 2 支）；目前沒有 active 列。
+1. **第 1～10 列全數 `verified`**（本地批 7 支＋外部批 3 支）；目前沒有 active 列。
    第 0 列維持 `skipped:user`。**第 8 列是首支零改動列**（locator `na`），
    外部批的四條操作定案見上方校準節。
    ⚠ `skill_manifest.py` 現況：內容不符 **0 支**、缺 key **1 支**（只剩第 0 列，已 skipped）。
