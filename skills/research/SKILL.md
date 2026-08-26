@@ -11,7 +11,7 @@ Its job:
 1. Investigate the question against **primary sources** (official docs, source code, specs, first-party APIs), not a secondary write-up of them. Follow every claim back to the source that owns it.
 2. Write the findings to a single Markdown file, citing each claim's source.
 
-   **LOCAL EDIT (2026-08-21) — the file goes to `.scratch/research/<slug>.md`.** Upstream only said "a Markdown file in the repo" and left the location open; an undefined write target in a repo with several concurrent sessions is how files land somewhere nobody looks for them (`SKILL_IMPORT_WAYFINDER_PLAN.md` K10). Create the directory if needed. **Do not create a git branch and do not commit** — the main session decides what happens to the file.
+   **LOCAL EDIT (2026-08-21) — the file goes to `.scratch/research/<slug>.md`.** Upstream only said "a Markdown file in the repo" and left the location open; an undefined write target in a repo with several concurrent sessions is how files land somewhere nobody looks for them (`SKILL_IMPORT_WAYFINDER_PLAN.md` K10). Create the directory if needed. **Do not create a git branch and do not commit** — the main session decides what happens to the file. **This supersedes step 3 below**: the location is fixed, so do not "match the existing convention" — that would reopen the undefined write target this edit exists to close.
 3. Save it where the repo already keeps such notes; match the existing convention, and if there is none, put it somewhere sensible and say where.
 
 ---
@@ -28,7 +28,7 @@ Its job:
 1. **查**：先請 user 打 `/deep-research <問題>`（模型叫不動 Workflow，要人打），
    或在查證量小的時候照這支原本的方法自己查。
 2. **落檔**：不論走哪一條，findings 一律寫 `.scratch/research/<slug>.md`，
-   格式照本檔其餘章節。**不建分支、不 commit**（見下方 2026-08-21 那條 LOCAL EDIT）。
+   格式照本檔其餘章節。**不建分支、不 commit**（見上方第 2 點裡 2026-08-21 那條 LOCAL EDIT）。
 3. **標明來源**：報告裡要分得出「哪些是 `/deep-research` 帶引用抓回來的」與
    「哪些是我自己讀 repo 得到的」——混在一起會讓下一棒分不出證據強度。
 
