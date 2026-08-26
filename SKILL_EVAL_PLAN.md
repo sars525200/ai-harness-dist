@@ -1144,6 +1144,10 @@ skills/adversarial-review/SKILL.md
   `</issue-template>` 三個，加上 `:12` 的**負面引用** `/setup-matt-pocock-skills`（叫人不要用）。
   四筆全落在報表的「人工看一眼」區、不計入缺失、不影響 exit code。**不是缺陷，是抽取器分不出
   閉標籤與負面引用**；B-4 禁改 eval 工具，只記錄。
+- ⚠ **2026-08-26 第 13 列訂正：下面這一筆在該列不成立**——`git cat-file -p <tree>` 讀 tree 物件
+  完全可以取代 `git ls-tree`，`git diff --no-index` 可對兩份磁碟副本，GNU `diff -u` ＋ `cmp`
+  可驗原始位元組。第 13 列的審查者用這四件組合**全程沒跟被審方要過任何物件**就完成了 byte-exact 對照。
+  ⇒ **真正缺的是「白名單的錯誤訊息沒告訴人有替代法」**，不是能力缺口；後續各列不必再回報一次「查不到」。
 - **結構性弱點一併記著**：唯讀閘門缺 `git ls-tree`／`write-tree`／`hash-object`／`check-attr`
   ⇒ 獨立審查者**無法自己完成步驟 4 要求的 digest 對帳，必須由被審方提供物件**。
   對抗式覆核裡「前像的存否掌握在被審方手上」是分工缺陷，不只是便利性問題。
