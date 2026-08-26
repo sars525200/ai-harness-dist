@@ -69,6 +69,7 @@ from contract import ALLOW, BLOCK, HookContext
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
 CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
+_ERR_LOG_MAX = 256 * 1024   # 單一錯誤 log 上限；超過就輪替成 `.1`
 
 sys.path.insert(0, HOOKS_DIR)
 
@@ -275,11 +276,19 @@ def _log_error(session_id: str, exc: BaseException, agent_id: str = "",
     一模一樣，看板還照著舊結論寫「全是 7/29 測 UTF-8 時手餵造成」，實際上它每天
     都在發生。留痕要留到足以歸因；只記「有錯」等於知道出事卻查不下去。
     """
-    import traceback  # 延遲 import：見頂層註解，正常路徑不該付這 20 ms
+    # 2026-08-26：`import traceback` 移進「真的要印」的那個分支——
+    # 解析類例外佔 429/431 筆，那條路徑完全用不到它。
 
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
         path = os.path.join(STATE_DIR, f"hook_errors.{_log_stem(session_id, agent_id)}.log")
+        # 上限輪替：留最近一份 `.1`，再舊的丟掉。這個 log 是給人查最近一次事故用的，
+        # 不是稽核軌跡——沒有上限就會像 `hook_errors.unknown.log` 那樣長到 453 KB。
+        try:
+            if os.path.getsize(path) > _ERR_LOG_MAX:
+                os.replace(path, path + ".1")
+        except OSError:
+            pass
         with open(path, "a", encoding="utf-8") as fh:
             fh.write(f"[{_now()}] {type(exc).__name__}: {exc}\n")
             # repr 才看得見控制字元與 U+FFFD（stdin 是 errors="replace" 解的）。
@@ -296,7 +305,24 @@ def _log_error(session_id: str, exc: BaseException, agent_id: str = "",
                 lo, hi = max(0, pos - 120), min(len(raw), pos + 120)
                 fh.write(f"  at[{pos}] before={raw[lo:pos]!r}\n")
                 fh.write(f"  at[{pos}] after ={raw[pos:hi]!r}\n")
-            fh.write(traceback.format_exc())
+            # 2026-08-26：**解析類例外不印 traceback**。實測 `hook_errors.unknown.log`
+            # 431 筆裡有 429 筆是 JSONDecodeError，traceback 佔掉 438,835／453,605 bytes
+            # ＝ **96.7% 的檔案是同一段零資訊文字**（永遠是 main → json.loads →
+            # decode → raw_decode → scan_once，因為它只有這一個呼叫點）。
+            # 真正能歸因的是上面那兩行 `at[pos]` 現場，以及下面這行來源指紋。
+            #
+            # ⚠ 只對「解析輸入」這一類豁免。其他例外（實測有 2 筆 NameError＝真的 bug）
+            # 照舊印完整 traceback —— 那才是 traceback 有價值的場合。
+            if isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError)):
+                # 來源指紋：top-level key 的名字足以認出是哪個 client 餵的
+                # （例：cursor_version／generation_id ⇒ Cursor CLI，非 Claude Code）。
+                # 只取前 12 個 key、**不取值**——值是指令內容，不該進跨 session 共用的 log。
+                import re  # 延遲 import：同 traceback，正常路徑不該付
+                keys = re.findall(r'"(\w{1,32})"\s*:', raw[:2000])[:12] if raw else []
+                fh.write(f"  keys={keys}\n")
+            else:
+                import traceback  # 延遲 import：只有真的要印才付這 20 ms
+                fh.write(traceback.format_exc())
             fh.write("\n")
     except Exception:
         pass
