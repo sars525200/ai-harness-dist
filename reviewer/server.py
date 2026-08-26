@@ -48,14 +48,36 @@ HOST, PORT = "127.0.0.1", 8899
 # which 回 None 但東西其實裝好了 —— 那會讓選單顯示「未安裝」而誘導人改選別的審查者。
 CURSOR_AGENT_CMD = os.path.join(os.environ.get("LOCALAPPDATA", ""), "cursor-agent", "agent.cmd")
 
+
+def detect_host_platform() -> str:
+    """執行 `--check`／skill 的這一則是哪個平台（不是審查者行程）。
+
+    最內層贏：`CURSOR_AGENT` 有值就判 Cursor，即使同時有 `CLAUDECODE`。
+    從 Claude 拉起 `agent.cmd` 時父行程環境會整包遺傳，兩邊旗標會同時在；
+    若先看 `CLAUDECODE` 會把審查者行程誤判成作者。
+    """
+    if os.environ.get("CURSOR_AGENT"):
+        return "cursor"
+    agent = str(os.environ.get("AI_AGENT") or "")
+    if os.environ.get("CLAUDECODE") or agent.startswith("claude-code"):
+        return "claude"
+    return "unknown"
+
+
+def required_reviewer_tool(host: str):
+    """作者平台決定審查者必須在對側。設定檔與這條衝突時本輪覆寫，不要改檔。"""
+    return {"cursor": "claude-code", "claude": "cursor-cli"}.get(host)
+
 # 審查者工具。`probe` 是「這台機器上裝了沒」的偵測方式 —— 選單要照實顯示可用性，
 # 讓人選之前就知道結果，而不是選了之後 skill 才回「沒裝，我用別的」。
 TOOLS = [
     {
         "id": "claude-code",
         "name": "Claude Code",
-        "desc": "開一個獨立 subagent（不共用推理脈絡）。有 Read/Grep/Bash 可查證、沒有 Edit/Write——符合「審查者只能挑錯、不能動手」的邊界。",
-        "probe": None,  # 就是當前執行環境，一定可用
+        "desc": "作者在 Cursor 時的對側審查者：本機 `claude -p --safe-mode`（MAX OAuth）。"
+                "作者在 Claude 時不要選它——那是自己審自己。"
+                "有 Read/Grep/Bash 可查證、沒有 Edit/Write。",
+        "probe": None,  # 作者在 Claude 裡一定可用；Cursor 側 skill 另查 claude.cmd
         "supports_model": True,
     },
     {
@@ -407,12 +429,20 @@ class Handler(BaseHTTPRequestHandler):
 def print_state() -> None:
     st = state()
     cfg = st["config"]
+    host = detect_host_platform()
+    need = required_reviewer_tool(host)
     tool = next((t for t in st["tools"] if t["id"] == cfg["tool"]), None)
     print(f"設定檔：{CONFIG_PATH}")
+    print(f"  作者平台：{host}")
     print(f"  審查者：{cfg['tool']}" + ("" if not tool else
           f"（{tool['name']}·{'可用' if tool['available'] else '⚠ 這台機器上找不到'}）"))
     print(f"  模型　：{cfg['model']}")
     print(f"  effort：{cfg['effort']}")
+    if host == "unknown":
+        print("  ⚠ 認不出作者平台（沒有 CURSOR_AGENT / CLAUDECODE）——停下來問人，不准猜。")
+    elif need and cfg["tool"] != need and cfg["tool"] != "codex":
+        print(f"  ⚠ 設定是 {cfg['tool']}，作者平台要求對側 {need}。"
+              f"本輪改走 {need}，不要改設定檔（下一則可能在另一平台）。")
     for w in config_load_issues() + config_warnings(cfg):
         print(f"  ✘ {w}")
     if cfg["tool"] == "cursor-cli":

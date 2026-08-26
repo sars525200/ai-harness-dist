@@ -146,6 +146,37 @@ def _case_save_keeps_cursor_cli(fails):
 
 # ── R1-3／V1：exit code 才是可檢查的東西 ─────────────────────
 
+def _case_host_platform(fails):
+    """作者平台：CURSOR_AGENT 最內層贏；對側 tool 對得上。"""
+    mod, _ = _with_config(GOOD)
+    saved = {
+        "CURSOR_AGENT": os.environ.pop("CURSOR_AGENT", None),
+        "CLAUDECODE": os.environ.pop("CLAUDECODE", None),
+        "AI_AGENT": os.environ.pop("AI_AGENT", None),
+    }
+    try:
+        if mod.detect_host_platform() != "unknown":
+            fails.append("三個旗標都拿掉應為 unknown")
+        os.environ["CLAUDECODE"] = "1"
+        if mod.detect_host_platform() != "claude":
+            fails.append("只有 CLAUDECODE 應為 claude")
+        os.environ["CURSOR_AGENT"] = "1"
+        if mod.detect_host_platform() != "cursor":
+            fails.append("CURSOR_AGENT 與 CLAUDECODE 同時在應為 cursor（最內層贏）")
+        if mod.required_reviewer_tool("cursor") != "claude-code":
+            fails.append("Cursor 作者應對側 claude-code")
+        if mod.required_reviewer_tool("claude") != "cursor-cli":
+            fails.append("Claude 作者應對側 cursor-cli")
+        if mod.required_reviewer_tool("unknown") is not None:
+            fails.append("unknown 不該指定 tool")
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def _case_exit_codes(fails):
     table = [
         ("合法設定", GOOD, 0),
@@ -267,6 +298,7 @@ def run():
         ("save 回報沒送來的欄位（R2-4）", _case_save_reports_missing_key),
         ("state() 帶 issues 給設定頁（R2-5）", _case_state_exposes_issues),
         ("exit code 五種情境", _case_exit_codes),
+        ("作者平台對側審查者", _case_host_platform),
         ("模型清單依 tool 而定（cursor-cli）", _case_model_set_per_tool),
         ("save 訊息宣稱值 == 磁碟實際值", _case_reject_msg_matches_disk),
     ]
