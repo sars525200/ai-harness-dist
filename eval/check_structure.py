@@ -53,6 +53,26 @@ DUP_WARN_RATIO = 0.15      # 重複片段佔比 >=15% 即警示
 
 
 # ── 讀取 ────────────────────────────────────────────────────────────────
+# 完成判準／邊界：中英雙語判準（2026-08-27）
+# **為什麼要英文對照**：原本兩條判準都是中文字面搜尋，而 upstream 匯入的英文 skill
+# 在結構上**不可能通過**——對它們開火的是假 WARN：規則其實寫了，只是不是用中文寫的。
+# 對照詞是**實查六支英文 skill 的原文**得來的，不是猜的：
+#   wayfinder:14 "the map is done when the way is clear"
+#   grilling:29  "The session is done when the frontier is empty"
+#   to-tickets:95 "## Acceptance criteria" / wayfinder:51、:96 "## Out of scope"
+# ⚠ **加對照詞不是放寬**：兩種都沒寫的仍然要紅。domain-modeling 就是——它是持續性紀律、
+#   本來就沒有「做完」的狀態，那個 WARN 是真的。改判準前後都要驗這一點還成立。
+# 邊界節標題：只認 ## 級以上的標題，不認內文出現該詞
+BOUNDARY_RE = r"^#{2,}[ \t].*(?:邊界|Out of scope|Boundaries)"
+
+_COMPLETION_MARKERS = ("完成判準", "done when", "acceptance criteria")
+
+
+def _has_completion(body: str) -> bool:
+    low = body.lower()
+    return any(m.lower() in low for m in _COMPLETION_MARKERS)
+
+
 def load_skills() -> tuple[list[dict], list[str]]:
     r"""回 `(skills, 同名衝突)`。跨兩層、realpath 去重（A-3），並拆 text/full_text（A-5）。
 
@@ -222,7 +242,7 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
         # ⚠ **型別閘門保留**：參考型（純規則資料，沒有步驟要完成）套這條就是假 WARN
         # ——§5.5「假 FAIL 比沒有 eval 更糟」。降級**不是**拿掉分流的藉口。
         if kind == "流程":
-            if "完成判準" not in body:
+            if not _has_completion(body):
                 r.add(name, "完成判準", "WARN",
                       "全檔沒有任何一處「完成判準」——這支 skill 跑完了沒有辦法判斷")
         else:
@@ -239,7 +259,7 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
         #
         # ⚠ 只認 `##` 級以上的標題（`^##+ .*邊界`），不認內文出現「邊界」二字
         #   ——現況 17 支裡有 4 支內文提到邊界但不是標題，抓它們是假 WARN。
-        if not re.search(r"^#{2,}[ \t].*邊界", body, re.M):
+        if not re.search(BOUNDARY_RE, body, re.M):
             r.add(name, "邊界", "WARN",
                   "沒有「## 邊界」節——這支 skill 不得做的事沒有寫下來")
 
@@ -316,6 +336,33 @@ def self_test(corpus: str) -> int:
           f"{'PASS' if ok_neg else '**FAIL** 會亂報'}")
     if not ok_neg:
         fails += 1
+
+    # 完成判準／邊界的中英雙語判準（2026-08-27）
+    # **加對照詞最大的風險是把判準變成永遠不會紅**，所以正反兩向都測：
+    # 正向少一條＝對英文支製造假 WARN；反向少一條＝判準等於被關掉。
+    # ⚠ 這裡**引用 BOUNDARY_RE 常數而不是抄一份正則**——抄字面的測試會在
+    #   判準改寫（例如折行）時假紅，並誘導人為了遷就測試而改回去。
+    for _s, _want, _label in [
+        ("本節的完成判準是…", True, "中文完成判準"),
+        ("the map is done when the way is clear", True, "英文 done when"),
+        ("## Acceptance criteria", True, "英文 Acceptance criteria"),
+        ("this skill has no such section at all", False, "兩種都沒寫→必須仍然紅"),
+        ("criteria alone should not count", False, "只有 criteria 不算"),
+    ]:
+        _ok = _has_completion(_s) == _want
+        print(f"  完成判準 {_label:<22} → " + ("PASS" if _ok else "**FAIL** 判準失效"))
+        if not _ok:
+            fails += 1
+    for _s, _want, _label in [
+        ("## 邊界", True, "中文標題"),
+        ("## Out of scope", True, "英文標題"),
+        ("這一段講邊界但不是標題", False, "內文出現不算"),
+        ("# Out of scope 只有一個井號", False, "一級標題不算"),
+    ]:
+        _ok = bool(re.search(BOUNDARY_RE, _s, re.M)) == _want
+        print(f"  邊界   {_label:<22} → " + ("PASS" if _ok else "**FAIL** 判準失效"))
+        if not _ok:
+            fails += 1
 
     print(f"\n  self-test：{'通過，重複率 0% 可信' if not fails else '未通過，本次重複率數字不可信'}")
     return fails

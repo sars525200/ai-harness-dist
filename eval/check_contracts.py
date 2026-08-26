@@ -55,7 +55,14 @@ FIXTURE_DIR = os.path.join(_HERE, "fixtures")
 _SKILL_INDEX = dict(_cfg.iter_skill_paths()[0])
 
 # 內文裡看起來像專案檔案路徑的樣子（含副檔名，排除純網址）
-PATH_RE = re.compile(r"`([A-Za-z0-9_./\\-]+\.(?:py|js|md|json|ps1|sh|css|html|sqlite))`")
+# ⚠ 字元類含 `:` 是為了吃 Windows 絕對路徑（2026-08-27 補）。不含它的時候，
+#   反引號內只要有磁碟機代號就**整條抽不到**、靜默零覆蓋——實測 `D:\...\X.md` -> []。
+#   B-4 期間禁改本工具，所以當時是靠「雙形並列」（裸檔名＋絕對路徑各寫一次）繞過；
+#   根因修掉之後那個繞法仍相容（`seen` 依字面去重，不會重複計數）。
+#   解析端本來就接得住絕對路徑（`_resolve_path` 實測：存在的解析成功、不存在的回 None）。
+#   ⚠ 加 `:` 會讓網址也長得像路徑（原註解「排除純網址」靠的就是不含 `:`）
+#     ⇒ 補負向前瞻擋掉 scheme。**這一條有自我測試守著**，見 self_test()。
+PATH_RE = re.compile(r"`(?!(?:https?|ftp|file)://)([A-Za-z0-9_.:/\\-]+\.(?:py|js|md|json|ps1|sh|css|html|sqlite))`")
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 SKILLREF_RE = re.compile(r"(?<![\w/])/([a-z][a-z0-9-]{2,})(?![\w/-])")
 # Claude Code 內建命令，不是本專案的 skill——抽到它們報 MISSING 是假 FAIL
@@ -227,6 +234,22 @@ def self_test() -> int:
     print(f"  {'真實記憶檔':<18} → {st:<8} {'PASS' if ok else '**FAIL** 會誤報'}")
     if not ok:
         fails += 1
+    # PATH_RE 抽取（2026-08-27）
+    # **為什麼要測抽取、不只測 verify**：抽不到的東西不會變成 MISSING，它會直接消失，
+    # 報表看起來跟「沒問題」一模一樣 —— 靜默零覆蓋比 FAIL 難發現得多。
+    _abs = "`D:" + os.sep + "harness" + os.sep + "X.md`"
+    for _text, _want, _label in [
+        (_abs, 1, "Windows 絕對路徑"),
+        ("`X.md`", 1, "裸檔名"),
+        ("`https://example.com/a.md`", 0, "https 網址不得當成檔案"),
+        ("`file:///c/d.md`", 0, "file scheme 不得當成檔案"),
+        ("`SKILL.md:63`", 0, "檔:行引用不是路徑"),
+    ]:
+        _got = len(PATH_RE.findall(_text))
+        _ok = _got == _want
+        print(f"  {_label:<18} → 抽到 {_got} 期望 {_want} " + ("PASS" if _ok else "**FAIL** 抽取器壞了"))
+        if not _ok:
+            fails += 1
     print()
     print(f"  self-test：{'通過，全綠可信' if not fails else '未通過，本次結果不可信'}")
     return fails
