@@ -41,6 +41,8 @@ except Exception:
 # import 這一行本身就會在設定壞掉時 SystemExit。
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config as _cfg                                            # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bundle as _bundle                                         # noqa: E402
 
 SKILL_DIRS = [str(p) for p in _cfg.SKILL_DIRS]
 MEMORY_SOURCES = [str(p) for p in _cfg.MEMORY_SOURCES]
@@ -91,9 +93,8 @@ def load_skills() -> tuple[list[dict], list[str]]:
         path = str(p)
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-        refs = sorted((p.parent / "references").glob("*.md")) \
-            if (p.parent / "references").is_dir() else []
-        extra = "".join("\n" + r.read_text(encoding="utf-8") for r in refs)
+        refs = _bundle.extras(p, docs_only=True)          # 單一入口，見 eval/bundle.py
+        extra = "".join("\n" + r.read_text(encoding="utf-8", errors="replace") for r in refs)
         out.append({
             "name": name, "path": path, "text": text, "full_text": text + extra,
             "refs": [str(r) for r in refs],

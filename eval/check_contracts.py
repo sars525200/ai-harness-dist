@@ -42,6 +42,8 @@ except Exception:
 _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_HERE))
 import config as _cfg                                            # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bundle as _bundle                                         # noqa: E402
 
 MEMORY_ROOT = str(_cfg.PROJECT_MEMORY_DIR)
 PROJECT_ROOT = str(_cfg.PROJECT_ROOT)
@@ -83,9 +85,8 @@ def load_skills() -> list[dict]:
         path = str(p)
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-        refdir = p.parent / "references"
-        refs = sorted(refdir.glob("*.md")) if refdir.is_dir() else []
-        extra = "".join("\n" + r.read_text(encoding="utf-8") for r in refs)
+        refs = _bundle.extras(p, docs_only=True)          # 單一入口，見 eval/bundle.py
+        extra = "".join("\n" + r.read_text(encoding="utf-8", errors="replace") for r in refs)
         out.append({"name": name, "path": path,
                     "text": text, "full_text": text + extra,
                     "mtime": max([os.path.getmtime(path)]
@@ -94,7 +95,14 @@ def load_skills() -> list[dict]:
 
 
 # 範本佔位字串——不是真實檔案，抽出來驗必然 MISSING（假 FAIL）
-PLACEHOLDER_RE = re.compile(r"YYYY|MM-DD|XXX|<[^>]+>|\{[^}]+\}|###|N\.json")
+# 範本佔位字串：長得像檔名但**永遠不會有那個檔**。抽出來當契約會製造長期常駐的紅燈，
+# 而長期常駐的紅燈等於沒有紅燈（真的斷線會混在裡面）。2026-08-27 補三類：
+#   · `slug` —— `0001-slug.md`（domain-modeling/ADR-FORMAT.md 的編號慣例）
+#   · 孤立的 N／NN metavariable —— `round-N-reply.md`、`NN-slug.md`
+#     ⚠ 用 lookaround 釘住「前後不是字母」，否則 CONTEXT/SKILL 這種含 N 的字會被誤判
+PLACEHOLDER_RE = re.compile(
+    r"YYYY|MM-DD|XXX|<[^>]+>|\{[^}]+\}|###|N\.json"
+    r"|slug|(?<![A-Za-z])NN?(?![A-Za-z])")
 
 SEARCH_BASES = [
     PROJECT_ROOT,
@@ -113,7 +121,7 @@ SEARCH_BASES = [
 ]
 
 
-def _resolve_path(raw: str) -> str | None:
+def _resolve_path(raw: str, home: "str | None" = None) -> str | None:
     """把內文寫的相對路徑對到真實檔案。找不到回 None。
 
     ★ base 清單是實測補出來的：skill 內文常只寫檔名（audit_key_history.py）或
@@ -121,6 +129,12 @@ def _resolve_path(raw: str) -> str | None:
     假 FAIL 會讓人整套不看（§5.5），所以寧可多找幾個 base。
     """
     cand = raw.replace("/", os.sep).replace("\\", os.sep)
+    # ★ 2026-08-27：bundle 內的檔會引用**同 bundle 的兄弟檔**（實例：
+    #   `prototype/UI.md:107` 寫 "Reason and reference: `SKILL.md` step 6"）。
+    #   SEARCH_BASES 全是 repo 級的目錄，構不到那一層 ⇒ 真的存在的檔被報成 MISSING。
+    #   `home` 由呼叫端傳入該支 skill 的目錄，排在最前面（最具體的先試）。
+    if home and os.path.exists(os.path.join(home, cand)):
+        return os.path.join(home, cand)
     for base in SEARCH_BASES:
         if os.path.exists(os.path.join(base, cand)):
             return os.path.join(base, cand)
@@ -154,7 +168,8 @@ def auto_contracts(sk: dict) -> list[dict]:
         if PLACEHOLDER_RE.search(m):
             sk.setdefault("_skipped", []).append(f"{m}（範本佔位字串，非真實檔案）")
             continue
-        out.append({"kind": "file", "value": m, "source": "auto"})
+        out.append({"kind": "file", "value": m, "source": "auto",
+                    "home": os.path.dirname(sk["path"])})
 
     for m in set(WIKILINK_RE.findall(text)):
         out.append({"kind": "memory", "value": m, "source": "auto"})
@@ -190,7 +205,7 @@ def verify(c: dict) -> tuple[str, str]:
     """回 (status, detail)。status: OK / MISSING / MANUAL"""
     kind, val = c["kind"], c["value"]
     if kind == "file":
-        hit = _resolve_path(val)
+        hit = _resolve_path(val, c.get("home"))
         return ("OK", hit) if hit else ("MISSING", "找不到檔案")
     if kind == "memory":
         p = os.path.join(MEMORY_ROOT, val + ".md")
@@ -248,6 +263,29 @@ def self_test() -> int:
         _got = len(PATH_RE.findall(_text))
         _ok = _got == _want
         print(f"  {_label:<18} → 抽到 {_got} 期望 {_want} " + ("PASS" if _ok else "**FAIL** 抽取器壞了"))
+        if not _ok:
+            fails += 1
+    # 範本佔位字串（2026-08-27）
+    # **後半那批負面對照才是重點**：判準寫太寬會讓真檔案被靜默跳過，
+    #   而「跳過」在報表上跟「通過」長得一樣 —— 比 FAIL 難發現。
+    for _s, _want, _label in [
+        ("0001-slug.md", True, "編號＋slug 模板"),
+        ("round-N-reply.md", True, "N metavariable"),
+        ("<name>.md", True, "角括號佔位"),
+        ("SKILL.md", False, "真檔名不得被跳過"),
+        ("CONTEXT-FORMAT.md", False, "含 N 的真檔名不得誤判"),
+        ("platforms.json", False, "真檔名不得被跳過"),
+    ]:
+        _ok = bool(PLACEHOLDER_RE.search(_s)) == _want
+        print(f"  佔位符 {_label:<18} → " + ("PASS" if _ok else "**FAIL** 判準失效"))
+        if not _ok:
+            fails += 1
+    # bundle 兄弟檔解析（home）
+    _home = os.path.dirname(str(_SKILL_INDEX["prototype"])) if "prototype" in _SKILL_INDEX else None
+    if _home:
+        _hit = _resolve_path("SKILL.md", _home)
+        _ok = bool(_hit) and os.path.dirname(_hit) == _home
+        print("  兄弟檔解析 SKILL.md → " + ("PASS" if _ok else "**FAIL** 構不到同 bundle 的檔"))
         if not _ok:
             fails += 1
     print()

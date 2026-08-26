@@ -35,6 +35,8 @@ LEDGER = os.path.join(HERE, "acceptance.json")
 # A-2：路徑從 harness 設定讀（U-1）；缺設定拒跑不猜（U-2）。
 sys.path.insert(0, os.path.dirname(HERE))
 import config as _cfg                                            # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bundle as _bundle                                         # noqa: E402
 
 
 def load_ledger() -> dict:
@@ -61,8 +63,9 @@ def skill_mtimes() -> dict[str, float]:
     """
     out = {}
     for name, p in _cfg.iter_skill_paths()[0]:
-        refdir = p.parent / "references"
-        refs = list(refdir.glob("*.md")) if refdir.is_dir() else []
+        # 新鮮度吃**全部** bundle 檔（不只 .md）：run.py／*.json／agents/*.yaml 改了
+        # 同樣算這支動過。只看 references/ 會對已變的 skill 顯示「有效」。
+        refs = _bundle.extras(p)
         out[name] = max([p.stat().st_mtime] + [r.stat().st_mtime for r in refs])
     return out
 

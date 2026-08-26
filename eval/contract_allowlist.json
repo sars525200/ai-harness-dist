@@ -14,13 +14,6 @@
       "reason": "來源是**條件式引用**不是契約：SKILL.md 與 CONTEXT-FORMAT.md 都寫 'If a CONTEXT-MAP.md exists at the root, the repo has multiple contexts'。本 repo 是 single-context（無 pnpm-workspace.yaml／package.json／packages/*），而 docs/agents/domain.md 明文寫「沒有 CONTEXT-MAP.md，也不會有…看到 skill 提 CONTEXT-MAP.md 一律當它不存在，不要建、也不要回報缺少它」。",
       "decided_on": "2026-08-22",
       "source": "SKILL_IMPORT_WAYFINDER_PLAN.md §7 / AUDIT_FIX_PLAN_20260822.md 分岔②"
-    },
-    {
-      "skill": "adversarial-review",
-      "value": "round-N-reply.md",
-      "reason": "**帶佔位符的輸出檔名模板，不是依賴**：`N` 是輪次的 metavariable，實際落地的是 `round-1-reply.md`／`round-2-reply.md`，字面上的 `round-N-reply.md` **永遠不會存在**。同一句的 `_rN_raw.txt` 是同一組模板，只因 `.txt` 不在 PATH_RE 的副檔名清單裡才沒被抽到 —— 那是巧合不是設計。",
-      "decided_on": "2026-08-27",
-      "source": "SKILL_EVAL_PLAN.md §9.6b 收尾機械驗收（L2 兩條偽陽性）"
     }
   ],
   "_todo": [
