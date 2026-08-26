@@ -975,9 +975,15 @@ skills/adversarial-review/SKILL.md
 2. 第 0 列保留 frozen bundle 與 pending 七格，不補假證據、不補 manifest key。
 3. 短／中／長校準任一未 `verified`，不開本地流程批。
 4. 任何時候只准一列 active；前一支未 `verified`／`rolled-back`／經 user `skipped`，不開下一支。
-5. 第 0 列 WT 必須維持 `f2d9a5f…` candidate；不得再改 bundle，缺 `## 邊界` 等規範後格式
-   列「沒做的」且不阻擋。只可另做 target-key-only manifest reconciliation；其他 queued
-   列在 inventory 前必須 WT＝HEAD。
+5. ~~第 0 列 WT 必須維持 `f2d9a5f…` candidate；不得再改 bundle~~ **⚠ 2026-08-26 作廢（user 裁決）**：
+   第 10 列施作時發現**另一條線已在工作區實質改寫該 bundle**（`skills\adversarial-review\SKILL.md`
+   WT blob `81318063…` → `b3da04a2…`，新增「依作者平台覆寫同側審查者」機制，未 commit）。
+   user 裁定**承認凍結失效、B-4 改記實況**，理由是那條線在做的是真功能（跨平台審查者），
+   而 B-4 每一列都在使用它；叫它停手的成本高於保住一個**已經 `skipped:user`** 那一列的凍結。
+   ⇒ **兩個 frozen anchor 對 HEAD 仍有效、對 WT 已無效**；B-4 不得再引用「WT＝frozen candidate」
+   當任何 gate 的證據。第 0 列其餘狀態（`skipped:user`、七格 `pending`、不補 marker）不變。
+   **以下三句仍然有效，未隨凍結一起作廢**：第 0 列缺 `## 邊界` 等規範後格式，列「沒做的」且不阻擋；
+   第 0 列只可另做 target-key-only manifest reconciliation；**其他 queued 列在 inventory 前必須 WT＝HEAD**。
 6. 外部 Skill 必須先留 upstream 對照與 `LOCAL EDIT` 語意對帳，才能改寫。
 7. B-4 禁跑 `skill_manifest.py --accept`；非目標 manifest 債留給各自隊列列。全部完成後才跑
    manifest 全量檢查與更新總體數字；不得把「已排程」寫成「已優化」。
@@ -1027,6 +1033,19 @@ skills/adversarial-review/SKILL.md
   - **`SkillViewer\platform_skills.json` 把 6 支外部 skill 全標成「全域自建」**
     （`:266` grilling 是實例；來源是 `tools\skill_inventory.py:49` 的 `"global": "全域自建"`），
     與 `PROVENANCE.md` 明確分開的「外部 6 支／本地自建 8 支」直接矛盾。
+- **【B-4 收尾交付物·user 2026-08-26 定案】LOCAL EDIT 復原真相改成機械產生**：
+  寫一支產生器，掃 `skills/**` 的 `LOCAL EDIT` 標記 ＋ `git diff <匯入commit> HEAD -- skills/<name>`，
+  輸出「每一支的在地分歧逐處清單（檔:行 ＋ 內容摘要）」，**讓表不可能漏**。
+  **判準**（第 10 列 live 的原型跑出來的）：①檔內 marker **不能**當真相——它與在地改動同檔，
+  `npx skills update` 覆寫時兩者一起消失（模型實跑救回 **0/8**），它是**標記不是備份**
+  ②`SKILL_IMPORT_WAYFINDER_PLAN.md` §13.2 表倖存但**已漏 4/8** 且行號腐爛 ⇒ **倖存 ≠ 完整**
+  ③隊列列目前唯一兩者兼具，但**它是 B-4 的產物、B-4 結束後沒人維護**。
+  ⇒ 前三者都靠人工，而實測已證明人工會漏。`manifest.local_edit_marks` **已經在數 marker，
+  缺的只是內容與位置**——產生器補的就是那一半。
+  ⚠ 產生器要吃**每支各自的匯入 commit 基準**：`grilling`／`domain-modeling` 的匯入 subtree
+  等於 PROVENANCE（可直接對 upstream）；`research`／`prototype`／`to-tickets`／`wayfinder` 不等
+  （匯入當下就帶在地改動），其中 `wayfinder` 另有 `~\.agents\skills\wayfinder` 這份**已驗證的乾淨副本**。
+  原型與判定：`.scratch\prototype-local-edit-truth\`（throwaway，收尾時可刪）。
 - **結構性弱點一併記著**：唯讀閘門缺 `git ls-tree`／`write-tree`／`hash-object`／`check-attr`
   ⇒ 獨立審查者**無法自己完成步驟 4 要求的 digest 對帳，必須由被審方提供物件**。
   對抗式覆核裡「前像的存否掌握在被審方手上」是分工缺陷，不只是便利性問題。
