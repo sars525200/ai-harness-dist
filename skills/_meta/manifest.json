@@ -17,6 +17,12 @@
       "diverged": false,
       "local_edit_marks": 0
     },
+    "design-spec": {
+      "tree": "5f8001057a44fcd2d220bb25e9ad4410303ce713",
+      "upstream": null,
+      "diverged": false,
+      "local_edit_marks": 0
+    },
     "domain-modeling": {
       "tree": "14663346d13ff492b712ff775765d5f01367050f",
       "upstream": "388c9822641805ca2dcd5038e68a1d5282437ee5",
