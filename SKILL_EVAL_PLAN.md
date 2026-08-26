@@ -707,7 +707,8 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 已在 `f2d9a5fcf2e1fac59a2968677a5edebe54266783`。第 1 列 content＋目標 key 在
 `930da0031ed2e9ef1096bb2997bb56987f47cff5`，第 2 列在
 `4ff488913fa8e16c0b97ca330c592f8adca08441`，第 3 列在
-`1dd7df85b1d0f63ac28e3846d9f4c21d1fd08192`。`pending`＝尚未量，**不是通過**。
+`1dd7df85b1d0f63ac28e3846d9f4c21d1fd08192`，第 4 列在
+`72367fb0ffda3b492407bbd54858407ecd027141`。`pending`＝尚未量，**不是通過**。
 
 ⚠ **這個 repo 有別的 session 在動**：第 2 列施作途中 HEAD 被推進五個 commit
 （`930da00`→`7ae0742`）且 index 被清空。逐列的 parent SHA 只代表「該列動工當下的 HEAD」，
@@ -720,7 +721,7 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 | 1 | 校準短型 | `chat-handoff` | 本地 | 流程 | 40 | before `258dc1c…`：subtree `faf94a044aaf74833e7e307d2cf4f97ce3490094`、blob `a2f3dd77862b8151cc9ab0b33ad443accc2e9568`、40 行／977 字；candidate `930da00…`：subtree `00ed779c74fd52e067a00bf30b099bc5fbb40eeb`、blob `71d06f257ce0080d9d7cbec8d7ddb8d45711dfa2`、40 行／901 字 | `verified` | 見下方七格；commit locator `930da00`／subject「精簡 chat-handoff 交接契約」 | 無 L3 題庫（description 未改）；manifest 其餘缺 key 不在本列 | 無；下一支是 `visual-check` |
 | 2 | 校準中型 | `visual-check` | 本地 | 流程 | 87 | before `930da00…`（動工時 HEAD，內容錨仍成立）：subtree `10df2c25070294963bca71ed0070a00dcd988202`、blob `c2b00f57646bc9b1b11f9cb4314cb2066ff3bd63`、87 行／2250 字／L1 1140 tok；candidate `4ff4889…`：subtree `c6d688da7a9cf5201c93071f5dce8ee20ddf30f2`、blob `e0c113ffe0f2e211e8521bd5d7bee455fa721611`、97 行／2629 字／L1 1434 tok（**淨增 +10 行／+294 tok，不是縮減**） | `verified` | 見下方七格；commit locator `4ff488913fa8e16c0b97ca330c592f8adca08441`（parent `7ae0742ad7de98ed2495c2bef890fc51ac470e11`）／subject「補 visual-check 邊界節與深色假通過守門」；manifest `visual-check.tree` old `390adde0acc6c96b8ab3486f4a1fcb928af653bf`（**連 before subtree 都對不上的既有漂移**）→ new `c6d688da…` | ①硬規則 2 第三個出口「查證過這一塊沒有深色規則」**沒定義「怎麼算查證過」**（審查者判部分處置；要定方法得先有 live 證據，硬寫等於用推論補一條要求別人不要用推論的規則）②`cursor-agents\visual-designer.md` 那份宣稱照抄的副本沒跟上：新增的 hash 分流與步驟 3 機制分支它完全沒有、第 5 條仍漏「probe 檔」、L33 指錯節位——**該檔不在本列允許 path，只列不改** ③SKILL.md 仍無任何 Cursor 平台分支（before 就如此，§9.6a 處置優先序第 2 條的既有缺口）④`eval\baseline.json` 記 2401 是舊 `full_text` 口徑，與 1140／1434 都對不上，不可當趨勢證據 ⑤`dashboard\sources_state.json:441` 的 sha 快照會過期，由產生器自己重寫，不在允許 path ⑥無 `eval\triggers\visual-check.jsonl`（L3 缺樣本，屬案 A 範圍外清單） | 無；下一支是 `skill-watch`（第 3 列），**未經 user 指示不自行開列** |
 | 3 | 校準長型 | `skill-watch` | 本地 | 流程 | 173 | before `b60acd34…`：subtree `dc6b3efa45e6464950be5e8ab88e1d4d1a162c5e`、`SKILL.md` blob `324ebf0bdbd7252fd7120b9a89f9a8aa3aa806e7` 173 行／L1 2526 tok；同 bundle 的 `platforms.json`（`3a74eeaf67d340eb669655c954576aee0aac0678`·21 行）與 `run.py`（`c1e9be79c5ff42d51fe4aabbdc7bc90c0cd961aa`·42 行）**本輪未改**，`__pycache__/` 由 `.gitignore:20` 涵蓋不算 bundle；candidate `1dd7df8…`：subtree `0463c040e96a0e835d1136a61a60ccdaed2c7249`、blob `d4de62639a37c31a20f38ac4b9c695d2da8240b7`、169 行／L1 2477 tok | `verified` | 見下方七格；commit locator `1dd7df85b1d0f63ac28e3846d9f4c21d1fd08192`（parent `b60acd344236e08020f894fe59fbc4c790a6381b`）／subject「skill-watch 的「這支不做什麼」正名為邊界節，並拆掉一張解釋表的表」；manifest `skill-watch.tree` old `35357231e0c791e02073fb9af1a2aabf4034a233`（**連 before subtree 都對不上的既有漂移**）→ new `0463c040…`，`skill_manifest.py` 不符名單因此由 3 支降為 2 支 | ①**−49 tok 不得報成優化成果**：主要來自表格骨架折疊＋刪一個行號＋刪一個歷史分母，§9.6a 明文「不得把拆行、改表格當成果」⇒ 本列如實記為**實質零縮減** ②before 的 2526 tok **審查者無法獨立復算**（唯讀閘門同時擋掉 `\|` 管線與 `hash-object`，blob 落不了地），只有改寫者單方數字；after 2477 已由審查者實跑確認 ③`## 換一個部門要改什麼` 未外移——審查者指出比「動兩支測試」更強的理由：那一節裝的是三條拒跑條件＋一條假綠防線，屬 `KEEP_SAFETY`，處置優先序第 1 條高於任何外移，**就算測試不存在也不准搬** ④L66-67 兩個相似度實測值（0.706／0.700）依分類屬 `MOVE_PLAN`、可再省 25–30 tok，但那是讓人相信「0.7 也可能完全不相干」的唯一校準，採納審查者建議不動 ⑤無 `eval\baseline.json` 條目、無 `eval\triggers\skill-watch.jsonl`（皆屬案 A 範圍外清單） ⑥三支字面耦合測試**測不到**的改動範圍：標題層、折疊掉的三列語意、行號與歷史分母移除、步驟 0 指路句——**全綠不等於沒破**，本輪靠逐列人工比對確認 | 無；下一支是 `context-health`（第 4 列），**未經 user 指示不自行開列** |
-| 4 | 本地流程 | `context-health` | 本地 | 流程 | 110 | `pending` | `queued` | `pending` | `pending` | 外移沿革，保留五條硬規則與驗證表 |
+| 4 | 本地流程 | `context-health` | 本地 | 流程 | 110 | before `39382de…`：subtree `49847a0944bd1cfc22742437d3e62cca451fe30c`、blob `7a1a23be89533044bd4e8c73048b56f4c53af2ae`、110 行／L1 2406 tok（**改寫者單方值·審查者無法復算**，見沒做的④）；candidate `72367fb…`：subtree `7d2c0f146fa015f327d831ae215101e3ced0f962`、blob `49ba7b15bd14d89d325efb29f60769bbf4ef01ad`、111 行／L1 2355 tok | `verified` | 見下方七格；commit locator `72367fb0ffda3b492407bbd54858407ecd027141`（parent `39382de1b82a2c8a7899e62e44e69e5cb26439ca`）／subject「context-health 補上完成判準節，沿革外移回計畫書」；manifest `context-health.tree` old `59c1afeb2fec5288dad824a8071464ef45632d18`（**連 before subtree 都對不上的既有漂移**）→ new `7d2c0f14…`，`skill_manifest.py` 不符名單由 2 支降為 1 支（只剩 `escalate`） | ①**「最長一段 2,271 字」不在計畫書**——改寫者原本宣稱三塊沿革都有完整副本，審查者查證後推翻；指路措辭已改成「實測案例與判準演化」不再承諾該數值，但該值目前**只存在於 `rulefile\check_prose_blocks.py:18` 的 docstring**，本輪未加指路，理由＝**docstring 行號會靜默腐爛而 `test_context_health_skill.py` 的盤點抓不到爛掉的行號** ②新增的完成判準條 4（驗證表五列都要有實跑證據）把一個**已知未修的衝突抬成完成條件**：第 3 列判準「條目數不得下降」與硬規則 1／2 允許的「合併同源條目」直接衝突，登記在 `CONTEXT_HEALTH_PLAN.md:885`（R6-9/10/11·接受·未修）；衝突是 before 就有的，本列不順手修（超出允許 path） ③**日期去留不一致**：硬規則 4 保留 `2026-08-13`（`KEEP_SAFETY` 允許帶一兩句理由，判保留正確），其餘三處已移除——記下來免得下一輪當漏網 ④before 2406 tok **無法由獨立審查者復算**（唯讀閘門同時擋掉 `\|` 管線與 `hash-object`）；已獨立實跑驗到的只有 2387 與 2355，**−51 中審查者只背書 −32**。`eval\baseline.json` 記 2270（舊 `full_text` 口徑），與三個值都對不上、不可當趨勢證據 ⑤步驟 5 的「實測 254 字…」（約 55 字）按分類屬 `MOVE_PLAN` 且副本在計畫書 `:1060`，**刻意不移**：它是讓人相信「兩條判準同時綠燈而一個字都沒搬」的唯一校準值（同第 3 列保留 0.706／0.700 的判準），且隊列方向明寫「保留驗證表」 ⑥「2026-08-26 append 量測紀錄觸發 Stop 閘門」這起事故**在 repo 內沒有第二份落點**，本輪保留事實故無損，但**後續任何一輪都不得以「計畫書有」為由外移** ⑦`test_context_health_skill.py` 測不到的範圍：整個 `## 完成判準` 節、驗證表五列、硬規則 3／4／5、P-9 與 find_duplicates 兩段警告的**內容**、步驟 2／3／4、邊界 bullet 2–5、開頭引言、`.md` 指路的節錨、行數／token／型別——**全綠不等於沒破**，本列保證全部來自人工逐段比對 | 無；下一支是 `escalate`（第 5 列），**未經 user 指示不自行開列** |
 | 5 | 本地流程 | `escalate` | 本地 | 流程 | 84 | `pending` | `queued` | `pending` | `pending` | 盤輸出契約與升級邊界 |
 | 6 | 本地流程 | `design-spec` | 本地 | 流程 | 103 | `pending` | `queued` | `pending` | `pending` | 與 §3／PR-1 去重 |
 | 7 | 本地編排 | `session-workflow` | 本地 | 流程 | 72 | `pending` | `queued` | `pending` | `pending` | 最後處理編排器，與前三支結果對齊 |
@@ -779,11 +780,23 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 | live | `pass:manual` | 真跑 `py -3 skills\skill-watch\run.py --dry-run`，exit 0，實際輸出：抓到 28 支→濾掉自建 12→平台內建 16；官方標記 Skill 13 支＋Workflow 1 支；官方文件有、不在注入清單 6 支（batch／debug／design-sync／doctor／run-skill-generator／verify）；與 headless 基準比對**無變動**、未寫 `TODOS.md`。跑前跑後 `git status --porcelain` 逐字相同 ⇒ `--dry-run` 確實沒寫任何進版控的檔。另跑 `--platforms` 確認開關現況。⚠ 測試裡的 `[1/6]…[6/6]` 是注入替身、**不算 live** |
 | commit-rollback | `pass:mechanical` | `1dd7df85` 只含兩 path（`git show --stat` 逐檔對過）；staged blob＝被審 candidate `d4de6263…`（審查者要求主 session 代驗，已核）；manifest 目標 key＝commit 後 subtree `0463c040…`；`git diff --cached --check` 乾淨、`git apply --reverse --check` 正反向皆通過。專用測試 42/0 與 34/0 皆與基準相同 |
 
+**`context-health` 七格**
+
+| gate | 狀態 | 方法／證據 |
+|---|---|---|
+| scope | `pass:mechanical+manual` | bundle 單檔（`SKILL.md`），無 `references/`、無同目錄檔。專用測試 1 支（`tests\test_context_health_skill.py`）、L3 無樣本。引用者：`skills\_meta\PROVENANCE.md:28`（本地表）、`manifest.json`、`dashboard\sources_state.json`、`CONTEXT_HEALTH_PLAN.md`／`CONTEXT_HEALTH_MEASUREMENTS.md`（內容落點）。staged path 恰兩個，staged blob 逐位元＝被審 candidate |
+| contract | `pass:manual` | 獨立審查者（新開、不共用改寫脈絡）**三輪**逐段對帳，流程型七項齊全，**行為級遺失 0／變義 0**。⚠ 本列補上的是 `eval\check_structure.py` 在 17 支裡**唯一為真**的 WARN（before 全檔零次「完成判準」）；審查者逐條判定新增五條**都可檢查**，其中三條淨新增、兩條是既有規則的結束態化，並在第三輪確認刪掉兩處純重複後仍可檢查 |
+| safety-provenance | `pass:manual` | before 15 條安全不變量全保留（2 條由「不要」改成「不得」＝加強）；`check_bloat` exit 0／1 的語意判讀防線逐字未動。**去日期化後仍為真**經審查者實查 `rulefile\check_bloat.py:671-672` 現行碼佐證，不是把過期快照講成現況。本地自建、**無 upstream、無 `LOCAL EDIT`**，明寫「無」 |
+| references | `na:沒有且未新增` | 兩端皆無 `references/` |
+| metadata-trigger | `na:description 未改` | frontmatter 整塊未動（第一輪 diff 首個 hunk 起於 `@@ -6,10 +6,9 @@`） |
+| live | `pass:manual` | 真跑步驟 1 的兩支工具：`rulefile\check_bloat.py` exit 0、`rulefile\check_prose_blocks.py` exit 0，輸出是真的量測值（每則都付合計 72,782 bytes、散文 1,447 字／約 964 tokens）。跑前跑後 `git status --porcelain` 逐字相同 ⇒ **證實 skill 宣稱的「兩支唯讀工具、都不改檔」為真**。工具自己的結尾訊息也逐句對上 skill 保留的「散文字數只涵蓋一半、要看總量」契約 |
+| commit-rollback | `pass:mechanical` | `72367fb0` 只含兩 path（`git show --stat` 逐檔對過）；staged blob＝被審 candidate `49ba7b15…`；manifest 目標 key＝commit 後 subtree `7d2c0f14…`；`--check` 乾淨、`git apply --reverse --check` 正反向皆過。專用測試 21/0 與基準逐項相同。⚠ stage 前重跑 `peek_sessions.py` 報「**有人正在動這個工作區**（54 秒前）」，逐項確認其改動（`reviewer\reviewer_config.json`／`RULE_HUB_PLAN.md`）不在本列 path 後才 stage |
+
 **批次停止線**
 
-1. **短／中／長三種校準樣本（`chat-handoff`／`visual-check`／`skill-watch`）全部 `verified`；
-   目前沒有 active 列。第 0 列維持 `skipped:user`。** 停止線第 3 條（三種校準未齊不開本地流程批）
-   已解除，下一支是 `context-health`（第 4 列）——**要不要開由 user 說**，不自行接續。
+1. **三種校準樣本＋本地流程批第一支共 4 列 `verified`**（`chat-handoff`／`visual-check`／`skill-watch`／`context-health`）**；
+   目前沒有 active 列。第 0 列維持 `skipped:user`。** 下一支是 `escalate`（第 5 列）
+   ——**要不要開由 user 說**，不自行接續。
 2. 第 0 列保留 frozen bundle 與 pending 七格，不補假證據、不補 manifest key。
 3. 短／中／長校準任一未 `verified`，不開本地流程批。
 4. 任何時候只准一列 active；前一支未 `verified`／`rolled-back`／經 user `skipped`，不開下一支。
