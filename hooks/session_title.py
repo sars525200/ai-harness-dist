@@ -547,9 +547,24 @@ def decide(declared: str, existing: str, distance: int,
     return target
 
 
+def _decode_payload(data: bytes) -> str:
+    """stdin bytes -> JSON 文字。剝掉**所有**前置 BOM，不是只剝一個。
+
+    2026-08-26：`utf-8-sig` 只剝掉第一個 BOM。Cursor 送來的 payload 帶**兩個**
+    （Cursor 自己一個、PowerShell 管線再加一個）⇒ 第二個 U+FEFF 留在 char 0 ⇒
+    JSONDecodeError。這支 hook 的失敗方向見 main() 的處置。
+
+    **四支 hook 各留一份複本**（dispatch／session_title／session_archive／
+    agent_readonly_gate）：這些 hook 要能各自獨立執行、不互相 import
+    （同 `force_utf8_output` 的「刻意的雙胞胎」註記）。複本不准漂——
+    `tests/test_cursor_payload.py` 對四支各驗一次 0/1/2/3 個 BOM。
+    """
+    return data.decode("utf-8-sig", errors="replace").lstrip("\ufeff")
+
+
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
+        payload = json.loads(_decode_payload(sys.stdin.buffer.read()))
     except Exception:
         return 0
     try:

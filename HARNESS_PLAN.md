@@ -90,7 +90,7 @@ git 原生機制三個維度全勝 hook：
 | **1** | **`tool_name` 是 `"PowerShell"` —— 與 `"Bash"` 並列的獨立工具** | ✅ **證實 §3.6 既有的 `Bash\|PowerShell\|Write` 寫法正確**（規格無需修改）。教訓價值：這是極易踩的陷阱——多數 hook 範例只寫 `Bash`，而本機主 shell 是 PowerShell，若憑直覺寫成 `Bash`，**DB-1 攔 `git push vm` 會完全失效**。我在 Step 0 的測試設定正是這樣寫的，因此第一次 PowerShell 呼叫完全沒被捕捉到 |
 | **2** | **Stop = 每個 assistant 回應結束時觸發** | ✅ **D5 前提成立**。實測 Stop 落檔早於下一個 PostToolUse 9 秒，且 `last_assistant_message` 為上一回合內容。發布邊界對帳的設計正確 |
 | **3** | **多 session 並行是常態，且 hook 是專案層級** | 🔴 實測同時有 **3 個 session** 在跑（a202da3f SkillViewer／c4235186 NB-00002／f52a27e5 本 session）。hook 會捕捉**所有** session 的事件 → state 必須 per-session（v4 已是）；且 **DB-1 會遇到「A session 改檔、B session push」** → 更加證明 **D6 用 git 當真相**是對的：git 是跨 session 的唯一共同事實 |
-| **4** | **stdin 可能帶 UTF-8 BOM → `json.loads` 直接失敗** | 🔴 配上 fail-open ＝ **規則靜默死亡**（D7 的病）。所有 hook 一律 `sys.stdin.buffer.read().decode("utf-8-sig")`，禁用 `sys.stdin.read()` |
+| **4** | **stdin 可能帶 UTF-8 BOM → `json.loads` 直接失敗** | 🔴 配上 fail-open ＝ **規則靜默死亡**（D7 的病）。所有 hook 一律 `sys.stdin.buffer.read().decode("utf-8-sig")`，禁用 `sys.stdin.read()`。⚠ **2026-08-26 訂正：`utf-8-sig` 一次不夠**——Cursor 送來的 payload 帶**兩個** BOM（Cursor 自己一個、PowerShell 管線再加一個），`utf-8-sig` 只剝掉第一個，第二個 U+FEFF 留在 char 0 ⇒ 照樣 `JSONDecodeError` ⇒ 照樣靜默死亡，而且**跑了兩天沒人發現**。正解是解碼後再 `.lstrip("\ufeff")` 把前置 BOM 全剝掉（只剝前置——值裡面的 U+FEFF 是資料）。落點 `hooks\dispatch.py` 的 `_decode_payload()`，回歸網 `tests\test_cursor_payload.py`（0／1／2／3 個 BOM 各一條） |
 
 ### 未驗項
 

@@ -416,6 +416,7 @@ def main() -> int:
         import test_context_health_skill
         import test_js_source_probe
         import test_adversarial_exchange_gate
+        import test_cursor_payload
         import test_reviewer_config
         import test_session_title
         import test_index_health
@@ -463,6 +464,7 @@ def main() -> int:
             (test_warn_wording.selftest, "WARN 措辭守門自檢"),
             (test_warn_wording.run, "WARN 措辭跨規則守門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
+            (test_cursor_payload.run, "Cursor payload 正規化"),
         ):
             # 2026-08-15：**每一項各自隔離**。原本是裸呼叫 —— 其中一支 `SystemExit` 就會把
             #   整個迴圈殺掉，而畫面上只會少印幾行、看起來像「一支測試失敗」。

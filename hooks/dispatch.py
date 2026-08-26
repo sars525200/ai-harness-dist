@@ -693,14 +693,73 @@ def _force_utf8_output() -> None:
 #   期間長了 46 倍。臨時碼要嘛自帶上限，要嘛在 docstring 寫死「哪個數字出現就可以刪」。
 
 
+# ── Cursor payload 正規化（2026-08-26）──────────────────────────────────────
+# 2026-08-26 23:11 實測（`state\hook_errors.unknown.log`）：Cursor CLI **會**讀專案
+# `.claude\settings.local.json` 的 hook 註冊、也真的呼叫了這支——但 payload 有兩處
+# 與 Claude 不同，**兩處都是安靜的**：
+#   ① stdin 帶**兩個** BOM（Cursor 自己一個、PowerShell 管線再加一個）。`utf-8-sig`
+#      只剝掉第一個，第二個 U+FEFF 留在 char 0 → JSONDecodeError → fail-open 放行。
+#      三種 BOM 數量已重現：0/1 個解得開、2 個必炸。
+#   ② 事件名與工具名命名不同：`preToolUse`↔`PreToolUse`、`Shell`↔`Bash`。解析成功
+#      也選不到任何 REGISTRY 項目，而且**連錯誤 log 都不會留**——比 ① 更難發現。
+#
+# ⚠ **這不涵蓋** 8/24-25 那批「中文 tool_input 讓 Cursor 序列化出收尾引號不見的
+#   JSON」（錯在字串中段、char 202~9561）。那一類仍然解析失敗、仍然 fail-open，
+#   而且**應該**繼續留錯誤 log——那是目前唯一還看得見它的地方。不要為了讓 log
+#   變乾淨去加寬鬆解析：收尾引號是真的不見了，寬鬆解析只是在猜原本的邊界在哪。
+#   回歸網在 `tests\test_cursor_payload.py`，含一條反向守門釘住這件事。
+
+# 正規化只認得這些事件名。REGISTRY 沒有的（例如 SessionEnd）刻意不列——
+# 對不上任何規則的事件，改了名字也不會多做任何事。
+_CANONICAL_EVENTS = {e for item in REGISTRY for e in item["events"]} | {"UserPromptSubmit"}
+
+# ⚠ `Shell` → `Bash` 是**推測不是實證**：只證明了 Cursor 送 `tool_name="Shell"`，
+#   沒證明它底下真的是 bash（8/26 早上的失敗訊息是 bash 的 `eval: syntax error`，
+#   所以偏向 bash，但那是間接證據）。若之後量到規則因 shell 語法差異誤判，
+#   要回頭改的是這一行，不是各條規則。
+_CURSOR_TOOL_ALIASES = {"Shell": "Bash"}
+
+
+def _decode_payload(data: bytes) -> str:
+    """stdin bytes → JSON 文字。剝掉**所有**前置 BOM，不是只剝一個。
+
+    `errors="replace"` 保留：解不開的位元組要變成 U+FFFD 留在 raw 裡給
+    `_log_error` 印出來，比整支拋 UnicodeDecodeError 好歸因。
+    """
+    return data.decode("utf-8-sig", errors="replace").lstrip("\ufeff")
+
+
+def _normalize_payload(payload: dict) -> dict:
+    """把 Cursor 的欄位值翻成 Claude 的寫法。**認不得就原樣放過。**
+
+    刻意只在「值本來就對不上」時才動：Claude 送來的 payload 走這裡是
+    位元不變的，所以這個函式不可能改變既有行為。
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    event = payload.get("hook_event_name")
+    if isinstance(event, str) and event not in _CANONICAL_EVENTS:
+        for canon in _CANONICAL_EVENTS:
+            if event.lower() == canon.lower():
+                payload["hook_event_name"] = canon
+                break
+
+    tool = payload.get("tool_name")
+    if isinstance(tool, str) and tool in _CURSOR_TOOL_ALIASES:
+        payload["tool_name"] = _CURSOR_TOOL_ALIASES[tool]
+
+    return payload
+
+
 def main() -> int:
     _force_utf8_output()
     session_id = "unknown"
     agent_id = ""
     raw = ""
     try:
-        raw = sys.stdin.buffer.read().decode("utf-8-sig", errors="replace")
-        payload = json.loads(raw)
+        raw = _decode_payload(sys.stdin.buffer.read())
+        payload = _normalize_payload(json.loads(raw))
         session_id = payload.get("session_id", "unknown")
         agent_id = payload.get("agent_id") or ""
         return _dispatch(payload)
