@@ -30,6 +30,25 @@ extension 沒有對 session 檔掛任何 watcher（`watchFile` 六處全是監�
    所以同名也要在被推遠時重寫一次，靠「永遠有一份在尾端」取勝。
 2. **只掛 Stop，不掛 SubagentStop**。subagent 與主 session 共用 session_id，
    在 SubagentStop 寫等於讓子代理的內容決定主對話叫什麼名字。
+3. **client 會把自己的快取名寫回來，所以要掛四個事件**（2026-08-26 client
+   2.1.237 實測）。它在每個新 prompt 進來時 append 一筆 `custom-title`，位置固定
+   夾在 `last-prompt` 與 `agent-name` 之間，值是**載入 session 那一刻讀到的名字**
+   —— hook 後來改了檔它不知道。於是「Stop 寫一次」會被下一則訊息蓋掉，側邊欄
+   永遠停在舊名（實例：`UI / 排版設計 (S)`、`主編輯`、`平台疑難雜症`）。
+   對策是 `is_ours()`＋`PreToolUse` 補寫：檔尾那筆不是我們的格式就補回去，
+   而 PreToolUse 正好排在 client 回寫之後。`/clear` 之後 client 還會把快取名
+   帶進**新** session 的第一行，所以佔位名也必須壓得過它。
+
+## 還沒有任務的新視窗（2026-08-26 user 定）
+
+`decide()` 原本明訂「沒宣告、檔裡也沒寫過 → 不猜名字」，**新開的視窗正好落在那條分支**，
+於是退回平台的英文標題。現在多一個佔位名 `專案名｜等待任務｜上一個任務`
+（沒有上一個任務就只有兩段）。兩個守則：
+
+- **排在最後**：宣告 > 檔裡既有的名字 > 佔位名。既有的名字可能是 user `/rename` 過的。
+- **只在「我從來沒替這個 session 命名過」時才給**。長對話的 `custom-title` 被推出
+  `_TAIL_SCAN` 之後 `existing` 會讀成空 —— 少了這道守門，一則正在做事的對話會被
+  改名成「等待任務」。
 
 失敗一律安靜吞掉並 exit 0：這支是錦上添花，絕不能因為它讓一輪工作中斷。
 
@@ -105,6 +124,27 @@ _NO_FILES = ("無", "待定", "")
 # 標題總長上限。放寬到不截任務名（user 2026-08-26 決定用完整格式）；
 # 這個數字只是防爆，不是排版目標。
 _MAX_TITLE = 48
+# 新視窗（還沒有任務）的命名：`專案名｜等待任務｜上一個任務`（user 2026-08-26 定）。
+# 刻意不加【】分類標記 —— 那三種標記說的是「這則在做什麼」，等待中的視窗還沒有
+# 那件事，最該一眼看到的是「哪個專案」。
+_IDLE_MARK = "等待任務"
+# `~/.claude/projects/` 的目錄名長成 `d--AI-Projects`（磁碟機代號＋`--`）。
+_DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]--")
+# 「這個名字是不是我們寫的」。2026-08-26 實測：client（2.1.237）在**每個新 prompt**
+# 進來時把它記憶體裡的 title 回寫進 transcript（夾在 last-prompt 與 agent-name 之間），
+# 而它的記憶體只有 `/rename` 改得動 —— hook 改檔它看不見。於是側邊欄永遠顯示
+# client 那份快取名（實例：`UI / 排版設計 (S)`、`主編輯`、`平台疑難雜症`）。
+# 靠格式辨識就能認出「檔尾這一筆不是我」，據此補回自己的名字。
+# **代價講明**：user 自己 `/rename` 的名字同樣不帶【】，也會被視為 client 快取而蓋掉。
+# 這是 user 2026-08-26 選的取捨（自動命名優先），log 每次都記下被蓋掉的值。
+_OURS_RE = re.compile(r"^【(?:任務|討論|收尾)】")
+
+
+def is_ours(title: str) -> bool:
+    """檔尾這一筆 custom-title 是不是我們寫的（含佔位名）。"""
+    if not title:
+        return False
+    return bool(_OURS_RE.match(title)) or ("｜" + _IDLE_MARK) in title
 
 
 _TITLE_NAME_RE = re.compile(r"^【[^】]+】([^｜]+)")
@@ -147,6 +187,37 @@ def compose(kind: str, name: str, stage: str, progress: str) -> str:
     if progress:
         parts.append(progress + "%")
     return "｜".join(parts)[:_MAX_TITLE]
+
+
+def compose_idle(project: str, last: str) -> str:
+    """新視窗還沒有任務時的名字：`專案名｜等待任務｜上一個任務`。
+
+    沒有專案名就回空字串 —— 寧可退回平台標題，也不要一個只叫「等待任務」的東西，
+    那說不出是**哪個專案**在等待，側欄一排長得一模一樣。
+    沒有上一個任務就**省略第三段**、不補空欄，與 `compose()` 對進度的處理一致。
+    """
+    if not project:
+        return ""
+    parts = [project, _IDLE_MARK]
+    if last:
+        parts.append(last)
+    return "｜".join(parts)[:_MAX_TITLE]
+
+
+def project_name(cwd: str, path: str = "") -> str:
+    """佔位名的第一段。取工作目錄的 leaf。
+
+    【核心層】這裡只做字串運算、**不查任何對照表**：核心層不得寫死專案路徑，
+    也不該有一份「哪個資料夾叫什麼中文名」的知識（全域 §6）。
+
+    `cwd` 少數情況拿不到（payload 沒帶），退回 transcript 的父目錄名並剝掉
+    `d--` 那種磁碟機前綴 —— 那是平台自己的專案目錄命名，不是我們定的。
+    """
+    name = os.path.basename(os.path.normpath(cwd)) if cwd else ""
+    if name and name not in (".", os.sep):
+        return name
+    slug = os.path.basename(os.path.dirname(path)) if path else ""
+    return _DRIVE_PREFIX_RE.sub("", slug)
 
 
 def _field(regex, text: str) -> str:
@@ -343,6 +414,43 @@ def _recall(session_id: str) -> str:
         return ""
 
 
+def _project_key(path: str) -> str:
+    """「上一個任務」要照專案分開存。key 用 transcript 的父目錄名（`d--AI-Projects`）
+    —— 那是平台自己的專案分界，與 `session_archive.py` 同一套，不必自己再定義
+    一次「什麼算同一個專案」。"""
+    raw = os.path.basename(os.path.dirname(path)) if path else ""
+    return "".join(c for c in raw if c.isalnum() or c in "-_")[:64]
+
+
+def _remember_last_task(key: str, title: str) -> None:
+    """記下這個專案最近一次的任務名，給下一個新視窗當第三段。
+
+    **只記抽得出分類標記的**：佔位名沒有【】⇒ `previous_name()` 回空 ⇒ 它自己
+    永遠不會被記成「上一個任務」，不必另外設旗標。別人（CLI 回寫／user `/rename`）
+    設的名字同理不記 —— 那些不是任務名，拿來當「上一個任務」會誤導。
+    """
+    name = previous_name(title)
+    if not key or not name:
+        return
+    try:
+        os.makedirs(_STATE_DIR, exist_ok=True)
+        with open(os.path.join(_STATE_DIR, "lasttask.%s.txt" % key), "w",
+                  encoding="utf-8", newline="") as fh:
+            fh.write(name)
+    except Exception:
+        pass
+
+
+def _recall_last_task(key: str) -> str:
+    if not key:
+        return ""
+    try:
+        return open(os.path.join(_STATE_DIR, "lasttask.%s.txt" % key),
+                    encoding="utf-8").read().strip()
+    except Exception:
+        return ""
+
+
 def restore_needed(remembered: str, existing: str) -> bool:
     """PreToolUse 專用：CLI 把名字蓋掉了沒有，要不要補回去。
 
@@ -392,7 +500,8 @@ def _push_cloud(bridge: str, title: str) -> None:
 
 
 def reconcile(declared: str, title: "str | None", existing: str,
-              fresh: str, fresh_dist: int) -> "str | None":
+              fresh: str, fresh_dist: int, idle: str = "",
+              memo: str = "") -> "str | None":
     """決定之後、寫入之前再讀一次檔尾，據此重新判一次；不必寫回 None。
 
     這支在同一次 Stop 裡可能被呼叫兩次（2026-08-26 實測：兩筆 custom-title
@@ -407,14 +516,32 @@ def reconcile(declared: str, title: "str | None", existing: str,
     """
     if fresh_dist < 0:
         return title
-    return decide(declared, fresh, fresh_dist)
+    return decide(declared, fresh, fresh_dist, idle, memo)
 
 
-def decide(declared: str, existing: str, distance: int) -> "str | None":
-    """要寫什麼標題；不必寫回 None。抽出來是為了能單獨測，不必造 transcript。"""
-    target = declared or existing
+def decide(declared: str, existing: str, distance: int,
+           idle: str = "", memo: str = "") -> "str | None":
+    """要寫什麼標題；不必寫回 None。抽出來是為了能單獨測，不必造 transcript。
+
+    優先序（2026-08-26 改）：**宣告 > 補回自己被蓋掉的名字 > 佔位名 > 檔裡既有的**。
+    原本是「宣告 > 既有 > 佔位名」，那假設了「既有＝上一次的結論或 user rename」。
+    這個假設在 client 2.1.237 之後不成立了 —— 它每個 prompt 都把自己的快取名寫回
+    檔尾（見 `is_ours`），於是「既有」十之八九是 client 蓋上來的，讓路等於永遠輸。
+
+    所以檔尾那一筆**不是我們的格式**時（`foreign`），它不再有權留下：
+    有 memo（我們上次決定的名字）就補回去，沒有就給佔位名。
+    """
+    foreign = bool(existing) and not is_ours(existing)
+    if declared:
+        target = declared
+    elif foreign and memo:
+        target = memo                    # 被 client 蓋回去了 → 把自己的名字補回檔尾
+    elif foreign and idle:
+        target = idle                    # 新視窗：/clear 後 client 把舊 tab 名帶了過來
+    else:
+        target = existing or idle
     if not target:
-        return None                      # 這輪沒宣告、檔裡也沒寫過 → 不猜名字
+        return None                      # 這輪沒宣告、檔裡也沒寫過、也沒佔位名 → 不猜
     if target == existing and 0 <= distance < _REWRITE_AFTER:
         return None                      # 同名且還在窗口內 → 不重複寫，避免膨脹
     return target
@@ -461,7 +588,14 @@ def main() -> int:
         declared = (_declared_task([payload.get("last_assistant_message") or ""], prev_title)
                     or _declared_task(iter_turn_assistant_texts(path), prev_title))
         existing, distance = _last_custom_title(path)
-        title = decide(declared, existing, distance)
+        # 佔位名的守門：**只有「我從來沒替這個 session 命名過」時才給**。
+        # 長對話的 custom-title 一旦被推出 _TAIL_SCAN，`existing` 會讀成空 ——
+        # 那時若給佔位名，等於把一則正在做事的對話改名成「等待任務」。
+        # memo 非空就代表命名過，拿它當守門最便宜（本來就已經讀出來了）。
+        idle = ("" if prev_title else
+                compose_idle(project_name(payload.get("cwd") or "", path),
+                             _recall_last_task(_project_key(path))))
+        title = decide(declared, existing, distance, idle, prev_title)
 
         # 競態守門：這支在同一次 Stop 裡可能被呼叫兩次（2026-08-26 實測）。
         # 兩個執行各自讀了檔尾又各自 append，後寫的那個如果沒抓到宣告，
@@ -469,14 +603,20 @@ def main() -> int:
         # 寫入前再讀一次把視窗縮到最小：檔尾若已經變了，用最新值重新判一次。
         if title:
             fresh, fresh_dist = _last_custom_title(path)
-            title = reconcile(declared, title, existing, fresh, fresh_dist)
+            title = reconcile(declared, title, existing, fresh, fresh_dist,
+                              idle, prev_title)
             existing = fresh or existing
 
-        _log("decided=%s declared=%s existing=%s dist=%s"
-             % (title, declared or "-", existing or "-", distance))
+        # `prev` 一起記：佔位名沒出現時，成因只有兩種 —— 守門擋掉（prev 非空）
+        # 或專案名取不到。少了這一欄，兩種在 log 上長得一模一樣。
+        _log("decided=%s declared=%s existing=%s%s dist=%s idle=%s prev=%s"
+             % (title, declared or "-", existing or "-",
+                "(client)" if (existing and not is_ours(existing)) else "",
+                distance, idle or "-", prev_title or "-"))
         if title:
             _append_title(path, session_id, title)
             _remember(session_id, title)
+            _remember_last_task(_project_key(path), title)
             bridge = _bridge_session_id(path)
             if should_push(title, existing, bridge):
                 _push_cloud(bridge, title)

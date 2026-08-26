@@ -185,6 +185,53 @@ case("轉向就改名", "§2：名稱是成本歸因的 key，轉向必須跟著
 case("都沒有就不猜", "沒宣告又沒寫過 → 不亂取名字",
      M.decide("", "", -1), None)
 
+# ── compose_idle／project_name（新視窗佔位名·2026-08-26 user 定）───────────
+_IDLE = "AI-Projects｜等待任務"
+
+case("新視窗三段式", "user 定的格式：專案名｜等待任務｜上一個任務",
+     M.compose_idle("AI-Projects", "三段式命名"), "AI-Projects｜等待任務｜三段式命名")
+case("沒有上一個任務就省略第三段", "與「進度沒寫就不補空欄」一致；不要一排沒有資訊量的｜無",
+     M.compose_idle("AI-Projects", ""), _IDLE)
+case("沒有專案名就不寫", "只叫「等待任務」說不出是哪個專案在等，側欄一排長得一模一樣",
+     M.compose_idle("", "三段式命名"), "")
+case("佔位名不會被記成上一個任務", "它沒有【】⇒ previous_name 抽不出 ⇒ 自己永遠不會被記進去",
+     M.previous_name(M.compose_idle("AI-Projects", "三段式命名")), "")
+
+case("專案名取工作目錄 leaf", "核心層不得寫死專案路徑，只做字串運算",
+     M.project_name(os.path.join("d:", os.sep, "AI-Projects")), "AI-Projects")
+case("拿不到 cwd 退回 transcript 目錄", "payload 沒帶 cwd 時仍要有名字；平台目錄名有 d-- 前綴",
+     M.project_name("", os.path.join("C:", os.sep, "u", ".claude", "projects",
+                                     "d--IT-department", "a.jsonl")),
+     "IT-department")
+
+# ── decide／reconcile 的佔位名分支 ────────────────────────────────────────
+case("新視窗落在佔位名", "沒宣告也沒既有標題時，現在會退回平台自產的英文標題",
+     M.decide("", "", -1, _IDLE), _IDLE)
+case("我們寫過的名字優先於佔位名", "上一輪的任務名不該被「等待任務」蓋掉",
+     M.decide("", "【任務】甲｜Execute", -1, _IDLE), "【任務】甲｜Execute")
+case("client 快取名不敵佔位名", "2026-08-26：client 每個 prompt 回寫快取名，讓路等於永遠輸",
+     M.decide("", "UI / 排版設計 (S)", -1, _IDLE), _IDLE)
+case("被 client 蓋掉就補回 memo", "memo 是我們上次的結論；檔尾不是我們的格式＝被蓋了",
+     M.decide("", "UI / 排版設計 (S)", 100, "", "【任務】甲｜Execute"),
+     "【任務】甲｜Execute")
+case("memo 優先於佔位名", "命名過的對話被蓋掉，要補回原名而不是退成「等待任務」",
+     M.decide("", "主編輯", 100, _IDLE, "【任務】甲｜Execute"), "【任務】甲｜Execute")
+case("宣告仍蓋過 memo", "本輪有新宣告時，補回舊名會讓名字停在上一輪",
+     M.decide("【討論】乙", "主編輯", 100, _IDLE, "【任務】甲｜Execute"), "【討論】乙")
+case("我們的名字在窗口內不重寫", "同名還在 64KB 窗口內就別膨脹檔案",
+     M.decide("", "【任務】甲｜Execute", 100, "", "【任務】甲｜Execute"), None)
+case("is_ours 認得三種分類標記", "只認【】開頭，否則佔位名與 client 快取名分不開",
+     [M.is_ours("【任務】甲"), M.is_ours("【討論】甲"), M.is_ours("【收尾】甲"),
+      M.is_ours("IT-department｜等待任務"), M.is_ours("UI / 排版設計 (S)"),
+      M.is_ours("")],
+     [True, True, True, True, False, False])
+case("宣告優先於佔位名", "任務一命名就該蓋掉佔位名",
+     M.decide("【任務】甲｜Execute", _IDLE, 100, _IDLE), "【任務】甲｜Execute")
+case("佔位名同樣做窗口維持", "被推出 64KB 窗口就悄悄退回 ai-title，佔位名沒有豁免",
+     M.decide("", _IDLE, 50000, _IDLE), _IDLE)
+case("競態重判要帶著佔位名", "reconcile 漏傳 idle，重判那條路徑就退回舊行為（寫不出佔位名）",
+     M.reconcile("", _IDLE, "", "", 100, _IDLE), _IDLE)
+
 
 def _write_transcript(path, decl_text, bridge=None):
     lines = []
@@ -203,9 +250,11 @@ def _write_transcript(path, decl_text, bridge=None):
 _STATE = None  # e2e 進場時指向該次跑的專屬暫存目錄
 
 
-def _run_hook(transcript, session_id="s-1", last_msg=None, event="Stop"):
+def _run_hook(transcript, session_id="s-1", last_msg=None, event="Stop", cwd=None):
     payload = {"hook_event_name": event, "session_id": session_id,
                "transcript_path": transcript}
+    if cwd is not None:
+        payload["cwd"] = cwd
     if last_msg is not None:
         payload["last_assistant_message"] = last_msg
     # 測試一律關掉雲端推送：這份回歸網不該對 api.anthropic.com 發任何請求
@@ -299,6 +348,47 @@ def e2e():
         rc = _run_hook(r, session_id="s-restore", event="PreToolUse")
         results.append(("補完就不再寫", "每次工具呼叫都跑，重複寫會讓檔案膨脹",
                         (rc, len(_titles(r))), (0, 3)))
+
+        # ── 新視窗佔位名（2026-08-26）──────────────────────────────────
+        # 另開一個目錄當「另一個專案」：專案 key 取 transcript 的父目錄名，
+        # 用上面那堆 fixture 的目錄會被它們寫下的「上一個任務」污染。
+        nd = os.path.join(d, "proj-new")
+        os.makedirs(nd, exist_ok=True)
+        cwd = os.path.join("d:", os.sep, "AI-Projects")
+
+        n = os.path.join(nd, "newwin.jsonl")
+        _write_transcript(n, "隨便聊兩句，這一則沒有自我宣告")
+        rc = _run_hook(n, session_id="s-new", cwd=cwd)
+        results.append(("e2e 新視窗寫佔位名", "沒宣告也沒既有標題時會退回平台英文標題",
+                        (rc, _titles(n)), (0, ["AI-Projects｜等待任務"])))
+
+        # 佔位名不准把自己記成「上一個任務」：第二個新視窗還是只有兩段，
+        # 不是「AI-Projects｜等待任務｜AI-Projects｜等待任務」。
+        n1b = os.path.join(nd, "newwin1b.jsonl")
+        _write_transcript(n1b, "第二個新視窗，一樣沒有任務")
+        rc = _run_hook(n1b, session_id="s-new1b", cwd=cwd)
+        results.append(("e2e 佔位名不自我污染", "沒過濾的話下一個視窗會變成四段疊字",
+                        (rc, _titles(n1b)), (0, ["AI-Projects｜等待任務"])))
+
+        # 同一個專案先跑完一件有名字的任務，下一個新視窗要把它帶出來
+        o = os.path.join(nd, "old.jsonl")
+        _write_transcript(o, _DECL)
+        _run_hook(o, session_id="s-old", cwd=cwd)
+        n2 = os.path.join(nd, "newwin2.jsonl")
+        _write_transcript(n2, "又一個新視窗，還沒有任務")
+        rc = _run_hook(n2, session_id="s-new2", cwd=cwd)
+        results.append(("e2e 帶出上一個任務", "跨 session 的紀錄沒寫成功的話這裡只會有兩段",
+                        (rc, _titles(n2)), (0, ["AI-Projects｜等待任務｜修進出庫同步"])))
+
+        # 守門：命名過的 session 即使標題被推出掃描範圍（existing 讀成空），
+        # 也不准寫佔位名 —— 那等於把一則正在做事的對話改名成「等待任務」。
+        g = os.path.join(nd, "guard.jsonl")
+        _write_transcript(g, _DECL)
+        _run_hook(g, session_id="s-guard", cwd=cwd)          # 先讓它被命名一次
+        _write_transcript(g, "後續沒有宣告，且標題已被推出掃描範圍")
+        rc = _run_hook(g, session_id="s-guard", cwd=cwd)
+        results.append(("e2e 命名過就不寫佔位名", "沒守門的話，長對話會被改名成「等待任務」",
+                        (rc, _titles(g)), (0, [])))
 
         # 壞掉的 transcript 不准讓 hook 非零退出
         bad = os.path.join(d, "bad.jsonl")

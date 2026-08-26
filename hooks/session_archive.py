@@ -42,6 +42,9 @@ SessionEnd **不能擋、也不能注入 prompt**（官方：`Shows stderr to us
 
 雲端 session 到不了這裡：那邊跑 Anthropic 隔離 VM，且**根本沒有 `/clear`**。
 
+【核心層】「對話收掉就該離開列表」是協作紀律，與被服務的專案無關 —— 換一個部門、
+換一個 repo 都一樣成立。所以這支不得寫死任何專案路徑（archive／log 相對自身解析）。
+
 失敗一律安靜吞掉並 exit 0：照 hooks/ 慣例，絕不能因為它讓收尾中斷。
 """
 from __future__ import annotations
@@ -49,19 +52,34 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 
+# harness 自己的根（hooks/ 的上一層）。**不寫死磁碟機路徑**：核心層換一台機器、
+# 換一個部門都要成立，而這兩個位置本來就是相對 harness 自身的（全域 §6）。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _ARCHIVE_ROOT = os.environ.get(
     "CLAUDE_SESSION_ARCHIVE_DIR",
-    os.path.join("D:", os.sep, ".ai-harness", "session-archive"),
+    os.path.join(_HARNESS_ROOT, "session-archive"),
 )
 _LOG_PATH = os.environ.get(
     "CLAUDE_SESSION_ARCHIVE_LOG",
-    os.path.join("D:", os.sep, ".ai-harness", "state", "session_archive.log"),
+    os.path.join(_HARNESS_ROOT, "state", "session_archive.log"),
 )
 # 設成 "1" 就只複製不刪原檔（列表照舊會留著那一列）。給「想先觀察幾天」用。
 _KEEP_ORIGINAL = os.environ.get("CLAUDE_SESSION_ARCHIVE_KEEP") == "1"
+# 搬走之後 client 會把檔案**重新建出來**（2026-08-26 實測，7 次封存全中）：
+# 多數是 118 bytes 的空殼（只有一行 bridge-session），但 `bb8d3376` 那次是把整份
+# 9.0MB 寫回去 —— 那一列原封不動回到側邊欄列表，使用者看到的就是「根本沒收乾淨」。
+# 所以刪檔不是終點，得回頭再看幾次。門檻取 1KB：空殼遠低於它，真對話遠高於它。
+_RESIDUE_MAX = 1024
+# 回頭檢查的時間點（秒）。10s 抓 client 當場重建，60s／300s 抓延後那一次。
+# 測試要能把它壓短，否則一個案例就要跑五分鐘。
+_SWEEP_DELAYS = tuple(
+    float(x) for x in (os.environ.get("CLAUDE_SESSION_ARCHIVE_SWEEP_DELAYS")
+                       or "10,60,300").split(",") if x.strip()
+)
 
 
 def _log(msg: str) -> None:
@@ -85,6 +103,60 @@ def _dest_for(path: str, session_id: str) -> str:
     except OSError:
         stamp = time.strftime("%Y%m%d-%H%M%S")
     return os.path.join(_ARCHIVE_ROOT, project, "%s__%s.jsonl" % (stamp, session_id))
+
+
+def sweep(path: str, dest: str, delays=None) -> None:
+    """封存刪檔之後回頭看幾次：client 重建了就再收一次。
+
+    兩種重建各有處置：
+    * **空殼**（≤ `_RESIDUE_MAX`）：只有 bridge-session 那一行，沒有對話 —— 直接刪。
+    * **完整重寫**（> `_RESIDUE_MAX`）：client 記憶體裡那份被整個寫回來了。
+      比封存檔大就先更新封存（它比較完整），再刪原檔。
+
+    順序永遠是「先確保封存那份夠完整，才刪」，與 `main()` 同一個紀律：
+    刪不掉只是列表多一列，封存丟了才是真的沒了。
+    """
+    for delay in (delays if delays is not None else _SWEEP_DELAYS):
+        try:
+            time.sleep(delay)
+            if not os.path.exists(path):
+                continue
+            size = os.path.getsize(path)
+            if size > _RESIDUE_MAX:
+                kept = os.path.getsize(dest) if os.path.exists(dest) else -1
+                if size > kept:
+                    shutil.copy2(path, dest)   # 重生那份比較完整 → 更新封存
+                    _log("sweep 重生 %.1fMB 比封存大(%.1fMB)，已更新封存 %s"
+                         % (size / 1048576.0, max(kept, 0) / 1048576.0,
+                            os.path.basename(dest)))
+                os.remove(path)
+                _log("sweep 清掉 client 完整重生的 %.1fMB %s"
+                     % (size / 1048576.0, os.path.basename(path)[:8]))
+            else:
+                os.remove(path)
+                _log("sweep 清掉 %d bytes 空殼 %s"
+                     % (size, os.path.basename(path)[:8]))
+        except Exception as exc:
+            _log("sweep FAILED %s: %s" % (type(exc).__name__, exc))
+
+
+def _spawn_sweep(path: str, dest: str) -> None:
+    """把 sweep 丟到背景去跑。
+
+    **不能在 hook 裡等**：SessionEnd 是同步的，睡 5 分鐘等於讓 `/clear` 卡住五分鐘。
+    Windows 要 DETACHED_PROCESS，否則子行程跟著 client 的 console 一起被收掉。
+    """
+    try:
+        flags = 0
+        if os.name == "nt":
+            flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+        subprocess.Popen(
+            [sys.executable, os.path.abspath(__file__), "--sweep", path, dest],
+            creationflags=flags, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    except Exception as exc:
+        _log("sweep 起不來（重生的檔會留在列表）%s: %s" % (type(exc).__name__, exc))
 
 
 def main() -> int:
@@ -128,6 +200,7 @@ def main() -> int:
             os.remove(path)
             _log("archived+removed %.1fMB %s -> %s"
                  % (src_size / 1048576.0, session_id[:8], dest))
+            _spawn_sweep(path, dest)      # client 會把檔案重建回來，回頭再收幾次
         except OSError as exc:
             # 刪不掉不是災難：封存已完成，只是列表還會看到那一列。
             _log("archived, 但原檔刪不掉（列表仍會顯示）%s: %s" % (session_id[:8], exc))
@@ -139,4 +212,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # `--sweep <path> <dest>`：背景回收模式，不讀 stdin（見 `_spawn_sweep`）。
+    if len(sys.argv) >= 4 and sys.argv[1] == "--sweep":
+        sweep(sys.argv[2], sys.argv[3])
+        sys.exit(0)
     sys.exit(main())

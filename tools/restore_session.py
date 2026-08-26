@@ -34,9 +34,12 @@ import shutil
 import sys
 import time
 
+# harness 自己的根（tools/ 的上一層）。**不寫死磁碟機路徑**：與
+# `hooks/session_archive.py` 同一套解析，換一台機器、換一個部門都要成立（全域 §6）。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARCHIVE_ROOT = os.environ.get(
     "CLAUDE_SESSION_ARCHIVE_DIR",
-    os.path.join("D:", os.sep, ".ai-harness", "session-archive"),
+    os.path.join(_HARNESS_ROOT, "session-archive"),
 )
 # 測試要能導去暫存目錄，否則跑一次回歸就往真實 projects 塞 fixture
 # （session_title.py 的 log 被 fixture 埋過一次，見該檔註解）。
