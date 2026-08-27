@@ -67,10 +67,17 @@ BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
 ORDER = ["IDX-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "PR-1", "ENC-1",
-         "HTML-1", "UI-1"]
+         "HTML-1", "UI-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
+    "CTX-1": {
+        "badge": "8/28 enforce", "on": "PostToolUse 改 CLAUDE.md／MEMORY.md",
+        "why": "常駐層寫進去之後比基準大一成（或多 800B）就講一次·"
+               "<b>帶棘輪</b>：叫過之後要再長一成才會再叫"
+               "（309 個歷史版本回測：少了棘輪 218 次改動叫 215 次、最長連續 215；"
+               "加了之後 15 次、最長連續 3）",
+    },
     "IDX-1": {
         "badge": "8/27 WARN", "on": "PreToolUse git commit",
         "why": "commit 前攤開整份 staged 清單，並標出這一輪從沒提過的檔"

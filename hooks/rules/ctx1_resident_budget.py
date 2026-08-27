@@ -29,8 +29,32 @@ r"""CTX-1 —— 常駐層檔案寫入後的預算檢查（PostToolUse Write/Edi
 ## 門檻怎麼訂
 
 基準取 `rulefile/bloat_snapshot.json`（`check_bloat.py --write-snapshot` 寫的那份，
-單一真相，不另存一份）。判準是 **max(基準×1.10, 基準+800)**：
+單一真相，不另存一份）。判準是 **max(參考值×1.10, 參考值+800)**：
 比例讓大檔有合理的成長空間，絕對值讓小檔不會因為比例太敏感而亂叫。
+
+## 為什麼要棘輪（第一版沒有，用資料量掉了）
+
+第一版直接拿快照基準比，2026-08-28 用 **309 個歷史版本**回測（IT 規範檔 219 版、
+IT 記憶索引 90 版、全域規範檔 13 版），分兩種情境：
+
+    人每次都去重立基準   IT 規範檔 218 次改動叫 2 次（0.9%）
+    人不重立基準         IT 規範檔 218 次改動叫 **215 次（98.6%）**，最長連續 215
+
+第二種才是真的——常駐層本來就會長，沒有人會每改一次就去重立一次基準。
+根因是**把持續狀態當成瞬間事件在判**：一旦跨線，之後每一次寫入都還是超標。
+BUDGET-1 檔頭講的是同一個病，它的藥是「一天只講一次」；這裡的藥是棘輪
+（記住上次叫的大小，要再長一成才會再叫），因為節流只是讓噪音變稀，
+超標狀態仍然每天叫一次、仍然會被無視。
+
+加了棘輪之後同一份資料重跑：
+
+    IT 規範檔     215 → **15 次（6.9%）**   最長連續 215 → 3
+    IT 記憶索引    85 → **12 次（13.5%）**  最長連續  85 → 1
+    全域規範檔      7 → **2 次（16.7%）**   最長連續   7 → 1
+
+三個月 219 次改動叫 15 次 ≈ 每兩週一次。回測腳本沒有留在 repo 裡
+（一次性分析），要重跑的話：取 `git log --reverse -- <檔>` 每個版本的
+`git cat-file -s`，套 `max(max(base, last_fired)×1.10, +800)` 逐版模擬。
 
 【核心層】「常駐層不該無聲長大」換任何部門都成立；門檻是設定，機制是通用的。
 路徑一律從 payload 推，不寫死任何專案。
@@ -48,6 +72,8 @@ RULE_ID = "CTX-1"
 # rules/ → hooks/ → harness 根。
 _HARNESS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _SNAPSHOT_PATH = os.path.join(_HARNESS, "rulefile", "bloat_snapshot.json")
+# 記「上次為這個檔叫過的大小」。沒有它，超標會從持續狀態變成每次都叫（見檔頭）。
+_STATE_PATH = os.path.join(_HARNESS, "state", "ctx1_state.json")
 
 # 快照的 key 用 \x01 接「專案名」與「檔案標籤」（check_bloat 寫的格式，不是我發明的）。
 _SEP = "\x01"
@@ -71,6 +97,28 @@ def _load_snapshot() -> dict:
             return json.load(fh).get("files", {}) or {}
     except Exception:                                          # noqa: BLE001
         return {}
+
+
+def _load_state() -> dict:
+    try:
+        with open(_STATE_PATH, encoding="utf-8-sig") as fh:
+            return json.load(fh) or {}
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
+def _remember_fired(key: str, size: int) -> None:
+    """記下這次叫的大小。寫失敗只是退回「每次都叫」，不該讓規則整條掛掉。"""
+    try:
+        state = _load_state()
+        state[key] = {"last_fired": size}
+        os.makedirs(os.path.dirname(_STATE_PATH), exist_ok=True)
+        tmp = _STATE_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, _STATE_PATH)
+    except Exception:                                          # noqa: BLE001
+        pass
 
 
 def _candidate_keys(file_path: str, cwd: str) -> list:
@@ -140,10 +188,20 @@ def check(ctx):
         # 快照裡沒有這個檔（新專案、或還沒立過基準）⇒ 沒有可比的東西，閉嘴。
         return allow()
 
-    limit = int(max(base * _GROWTH_RATIO, base + _GROWTH_FLOOR))
+    # 棘輪：比的是「基準」與「上次為這個檔叫過的大小」取大者。
+    # 沒有這一段的話，跨線之後每一次寫入都還是超標 ⇒ 每次都叫。
+    # 實測（309 個歷史版本）：少了它，IT 規範檔 218 次改動叫 215 次、最長連續 215。
+    last_fired = 0
+    row = _load_state().get(key) or {}
+    if isinstance(row.get("last_fired"), int):
+        last_fired = row["last_fired"]
+    ref = max(base, last_fired)
+
+    limit = int(max(ref * _GROWTH_RATIO, ref + _GROWTH_FLOOR))
     if size <= limit:
         return allow()
 
+    _remember_fired(key, size)
     grew = size - base
     pct = (size / base - 1) * 100 if base else 0
     return warn(

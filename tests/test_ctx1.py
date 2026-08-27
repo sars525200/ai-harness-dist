@@ -38,12 +38,24 @@ RULE_PATH = os.path.join(HOOKS, "rules", "ctx1_resident_budget.py")
 _SEP = "\x01"
 
 
-def _load(snapshot_path):
-    """每次拿乾淨模組，並把快照導到暫存區。"""
+_state_seq = [0]
+
+
+def _load(snapshot_path, state_path=None):
+    """每次拿乾淨模組，並把快照與狀態檔都導到暫存區。
+
+    ⚠ 狀態檔一定要導開：這條規則叫過之後會寫檔（棘輪），沒導開的話
+    測試會污染真實的 state\\ctx1_state.json，而且下一次測試會讀到上一次的殘留。
+    """
     spec = importlib.util.spec_from_file_location("ctx1_under_test", RULE_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod._SNAPSHOT_PATH = snapshot_path
+    if state_path is None:
+        _state_seq[0] += 1
+        state_path = os.path.join(os.path.dirname(snapshot_path),
+                                  f"ctx1_state_{_state_seq[0]}.json")
+    mod._STATE_PATH = state_path
     return mod
 
 
@@ -147,6 +159,41 @@ def test_cwd_in_subdirectory(tmpdir):
     _check("cwd 在子目錄仍對得上", mod.check(ctx).decision == WARN)
 
 
+def test_ratchet_suppresses_repeat(tmpdir):
+    """7. 棘輪：叫過一次之後，同一個檔要再長一成才會再叫。
+
+    這是整條規則最容易退化的地方。少了它，超標會從「一次事件」變成「持續狀態」，
+    之後每一次寫入都還是超標 ⇒ 每次都叫 ⇒ 被整條無視。
+    2026-08-28 用 309 個歷史版本回測：沒有棘輪，IT 規範檔 218 次改動叫 215 次。
+    """
+    state = os.path.join(tmpdir, "ratchet_state.json")
+    snap = _write_snapshot(tmpdir, {"proj" + _SEP + "CLAUDE.md": {"bytes": 10_000}})
+
+    mod = _load(snap, state)
+    v1 = mod.check(_ctx(r"D:\proj\CLAUDE.md", "x" * 12_000, cwd=r"D:\proj"))
+    _check("第一次跨線要叫", v1.decision == WARN)
+
+    # 又長了 300 bytes —— 相對基準仍然超標，但相對「上次叫的 12,000」還不夠。
+    mod2 = _load(snap, state)
+    v2 = mod2.check(_ctx(r"D:\proj\CLAUDE.md", "x" * 12_300, cwd=r"D:\proj"))
+    _check("跨線後小幅成長不該再叫", v2.decision == ALLOW, f"實際 {v2.decision}")
+
+    # 再長一成（12,000 → 13,300 以上）才值得再講一次。
+    mod3 = _load(snap, state)
+    v3 = mod3.check(_ctx(r"D:\proj\CLAUDE.md", "x" * 13_500, cwd=r"D:\proj"))
+    _check("又長一成才再叫", v3.decision == WARN, f"實際 {v3.decision}")
+
+
+def test_state_write_failure_is_not_fatal(tmpdir):
+    """7b. 狀態檔寫不進去時只能退回「每次都叫」，不得讓規則整條掛掉。"""
+    snap = _write_snapshot(tmpdir, {"proj" + _SEP + "CLAUDE.md": {"bytes": 10_000}})
+    # 把狀態檔路徑指到一個不可能寫成功的地方（用既有檔案當目錄的一段）。
+    bad = os.path.join(snap, "nope", "state.json")
+    mod = _load(snap, bad)
+    v = mod.check(_ctx(r"D:\proj\CLAUDE.md", "x" * 12_000, cwd=r"D:\proj"))
+    _check("狀態檔寫不進去仍然給得出判定", v.decision == WARN)
+
+
 def main() -> int:
     print("CTX-1 回歸網")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,7 +201,8 @@ def main() -> int:
                    test_silent_when_no_baseline, test_silent_when_snapshot_missing,
                    test_silent_under_limit, test_warns_over_limit,
                    test_small_file_uses_floor, test_global_key_mapping,
-                   test_cwd_in_subdirectory):
+                   test_cwd_in_subdirectory, test_ratchet_suppresses_repeat,
+                   test_state_write_failure_is_not_fatal):
             fn(tmpdir)
     passed = sum(1 for _, ok, _ in _results if ok)
     total = len(_results)
