@@ -77,8 +77,10 @@ case("任務欄寫「待定」不算名字", "§2 只讓規模／修改檔案欄
      "當成名字會一路傳進 _remember_last_task，把整個專案的「上一個任務」"
      "污染成一個沒有資訊的詞（2026-08-27 log 11:01:09 實例）",
      M._clean("待定"), "")
-case("超過 12 字截斷", "§2 硬性 ≤12 字；截短仍勝過退回平台英文標題",
-     M._clean("一二三四五六七八九十十一十二十三"), "一二三四五六七八九十十一")
+case("超過 12 字截斷補省略號", "§2 硬性 ≤12 字；硬切會生出讀不通的名字"
+     "（實例「明文憑證閘門（工作已從盤」括號沒收），補「…」讓人一眼看出是截的。"
+     "11 字 ＋ 「…」＝12，仍守 §2 上限",
+     M._clean("一二三四五六七八九十十一十二十三"), "一二三四五六七八九十十…")
 
 # ── _declared_task ────────────────────────────────────────────────────────
 case("抓得到自我宣告", "主用途：每輪開場那行就是名稱來源",
@@ -234,6 +236,27 @@ case("拿不到 cwd 退回 transcript 目錄", "payload 沒帶 cwd 時仍要有�
      M.project_name("", os.path.join("C:", os.sep, "u", ".claude", "projects",
                                      "d--IT-department", "a.jsonl")),
      "IT-department")
+
+# ── _repo_root：專案邊界用 repo 根認，不是 cwd 的 leaf ─────────────────────
+# 2026-08-27 補測試。這一段程式碼在 repo 裡孤兒放了兩小時（作者的 session 已收工
+# 封存，另外兩則收工都正確判定「不是我的」而沒人認領），期間**零測試覆蓋** ——
+# 既有的兩條 project_name 案例只斷言 fallback，把 _repo_root 整段拿掉也不會紅。
+_RR = tempfile.mkdtemp(prefix="repo_root_")
+_RR_REPO = os.path.join(_RR, "myrepo")
+_RR_SUB = os.path.join(_RR_REPO, "tests", "warn-probe")
+os.makedirs(_RR_SUB)
+open(os.path.join(_RR_REPO, ".git"), "w", encoding="utf-8").write("gitdir: elsewhere")
+
+case("_repo_root 從子目錄往上找得到 repo 根", "session 開得起來的目錄不一定是專案根",
+     M._repo_root(_RR_SUB), _RR_REPO)
+case("_repo_root 認 .git 檔案不只認目錄", "worktree 裡 .git 是檔案，用 isdir 會整個漏掉",
+     os.path.isfile(os.path.join(_RR_REPO, ".git")) and M._repo_root(_RR_REPO), _RR_REPO)
+case("沒有 .git 就回空字串", "回 cwd 會讓呼叫端分不出「找到了」與「找不到」",
+     M._repo_root(_RR), "")
+case("cwd 是子目錄時佔位名取 repo 根", "實機打臉的那條：cwd=…/tests 時側欄出現「tests｜等待任務」",
+     M.project_name(_RR_SUB), "myrepo")
+case("找不到 repo 根就退回 cwd 的 leaf", "不是每個工作目錄都在 repo 裡，那時舊行為仍要成立",
+     M.project_name(os.path.join(_RR, "loose-dir")), "loose-dir")
 
 # ── decide／reconcile 的佔位名分支 ────────────────────────────────────────
 case("新視窗落在佔位名", "沒宣告也沒既有標題時，現在會退回平台自產的英文標題",

@@ -251,16 +251,40 @@ def compose_idle(project: str, last: str) -> str:
     return "｜".join(parts)[:_MAX_TITLE]
 
 
-def project_name(cwd: str, path: str = "") -> str:
-    """佔位名的第一段。取工作目錄的 leaf。
+def _repo_root(start: str) -> str:
+    """從 `start` 往上找第一個帶 `.git` 的目錄；找不到回空字串。
 
-    【核心層】這裡只做字串運算、**不查任何對照表**：核心層不得寫死專案路徑，
-    也不該有一份「哪個資料夾叫什麼中文名」的知識（全域 §6）。
-
-    `cwd` 少數情況拿不到（payload 沒帶），退回 transcript 的父目錄名並剝掉
-    `d--` 那種磁碟機前綴 —— 那是平台自己的專案目錄命名，不是我們定的。
+    **刻意不呼叫 git**：Stop hook 是同步阻塞的，每輪多一個子行程會拖到每一次
+    工作結束（同一個理由讓 `_CLOUD_TIMEOUT` 只給 5 秒）。往上走幾層
+    `os.path.exists` 便宜得多，答案也一樣。`.git` 在 worktree 裡是**檔案**不是
+    目錄，所以用 `exists` 不用 `isdir`。
     """
-    name = os.path.basename(os.path.normpath(cwd)) if cwd else ""
+    d = os.path.abspath(start)
+    while True:
+        if os.path.exists(os.path.join(d, ".git")):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:                   # 走到磁碟機根了
+            return ""
+        d = parent
+
+
+def project_name(cwd: str, path: str = "") -> str:
+    r"""佔位名的第一段：這個工作目錄屬於哪個專案。
+
+    【核心層】不查任何對照表：核心層不得寫死專案路徑，也不該有一份「哪個資料夾
+    叫什麼中文名」的知識（全域 §6）。專案的邊界一律用 repo 根來認。
+
+    ⚠ **不能直接取 `cwd` 的 leaf**（2026-08-27 實機打臉）：session 開得起來的
+    目錄不一定是專案根，log 出現過 `tests｜等待任務｜…` —— 那個 session 的 cwd
+    是 `D:\.ai-harness\tests`。`_lib.py` 的 `RealGitContext` 早就寫過同一句提醒
+    （「cwd 可能是子目錄」），我第一版沒看到。
+    ⚠ **退回 transcript 的父目錄救不了這件事**：平台的專案目錄名是同一套算法，
+    實際存在 `D---ai-harness-tests-warn-probe` 這種目錄。它只是「cwd 拿不到」時
+    的最後手段。
+    """
+    root = _repo_root(cwd) if cwd else ""
+    name = os.path.basename(root or (os.path.normpath(cwd) if cwd else ""))
     if name and name not in (".", os.sep):
         return name
     slug = os.path.basename(os.path.dirname(path)) if path else ""
@@ -281,7 +305,13 @@ def _clean(name: str) -> str:
     name = name.strip().strip("、，,。．.：:；;－-—　")
     if not name or name.startswith(_NOT_A_NAME):
         return ""
-    return name[:_MAX_CHARS]
+    if len(name) > _MAX_CHARS:
+        # 硬切會生出讀不通的名字。2026-08-27 實機實例：「明文憑證閘門（工作已從盤」
+        # （括號沒收）、「Skill 優化 ses」（session 切一半）—— 兩個都看起來像壞掉，
+        # 而不是像被截。補一個省略號讓人一眼看出是截的。總長仍守 §2 的 ≤12 字
+        # （11 字 ＋ 「…」），所以這個改動不會讓任何標題變長。
+        return name[:_MAX_CHARS - 1] + "…"
+    return name
 
 
 def _looks_like_declaration(head: str) -> bool:
