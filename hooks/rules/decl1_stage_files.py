@@ -95,17 +95,46 @@ _CODE_FENCE = re.compile(
 )
 
 
+# 宣告可以分成連續幾行寫（2026-08-27 user 要求：8 個欄位擠一行讀不動）。
+# 判定必須看整段而不是單行 —— 分行寫時「階段」與「修改檔案」天然落在不同行，
+# 逐行檢查會對一個**欄位其實填齊了**的宣告叫「沒帶修改檔案欄」（8/27 實際咬到）。
+# 併進來的相鄰行不會放寬誤報面：收斂仍靠 STAGE 那個封閉集合
+# （Research|Design|Execute|Review|Fix），正文的「階段性成果」照樣匹配不到；
+# 而且整段仍要求至少有一行通過 DECL_LINE 的 40 字錨，錨的語意原封不動。
+_DECL_FIELD = re.compile(r"模式|任務分類|分類|任務|階段|規模|進度|修改檔案|修改摘要")
+_DECL_JOIN = "｜"
+
+
 def _decl_lines(msg: str) -> list:
-    """回這則訊息裡的宣告行（已排除圍欄示範、表格列、行內程式碼與引用規則的句子）。"""
-    out = []
+    """回這則訊息裡的宣告（已排除圍欄示範、表格列、行內程式碼與引用規則的句子）。
+
+    連續的宣告行併成一段回傳；單行宣告是「長度為 1 的段」，行為不變。
+    併行用「｜」接 —— FILES 的 lookahead 把它當欄位邊界，少了它，行尾那一欄
+    的值會把下一行整個吃進去。
+    """
     msg = _CODE_FENCE.sub("", msg or "")
-    for line in DECL_LINE.findall(msg):
-        if _TABLE_ROW.match(line):
+    keep = []
+    for line in msg.splitlines():
+        bare = _INLINE_CODE.sub("", line)
+        ok = (line.strip() and not _TABLE_ROW.match(line)
+              and not _QUOTING.search(bare) and _DECL_FIELD.search(bare))
+        keep.append(line if ok else None)
+    out = []
+    i = 0
+    while i < len(keep):
+        if keep[i] is None:
+            i += 1
             continue
-        bare = _INLINE_CODE.sub("", line)      # 剝掉行內程式碼再判定
-        if _QUOTING.search(bare) or not STAGE.search(bare):
-            continue
-        out.append(line)
+        j = i
+        block = []
+        while j < len(keep) and keep[j] is not None:
+            block.append(keep[j].strip())
+            j += 1
+        joined = _DECL_JOIN.join(block)
+        if (any(DECL_LINE.match(b) for b in block)
+                and STAGE.search(_INLINE_CODE.sub("", joined))):
+            out.append(joined)
+        i = j
     return out
 
 

@@ -103,6 +103,20 @@ def run() -> "tuple[int, list]":
                   "`gen_todos.py` ／ 修改摘要 加欄位**") == "allow")
     check("寫「無」也算填了（規則明訂）",
           verdict("**模式 VERIFY ／ 階段 Review ／ 修改檔案 無（唯讀）**") == "allow")
+
+    # ── 分行宣告（2026-08-27 user 要求：8 個欄位擠一行讀不動）──────────────
+    # 分行寫時「階段」與「修改檔案」天然落在不同行，逐行檢查會對一個**欄位
+    # 其實填齊了**的宣告叫「沒帶修改檔案欄」—— 8/27 換格式當輪就實際咬到。
+    _ML_OK = ("模式 DEV ｜ 任務 回報格式調校 ｜ 任務分類 [devops]\n"
+              "階段 Review ｜ 規模 S ｜ 進度 90%\n"
+              "修改檔案 decl1_stage_files.py ｜ 修改摘要 支援分行宣告")
+    check("分行宣告·欄位齊 → 放行", verdict(_ML_OK) == "allow")
+    check("分行宣告·真的漏修改檔案 → WARN",
+          verdict("模式 DEV ｜ 任務 回報格式調校 ｜ 任務分類 [devops]\n"
+                  "階段 Review ｜ 規模 S ｜ 進度 90%") == "warn")
+    check("分行不可跨空行併（空行後是正文，吃進來會誤放行）",
+          verdict("模式 DEV ｜ 任務 X ｜ 階段 Execute ｜ 規模 S\n\n"
+                  "接下來修改檔案的部分我再想想。") == "warn")
     check("寫「待定」也算填了",
           verdict("**模式 DEV ／ 階段 Research ／ 修改檔案 待定**") == "allow")
     check("沒有宣告的一般訊息 → 放行",

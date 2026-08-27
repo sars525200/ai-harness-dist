@@ -139,6 +139,17 @@ _DECL_WINDOW = 200
 _DECL_FIELDS = ("模式", "任務", "分類", "階段", "規模", "修改檔案", "修改摘要")
 _DECL_MIN_FIELDS = 3
 
+# 宣告可以分成連續幾行寫（2026-08-27 user 要求：8 個欄位擠一行讀不動）。
+# 錨在「模式」是刻意的 —— 宣告永遠以它開頭，而正文散文幾乎不會以「模式 XXX」
+# 起一行。若改成「每行湊 1 個欄位就收」，CLAUDE.md §8 那種「任務工單統一表」
+# 的句子會整段被吃進來，正是 8/26 那條誤報回歸案要防的東西。
+_DECL_START_RE = re.compile(r"^\s*(?:\*\*)?\s*模式\s*[:：]?\s*[A-Za-z_]+")
+# 併行時用「｜」接：_STAGE_RE／_FILES_RE 的字元類把它當終止符。少了它，
+# 行尾那一欄的值會把下一行整個吞進去（`階段 Fix` 會連著吃掉下一行的欄位）。
+_DECL_JOIN = "｜"
+# 續行不能是 markdown 區塊（標題／清單／引用／code fence）—— 那些是正文。
+_NOT_CONT_RE = re.compile(r"^\s*(?:#{1,6}\s|[-*+>]\s|\d+[.)]\s|```)")
+
 # 宣告的其他欄位。標題要組成 `【任務】名稱｜階段｜進度%`，這些是原料。
 # 這些正則刻意不處理換行：解析前會先取宣告那一行（`_decl_line`），
 # 宣告本來就是單行的，先切行比在正則裡排除換行單純得多。
@@ -277,6 +288,33 @@ def _looks_like_declaration(head: str) -> bool:
     return sum(1 for f in _DECL_FIELDS if f in head) >= _DECL_MIN_FIELDS
 
 
+def _decl_text(head: str) -> str:
+    """取出宣告：以「模式」起頭的連續數行併成一段；找不到才退回單行掃描。
+
+    **先併行再退回單行**，順序不能倒過來。分行寫的第一行（`模式｜任務｜分類`）
+    自己就湊得滿 3 個欄位 —— 先跑單行掃描會就地收工，把後面的階段／進度／
+    修改檔案整段漏掉，而且漏得無聲無息（標題照樣組得出來，只是少了兩段）。
+
+    單行宣告走這條路的結果不變：下一行是空行就 break，併出來還是它自己。
+    """
+    lines = head.splitlines()
+    for i, ln in enumerate(lines):
+        if not _DECL_START_RE.match(ln):
+            continue
+        block = [ln.strip()]
+        for nxt in lines[i + 1:]:
+            s = nxt.strip()
+            if not s or _NOT_CONT_RE.match(nxt):
+                break
+            if not any(f in s for f in _DECL_FIELDS):
+                break
+            block.append(s)
+        joined = _DECL_JOIN.join(block)
+        if _looks_like_declaration(joined):
+            return joined
+    return next((ln for ln in lines if _looks_like_declaration(ln)), "")
+
+
 def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
     """從 assistant 文字裡取自我宣告的任務名；沒有回空字串。
 
@@ -293,8 +331,7 @@ def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
         # `declared=-`，與「這輪本來就沒宣告」**長得一模一樣**，看不出壞掉。
         # 改成逐行找「自己就湊得滿欄位數」的那一行：門檻比原本**更嚴**
         # （原本是整段 head 湊滿 3 個欄位，現在要同一行湊滿），誤報只會更少。
-        line = next((ln for ln in head.splitlines()
-                     if _looks_like_declaration(ln)), "")
+        line = _decl_text(head)
         if not line:
             continue
         name = ""

@@ -19,6 +19,13 @@
       "decided_on": "2026-08-22",
       "source": "SKILL_IMPORT_WAYFINDER_PLAN.md §7 / AUDIT_FIX_PLAN_20260822.md 分岔②",
       "repo": "IT-department"
+    },
+    {
+      "skill": "adversarial-review",
+      "value": ".cursor/cli.json",
+      "reason": "來源是**產生物路徑**不是契約：SKILL.md 寫的是「要真的擋，在沙箱放一份 .cursor/cli.json」，那份檔由 tools/build_review_sandbox.py 在**每次審查各自的臨時沙箱**裡寫出（build_review_sandbox.py:123）。repo 裡永遠不會有這個檔 —— 有的話反而是錯的：專案層 cli.json 會把 permissions 套到所有 Cursor 工作階段，而這份設定的用意正是「只影響這一次審查」。⚠ 不填 `repo`：它在**任何** repo 都不會存在，不是本專案的特例。與 _todo 記的是同一個根因 —— 抽取器把指示句裡的檔名當成必要檔案。",
+      "decided_on": "2026-08-27",
+      "source": "L2 紅燈排查；skills/adversarial-review/SKILL.md:99"
     }
   ],
   "_todo": [
