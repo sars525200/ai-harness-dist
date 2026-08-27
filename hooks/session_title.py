@@ -11,16 +11,48 @@
 沒有 SlashCommand 工具，CLI 也沒有對應的非互動子指令（`claude --help` 的
 Commands 只有 agents/auth/mcp/plugin/project 那幾個）。所以只剩「直接寫檔」。
 
-## 生效時機：**要 Reload Window，不是即時**（實測確認，別誤會成壞掉）
+## 生效時機：**按重新整理鈕就看得到，不必 Reload Window**（2026-08-27 訂正歸因）
 
-extension 沒有對 session 檔掛任何 watcher（`watchFile` 六處全是監看 git 分支），
-`ensureSessionLoaded` 還有一層記憶體快取。實測序列：
+extension 沒有對 session 檔掛任何 watcher（`watchFile` 六處全是監看 git 分支）——
+這半是對的。**但「記憶體快取」不是原因**（原本寫在這裡，2026-08-27 查 extension
+2.1.246 推翻）：側邊欄那一列走 `listSessions()` → `fetchSessions()` → `nZ$()`，
+**每次都直接開檔**讀 head 64KB ＋ tail 64KB（`wQ`／`xX` 皆 65536）；
+`ensureSessionLoaded` 的 `customTitles` Map 只餵 transcript 訊息內容、不餵這條路徑。
 
-    寫檔 → 切走再切回 → 名稱不變
-    寫檔 → Developer: Reload Window → 名稱變了 ✅
+真正的原因是**沒人主動發 `list_sessions_request`** —— 不是讀不到新值，是沒去讀。
+8/26 實測到的序列仍然成立，只是解釋錯了：
 
-所以這支的效果是「**下次重載後，Recents 裡找得到正確名字**」。命名的主要用途
-本來就是日後回頭找對話，這個時機足夠；要當下就改名還是只能自己打 `/rename`。
+    寫檔 → 切走再切回 → 名稱不變（切換面板不在觸發清單裡）
+    寫檔 → Developer: Reload Window → 名稱變了 ✅（走 panel_boot）
+
+`webview/index.js` 的八個 entryPoint：`refresh_button`／`sessions_dialog`／
+`sidebar_mount`／`state_sync`／`state_sync_retry`／`connection`／`panel_boot`／`activate`。
+**要當下就看到，按 session 列表的「重新整理」鈕**（`refresh_button`）即可。
+其中 `state_sync` 是自動的：CLI 推來的 state title 與側邊欄不同、而該 session
+**已有 persisted title**（我們寫過就會有）時，webview 不直接覆蓋，而是回頭重讀
+transcript，2 秒後再讀一次。
+
+⚠ 刷新取的是 tail 裡**最後一筆** `customTitle`。client 每個新 prompt 都 append
+自己的快取名，所以刷新若落在 client 回寫之後、本 hook 補寫之前，看到的仍是快取名。
+這不是壞掉，是下一次 `PreToolUse` 就會補回來。
+
+## 不要往 sidecar `custom-title.json` 寫（2026-08-27 對抗式覆核結論）
+
+平台有一條 fallback：tail 64KB 裡找不到 `customTitle` 時，改讀
+`<projects>/<projectDirSlug>/<sessionId>/custom-title.json`。**那個槽位已經被 client
+佔用** —— 實地在 `7569ebcc-…/custom-title.json` 讀到 `{"customTitle":"主編輯"}`，
+而「主編輯」正是 client 的記憶體快取名。hook 寫進去只會被覆寫，長對話標題反而被
+釘死在快取名，比現況更糟。
+
+而且它要解的問題本來就不存在：下一節那個 40KB 重寫機制已經讓 `custom-title` 永遠
+留在窗口內（實測 112 個 >200KB 的 transcript，96 個在 tail 64KB 內命中；16 個 MISS
+有 15 個最後修改時間早於本 hook 上線的 2026-08-26 06:12）。
+
+還有三個附帶的坑，一併記著免得有人再走一次：`session_archive.py` 只 `os.remove`
+transcript、不刪 `<sessionId>/` 目錄（`/clear` 後 sidecar 會殘留 → 舊名復活）；
+Cursor 的 `transcript_path` 是 `agent-transcripts/<sid>/<sid>.jsonl`，
+`dirname + session_id` 會疊成雙層 sid、寫到別套目錄；`decide()` 回 None 時整段跳過
+寫入，sidecar 會停在過期值。
 
 ## 兩個必須照做的實作細節
 
