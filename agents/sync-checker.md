@@ -9,6 +9,10 @@ department: 品管組
 icon: compare
 hooks:
   PreToolUse:
+    - matcher: 'Skill'
+      hooks:
+        - type: command
+          command: 'py -3 "D:\.ai-harness\hooks\agent_hitl_gate.py"'
     - matcher: 'Bash|PowerShell'
       hooks:
         - type: command

@@ -201,10 +201,26 @@ def parse_agents() -> list:
             m = re.search(rf"^{key}:\s*(.+)$", fm, re.MULTILINE)
             return m.group(1).strip() if m else default
 
-        gate = ""
-        gm = re.search(r"command:\s*'([^']+)'", fm)
-        if gm:
-            gate = gm.group(1).rsplit("\\", 1)[-1].rstrip("\"'")
+        # ⚠ **按 matcher 分辨，不要取第一個 command**（2026-08-27）。
+        #   `gate` 欄的語意是「**Bash** 有沒有被收窄」（見 `_gate_chip` 的 docstring），
+        #   而角色可以掛不只一個 agent-scoped hook。原本的 `re.search` 只取第一個 ⇒
+        #   一旦有人在 Bash 那條前面插了別的 matcher（實例：`Skill` 的 HITL 閘門），
+        #   這一欄就會顯示成那一支，而 chip 仍然說「收窄成唯讀」——**欄位與說法對不上，
+        #   而且沒有任何地方會報錯**。
+        gate, gates = "", []
+        _blocks = re.split(r"^    - matcher:", fm, flags=re.M)[1:]
+        for _b in _blocks:
+            _mm = re.match(r"\s*'([^']+)'", _b)
+            if not _mm:
+                continue
+            matcher, blk = _mm.group(1), _b
+            cm = re.search(r"command:\s*'([^']+)'", blk)
+            if not cm:
+                continue
+            leaf = cm.group(1).rsplit("\\", 1)[-1].rstrip("\"'")
+            gates.append(leaf)
+            if re.search(r"Bash|PowerShell", matcher):
+                gate = leaf
         out.append({
             "name": field("name", path.stem),
             # 顯示名（中文）與識別字（英文）分開：識別字是派工要打的字，
@@ -221,6 +237,7 @@ def parse_agents() -> list:
             # 那正是要在畫面上看見的事（留空會跟「配好了」長得一樣）。
             "icon": field("icon", ""),
             "gate": gate,
+            "gates": gates,
             "builtin": False,
             "bodyLines": len([ln for ln in body.splitlines() if ln.strip()]),
             # 正文有沒有指名該呼叫哪幾支 skill（技能層真的接上了沒）。
@@ -659,6 +676,7 @@ def _role_payload(role: dict, hist: dict, running: dict, daily: dict) -> dict:
         # ── ④ 沙箱 ──
         "boundary": _boundary(role),
         "gate": role.get("gate", ""),
+        "gates": role.get("gates", []),
         "tools": role.get("tools", ""),
         "roots": sorted(({"name": k, "calls": v} for k, v in h.get("roots", {}).items()),
                         key=lambda x: -x["calls"]),
@@ -757,6 +775,7 @@ def build_html(agents: list, hist: dict, sess: dict, now: float) -> str:
     for a in agents:
         known.update(_keys_of(a))
     ghosts = [{"name": n, "display": n, "tools": "", "model": "", "desc": "", "gate": "",
+               "gates": [],
                "builtin": True, "external": True, "department": "外援", "icon": "book"}
               for n in sorted(hist) if n not in known and n != "?"]
 

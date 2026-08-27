@@ -8,6 +8,10 @@ department: 稽核組
 icon: clipboard-check
 hooks:
   PreToolUse:
+    - matcher: 'Skill'
+      hooks:
+        - type: command
+          command: 'py -3 "D:\.ai-harness\hooks\agent_hitl_gate.py"'
     - matcher: 'Bash|PowerShell'
       hooks:
         - type: command
