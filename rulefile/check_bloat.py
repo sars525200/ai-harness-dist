@@ -1369,10 +1369,18 @@ def main() -> None:
     only = resolve_cwd_project(targets)
 
     report_overview(targets)
+    # ⚠ **這一行必須無條件印**，不可只掛在「沒有新增膨脹」那條分支上。它是
+    # `only = resolve_cwd_project(...)` 有沒有接上的唯一可見證據；掛在乾淨分支時，
+    # 釘這件事的測試（Round 9 F-3）只有在被量的檔剛好乾淨時才驗得到 ⇒ 它的紅綠取決於
+    # **被守的內容**而不是**接線**。2026-08-27 實際發生：另一條線把全域規則加長，
+    # 閘門正確開火走「這次變大了」分支，那條測試就紅了，而程式一個字都沒壞
+    # （已記錄在 SKILL_EVAL_PLAN.md「別條線·進行中」）。
+    # 判準：**守門的可見性不得依賴被守的東西是不是乾淨的。**
+    print(f"\nexit code 只看 {only}；其他專案見上表。")
     reasons, blind = diff(load_snapshot(), targets, only_project=only)
 
     if not reasons and not blind:
-        print(f"\n沒有新增膨脹（exit code 只看 {only}；其他專案見上表）。")
+        print("沒有新增膨脹。")
         sys.exit(0)
 
     if reasons:
