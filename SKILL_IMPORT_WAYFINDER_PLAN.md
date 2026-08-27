@@ -28,7 +28,7 @@
 | K6 | `agents/harness-auditor.md:62,66`、`agents/project-auditor.md:36,41` | 稽核對象含「各 `*_PLAN.md`」 | 稽核一批凍結的檔，回報「無漂移」 |
 | K7 | `/design-spec` 步驟 5 | 是 `> 狀態：待審核` 的**唯一產生源** | D4 把它移出規劃層 ＝ K1 的握手再也不會被寫 |
 | **K8** | 全域 §1「問題一律走 `AskUserQuestion` 結構化選擇題」＋ 檢查它的 hook | `grilling` 的問法是 `❓ **Q1** … ➡️ 推薦答案` **純文字** | **每問一輪都踩 hook**（本 session 2026-08-21 實際被攔過一次：「這輪尾段把決定權交回 user 但沒呼叫 AskUserQuestion」）。v3 因分岔 4 加勾 grilling 而新增 |
-| **K9** | `feedback-concurrent-sessions-same-repo`（多 session 併行＋外部程序定期 `git add -A`） | `prototype.md:26` 要求「commit it to a **throwaway branch**, out of main」 | skill 自行建分支並 commit，撞多 session 的 index 污染問題。v3 因分岔 4 加勾 prototype 而新增 |
+| **K9** | `feedback-concurrent-sessions-same-repo`（多 session 併行＋外部程序定期 `git add -A`　⚠ **2026-08-27 訂正**：後半查無實據 —— `auto_commit.ps1` 是 14 檔白名單、git hooks 不 stage、scratch commit 全是人為。**K9 的處置不變**，污染者是併行的另一個 session 而非自動掃描） | `prototype.md:26` 要求「commit it to a **throwaway branch**, out of main」 | skill 自行建分支並 commit，撞多 session 的 index 污染問題。v3 因分岔 4 加勾 prototype 而新增 |
 | **K10** | `locator` 角色（唯讀、不寫檔）＋ §0 已有的多個寫檔位置 | `research.md:3,11` 要求「Write the findings to a single Markdown file **in the repo**」 | 職掌相反，且多一個未定義位置的寫檔點。v3 因分岔 4 加勾 research 而新增 |
 | **K11** | `dashboard/gen_workflow_compliance.py:549` 軌跡 key ＝ **(專案, session)** | `wayfinder.md:105` 硬規定「never resolve more than one ticket per session」 | Design 在 charting session、Execute 在另一個 session ⇒ `seq[:i]` 空 ⇒ **每個實作 session 固定吃 `:692`／`:695` 兩個假 warn**；`first_scale != "L"` 的豁免救不了（D4＝S＋M）。該模組 docstring `:29` 自己寫過死法：「假警報三次之後整張表就會被無視」 |
 | **K12** | `/design-spec` **步驟 4「驗證方式守門（沒寫完不得進 Execute）」** | wayfinder map 模板（`:31-53`）與 ticket 模板（`:59-63`）**沒有任何一格放驗證方式**；`:13` 明寫「produce decisions, not deliverables」 | 比 K1 更根本：K1 是「計畫沒被審」，K12 是「計畫裡根本沒有驗證這一節」。全域 §3 把它列為 Design 的必填空缺欄 |
@@ -726,7 +726,7 @@ prototype／research）**全部已裝**。
 | `domain-modeling` | **可用**（實跑過，抓到 V-3 並修好） | 台帳仍判「已過期」——因為它正是 K15 剩那 1 項的所在，**契約紅就不給驗收章**。這個行為是對的，不是 bug |
 | `to-tickets`／`wayfinder` | **我驗不了——工具層硬限制** | `Skill to-tickets cannot be used with Skill tool due to disable-model-invocation. Ask the user to run /to-tickets themselves... Do not replicate this skill's workflow by other means.` 連繞路模擬都被明文禁止。**這比 §1.7 原本寫的「模型叫不動」更硬**：不是不會叫，是被禁止叫 |
 | `grilling` | **未跑** | 需要 user 實際回答一輪才驗得到；且會踩 K8（推高 AWC-1 的 WARN 率） |
-| `prototype` | **未跑（刻意不跑）** | `prototype.md:26` 會自行 commit 到 throwaway branch，而這個 repo 多 session 併行＋外部程序定期 `git add -A`（K9）。不宜在未定處置前貿然跑 |
+| `prototype` | **未跑（刻意不跑）** | `prototype.md:26` 會自行 commit 到 throwaway branch，而這個 repo 多 session 併行＋外部程序定期 `git add -A`（K9）（⚠ **2026-08-27 訂正**：「外部程序定期 `git add -A`」實查**查無實據** —— `auto_commit.ps1` 是 14 檔白名單、git hooks 不 stage、scratch commit 全是人為。**危害不變**，污染者是併行的另一個 session。詳見 `feedback-concurrent-sessions-same-repo`。）。不宜在未定處置前貿然跑 |
 | `research` | ✅ **已跑（2026-08-23 更正，本列原寫「未跑」）** | event log：`2026-08-21T17:39:20` 有 `skill=research`，**跟這份計畫書同一天、寫下這一列之後 21 分鐘**。產出＝`d:/IT-department/.scratch/research/skills-cli-update-semantics.md`（29KB，mtime 17:54），內容就是 `reference-external-skill-import` 那筆記憶的來源（`npx skills update` 會靜默覆寫在地修改）。⇒ **K10「寫檔位置尚未定義」在實務上早就解掉了**（落在 `.scratch/research/`），只是沒人回頭關這一列。要不要把那個位置寫成正式慣例，另議 |
 
 
@@ -756,7 +756,7 @@ prototype／research）**全部已裝**。
 **「LOGIC 還是 UI 分支」的意思，不是 git 分支**。全域取代會過度匹配（CLAUDE.md §8「禁全域 sed 過度匹配」）。
 
 理由一律寫在檔內 `LOCAL EDIT (2026-08-21)` 旁邊（共 7 處標記，含 V-2 的 3 處），**不悄悄改**。
-K9 的根據是 `feedback-concurrent-sessions-same-repo`：多 session 併行＋外部程序定期 `git add -A`，
+K9 的根據是 `feedback-concurrent-sessions-same-repo`：多 session 併行＋外部程序定期 `git add -A`（⚠ **2026-08-27 訂正**：後半查無實據 —— `auto_commit.ps1` 是 14 檔白名單、git hooks 不 stage、scratch commit 全是人為。**危害與處置不變**，污染者是併行的另一個 session。詳見 `feedback-concurrent-sessions-same-repo`），
 skill 自行起的 commit 會蓋在別人 staged 的東西上。
 
 **已驗證改動吃得到（不只是改到檔案）**：實跑 `/research` 時，載入的指令裡**確實出現了那段 LOCAL EDIT**。
@@ -822,4 +822,4 @@ lock 檔測試前後內容一致（已比對）。完整 `capability_checks.py` 
 
 <!-- ADVERSARIAL_REVIEW_HISTORY sha256=ef47173339edf5a379cd8ecb8565aa83c394b805393dbdba1793e7ab290ede0e rounds=2 at=2026-08-21T15:02:01+08:00 -->
 
-<!-- ADVERSARIAL_REVIEW_SKIP sha256=62cba8532a9fd3282356dcc4fd8bbbe76f7b039ab6c9f15349e1786029fde426: 只更新狀態欄——§7 的 /audit 標成已跑、更正一個被證偽的前提、修掉 grilling 那列的斷行 bug、新增 §7.1 誠實標示 audit 產出與本任務的關係、§12 加 v7。未改任何設計決定或分岔。§7 已包進 REVIEW_SCOPE_IGNORE，之後更新進度不需再 SKIP。上方那張是 ADVERSARIAL_REVIEW_HISTORY（2026-08-23 從 PASSED 遷過來·覆核 R2-H4 定案 A）：它記錄「這份文件曾在 8/21 跑過 rounds=2」，hash 對不上正說明內容自那次覆核後變過——那是歷史該有的樣子，不是憑證。原本用 PASSED 寫，規則先查 SKIP 所以照樣放行，但讀檔的人會看到「已通過覆核」而誤以為現在還有效。 -->
+<!-- ADVERSARIAL_REVIEW_SKIP sha256=fa900cf3d0a8c35a1e71d59ad7133dcd9298575df2302f46a66f7ba39127db5e: 只更新狀態欄——**2026-08-27 重簽：K9 成因欄加一句訂正（「外部程序定期 `git add -A`」查無實據），處置與分岔一字未動；與本 marker 原本略過的「更正一個被證偽的前提／未改任何設計決定或分岔」同一類**、§7 的 /audit 標成已跑、更正一個被證偽的前提、修掉 grilling 那列的斷行 bug、新增 §7.1 誠實標示 audit 產出與本任務的關係、§12 加 v7。未改任何設計決定或分岔。§7 已包進 REVIEW_SCOPE_IGNORE，之後更新進度不需再 SKIP。上方那張是 ADVERSARIAL_REVIEW_HISTORY（2026-08-23 從 PASSED 遷過來·覆核 R2-H4 定案 A）：它記錄「這份文件曾在 8/21 跑過 rounds=2」，hash 對不上正說明內容自那次覆核後變過——那是歷史該有的樣子，不是憑證。原本用 PASSED 寫，規則先查 SKIP 所以照樣放行，但讀檔的人會看到「已通過覆核」而誤以為現在還有效。 -->
