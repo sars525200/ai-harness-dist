@@ -24,6 +24,25 @@ r"""掃出文字檔裡的控制字元 —— 看不見、但會把逐字指令�
     py -3 tools/check_control_chars.py                    # 掃目前 repo
     py -3 tools/check_control_chars.py --repo <路徑>      # 掃指定 repo（可重複）
     py -3 tools/check_control_chars.py --self-test        # 先證明它會紅
+
+每日排程（2026-08-28 起）：任務名 ClaudeCode-CheckControlChars，每天 04:30，
+用 pyw.exe 跑所以不閃 console，輸出附加到 state/check_control_chars.log。
+**只報不擋**——擋下來的結果是繞過它不是處理它（判準沿用 check_pending_age）。
+
+⚠ 排程是**這台機器的本機狀態**，不隨 git 走。換機器要重新註冊，否則「每日掃」
+在新機器上靜默不存在而沒有人會知道。註冊指令（PowerShell，路徑照該機器改）：
+
+    $exe = "<python 安裝處>/Launcher/pyw.exe"
+    $arg = '-3 "<harness>/tools/check_control_chars.py" ' +
+           '--repo "<harness>" --repo "<專案 repo>" ' +
+           '--log "<harness>/state/check_control_chars.log"'
+    $a = New-ScheduledTaskAction -Execute $exe -Argument $arg
+    $t = New-ScheduledTaskTrigger -Daily -At 4:30AM
+    Register-ScheduledTask -TaskName "ClaudeCode-CheckControlChars" -Action $a -Trigger $t -Force
+
+註冊完**一定要用 Start-ScheduledTask 實跑一次**再相信它：註冊成功不等於跑得起來。
+本機第一版就因為模組層無條件呼叫 sys.stdout.reconfigure 而會在 pyw 底下炸
+（沒有 console 時 sys.stdout 是 None）。判準＝LastTaskResult 為 0 且 log 有增長。
 """
 from __future__ import annotations
 
@@ -33,8 +52,10 @@ import subprocess
 import sys
 import tempfile
 
-sys.stdout.reconfigure(encoding="utf-8")
-sys.stderr.reconfigure(encoding="utf-8")
+# pyw.exe（排程用，不閃 console）底下 sys.stdout 是 None —— 不能無條件呼叫。
+for _s in (sys.stdout, sys.stderr):
+    if _s is not None:
+        _s.reconfigure(encoding="utf-8")
 
 # 合法出現在文字檔裡的控制字元：TAB(9)／LF(10)／CR(13)。其餘一律視為事故。
 ALLOWED = {9, 10, 13}
@@ -155,7 +176,21 @@ def main() -> int:
                     help="要掃的 repo 路徑，可重複；省略時掃目前工作目錄")
     ap.add_argument("--self-test", action="store_true",
                     help="用人造的髒資料證明這支會紅")
+    ap.add_argument("--log",
+                    help="把輸出附加寫到這個檔。給排程用：有了它就能用 pyw.exe 執行，"
+                         "完全不閃 console 視窗（作法比照 clean_file_history.py）")
     args = ap.parse_args()
+
+    if args.log:
+        import time
+        d = os.path.dirname(args.log)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        fh = open(args.log, "a", encoding="utf-8")
+        fh.write("-" * 10 + " " + time.strftime("%Y-%m-%d %H:%M:%S") + " " + "-" * 10 + chr(10))
+        sys.stdout = fh
+        sys.stderr = fh
+
     if args.self_test:
         return self_test()
     return run(args.repo or [os.getcwd()])
