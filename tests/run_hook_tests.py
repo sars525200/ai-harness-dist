@@ -66,6 +66,14 @@ class FakeGitContext(GitContext):
         self.spec = spec or {}
         self._default_root = default_root
 
+    def staged_paths(self) -> "list[str]":
+        # fixture 沒定義就拋錯（同本類其餘方法）：回空值會讓規則安靜走進
+        # 「沒有東西 staged」的分支，而那正是這條規則要防的假綠燈。
+        v = self.spec.get("staged")
+        if v is None:
+            raise AssertionError("fixture 缺少 git.staged，但規則查詢了 staged_paths")
+        return list(v)
+
     def _need(self, section: str, key: str):
         table = self.spec.get(section)
         if table is None:
@@ -416,6 +424,7 @@ def main() -> int:
         import test_context_health_skill
         import test_js_source_probe
         import test_adversarial_exchange_gate
+        import test_build_review_sandbox
         import test_cursor_payload
         import test_reviewer_config
         import test_session_title
@@ -435,6 +444,10 @@ def main() -> int:
             # （`dc3000d`）起會呼叫落檔交換守門 ⇒ 守門壞掉會直接改變 Stop 的判定，
             # 而 eval 那一層看的是 skill 的契約、掃不到工具的行為。
             (test_adversarial_exchange_gate.run, "落檔交換守門（cursor 覆核）"),
+            # 守的是「隔離設定不會靜默寫錯」。2026-08-27 實測：deny 路徑用正斜線
+            # （官方範例的寫法）**檔案照樣讀得到且不報錯** —— 覆核會照常跑完、
+            # 報告照常回來，只是什麼都沒擋。上面那支守「有沒有交換」，這支守「隔離真不真」。
+            (test_build_review_sandbox.run, "建覆核沙箱（deny 不會靜默寫錯）"),
             (test_reviewer_config.run, "審查者設定（未知值／缺檔不得靜默）"),
             (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
             (test_index_health.run, "常駐層指向與容量（撞上限／死索引／glob 寫錯）"),

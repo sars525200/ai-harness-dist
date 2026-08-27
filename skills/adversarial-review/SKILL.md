@@ -82,7 +82,15 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
    `exit 1`（原生沙箱只支援 macOS/Linux，而且它管的是 command execution，
    不是 Read 工具）。所以沙箱只保證「它不會**自動載入**你的 CLAUDE.md 與 skills」。
    ⇒ **要真的擋，在沙箱放一份 `.cursor/cli.json`**（官方機制；專案層唯一能設的
-   就是 permissions，所以它只影響這一次審查）：
+   就是 permissions，所以它只影響這一次審查）。**用工具建，不要手打**：
+
+   ```text
+   py -3 D:\.ai-harness\tools\build_review_sandbox.py <沙箱名> --file <要審的檔> [--deny <額外要擋的>]
+   ```
+
+   它把下面三個坑一次寫對、檢查父鏈乾不乾淨、印出可直接貼的 agent 命令。
+   手工建也行，但**其中一個坑是靜默的**（下面第一條），寫錯不會有任何徵兆。
+   設定長這樣：
 
    ```json
    {"permissions": {
