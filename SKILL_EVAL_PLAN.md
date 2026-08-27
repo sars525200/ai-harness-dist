@@ -1138,6 +1138,14 @@ harness repo 兩個檔都沒有（實查），所以這條路徑是真的走得�
 > | ↳ 覆蓋率上升後浮出的三筆 | ✅ 兄弟檔解析（`_resolve_path` 加 `home`）／`PLACEHOLDER_RE` 認 `slug`＋孤立 N／連帶讓 `round-N-reply.md` 的 allowlist 條目變死條目**已移除**（機械層是更好的層） | 同上 |
 
 >
+> | skill 型別靠 `###` 推導、4 支判錯（#7·user 定案 frontmatter） | ✅ `type:` 宣告優先於推導，不一致仍以宣告為準並報出來（啟發式永遠有下一個例外，該讓人覆寫而不是一直修它）。26 支已宣告；**推導正確的 3 支外部支＋別人正在改的 2 支刻意不動**。效果：`prototype`／`research` 兩支真 WARN 立刻浮出 | `d563c29` |
+> | HITL 派工四個入口（#12·#13·user 定案角色側擋） | ✅ `hooks/agent_hitl_gate.py` 掛三支帶 `Skill` 的角色。⚠ 原以為 frontmatter 只是裝飾，實查發現 agent-scoped `hooks:` 才是真執行點。名單只收「人的那一側被補掉後產出仍看起來完整」那類（5 支），`prototype` 刻意不收 | `aac9f48` |
+> | 文件 git hash 無人驗（user 定案建工具） | ✅ `tools/check_commit_refs.py`。⚠ **第一版量測是錯的**：12 個「對不上」裡多數根本不是 git hash（session id／sha256／別的 repo）⇒ 分成結構性排除＋豁免清單兩層，豁免只剩 3 筆。抓到 1 個真發現（`HARNESS_PLAN.md:373` 的 AI-Projects init hash，用 238 檔對上真值） | `b06d1b9` |
+> | `SkillViewer` 把 6 支外部標成自建（#14） | ✅ 程式預設＋已存錯值兩處都改；覆寫收窄成「只蓋機器猜的預設」以保護人工分類 | `c29c80b` |
+> | `ec991f55` 那 6 條 path-scoped 落地率（#17） | ✅ **實查 6/6 全部落地**，且兩個 glob 都命中真實檔案（DEV/PROD 兩份都涵蓋）⇒ 審查者的疑慮不成立 | 唯讀查證 |
+> | `to-tickets:61` 缺 marker（#18） | ✅ 補上。**六支裡唯一值得補的**——它的 upstream 物件不在本地，機械層對它是 `n/a`，只剩檔內標記可靠 | `bc97259` |
+> | 契約豁免無 repo 維度（#10） | ✅ 帶 `repo` 的條目只在該 repo 生效。變異證明：改成別的部門 → 豁免失效、L2 真的紅 | `adcc0ed` |
+
 > **⇒ 目前 L1／L1-self／L2／L2-self／L3／L4 首次全 PASS。**
 >
 > **仍未收**：型別欄無交叉檢查（#7）／`check_contracts` 只 glob `references/*.md`（#9）／
