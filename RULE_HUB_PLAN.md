@@ -10,15 +10,12 @@
 
 ## 現況
 
-對話已排除 rulesync；已定全域／專案開分、產生器第一刀只產全域。尚未改檔。
+對話已排除 rulesync；四票已關；產生器第一版＝`tools/gen_rule_hub.py`；backup 無旗標不寫。
 
 <!-- REVIEW_SCOPE_IGNORE_START -->
 
 | 狀態 | 項目 | 說明 |
 |---|---|---|
-| ⏳ 待做 | 票 01 Cursor User Rules 存在哪 | `.scratch/global-rule-hub/issues/01-locate-cursor-user-rules.md` |
-| ⏳ 待做 | 票 02 盤點 global/CLAUDE.md 切格 | `.scratch/global-rule-hub/issues/02-inventory-global-claude.md` |
-| ⏳ 待做 | 票 03 產出檔契約 | `.scratch/global-rule-hub/issues/03-generated-file-contract.md` |
-| ⏳ 待做 | 票 04 同步工具形狀 | `.scratch/global-rule-hub/issues/04-sync-tool-shape.md` |
+| ✅ 已關 | 票 01–04 | 切法見各票 Answer。產生器第一版＝`tools/gen_rule_hub.py`；backup 無旗標不寫 |
 
 <!-- REVIEW_SCOPE_IGNORE_END -->

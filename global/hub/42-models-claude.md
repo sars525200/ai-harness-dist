@@ -1,0 +1,14 @@
+---
+audience: claude
+---
+
+### 4.2 模型選擇
+
+- **預設 Sonnet**（日常維護／UI 打磨／低風險 additive）。
+- **升 Opus 的時機**：任務碰到 **DB／邏輯／硬規則區／多檔協調／根因診斷／架構規劃**
+  → 起頭切 Opus、收尾切回 Sonnet。**錯誤成本高就升，門檻放低、別等「很複雜」。**
+- **Fable 5 燒獨立 Weekly Fable 桶＋2 倍權重**（與 Opus／Sonnet 不同池）。
+- **最貴的模型 <5%**：只留最硬的 audit（全平台安全掃描、大規模資料一致性稽核），日常勿碰。
+- **目標落點 Opus:Sonnet ≈ 4:6**，用 `/usage` 的 model 拆分看（不是 skill 歸因）。
+- **skill frontmatter 的 `model`／`effort` 只准往上調**；往下降一律手動切——
+  覆寫活到下一則 user 訊息、**會整輪蓋掉當次決策且無提示**，釘死＝第二真相。

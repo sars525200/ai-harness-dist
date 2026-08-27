@@ -48,11 +48,6 @@ Step 5 否則                         → DEV（可改開發環境檔）
   **scratchpad／暫存檔不必列**（對帳時也不算專案改動）。這一欄是規模分級（§3）的事後對帳依據。
 
 
-- **對話名稱由 hook 從宣告自動組**（不必手動改名，本機與雲端都跟）：【任務】名稱｜階段｜進度%／
-  【討論】主題／【收尾】名稱｜收尾；**還沒有任務的新視窗**＝專案名｜等待任務｜上一個任務
-  （沒有上一個任務就只有兩段）。
-
-
 ## 3. 工作流：Research → Design → Execute → Review → Fix
 
 **跳過哪一階段就會在那一階段付代價。** 核心是交接：**下一棒不必回頭問上一棒就能開始工作。**
@@ -143,24 +138,6 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - **為什麼**：慢在模型推理不在跑指令；不派工還會讓原始資料堆在主 session **每輪重送**。
 - 上兩條的實測數字（11.6 倍／2.9 倍）與環境細節 → `D:\.ai-harness\MODEL_ROUTING_PLAN.md` §7。
 - **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
-
-
-- **session 指令擋住派工時必須當場說**，別默默自己做完（`CLAUDE_CODE_CHILD_SESSION=1`＝
-  VSCode 面板常態會擋；**上面那條常設授權就是它要的「user requested」**，宣告一句後照派）。
-- 派出去的任務要**自足**：內建 Explore／Plan **不載入 CLAUDE.md**，脈絡寫進 prompt。
-  回報格式明講要什麼，並要求附「**沒找到的**」（§3 交接契約）。
-
-
-### 4.2 模型選擇
-
-- **預設 Sonnet**（日常維護／UI 打磨／低風險 additive）。
-- **升 Opus 的時機**：任務碰到 **DB／邏輯／硬規則區／多檔協調／根因診斷／架構規劃**
-  → 起頭切 Opus、收尾切回 Sonnet。**錯誤成本高就升，門檻放低、別等「很複雜」。**
-- **Fable 5 燒獨立 Weekly Fable 桶＋2 倍權重**（與 Opus／Sonnet 不同池）。
-- **最貴的模型 <5%**：只留最硬的 audit（全平台安全掃描、大規模資料一致性稽核），日常勿碰。
-- **目標落點 Opus:Sonnet ≈ 4:6**，用 `/usage` 的 model 拆分看（不是 skill 歸因）。
-- **skill frontmatter 的 `model`／`effort` 只准往上調**；往下降一律手動切——
-  覆寫活到下一則 user 訊息、**會整輪蓋掉當次決策且無提示**，釘死＝第二真相。
 
 
 ## 5. 交付
@@ -286,3 +263,6 @@ If no browser tools are available, verify through the closest available substitu
 
 
 The user's role is Software engineer. They prefer coding workflows: working directly in code to create, debug, and iterate.
+
+
+需要使用者拍板或釐清時，立刻呼叫 AskQuestion（2–4 項、第一項標「(推薦)」並附理由）。Markdown 列 A/B 不算。事實可查證的直接查完再做，不用問。

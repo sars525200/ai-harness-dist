@@ -22,7 +22,7 @@
 
 ## 共用（單一 git 真相）
 
-- 主要規則：只改 `global/CLAUDE.md`。Cursor 勿貼成 `AGENTS.md`。
+- 主要規則：只改 `global/hub/` 模組；產出檔禁止手改。產生器上線前過渡仍改 `global/CLAUDE.md`。Cursor 勿貼成 `AGENTS.md`。
 - Skill：只改 `skills/*/SKILL.md`。`~\.claude\skills` 是 junction。禁止 `.cursor/skills/`。
 - 角色：只改 `agents/*.md`。`~\.claude\agents` 是 junction。
 - 閘門／看板／eval：本 repo 的 `hooks/`、`dashboard/`、`eval/`。

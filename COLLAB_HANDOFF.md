@@ -70,7 +70,7 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 
 **只改這一側（單一 git 真相）**
 
-- 主要規則：`global/CLAUDE.md`（再同步到 `~\.claude\CLAUDE.md`；檔案無法 junction，用 `tools/backup_global_config.py` 這類複製＋漂移偵測，不要發明第二份本文）
+- 主要規則：只改 `global/hub/` 模組；產出檔 `global/CLAUDE.md` 與 `global/CURSOR_USER_RULES.md` 禁止手改（產生器寫出；前者再同步到 `~\.claude\CLAUDE.md`）。產生器尚未上線前，過渡手改點仍是 `global/CLAUDE.md`。`backup_global_config.py` 管 live↔產出漂移，**不是**產生器 `--check`；無旗標不寫檔；`--restore`＝repo→live、`--backup`＝live→repo。不要發明第二份本文
 - Skill：`skills/*/SKILL.md`
 - 角色：`agents/*.md`
 - 閘門／看板／eval：`hooks/`、`dashboard/`、`eval/`
@@ -138,7 +138,7 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
    ⇒ **用 `--keep` 綁自己改動的字面，不要用 `--drop` 排除別人的**：
    `--keep` 的失效方向是「少留了自己的東西」（commit 少一塊，看得出來）；
    `--drop` 的失效方向是「多留了別人的半個改動」（檔案壞掉，而且訊號是綠的）。
-3. 改 skill／角色／`global/CLAUDE.md` 等於改 Claude **和** Cursor 的執行期——先 peek，再動。
+3. 改 skill／角色／模組（產出檔禁止手改；產生器上線前過渡仍是 `global/CLAUDE.md`）等於改 Claude **和** Cursor 的執行期——先 peek，再動。
 0. **開工第一件事：在 `COLLAB_NOW.md` 加一列**（誰／開始時間／在做什麼／會碰哪些檔），
    動共用檔**之前**就寫，不是動完才寫。收工或換題時**把自己那列刪掉**。
    它**不進版控**（`.gitignore`）——兩邊會同時寫，進版控就變成新的同檔污染源。

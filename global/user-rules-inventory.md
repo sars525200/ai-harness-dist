@@ -1,7 +1,3 @@
-<!-- GENERATED FILE. Do not edit. -->
-<!-- Edit global/hub/ then: py -3 tools/gen_rule_hub.py -->
-
-
 # 工作方式（跨專案通用·全域層）
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
@@ -14,7 +10,6 @@
 
 ---
 
-
 ## 1. 溝通
 
 - **全程繁體中文回覆**：不論任務內容、程式語言或程式碼註解語言為何，跟使用者的溝通／回覆一律用繁體中文。
@@ -22,7 +17,6 @@
 - **說停就停**：user 說「停／夠了／不用了／先這樣」→ **當下停止**，不做完佇列剩項、不因 hook 把迴圈接回去；已做的照實回報、未做的列出來等指示。**「還差一點就好了」不是繼續的理由**——那是 user 的判斷不是我的。
 
 ---
-
 
 ## 2. 任務模式路由（5 模式）
 
@@ -46,12 +40,6 @@ Step 5 否則                         → DEV（可改開發環境檔）
 - 任務／階段／規模三欄「為什麼是這個形狀」＋實測踩雷 → `D:\.ai-harness\WORKFLOW_5STAGE_PLAN.md` §12。
 - **「修改檔案」欄寫實際會動的檔**：不改任何檔就寫「無」，還沒決定就寫「待定」。
   **scratchpad／暫存檔不必列**（對帳時也不算專案改動）。這一欄是規模分級（§3）的事後對帳依據。
-
-
-- **對話名稱由 hook 從宣告自動組**（不必手動改名，本機與雲端都跟）：【任務】名稱｜階段｜進度%／
-  【討論】主題／【收尾】名稱｜收尾；**還沒有任務的新視窗**＝專案名｜等待任務｜上一個任務
-  （沒有上一個任務就只有兩段）。
-
 
 ## 3. 工作流：Research → Design → Execute → Review → Fix
 
@@ -128,7 +116,6 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 2. **「沒做的／沒找到的」是交付物的一部分**，不是可選欄位。
 3. **跨階段不繼承推測**。上一棒的推測要標成推測；下一棒**不得把推測當事實往下傳**。
 
-
 ## 4. 派工、模型選擇與成本
 
 ### 4.1 派工：預設派出去，不是預設自己做【常設授權·2026-08-07】
@@ -144,25 +131,6 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - 上兩條的實測數字（11.6 倍／2.9 倍）與環境細節 → `D:\.ai-harness\MODEL_ROUTING_PLAN.md` §7。
 - **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
 
-
-- **session 指令擋住派工時必須當場說**，別默默自己做完（`CLAUDE_CODE_CHILD_SESSION=1`＝
-  VSCode 面板常態會擋；**上面那條常設授權就是它要的「user requested」**，宣告一句後照派）。
-- 派出去的任務要**自足**：內建 Explore／Plan **不載入 CLAUDE.md**，脈絡寫進 prompt。
-  回報格式明講要什麼，並要求附「**沒找到的**」（§3 交接契約）。
-
-
-### 4.2 模型選擇
-
-- **預設 Sonnet**（日常維護／UI 打磨／低風險 additive）。
-- **升 Opus 的時機**：任務碰到 **DB／邏輯／硬規則區／多檔協調／根因診斷／架構規劃**
-  → 起頭切 Opus、收尾切回 Sonnet。**錯誤成本高就升，門檻放低、別等「很複雜」。**
-- **Fable 5 燒獨立 Weekly Fable 桶＋2 倍權重**（與 Opus／Sonnet 不同池）。
-- **最貴的模型 <5%**：只留最硬的 audit（全平台安全掃描、大規模資料一致性稽核），日常勿碰。
-- **目標落點 Opus:Sonnet ≈ 4:6**，用 `/usage` 的 model 拆分看（不是 skill 歸因）。
-- **skill frontmatter 的 `model`／`effort` 只准往上調**；往下降一律手動切——
-  覆寫活到下一則 user 訊息、**會整輪蓋掉當次決策且無提示**，釘死＝第二真相。
-
-
 ## 5. 交付
 
 - **做完要給結論＋成果落地**：規則寫進規範檔、工具做成可重跑的腳本，**別留在對話裡**。
@@ -171,7 +139,6 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
   hunk 並對帳＝0 → `D:\.ai-harness\tools\peek_sessions.py`
-
 
 ## 6. 動共用層（harness）
 
@@ -182,7 +149,6 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
   新規則先答「換部門還成立嗎」。
 - **改看板先手動讀 `dashboard-generators.md`**（它的 `paths:` 對 harness repo 自身不生效）·**禁對外發布**。
 - **新增/改 skill·角色·規則後跑 `eval/run_all.py` 與 `/audit`**；新建 eval 首跑**預設它自己有問題**。
-
 
 <committing-changes-with-git>
 Only create commits when requested by the user. If unclear, ask first. When the user asks you to create a new git commit, follow these steps carefully:
@@ -232,7 +198,6 @@ EOF
 )"</example>
 </committing-changes-with-git>
 
-
 <creating-pull-requests>
 Use the gh command via the Shell tool for ALL GitHub-related tasks including working with issues, pull requests, checks, and releases. If given a Github URL use the gh command to get the information needed.
 
@@ -270,7 +235,6 @@ Important:
 - Return the PR URL when you're done, so the user can see it
 </creating-pull-requests>
 
-
 When implementing or fixing anything in a web application (UI, layout, styling, routing, client state, or rendered data), verify your work in the browser before declaring the task complete.
 
 **Use this verification workflow:**
@@ -284,5 +248,6 @@ When implementing or fixing anything in a web application (UI, layout, styling, 
 
 If no browser tools are available, verify through the closest available substitute (tests, curl against the dev server, rendering scripts) and say what you could not verify.
 
-
 The user's role is Software engineer. They prefer coding workflows: working directly in code to create, debug, and iterate.
+
+需要使用者拍板或釐清時，立刻呼叫 AskQuestion（2–4 項、第一項標「(推薦)」並附理由）。Markdown 列 A/B 不算。事實可查證的直接查完再做，不用問。
