@@ -288,6 +288,25 @@ def self_test() -> int:
         print("  兄弟檔解析 SKILL.md → " + ("PASS" if _ok else "**FAIL** 構不到同 bundle 的檔"))
         if not _ok:
             fails += 1
+    # 豁免的 repo 維度（2026-08-27）
+    # **重點是第二案**：帶了別的 repo 的條目**不得**在這裡生效。
+    #   沒有這一條，共用層的豁免會在所有部門通用，而它的理由往往是
+    #   「本 repo 是 …」—— 那在別的部門根本不成立。
+    _cur = os.path.basename(os.path.normpath(PROJECT_ROOT)).lower()
+    for _repo, _want, _label in [
+        (None, True, "沒填 repo → 全域生效"),
+        (_cur, True, "repo 等於現任專案 → 生效"),
+        ("definitely-not-this-repo", False, "repo 是別的部門 → **不得生效**"),
+    ]:
+        _e = {"skill": "x", "value": "y"}
+        if _repo is not None:
+            _e["repo"] = _repo
+        _scope = (_e.get("repo") or "").strip().lower()
+        _applies = (not _scope) or _scope == _cur
+        _ok = _applies == _want
+        print(f"  豁免 repo 維度 {_label:<26} → " + ("PASS" if _ok else "**FAIL** 作用域判錯"))
+        if not _ok:
+            fails += 1
     print()
     print(f"  self-test：{'通過，全綠可信' if not fails else '未通過，本次結果不可信'}")
     return fails
@@ -316,8 +335,20 @@ def _load_allowlist() -> dict:
         with open(os.path.join(here, "contract_allowlist.json"),
                   encoding="utf-8-sig") as fh:
             data = json.load(fh)
-        return {(e["skill"], e["value"]): e.get("reason", "（未寫理由）")
-                for e in data.get("entries", [])}
+        # ⚠ **repo 維度**（2026-08-27 補）：`SEARCH_BASES` 第一個是 `PROJECT_ROOT`
+        #   ⇒ **共用層 skill 寫的路徑一律先對「現任專案」解析**，共用層的豁免
+        #   因此天生是專案作用域。實例：`CONTEXT-MAP.md` 的豁免理由是
+        #   「**本 repo** 是 single-context」——換一個部門若真是 multi-context，
+        #   L2 會**因為一筆為別的 repo 下的永久豁免而保持沉默**。
+        #   ⇒ 帶 `repo` 的條目只在該 repo 生效；沒帶的視為全域（相容既有寫法）。
+        cur = os.path.basename(os.path.normpath(PROJECT_ROOT)).lower()
+        out = {}
+        for e in data.get("entries", []):
+            scope = (e.get("repo") or "").strip().lower()
+            if scope and scope != cur:
+                continue
+            out[(e["skill"], e["value"])] = e.get("reason", "（未寫理由）")
+        return out
     except Exception:
         return {}
 

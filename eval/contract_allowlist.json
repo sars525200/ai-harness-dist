@@ -5,15 +5,20 @@
     "SKILL.md 都不會紅，L2 對「skill 指向不存在的 skill」這個最常見的失效永久失明。",
     "每一筆必須有 reason，而且 reason 要說出「為什麼它永遠不會存在」，",
     "不是「它現在不存在」——後者是待修，前者才是豁免。",
-    "被豁免的項目在報表獨立列出，不靜默吞掉；exit code 不受影響。"
+    "被豁免的項目在報表獨立列出，不靜默吞掉；exit code 不受影響。",
+    "⚠ 選用欄位 `repo`：只在該 repo 生效（比對 PROJECT_ROOT 的目錄名，不分大小寫）。",
+    "  SEARCH_BASES 第一個是 PROJECT_ROOT ⇒ 共用層 skill 的路徑一律先對現任專案解析，",
+    "  所以共用層的豁免天生是專案作用域。理由裡出現「本 repo」就一定要填 repo，",
+    "  否則換一個部門會因為一筆為別的 repo 下的永久豁免而保持沉默。沒填＝全域。"
   ],
   "entries": [
     {
       "skill": "domain-modeling",
       "value": "CONTEXT-MAP.md",
-      "reason": "來源是**條件式引用**不是契約：SKILL.md 與 CONTEXT-FORMAT.md 都寫 'If a CONTEXT-MAP.md exists at the root, the repo has multiple contexts'。本 repo 是 single-context（無 pnpm-workspace.yaml／package.json／packages/*），而 docs/agents/domain.md 明文寫「沒有 CONTEXT-MAP.md，也不會有…看到 skill 提 CONTEXT-MAP.md 一律當它不存在，不要建、也不要回報缺少它」。",
+      "reason": "來源是**條件式引用**不是契約：SKILL.md 與 CONTEXT-FORMAT.md 都寫 'If a CONTEXT-MAP.md exists at the root, the repo has multiple contexts'。本 repo 是 single-context（無 pnpm-workspace.yaml／package.json／packages/*），而 docs/agents/domain.md 明文寫「沒有 CONTEXT-MAP.md，也不會有…看到 skill 提 CONTEXT-MAP.md 一律當它不存在，不要建、也不要回報缺少它」。 ⚠ **本筆只對 IT-department 成立**（理由逐字寫「本 repo 是 single-context」）⇒ 已加 `repo` 欄，換一個 multi-context 的部門這筆不生效、L2 會照常紅。",
       "decided_on": "2026-08-22",
-      "source": "SKILL_IMPORT_WAYFINDER_PLAN.md §7 / AUDIT_FIX_PLAN_20260822.md 分岔②"
+      "source": "SKILL_IMPORT_WAYFINDER_PLAN.md §7 / AUDIT_FIX_PLAN_20260822.md 分岔②",
+      "repo": "IT-department"
     }
   ],
   "_todo": [
