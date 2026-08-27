@@ -1,0 +1,31 @@
+{
+  "_why": [
+    "`tools/check_commit_refs.py` 的豁免清單。每一筆是一個 hash 值。",
+    "reason 要說出「**為什麼那個物件永遠不會在本地**」，不是「它現在找不到」——",
+    "後者是待修，前者才是豁免。（判準沿用 eval/contract_allowlist.json 的收錄標準。）",
+    "⚠ 這裡**不收「根本不是 git hash」那類**（session id、sha256 摘要）——",
+    "那是偵測器的事，已由 CONTEXT_SKIP 結構性排除。把它們塞進來會讓清單膨脹到沒人看，",
+    "而沒人看的清單等於沒有清單。",
+    "被豁免的項目在報表獨立列出、不靜默吞掉。"
+  ],
+  "entries": [
+    {
+      "value": "e41d92e171f074a2b6887d8f6faca4a15c83d1ca",
+      "where": "skills/_meta/PROVENANCE.md:19",
+      "reason": "`prototype` 的 **upstream** subtree（mattpocock/skills）。那是上游 repo 的物件 —— 本地從來沒有 clone 過上游、只 copy 過內容 ⇒ **永遠不會在本地**。`tools/local_edits.py` 已把「這一支只能對匯入 commit、不能對真 upstream」明記在產出的表裡。",
+      "decided_on": "2026-08-27"
+    },
+    {
+      "value": "0a6796c5667e95ed2301ba7381c123b4acb2ae1a",
+      "where": "skills/_meta/PROVENANCE.md:20",
+      "reason": "`research` 的 **upstream** subtree（mattpocock/skills）。那是上游 repo 的物件 —— 本地從來沒有 clone 過上游、只 copy 過內容 ⇒ **永遠不會在本地**。`tools/local_edits.py` 已把「這一支只能對匯入 commit、不能對真 upstream」明記在產出的表裡。",
+      "decided_on": "2026-08-27"
+    },
+    {
+      "value": "b32c94e5a51c24ee9c41fcb7fe9ea9fff9af6369",
+      "where": "skills/_meta/PROVENANCE.md:21",
+      "reason": "`to-tickets` 的 **upstream** subtree（mattpocock/skills）。那是上游 repo 的物件 —— 本地從來沒有 clone 過上游、只 copy 過內容 ⇒ **永遠不會在本地**。`tools/local_edits.py` 已把「這一支只能對匯入 commit、不能對真 upstream」明記在產出的表裡。",
+      "decided_on": "2026-08-27"
+    }
+  ]
+}

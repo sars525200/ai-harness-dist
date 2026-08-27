@@ -370,7 +370,7 @@ state：append-only、session-scoped、24 小時過期清理。
 | **v4 改版（D11–D14 + §-1 實測 + DB-1 重寫）** | ✅ 第三輪審查＋實測 |
 | **§-1 前提實測**（gitattributes／vm ref／quotepath／`?v=`） | ✅ 2026-07-28 全部指令實跑 |
 | **D12 renormalize** | ✅ 主 repo `8d5c2389`（87,128 行）＋ SOP `5c677945`；I6／A1／DB-1 step6 三條規則廢止 |
-| 附-A AI-Projects git init | ✅ `69b7141` — 238 檔 / 1.74MB，2,963MB payload 排除 |
+| 附-A AI-Projects git init | ✅ `33b3db2` — 238 檔 / 1.74MB，2,963MB payload 排除 |
 | Step 0 schema spike | ✅ 四發現見 §-0.5；settings SHA256 驗證完全復原 |
 | 共用層自身 git init | ✅ `bcfcb9b`（含預防式 `.gitattributes`，不重蹈覆轍） |
 | `contract.py`（規則介面 + git 抽象） | ✅ git 存取抽象化，DB-1 才可被 fixture 測 |
