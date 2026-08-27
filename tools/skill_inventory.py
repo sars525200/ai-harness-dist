@@ -44,15 +44,37 @@ CONFIG_PATH = HARNESS_ROOT / "harness.config.json"
 DOCS_URL = "https://code.claude.com/docs/en/commands.md"
 UA = {"User-Agent": "Mozilla/5.0 (harness skill_inventory)"}
 
+# ⚠ **「自建」是一個宣稱，不是位置**（2026-08-27 訂正）。原本只看 origin ⇒
+#   六支從 mattpocock/skills 匯入的外部 skill 全被標成「全域自建」，與
+#   `skills/_meta/PROVENANCE.md` 明確分開的「外部 6 支／本地自建 8 支」直接矛盾。
+#   影響不只好看：標成自建的東西，沒有人會想到它會被 `npx skills update` 覆寫。
 DEFAULT_CATEGORY = {
     "platform": "平台內建",
     "global": "全域自建",
     "project": "專案自建",
 }
+EXTERNAL_CATEGORY = "全域·外部匯入"
+
+
+def external_skills() -> set:
+    """manifest 裡 `upstream` 非 null 的就是外部匯入。
+
+    真相取 manifest 而不是 PROVENANCE：前者是機器讀的、`tools/skill_manifest.py`
+    每次都在對，後者是給人看的表。兩者不一致時 manifest 會先叫。
+    """
+    try:
+        with open(HARNESS_ROOT / "skills" / "_meta" / "manifest.json",
+                  encoding="utf-8") as fh:
+            return {k for k, v in json.load(fh)["skills"].items() if v.get("upstream")}
+    except Exception:
+        return set()
 
 
 class InventoryError(RuntimeError):
     pass
+
+
+_EXTERNAL = external_skills()
 
 
 def read_frontmatter(path: Path) -> dict:
@@ -173,7 +195,17 @@ def build(doc: dict, project: Path) -> list[dict]:
         item = merged[name]
         old = old_by_name.get(name, {})
         # 分類是人的判斷：舊值優先保留，沒有才按 origin 給預設
-        item["category"] = old.get("category") or DEFAULT_CATEGORY[item["origin"]]
+        # 外部匯入優先於舊值：舊值可能是「全域自建」那個錯的預設留下來的，
+        # 而那不是人手動分過的類，是機器猜錯的（見 DEFAULT_CATEGORY 上方）。
+        _old_cat = old.get("category")
+        # ⚠ **只蓋機器猜的那個值，不蓋人分過的類**：`:16` 明文「舊有的保留原值」，
+        #   那條是為了保護人工分類。但「全域自建」不是人分的，是壞掉的預設留下來的
+        #   ⇒ 只有當舊值正好等於某個 DEFAULT_CATEGORY 時才覆寫。
+        if item["name"] in _EXTERNAL and (
+                not _old_cat or _old_cat in DEFAULT_CATEGORY.values()):
+            item["category"] = EXTERNAL_CATEGORY
+        else:
+            item["category"] = old.get("category") or DEFAULT_CATEGORY[item["origin"]]
         # 自建 skill 不在基準裡（基準只存平台內建），所以 modes 對它們不適用。
         # 給 null 而不是空陣列，免得被讀成「兩種模式都看不到它」。
         item["modes"] = seen_in.get(name, []) if item["origin"] == "platform" else None

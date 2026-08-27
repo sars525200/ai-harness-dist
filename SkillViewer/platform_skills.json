@@ -223,7 +223,7 @@
       "description": "Build and sharpen a project's domain model. Use when discussing codebase terminology, writing or editing a CONTEXT.md, or recording or editing an ADR.",
       "origin": "global",
       "userOnly": false,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     },
@@ -263,7 +263,7 @@
       "description": "Grill the user relentlessly about a plan, decision, or idea. Use when the user wants to stress-test their thinking, or uses any 'grill' trigger phrases.",
       "origin": "global",
       "userOnly": false,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     },
@@ -329,7 +329,7 @@
       "description": "Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like.",
       "origin": "global",
       "userOnly": false,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     },
@@ -338,7 +338,7 @@
       "description": "Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading legwork delegated to a background agent.",
       "origin": "global",
       "userOnly": false,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     },
@@ -438,7 +438,7 @@
       "description": "Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).",
       "origin": "global",
       "userOnly": true,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     },
@@ -506,7 +506,7 @@
       "description": "Plan a huge chunk of work (more than one agent session can hold) as a shared map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.",
       "origin": "global",
       "userOnly": true,
-      "category": "全域自建",
+      "category": "全域·外部匯入",
       "modes": null,
       "presentLocally": true
     }
