@@ -118,7 +118,17 @@ def run() -> tuple[int, list]:
     real_u = (HARNESS / "global" / "CURSOR_USER_RULES.md").read_text(encoding="utf-8")
     check("真檔：AskQuestion 句只在 Cursor 產出", "立刻呼叫 AskQuestion" in real_u and "立刻呼叫 AskQuestion" not in real_c)
     check("真檔：CHILD_SESSION 只在 Claude 產出", "CLAUDE_CODE_CHILD_SESSION" in real_c and "CLAUDE_CODE_CHILD_SESSION" not in real_u)
-    check("真檔：task-naming 不進產出", "task-naming.mdc" not in real_c and "task-naming.mdc" not in real_u)
+    # 票 02 拍板「task-naming 搬走」，防的是規則**本文**在兩處各留一份；
+    # 2026-08-27 `5b1dfa6` 補回的是**一行指標**，不是本文 —— 指標拿掉，
+    # .cursor/rules/task-naming.mdc 就成了沒人指得到的孤兒檔（它是對話命名
+    # 判定與踩雷的唯一出處）。原本那條把兩者當同一件事，於是重產當天轉紅。
+    # ⇒ 判準拆成兩條：本文不得進任一份產出；指標只進 Claude 產出
+    #   （Cursor 側靠 .cursor/rules 的 alwaysApply 自己載得到，不需要指標）。
+    _tn_body = ("rename_chat", "cursor-app-control", "判定順序不能換")
+    _tn_leak = [n for n in _tn_body if n in real_c or n in real_u]
+    check("真檔：task-naming 本文不進兩份產出", not _tn_leak, str(_tn_leak))
+    check("真檔：task-naming 指標只在 Claude 產出",
+          "task-naming.mdc" in real_c and "task-naming.mdc" not in real_u)
 
     return passed, failed
 
