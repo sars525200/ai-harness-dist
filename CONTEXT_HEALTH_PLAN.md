@@ -2,8 +2,9 @@
 
 > 狀態：待審核
 >
-> 主題：**always-loaded 檔案的跨專案健檢機制**——每次收工自動量、產出該專案專屬的
-> 瘦身建議、並且**下一次收工比對上次壓縮的效果**，讓它自己疊代。
+> 主題：**always-loaded 檔案的跨專案健檢機制**——全程手動 `/context-health` 量測、
+> 產出該專案專屬的瘦身建議、並且用時序比對上次壓縮的效果。
+> ~~每次收工自動量~~已於 **2026-08-23** 撤掛載（含 IT；`/shougong` 不做健檢）。
 >
 > **與既有計畫書的分工**（新建的理由）：`IT-DEPARTMENT_CLAUDEMD_PLAN.md` 管「IT-department
 > 那一份檔的內容該放哪一層」，是**一次性的內容決策記錄**（多數項目已 ✅ 執行完）；
@@ -68,9 +69,10 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
 
 ## 2. 目標
 
-1. **每次收工自動檢測**，涵蓋**所有**有 CLAUDE.md 的專案，不是只有 IT-department。
+1. **全程手動 `/context-health` 檢測**，涵蓋**所有**有 CLAUDE.md 的專案，不是只有 IT-department。
+   ~~每次收工自動~~已於 2026-08-23 撤（含 IT）。
 2. 產出**該專案專屬**的健檢結果（依它自己的章節結構與技能組合，不套別人的模板）。
-3. **下次收工比對上次**：壓下去了多少、有沒有反彈、哪幾條是新長出來的。
+3. **下次量測比對上次**：壓下去了多少、有沒有反彈、哪幾條是新長出來的。
 
 **不做的**（沿用 `check_bloat.py` 已經定調的判斷，不推翻）：
 **壓縮不自動化。** 刪錯的後果不是規則變短，是**規則失去觸發力**——模型認不出情境就
@@ -86,7 +88,7 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
 | # | 分岔 | 選項 | 傾向（附理由） | 決定 |
 |---|---|---|---|---|
 | C-1 | 「專案專用 CLAUDE.md」是什麼 | (a) 出健檢報告＋骨架建議，人決定 (b) 自動生成／改寫 CLAUDE.md (c) 只出「這專案缺什麼」清單 | **(a)＋(c)**：§2 那條「壓縮不自動化」是踩過的判斷，不因為要全域化就推翻 | ✅ **(a)＋(c)** |
-| C-2 | 檢測的強制力 | (a) 只在收工報告 (b) 收工自動跑＋超標落便箋 (c) 超標擋收工 | **(b)**：user 要「每次收工自動」；(c) 是流程閘門，`UNIVERSAL_HARNESS_PLAN` §4 列為高風險，且會重演 D5 的 WARN 疲勞 | ✅ **(b)** |
+| C-2 | 檢測的強制力 | (a) 只在收工報告 (b) 收工自動跑＋超標落便箋 (c) 超標擋收工 | **(b)**：當時 user 要「每次收工自動」；(c) 是流程閘門 | ✅ **(b) 兩半分開結算**：(1) 收工自動跑 → **2026-08-23 已撤**，全程手動 `/context-health`（含 IT）；(2) 超標落便箋 → **v3 已否**（不寫 `PENDING_VERIFY.md`，見 P-6 🔒）。8/13 原列留作當日拍板紀錄，不是現行授權 |
 | C-3 | 納管哪些檔 | (a) 只 CLAUDE.md (b) ＋MEMORY.md (c) ＋PROJECT_CONTEXT.md 等全部 always-loaded | **(c)**：token 是一起付的，只看 CLAUDE.md 會讓膨脹搬家到 MEMORY.md 而數字變好看 | ✅ **(c)** |
 | C-4 | AI-Projects 現在瘦不瘦 | (a) 機制做完跑一次，依報告當場瘦 (b) 只做機制，瘦身另案 | **(a)**：不然 user 的痛點沒解決，而且它是驗證機制真的有用的第一個實例 | ✅ **(a)** |
 
@@ -238,8 +240,9 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
   - **反彈改成與「歷史最低點」比，不與相鄰筆比**：相鄰筆比會漏掉
     `44KB→30KB(降)→30KB(沒動)→43KB` 這個最常見的形狀（判定時「上次」沒降，
     反彈條件不成立）。門檻用**可見字數**（不受 CRLF 影響）並明訂百分比。
-  - append 以 `(date, project, file)` 去重——收工流程本來就可能重跑
-    （exit 1 → 壓完再跑一次確認）。
+  - append 以 `(date, project, file)` **且值相同**才去重——量測流程可能重跑
+    （exit 1 → 壓完再跑一次確認）。值變了就要留成兩筆：同一天只留最新一筆
+    曾在 2026-08-13 把壓縮前後對比吃掉（見 `append_history` docstring）。
   - **⚠ 保留 `bloat_snapshot.json` 這個檔名**：`capability_checks._p_anti_bloat()`
     綁死 `snapshot.exists()`，改成 per-project 檔名會讓看板的「防膨脹能力」靜默翻 False
     （那支函式的 docstring 自己就記過同型的字面值漂移，7/30 一天咬兩次）。
@@ -247,18 +250,17 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
     （`total_bytes`／`entry_count`／`over_limit_count`／`entries` 共 63 條）。
     它是**合法 JSON**，所以走不到 `load_snapshot()` 的 `JSONDecodeError → exit 2`；
     新版拿三元組 key 去查舊的扁平 dict 會全部 miss → **63 條連同既有 2 條超標
-    全被報成「新增超標」**，而升級後第一次收工正是最不該噴假警報的那一次。
+    全被報成「新增超標」**，而升級後第一次量測正是最不該噴假警報的那一次。
     **定案**：快照加 `"schema": 2`，讀到缺欄位或版本不符時 **exit 2 並印出遷移指令**。
     ⚠ 這個 bug 會被 P-0 沒做時的「條目層全滅」遮蔽——**兩個 bug 互相遮蔽，症狀是一片安靜**。
   - **全域 `CLAUDE.md` 走 `project = "__global__"` 單獨一條線（v3 新增·R2-10）**：
     它是所有專案**共用同一個實體**，用 `(project, file)` 當 key 會為它開 N 條線
     →「歷史最低點」各自算、合計被灌 N 次、`--write-snapshot` 要跑 N 次才接受得完，
     漏跑一個就永遠掛著一筆假的成長。在各專案報告裡只當「共同成本」列出，不進該專案合計。
-- **P-6 掛載點（C-2·v3 定案＝唯讀）**：v1 掛步驟 3.5＋pending_warn 便箋，**兩處都錯**；
-  v2 改寫 `PENDING_VERIFY.md`，**又引入四個新問題**（R2-6/7/8/15）。v3 收斂成：
-  - **掛步驟 3**（防膨脹量測，無條件執行）。步驟 3.5 的標題是
-    「**只有動過 `D:\.ai-harness` 才跑**」——而「今天只改了專案的 CLAUDE.md、沒碰
-    harness」正是它膨脹最典型的那一天，掛 3.5 等於在最該跑的日子不跑。
+- **P-6 掛載點（C-2·v3 定案＝唯讀；2026-08-23 撤掛載）**：v1 掛步驟 3.5＋pending_warn 便箋，**兩處都錯**；
+  v2 改寫 `PENDING_VERIFY.md`，**又引入四個新問題**（R2-6/7/8/15）。v3 曾收斂成掛 shougong 步驟 3（無條件）。
+  **2026-08-23 user 定：收工不做健檢。** 現行＝全程手動 `/context-health`（含 IT）。
+  v3 仍成立、且與掛載無關的邊界：
   - **🔒 這支工具唯一會寫的檔是它自己的兩個**（`bloat_snapshot.*.json`／
     `bloat_history.jsonl`）。**不寫 `PENDING_VERIFY.md`、不寫任何別人的檔。**
     這條是 v3 的核心邊界，一次解掉四個發現：便箋投不到（A-1）、寫哪張表會被
@@ -267,22 +269,21 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
     （`gen_todos.line_sha` 的 docstring 逐字寫「多 session 並行是這個環境的常態」，
     而看板的「完成」鈕正靠行號＋`line_sha` 寫回 `PENDING_VERIFY.md`——
     兩個寫入者搶同一個檔，換來的只是一則本來就會印在收工報告裡的訊息）。
-  - **訊息怎麼到人眼前＝收工報告印出來**，由 shougong 步驟 3 的完成判準要求
-    **貼出當次數字**（現行判準已經要求貼 exit code 與數字，沿用不新增機制）。
-  - **exit code 的閘門語意收窄**：SKILL.md 現行完成判準「exit 1 時已壓回或已取得
-    user 同意並更新快照」實質就是 C-2 否決掉的 (c) 擋收工，多專案化後會從後門進來
-    （在 IT-department 收工卻被別的專案的膨脹卡住）。**定案**：exit 1 只對
-    **cwd 所屬專案**成立；其他專案一律走報告不走 exit code。
-  - **`bloat_history.jsonl` 要有保留上限**：`_entry_probe` 那筆待驗項的原文是
-    「會無上限長（463 筆／20KB，每 session +11KB），要決定移除或加上限」——
-    **複製形狀就要複製教訓**。上限＝每個 `(project, file)` 保留最近 60 筆。
-- **P-6b 觸發點的已知邊界（v2 新增·審查者 A-3）**：`/shougong` 與 dispatch hook
-  **都只存在於 IT-department**（全域 `~\.claude\skills\` 只有 `visual-check` 一支；
-  `D:\AI-Projects\.claude\` 只有 `settings.local.json`、`hooks` 為 None、
-  `survey_projects()` 回報 `dispatchWired: False`）。所以本機制的**觸發點**是
-  「在 IT-department 收工」，其他專案是**被動被掃到的對象**。
-  這是刻意接受的限制（健檢是主動去讀別人的檔，不需要對方裝東西），
-  但**必須寫在畫面上**——否則會被讀成「每個專案收工都會自己檢查」。
+  - **訊息怎麼到人眼前＝`/context-health` 當次 stdout**（不再經收工報告）。
+    寫入載體就是這支 skill：步驟 1 仍唯讀；**人點頭本次量測作實之後**才 `--append-history`，
+    再跑步驟 5 的 `--history`。沒有這步時序永遠空、🔑 永遠紅。
+    `--write-snapshot --project <名稱>` 只有人明示接受現況當新基準才跑，不是預設。
+  - **exit code 的閘門語意收窄**：exit 1 只對 **cwd 所屬專案**成立；其他專案一律走報告不走 exit code。
+    不得把 exit 1 當擋收工（C-2 否決的 (c)）。**目前沒有 SOP 讀者**（§7 已記）；
+    禁止因為註解裡還寫「收工腳本」就把 exit code 接回收工鏈。
+  - **`bloat_history.jsonl` 要有保留上限**：每個 `(project, file)` 保留最近 60 筆。
+    2026-08-27 起空檔當新基準；少於兩筆真實量測不准宣稱趨勢。
+  - 看板探針只驗「工具在、觸發是手動 `/context-health`」，**不驗快照準不準**。
+    D-3（過期基準／撞 key）是另案，不是本條對齊的修復範圍。
+- **P-6b 觸發點（v2 新增·審查者 A-3；2026-08-23 修訂）**：`/shougong` 與 dispatch hook
+  **都只存在於 IT-department**，且 **2026-08-23 起 shougong 不做健檢**。
+  本機制的**觸發點**是手動 `/context-health`（全域 skill，每個專案都叫得到）。
+  不寫的話會被讀成「裝了 harness 就每個專案收工都會自己檢查」。
 - **P-7 用它瘦 AI-Projects（C-4·v2 加前置條件）**：
   ⚠ **§6「現況與待辦」6,355 字不可直接刪**。v1 的理由是「看板 `gen_todos.py` 已經在掃」，
   但 gen_todos 的來源表是從該專案的 `.claude\PROJECT_CONTEXT.md`「待辦來源」節讀的，
@@ -396,9 +397,8 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
     ⑥重跑 `check_bloat` 比對前後、貼出數字。
   - **層級＝全域**（user 決定）：跟 `visual-check` 同層，每個專案都叫得到。
     作用對象一律從該專案的 `.claude/PROJECT_CONTEXT.md` 讀，**不寫死**（U-1）。
-  - ⚠ **P-6b 的邊界仍然成立且要寫進 skill 正文**：`/shougong` 只存在於 IT-department，
-    所以「每次收工自動跑」只在這個專案為真；其他專案是**手動叫這支 skill**。
-    不寫的話會被讀成「裝了就每個專案都會自己檢查」。
+  - ⚠ **P-6b 的邊界仍然成立且要寫進 skill 正文**：觸發點是手動 `/context-health`，
+    `/shougong` 不做健檢（2026-08-23）。不寫的話會被讀成「裝了就每個專案收工都會自己檢查」。
 
 - **P-12 `gen_layers` 去專案化（C-11·解 §7 v3 登記的未償債務）**：
   拆掉 `PROJECT_DIR`(L44)／`EXTRA_PROJECTS`(L72)／`SCAN_ROOT`(L73) 三個字面值。
@@ -469,7 +469,7 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
 | P-3／P-3b 解析 | ✅ | 章節通用＋無章節退路；條目層綁錨、索引檔自動認 |
 | P-4 建議 | ✅ | V-9 用 git 舊版驗過，3/3 指對；不亂指 |
 | P-5 快照＋時序 | ✅ | schema 2、三元組 key、逐專案寫入、保留 60 筆 |
-| P-6 掛載 | ✅ | shougong 步驟 3（無條件）·exit 1 只對 cwd 專案 |
+| P-6 掛載 | ✅ **已撤** | 2026-08-23 起全程手動 `/context-health`；不再掛 shougong 步驟 3 |
 | 回歸網 | ✅ | `test_check_bloat.py` 29 條＋9 個變異全紅＋1 等價不誤判；主套件 **585/585** |
 | 基準 | ✅ | 三專案快照＋5 筆時序（**在壓縮之前**，R2-13 的硬相依） |
 
@@ -518,6 +518,64 @@ user 要求「健檢做成工具／編排優化做成工具／包成 skill／通
 **這一輪最值得記的不是工具，是 P-8 那個錯**：我把 C-1 已經否決的東西換了個名字
 （「重複偵測是事實不是判斷」）重新提了一次，寫進計畫書、寫成程式碼、跑起來才發現。
 **擋下它的不是覆核也不是規則，是「拿已知答案的 fixture 去跑一次」。**
+
+| 狀態 | 項目 | 說明 |
+|---|---|---|
+| ✅ | 票 01 時序歷史救回或新基準 | 不救回；空檔新基準；步驟 5 少於兩筆真實量測仍宣稱趨勢＝紅。詳見 [時序歷史救回或新基準](.scratch/skill-opt/decisions/01-history-restore.md) |
+| ✅ | 票 02 收工金額判準 | 預設拿掉 `--with-cost`；判準＝金額＋as_of。詳見 [收工金額判準](.scratch/skill-opt/decisions/02-cost-criterion.md) |
+| ✅ | 票 03 健檢標竿形態 | 2.5 加官方對應欄；不加 6 題／步驟；200／25KB 不當閘門。詳見 [健檢標竿形態](.scratch/skill-opt/decisions/03-benchmark-shape.md) |
+| ✅ | 票 04 計畫書 P-6 這輪動不動 | 這輪不動 P-6／C-2／檔頭；另開執行票且必送審。詳見 [計畫書 P-6 這輪動不動](.scratch/skill-opt/decisions/04-plan-p6.md) |
+| ✅ | 票 05 收工對齊句落地 | IT §4 鏈拿掉防膨脹量測；3.5 預設無 `--with-cost`，判準含 as_of。詳見 [收工對齊句落地](.scratch/skill-opt/decisions/05-shougong-align.md) |
+| ✅ | 票 06 健檢 skill 落地 | 2.5 加官方對應欄；全程手動；MEMORY 200／25KB 當事實句不當閘門。詳見 [健檢 skill 落地](.scratch/skill-opt/decisions/06-context-health-skill.md) |
+| ✅ | 票 07 工具洞：歷史與 as_of | 歷史空檔新基準；`--history` 少於兩筆 exit 2；成本 stdout 帶 as_of。詳見 [工具洞：歷史與 as_of](.scratch/skill-opt/decisions/07-tool-history-asof.md) |
+| ✅ | 票 08 探針與副本文案 | 探針改看 /context-health；roster／SkillViewer 鏈拿掉防膨脹量測。詳見 [探針與副本文案](.scratch/skill-opt/decisions/08-probe-copy.md) |
+| ✅ | 票 09 計畫書 P-6 對齊並送審 | 檔頭／C-2／P-6 改全程手動；四輪 claude-code 後 PASSED（未重簽 SKIP）。詳見 [計畫書 P-6 對齊並送審](.scratch/skill-opt/decisions/09-plan-p6-review.md) |
+
+### Round 1 處置（2026-08-27·claude-code／opus）
+
+交換檔：`.scratch/skill-opt/p6-review/round-1-ask.md`／`round-1-reply.md`。`reviewed=` 派出當下＝`04a6468fec66e9f071a42a6bf203e539bfd795437c216aa983408d79ab9b8ea3`（處置改動後 hash 已變，Round 2 重記 inflight）。
+
+| # | 處置 | 修法／證據 |
+|---|---|---|
+| F-1 | **接受** | `/context-health` 步驟 5 補上人點頭後 `--append-history`；完成判準加一項；V-14 加鎖。P-6 改寫寫入載體。 |
+| F-2 | **接受·不改 hook** | 改完立刻 `review_inflight.py --set --round 2`。禁止跟著 BLOCK 訊息重簽 SKIP。交換守門只掃 map 是已知限制，本票不改 PR-1。 |
+| F-3 | **接受** | C-2 決定欄把 (b) 兩半分開結算：收工自動跑 8/23 撤；落便箋 v3 已否。 |
+| F-4 | **接受** | P-6 明寫 exit 1 無 SOP 讀者、禁止接回收工。`check_bloat.py` 四處「收工腳本」改成呼叫端／禁止接回。 |
+| F-5 | **接受** | `reference-writing-rules-meta.md` 兩處改指 §4 補規範分流／§8，不再叫人回「§4 防膨脹」。 |
+| F-6 | **部分接受** | D-3 過期基準仍在，但不是本輪對齊製造（8/23 已撤掛載）。P-6 加一句：探針不驗快照準不準，D-3 另案。不改探針判準。 |
+
+### Round 2 處置（2026-08-27·claude-code／opus）
+
+交換檔：`.scratch/skill-opt/p6-review/round-2-ask.md`／`round-2-reply.md`。
+
+| # | 處置 | 修法／證據 |
+|---|---|---|
+| R2-1 | **接受** | shougong :81 改成「那支會量測；人點頭後才 `--append-history`。寫入不是收工的事」——「這支」不再能指 `/context-health`。 |
+| R2-2 | **接受** | §7「下一棒」加 2026-08-27 訂正：禁止接上收工流程。 |
+| R2-3 | **接受** | `append_history` docstring 改「量測流程」；順手清「每次收工都報／第一次收工」。 |
+| R2-4 | **接受** | V-4／V-4b 改寫 tmp `HISTORY_PATH`，不再動 live `bloat_history.jsonl`。 |
+| R2-5 | **接受** | stdout 改成「人明示接受現況才 `--write-snapshot`」，不是壓完就教人跑。 |
+
+### Round 3 處置（2026-08-27·claude-code／opus）
+
+交換檔：`.scratch/skill-opt/p6-review/round-3-ask.md`／`round-3-reply.md`。
+
+| # | 處置 | 修法／證據 |
+|---|---|---|
+| R3-1 | **部分接受** | 票 01 已決不救回 75 筆。工作區 `bloat_history.jsonl` 已空；HEAD 那筆 `ZZ/T.md` 等 user 要 commit 才進版控。本票不 commit。 |
+| R3-2 | **接受** | P-5 去重規格改成「值相同才去重、值變了留兩筆」，與 `append_history` 對齊。 |
+| R3-3 | **部分接受** | 不改 `any()` 契約。skill 🔑 明寫 exit 0 ≠ 本次那一檔能比。 |
+| R3-4 | **部分接受** | 本票不新開 CLI 變異。V-4b 已鎖回傳值；接線覆蓋另案。 |
+| R3-5 | **接受** | `diff()` 條目數下降那句改「人明示後才重建基準」。 |
+| R3-6 | **接受** | R2-5 快照測試改寫 tmp `SNAPSHOT_PATH`。 |
+
+### Round 4 處置（2026-08-27·claude-code／opus·預設上限最後一輪）
+
+交換檔：`.scratch/skill-opt/p6-review/round-4-ask.md`／`round-4-reply.md`。P-5／P-6 無新發現。
+
+| # | 處置 | 修法／證據 |
+|---|---|---|
+| R4-1 | **接受** | `context-health` frontmatter 拿掉「或收工要盤點常駐層時使用」；V-14 加鎖；`SkillViewer/platform_skills.json` 同步。不在計畫書 hash 範圍。 |
 
 <!-- REVIEW_SCOPE_IGNORE_END -->
 
@@ -801,9 +859,10 @@ exit code 從「所有專案都算」變成「只算 `__global__`」。依 R8-8 
   前九輪每一輪都在上一輪的修法裡找到新缺陷（Round 9 抓到的兩個「高」正是前一輪的產物），
   沒有理由假設這一輪例外。
 - **先答「這個 exit code 有沒有人讀」**：Round 9 找不到任何腳本或 hook 真的判讀
-  `check_bloat` 的 exit code。若確認沒有消費端，F-2／F-4 那一類「contract 違反」的
-  優先度要整批下修，而該補的其實是**把它接上收工流程**——否則整支工具的 exit code
-  語意是在對空氣講話。這件事沒答之前，別再為 exit code 的細節投更多人力。
+  `check_bloat` 的 exit code。
+  **2026-08-27 訂正**：答案已確認——沒有 SOP 讀者。**禁止把它接上收工流程**
+  （2026-08-23 撤掛載；P-6 現行＝全程手動 `/context-health`）。exit code 對本工具
+  呼叫端／stdout 講話，不是對 `/shougong`。這件事已答完；別再為「接回收工」投人力。
 
 ### Round 7（2026-08-15·**§8 規格全數落地並實跑驗收**·主套件 691 → **783/783**）
 
@@ -1630,4 +1689,5 @@ IT-department **30,731 tokens**／AI-Projects **21,869 tokens**（含 system pro
 
 ---
 
-<!-- ADVERSARIAL_REVIEW_SKIP sha256=a1194f8d5fb380a6d83ffd9d1b429099cb3562afb0e358988b24e9bb52589477: Round 8 續修（2026-08-15·user 拍板 R8-4 走「改工具」並順手收 R8-9）。R8-4 已全修並實跑驗過，R8-9 只修了前半。**仍未收斂、仍不標 PASSED。**做法三件：①條目 key 改在 parse_entries 產生時去重——同檔內第 1 條原封不動、第 2 條起加 U+0002 尾碼；②gather_current 的撞號守門保留 exit 2 但改判主體，從「請把其中一條的開頭改得不一樣」改成「parse_entries 去重失效，這是工具的 bug」；③gather_current 寫入前檢查 blind，失明整批拒寫（R8-9 前半）。為什麼是這個形狀：去重必須做在 parse_entries 而非 gather_current，因為 measure 的 over 是 entries 的同一批 dict 物件、diff 比對讀的也是同一把 key——做在 gather_current 只有寫入端算得到尾碼，而 diff 迭代的是 over（超標子集），兩邊數出來的第 n 條不是同一條，症狀會是「既有條目全被報成新增」，看起來像基準壞了、不像去重寫錯地方。選「第 1 條不動、第 2 條起加尾碼」而不是全體 by-index：動工前實測 320 條只有 1 組撞號，這個形狀讓 319 把既有 key 逐字不變 ⇒ 零基準重建；交接要求的前置條件「先確認不會讓所有 key 位移」答案是不會。已知代價：兩條撞號的規則對調順序時尾碼換手、該條歷史成長紀錄斷一次，接受。驗收：主套件 822 到 837/837、test_check_bloat 74 到 86/86、變異 18 到 21/21 全抓到＋1 等價未誤判＋還原雜湊一致、test_check_prose_blocks 112/112、check_prose_blocks 本體 exit 0。實跑 --write-snapshot --project AI-Projects 印「已更新（2 個檔）」不再 exit 2；**靜默成長額度 25 條降到 0 條**；**零位移契約在活資料上驗過**——比對 git show HEAD 的舊快照，IT-department/CLAUDE.md（67）、IT-department/MEMORY.md（87）、__global__（38）三檔的 key 集合與每一把的值全部逐字相同，只有 AI-Projects 兩檔變。這條刻意在活資料上驗而不是 fixture：fixture 只證明實作在合成資料上的行為，位移是活資料才量得到的，而 R8-4 之所以沒被更早發現正是「拿三條同專案的抽樣支撐全稱結論」。**訂正上一輪兩個數字**：額度是 25 條不是 24，且橫跨兩個檔（CLAUDE.md 18＋MEMORY.md 7）——「現 110 字／基準 578 字」那條在 MEMORY.md。MEMORY.md 條目數 14 對 14 完全對得上、從頭到尾沒觸發任何守門卻有 7 條在裸奔：**條目數對得上不等於基準沒過期**（Round 7 換的是量測單位，值變了、key 沒變）。本批新踩的坑已寫進計畫書：Edit 工具寫 U+0002 會把跳脫序列轉成字面控制字元存進原始碼，功能正確但在編輯器與 git diff 上都不顯形，判準是 repr 量位元組不是看檔案。＝＝＝ 第二批續修（同日·R8-7 ＋ R8-8）＝＝＝ 主套件 837 到 858/858、test_check_bloat 86 到 101/101、變異 21 到 27/27、prose 112/112。R8-7 的破口比表上寫的寬兩層：①except ModuleNotFoundError 接不到 ImportError（父類別），②MarkdownIt(commonmark) 與 .enable(table) 若 preset／rule 改名會拋 ValueError／KeyError，③**最寬的一層表上完全沒提**——Python 對任何未捕捉例外用的都是 exit 1，而契約寫 1 ＝ 有新增膨脹 ⇒ 工具自己炸掉會被收工腳本讀成「量過了、去壓」。故兩層都修：_markdown 的 try 改接 Exception 並把建構納入（窄的那道給得出可行動訊息），新增 run_guarded(fn) 包住 CLI（寬的那道保證沒有路徑走得到假的 exit 1）。⚠ SystemExit 必須原樣穿透，否則唯一合法的 exit 1 也被改判成 2 ＝ 另一種說謊；靠的是它繼承 BaseException 而非 Exception，不是靠先判型別。變異 23 專釘這一半——只驗「例外要 exit 2」的話，一個 except BaseException 的實作照樣全綠。R8-8 是三個缺陷疊在一起：startswith 無路徑邊界（現在就成立）／取第一個命中而非最深（風險屬實但未實體化）／cwd 不在任何專案時回 None 讓 diff 不過濾、所有專案都算進 exit code（現在就成立，且與設計意圖完全相反）。⚠ **訂正審查者舉的巢狀例子**：D:\AI-Projects\codebase-health-dashboard 沒有 CLAUDE.md ⇒ 不在 discover_targets 裡 ⇒ 綁外層 AI-Projects 才是正確行為；它在 ~/.claude/projects 有登記，但 session 專案與納管目標是兩件事。該坑要等有人替它加 CLAUDE.md 才實體化。⚠ **第三項是行為改變不只是修 bug**：從不屬於任何專案的目錄跑，exit code 從「所有專案都算」變成「只算 __global__」，依 R8-8 記載的設計意圖修，其餘專案照樣進報告只是不進 exit code。活資料驗證：真的從五個不同 cwd 跑 CLI 比對它印的「exit code 只看 X」，五格全對。⚠ **本線第 5 次「驗證自己有問題」**：活資料腳本原本期望巢狀那格回 codebase-health-dashboard，實際回 AI-Projects——是我的期望錯，我照抄了審查者舉的例子而沒查它是不是納管目標。共同形狀仍是驗證程式對被測介面做了未經確認的假設，這次的變體是**照抄上游的事實主張當前提**。＝＝＝ Round 9（同日·claude-code／opus·6 個發現全部已查證·全數已修）＝＝＝ ⚠ effort:high 沒真的傳進去——主 session 的 Agent tool 只有 model 沒有 effort，設定檔那一欄由角色定義承載。主套件 858 到 875/875、test_check_bloat 101 到 113/113、變異 27 到 31/31 ＋ 2 條等價未誤判、prose 112/112。**兩個「高」都是前兩批自己引入或沒補起來的**：F-1：序位尾碼把身分綁在序位上 ⇒ 刪掉撞號組第 1 條，第 2 條遞補並**繼承前者的基準值**；合成 fixture 實跑 B 從 526 長到 626 字而 reasons/blind 皆空、exit 0 ——**R8-4 要消滅的靜默成長額度被修法自己重新製造出來**，且條目數不變時 R8-3 也不會叫。原註解只承認「歷史斷一次」，低估了一個量級。修法改成**前綴延長到唯一**（_assign_keys）：身分純由該條自己的內容決定，刪掉組裡任何一條都不會讓別條改變身分；兄弟被刪時倖存者 key 縮回 24 字而**查不到基準**——那是安全的失敗方向，不會繼承一個錯的基準值。F-2：run_guarded 的例外處理器**自己會拋例外**——它印的 ⚠ 在 cp950 編不出來 ⇒ UnicodeEncodeError 從 except 裡拋出 ⇒ 沒人接 ⇒ exit 1，而它的 docstring 寫「保證沒有任何路徑走得到 exit 1」，**它自己就是那條路徑**。修法：工具本體補 stdout/stderr 的 reconfigure（兩支測試檔早就有，本體沒有）。⚠ 這個 bug 在設了 PYTHONIOENCODING 的環境下完全看不到（本 session 就設了），那正是它沒被發現的原因；重現必須清掉該環境變數、不帶 -X utf8、stdout 導向 pipe。F-3：R8-7／R8-8 的**接線**零覆蓋——spec_from_file_location 讓 __name__ 不是 __main__，實測把 run_guarded(_cli) 改成 _cli()、only=resolve_cwd_project(…) 改成 only=None，101 條斷言全綠、27 條變異一條都沒蓋到。已補 subprocess 層 CLI 測試與兩條接線變異。F-4：only_project 的過濾放在 measure() 之前 ⇒ 被過濾的檔連量都不量 ⇒ 失明不進 blind ⇒ **別的專案失明時 exit 2 靜默變 exit 0**，而 D:\.ai-harness 正是「不屬於任何專案」的目錄。**user 拍板選「only_project 只收斂膨脹、不收斂失明」而非回退**。F-5：我上一輪的訂正自己也錯了——真正的閘門是 gen_layers.discover_projects 要 .claude/ 目錄且 SCAN_ROOTS 非遞迴，所以巢狀目錄加了 CLAUDE.md 也不會被發現，唯一入口是 harness.config.json 的 extraProjects。F-6：變異腳本分不出「斷言抓到」與「測試中途炸掉」；導入 verdict() 判收尾摘要行之後，變異 6 與 20 當場被判成「炸掉、不算抓到」。**修法不是放寬判準**，是把那兩個炸點補上守門讓回歸網不會被一處壞掉打斷。**Round 9 沒查到的**（不得當成已窮盡）：找不到任何腳本或 hook 真的讀 check_bloat 的 exit code ⇒ F-2／F-4 是契約層違反、沒有驗證到具體下游消費端；/shougong 的真實 cwd 沒追；F-1 的往返沒在活資料上驗（需要 --write-snapshot，覆核時被禁）；只在單一 Windows/cp950 機器測過；並行競態完全沒碰。**未修剩四項半**：R8-6／**R8-9 後半**（檔案被移走留成殭屍基準）／R8-10／R8-11。**仍未收斂**：Round 9 的六個修法自己沒有被覆核過，其中 _assign_keys 與「只收斂膨脹不收斂失明」改動面不小，後者更是 Round 9 沒審過的新設計。前九輪每一輪都在上一輪的修法裡找到新缺陷（Round 9 抓到的兩個高正是前一輪的產物）。下一棒：跑 Round 10；並先答「這個 exit code 到底有沒有人讀」——沒答之前別再為 exit code 的細節投人力。PR-1 下次仍會擋，那是對的。 ＝＝＝ 重簽（2026-08-26）＝＝＝ 上一版 sha ef7ea0fa 失效的原因已逐顆 commit 查證：打破它的是 f2d9a5f，而該 commit 對本檔只改了 2 行交叉指標（「/adversarial-review 步驟 5 的第二種」→「收斂判準的第二種」），是那支 skill 改寫後的指標修正，**計畫書實質內容零變動**、仍落在當初略過的範圍內，故重簽 SKIP 而**不改標 PASSED**——PR-1 下次仍會擋，那是對的。⚠ 重簽的判準是「差異在不在原本略過的範圍內」，不是「hash 對不上就重算」；後者是偽造憑證的唯一動作（§4.1 4️⃣），而這次是先答得出「誰改的、改了什麼」才簽的。  -->
+<!-- 2026-08-27：P-6 對齊後舊 SKIP 已刪（禁止重簽）。Round 8 略過理由見 git 該 marker／本檔 §7。本輪送審中，不蓋 PASSED 直到審查收斂。 -->
+<!-- ADVERSARIAL_REVIEW_PASSED sha256=42a9b78e2d7132d18cd1dfc2bd6e3fd80203ae5986e0db324549e2b503a85bf4 reviewed=42a9b78e2d7132d18cd1dfc2bd6e3fd80203ae5986e0db324549e2b503a85bf4 rounds=4 at=2026-08-27T21:11:06+08:00 -->

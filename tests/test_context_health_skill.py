@@ -239,14 +239,22 @@ def test_missing_component_is_detected() -> None:
 
 
 def test_skill_states_its_boundaries() -> None:
-    """P-6b 的邊界必須寫在 skill 正文裡。
+    """觸發點邊界必須寫在 skill 正文裡。
 
-    `/shougong` 只存在於 IT-department，所以「每次收工自動量」只對那一個專案為真。
+    2026-08-23 起全程手動（含 IT）；`/shougong` 不做健檢。
     不寫的話會被讀成「裝了 harness 就每個專案都會自己檢查」。
     """
     text = SKILL_MD.read_text(encoding="utf-8")
-    check("skill 寫明「只在被叫的時候跑」的邊界（P-6b）",
-          "shougong" in text and "手動" in text, "找不到觸發點邊界說明")
+    check("skill 寫明全程手動／shougong 不做健檢",
+          "shougong" in text and "手動" in text and "不做健檢" in text,
+          "找不到觸發點邊界說明")
+    check("skill 不再寫「每次收工自動量」",
+          "每次收工自動量" not in text, "舊謊還在")
+    check("description 不再把收工當觸發（否則 model-invoked 會把掛載接回來）",
+          "收工要盤點" not in text, "frontmatter 仍邀請收工時叫這支")
+    check("skill 寫明人點頭後才 --append-history（否則時序沒有寫入者）",
+          "--append-history" in text and "人點頭" in text,
+          "工具註解指向 /context-health 人點頭後寫入，skill 步驟卻沒有這行")
     check("skill 寫明禁止機械壓縮（C-1）",
           "觸發力" in text or "禁止機械壓縮" in text, "找不到 C-1 的硬規則")
     check("skill 寫明 MEMORY.md 禁止刪行",

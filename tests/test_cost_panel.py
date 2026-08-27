@@ -636,6 +636,21 @@ def _case_stage_detect_single_source(fails: list) -> None:
     if not ("_WFC.DECL_LINE" in src and "_WFC.FIELD" in src):
         fails.append(msg)
 
+def _case_as_of_stdout(fails: list) -> None:
+    """無 --with-cost 時 stdout 也要帶 as_of，否則收工 3.5 判準只看到金額會假綠。"""
+    m = _load()
+    if "缺" not in m._fmt_cost_stdout({"project_total": 1.5}):
+        fails.append("快取沒有 as_of 時沒有把「缺」印出來")
+    line = m._fmt_cost_stdout({"project_total": 12.5, "as_of": "2026-08-27T01:00:00"})
+    if "12.50" not in line or "as_of 2026-08-27T01:00:00" not in line:
+        fails.append(f"金額與 as_of 沒有同行：{line!r}")
+    if m._fmt_cost_stdout(None) != " · 無金額快取":
+        fails.append(f"無快取時字面變了：{m._fmt_cost_stdout(None)!r}")
+    src = open(GEN_PATH, encoding="utf-8").read()
+    if "已注入成本分頁" in src and "_fmt_cost_stdout(cost)" not in src.split("已注入成本分頁")[1][:200]:
+        fails.append("注入成功那行沒走 _fmt_cost_stdout —— as_of 仍可能被拿掉")
+
+
 def run() -> "tuple[int, list]":
     """回 (通過數, 失敗描述清單) —— 與 run_hook_tests.py 的統一入口契約一致。
 
@@ -648,6 +663,7 @@ def run() -> "tuple[int, list]":
         ("資料源斷掉時拒絕產出", _case_refuse_empty),
         ("固定輸入冪等", _case_idempotent),
         ("無金額快取時不擋 mix", _case_no_cost_cache),
+        ("注入 stdout 金額與 as_of 同行", _case_as_of_stdout),
         ("按日按精確模型名聚合", _case_daily_by_model),
         ("每日金額掛進圖表且缺值為 null", _case_daily_cost_attached),
         ("縱軸口徑切換預設金額", _case_metric_switch),

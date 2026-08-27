@@ -626,6 +626,14 @@ def load_cost_cache() -> "dict | None":
         return None
 
 
+def _fmt_cost_stdout(cost: "dict | None") -> str:
+    """注入成功／--check 同一套：金額與 as_of 同行。缺 as_of 要寫出來，不能只印金額。"""
+    if not cost:
+        return " · 無金額快取"
+    as_of = cost.get("as_of") or "缺"
+    return f" · 金額 ${cost['project_total']:,.2f} · as_of {as_of}"
+
+
 # ── HTML ────────────────────────────────────────────────────────────────────
 
 def _fmt(n: int) -> str:
@@ -1071,7 +1079,7 @@ def main() -> None:
         print(f"\nskill {len(skills)} 支，零觸發 {len(zero)}：{zero}")
         print(f"角色 {len(agents)} 個，實派：{ {a: ev['agents'].get(a, {}).get('n', 0) for a in agents} }")
         print(f"金額快取：{'有' if cost else '無'}"
-              + (f"，本專案累計 ${cost['project_total']:,.2f}" if cost else ""))
+              + (_fmt_cost_stdout(cost) if cost else ""))
         st, meta = stage
         tot = sum(_stage_cost(f) for f in st.values()) or 1.0
         print(f"\n階段歸因：宣告 {meta['decl_n']} 次、去重跳過 {meta['dup_skipped']} 筆")
@@ -1091,7 +1099,7 @@ def main() -> None:
         with io.open(HTML_PATH, "w", encoding="utf-8", newline="") as f:
             f.write(out)
     print(f"已注入成本分頁：{len(by_day)} 天 · skill {len(skills)} 支 · 角色 {len(agents)} 個"
-          + (f" · 金額 ${cost['project_total']:,.2f}" if cost else " · 無金額快取"))
+          + _fmt_cost_stdout(cost))
 
 
 if __name__ == "__main__":

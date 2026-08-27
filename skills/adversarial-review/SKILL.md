@@ -24,7 +24,7 @@ effort: high
 區內的 Decisions so far／Not yet specified 不進 hash；審查者可讀 child tickets 補脈絡。
 處置紀錄寫在 `## Decisions so far` 之後，marker 放檔尾。
 
-## 1. 讀設定，不自行選審查者
+## 1. 讀設定，再依作者平台覆寫同側審查者
 
 先跑：
 
@@ -32,17 +32,32 @@ effort: high
 py -3 D:\.ai-harness\reviewer\server.py --check
 ```
 
-記錄輸出與原始 exit code。非零代表設定缺失、損壞或不合法：**停止並請 user 修設定**，
-不可退回 `claude-code` 繼續。設定真相是 `reviewer/reviewer_config.json`；要改設定就跑
-`reviewer/Launch-Reviewer.bat`。
+記錄輸出與原始 exit code。看「作者平台」那一行。
+
+**作者平台（執行 skill 的這一則，不是審查者行程）：**
+
+- `CURSOR_AGENT` 有值 → Cursor。Cursor IDE agent 實測有 `CURSOR_AGENT=1` 且無 `CLAUDECODE`。從 Claude 拉起的 `agent.cmd` 會**同時**帶 `CURSOR_AGENT` 與遺傳的 `CLAUDECODE` → **最內層贏**，見 `CURSOR_AGENT` 就判 Cursor。
+- 否則 `CLAUDECODE` 或 `AI_AGENT` 以 `claude-code` 開頭 → Claude。
+- 否則未知：**停下來問人，不准猜。**
+
+**對側（硬規則，蓋過設定檔）：**
+
+| 作者 | 本輪審查者 | 不要 |
+|---|---|---|
+| Cursor | `claude-code`（本機 `%APPDATA%\npm\claude.cmd -p --safe-mode`） | Cursor CLI，含 CLI 裡的 Claude slug（仍是 Cursor 平台、打 Cursor 帳單） |
+| Claude | `cursor-cli`（隔離沙箱 + 非 Anthropic slug） | `claude-code`（自己審自己）；Cursor CLI 的 `claude-opus-*` slug |
+
+設定檔 `reviewer/reviewer_config.json` 只提供該 tool 的 model／effort。**與作者同平台時本輪覆寫，不要改設定檔**（下一則可能在另一平台）。`codex` 仍可當第三選項。
+
+`--check` 非零（缺檔／壞 JSON／未知 tool）→ 停止並請人修設定。同平台衝突是印 ⚠、exit 仍 0——skill 必須看那行 ⚠，不能只看 exit code。
 
 | `tool` | 執行方式 |
 |---|---|
 | `cursor-cli` | 跑 Cursor 官方 CLI；依下節的隔離與輸出守門 |
-| `claude-code` | 派唯讀 Plan 審查者，帶設定的 model／effort；回報同模型族限制 |
+| `claude-code` | Cursor 作者：`tools/run_claude_reviewer.py`（本機 `claude -p --safe-mode`）。Claude 作者不要走這條。 |
 | `codex` | 先看 `--help` 確認本機旗標；不可用時回報，不靜默換人 |
 
-完成判準：回報實際審查者、模型、effort、是否與設定一致，以及 `--check` 的 exit code。
+完成判準：回報作者平台、實際審查者／模型／effort、是否覆寫了設定、以及 `--check` 的 exit code。
 
 ## 2. 建立並凍結每輪題目
 
@@ -123,6 +138,20 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
    用該 log 的 `conversation_id` 執行 `--resume` 取回原報告。
 
 抓 exit code 時不要把管線末端工具的狀態當成 CLI 狀態。
+
+## 3b. `claude-code` 執行規則（Cursor 作者）
+
+```text
+py -3 D:\.ai-harness\tools\run_claude_reviewer.py --ask <round-N-ask.md> --add-dir <跨 repo 時的對方路徑>
+```
+
+預設把 reply 寫到同目錄 `round-N-reply.md`、命令與 exit 寫 `_rN_raw.txt`。
+
+1. **一定走這支**，不要手組 `claude -p`。prompt 必須走 stdin：Claude Code 2.1.241+ 把 `-p` 的多行 argv 截在第一個換行。
+2. `--safe-mode`：不載 CLAUDE.md／skills／hooks，審查者不共用作者脈絡。`--bare` 不要用（會改走 API key、MAX OAuth 失效）。
+3. `--permission-mode plan`，並 disallow Edit／Write。審查者只挑錯。
+4. 模型用 claude-code 檔位（`opus`／`sonnet`），**不要**把設定檔裡 cursor-cli 的 grok slug 傳進去。
+5. reply 的 `ask-sha256=` 必須由審查者輸出；不得代補。stdout 少於 200 bytes 這支會非零退出。
 
 ## 4. 驗證回覆
 

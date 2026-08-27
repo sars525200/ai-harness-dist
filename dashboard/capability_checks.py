@@ -139,28 +139,28 @@ def _p_on_demand():
 
 
 def _p_anti_bloat():
-    """判準綁「機制存在 ＋ 任一常駐層或 skill 指向它」，不綁單一檔案的字面值。
+    """判準綁「機制存在 ＋ /context-health 指向它」。收工不做健檢。
 
     2026-07-30 同一天咬了兩次，都是判準跟著字面值漂：
       ①原本寫死 `wc -c`，CLAUDE.md 改用 `check_bloat.py` → 判 False
       ②改綁 CLAUDE.md 的「防膨脹」，收工規則搬進 /shougong 後 §4 沒這三個字 → 又判 False
-    兩次能力都沒消失，是 probe 綁錯層。**規則會搬家，機制不會** —— 所以看檔案與 snapshot
-    在不在，再確認有東西指向它。這正是 §8「改名/改制必先 audit 字面值」講的情形，
-    發生在規則自己的檢查器身上。
+    兩次能力都沒消失，是 probe 綁錯層。**規則會搬家，機制不會**。
+
+    2026-08-23 起跑它的是手動 `/context-health`，不是 `/shougong`。
+    若把 shougong 正文出現 `check_bloat` 當成「SOP 會跑」，收工拆走健檢之後探針仍綠
+    ——那是假綠（步驟 3 已不做）。
     """
     script = HARNESS / "rulefile" / "check_bloat.py"
     snapshot = HARNESS / "rulefile" / "bloat_snapshot.json"
-    pointers = []
-    if "防膨脹" in _read(CLAUDE_MD):
-        pointers.append("CLAUDE.md")
-    if "check_bloat" in _read(_find_skill("shougong") or Path("")):
-        pointers.append("/shougong")
-    ok = script.exists() and snapshot.exists() and bool(pointers)
+    ch = _read(_find_skill("context-health") or Path(""))
+    pointed = "check_bloat" in ch
     if not script.exists():
-        return False, "找不到 check_bloat.py —— 防膨脹沒有可執行的量測"
-    if not pointers:
-        return False, "check_bloat.py 存在但沒有任何常駐層或 skill 指向它 —— 不會有人跑"
-    return ok, f"check_bloat.py ＋ snapshot 基準，由 {'／'.join(pointers)} 指向"
+        return False, "找不到 check_bloat.py —— 沒有可執行的量測"
+    if not snapshot.exists():
+        return False, "找不到 bloat_snapshot.json —— 沒有基準"
+    if not pointed:
+        return False, "check_bloat.py 存在但 /context-health 沒指向它 —— 不會有人跑"
+    return True, "check_bloat.py ＋ snapshot；手動 /context-health 才跑（收工不做）"
 
 
 def _p_rule_index():

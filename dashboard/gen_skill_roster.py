@@ -51,7 +51,7 @@ MARK_END = "<!-- SKILL_ROSTER_END -->"
 # 編輯內容。what／when 可含已 escape 的 HTML（<b>／<code>）。
 DESC = {
     "shougong": {
-        "what": "收工封存：清暫存 → 補規範分流 → 防膨脹量測 → 兩個 repo commit",
+        "what": "收工封存：清暫存 → 補規範分流 → 看板新鮮度 → 三 repo commit（健檢手動 /context-health，不在這條鏈）",
         "when": "說「<b>收工</b>」「先到這」「封存」，或要補規範／寫日誌",
         "group": "flow",
     },

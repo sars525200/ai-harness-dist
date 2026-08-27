@@ -333,7 +333,8 @@ def run() -> "tuple[int, list]":
 
     # ── V-4 反彈判定 ────────────────────────────────────────────────────
     print("\n[V-4] 反彈判定（至少三個基準點，兩筆表達不出「上次降過」）")
-    hist_backup = m.HISTORY_PATH.read_text(encoding="utf-8") if m.HISTORY_PATH.exists() else None
+    real_hist = m.HISTORY_PATH
+    m.HISTORY_PATH = tmp / "bloat_history.jsonl"
     try:
         def seed(vals):
             rows = [{"date": f"2026-01-{i+1:02d}", "ts": f"2026-01-{i+1:02d}T00:00:00",
@@ -395,10 +396,35 @@ def run() -> "tuple[int, list]":
         check("兩筆的日期相同（證明不是靠跨日才留得住）",
               len({r.get("date") for r in rows}) == 1 and rows[0]["date"] == today)
     finally:
-        if hist_backup is not None:
-            m.HISTORY_PATH.write_text(hist_backup, encoding="utf-8")
-        elif m.HISTORY_PATH.exists():
-            m.HISTORY_PATH.unlink()
+        m.HISTORY_PATH = real_hist
+
+    # ── --history 少於兩筆真實量測不得 exit 0（步驟 5 假綠）──────────────
+    print("\n[V-4b] --history 趨勢門檻")
+    real_hist = m.HISTORY_PATH
+    m.HISTORY_PATH = tmp / "bloat_history_v4b.jsonl"
+    try:
+        def _row(i, vis, proj="P", label="C.md"):
+            return {"date": f"2026-02-{i:02d}", "ts": f"2026-02-{i:02d}T00:00:00",
+                    "project": proj, "file": label, "bytes": vis * 3, "visible": vis,
+                    "over": 0, "entries": 1}
+
+        m.HISTORY_PATH.write_text("", encoding="utf-8")
+        n, can = m.report_history()
+        check("空檔：筆數 0 且不能宣稱趨勢", (n, can) == (0, False), f"{n},{can}")
+
+        m.HISTORY_PATH.write_text(json.dumps(_row(1, 1000), ensure_ascii=False) + "\n",
+                                  encoding="utf-8")
+        n, can = m.report_history()
+        check("一筆真實：不能宣稱趨勢（不得當步驟 5 綠）", n == 1 and can is False, f"{n},{can}")
+
+        m.HISTORY_PATH.write_text(
+            json.dumps(_row(1, 1000), ensure_ascii=False) + "\n"
+            + json.dumps(_row(2, 800), ensure_ascii=False) + "\n",
+            encoding="utf-8")
+        n, can = m.report_history()
+        check("兩筆同檔：可以宣稱趨勢", n == 2 and can is True, f"{n},{can}")
+    finally:
+        m.HISTORY_PATH = real_hist
 
     # ── bytes 用 getsize（CRLF 專案不得系統性少算）──────────────────────
     print("\n[D-3] CRLF")
@@ -429,10 +455,10 @@ def run() -> "tuple[int, list]":
     #
     # 這是**最容易被漏掉的一條**：舊格式快照是合法 JSON，所以走不到
     # `JSONDecodeError → exit 2`。不擋的話，新版三元組 key 查舊扁平 dict 全部 miss
-    # → 既有條目全被報成「新增超標」，而升級後第一次收工正是最不該噴假警報的一次。
+    # → 既有條目全被報成「新增超標」，而升級後第一次量測正是最不該噴假警報的一次。
     print("\n[R2-5] 快照 schema 遷移")
-    snap_bak = (m.SNAPSHOT_PATH.read_text(encoding="utf-8")
-                if m.SNAPSHOT_PATH.exists() else None)
+    real_snap = m.SNAPSHOT_PATH
+    m.SNAPSHOT_PATH = tmp / "bloat_snapshot.json"
     try:
         m.SNAPSHOT_PATH.write_text(
             json.dumps({"total_bytes": 1, "entry_count": 1, "entries": {"a": 1}}),
@@ -461,10 +487,7 @@ def run() -> "tuple[int, list]":
         check("真的壞掉的快照即使 strict=False 也要 exit 2（壞掉≠舊格式）",
               got3 == 2, str(got3))
     finally:
-        if snap_bak is not None:
-            m.SNAPSHOT_PATH.write_text(snap_bak, encoding="utf-8")
-        elif m.SNAPSHOT_PATH.exists():
-            m.SNAPSHOT_PATH.unlink()
+        m.SNAPSHOT_PATH = real_snap
 
     # ── snap_key 三元組（跨檔碰撞不得靜默覆蓋）──────────────────────────
     print("\n[D-1] 快照 key")

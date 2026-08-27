@@ -1,10 +1,10 @@
 """常駐層（always-loaded）膨脹偵測：**所有專案**的 CLAUDE.md / MEMORY.md。
 
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py                      # 收工時跑（SOP 步驟 3）
+    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py                      # 手動 /context-health 時跑
     py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list               # 列出全部超標條目（回頭壓的時候用）
     py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --history            # 看時序：壓下去了／沒動／反彈
     py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --write-snapshot --project <名稱>
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --append-history     # 寫一筆時序（收工時）
+    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --append-history     # 寫一筆時序（/context-health 人點頭後）
 
 exit code：0 = **該掃的都掃了**且沒有新增膨脹　1 = **cwd 所屬專案**有新增膨脹
 　　　　　 2 = **說不出答案**，四種來源：
@@ -16,12 +16,13 @@ exit code：0 = **該掃的都掃了**且沒有新增膨脹　1 = **cwd 所屬�
 　　　　　     ④**條目數比基準少**（可能是瘦身成果、也可能是這個檔失明了，
 　　　　　       工具分不出來 ⇒ 交給人判斷·R8-3）
 旗標模式同樣不准用 0 表示「什麼都沒做」：`--history` 沒有任何時序＝2、
+`--history` 每條線真實量測都少於兩筆（不准宣稱趨勢）＝2、
 `--append-history` 一個檔都沒量到＝2、`--list` 一個檔都沒量到＝2。**0 是一個判定。**
 
 ## 為什麼比對快照，不看絕對值（2026-07-28 定，仍然成立）
 
 原本是 `wc -c` 對照固定基準，加上「任一規則 >120 字就壓回」。問題是既有已經有一批
-超標，於是每次收工都報同樣幾條——**重複的警報等於沒有警報**，幾次之後變成背景雜訊
+超標，於是每次量測都報同樣幾條——**重複的警報等於沒有警報**，幾次之後變成背景雜訊
 （跟 D5 的 WARN 疲勞同一種病）。真正該抓的是**新增條目**與**既有條目被加長**。
 
 ## 能自動化的只有偵測，壓縮不行（2026-07-28 定，仍然成立）
@@ -451,8 +452,9 @@ def _markdown():
             # ⚠ **接 `Exception` 而不是 `ModuleNotFoundError`**（R8-7·2026-08-15）：
             # 升版把 `SyntaxTreeNode` 搬走拋的是 **`ImportError`**（`ModuleNotFoundError`
             # 的**父**類別，子類別的 except 接不到）⇒ 例外外拋 ⇒ Python 以 **exit 1**
-            # 結束 ⇒ 而本檔契約寫著 `1 = 有新增膨脹` ⇒ **收工腳本會判成「量過了、去壓」，
-            # 真相是「一個字都沒量」**。靜默，而且方向剛好相反。
+            # 結束 ⇒ 而本檔契約寫著 `1 = 有新增膨脹` ⇒ **把 exit 1 當結論的呼叫端
+            # 會判成「量過了、去壓」，真相是「一個字都沒量」**。靜默，而且方向剛好相反。
+            # 目前沒有 SOP 讀這個 exit code；禁止接回收工鏈。
             # 這裡窄接一種例外沒有任何好處：這個 try 只做一件事（把 parser 生出來），
             # 它的**每一種**失敗都是同一個結論「量不了」，都該走同一個 exit 2。
             # `sys.exit(2)` 本身不會被自己接住（`SystemExit` 繼承 BaseException）。
@@ -889,7 +891,7 @@ def load_snapshot(strict: bool = True) -> "dict | None":
     if got != SCHEMA:
         # ⚠ 舊版快照是**合法 JSON**（扁平單專案），所以走不到上面的解析錯誤。
         # 不擋的話：新版三元組 key 查舊扁平 dict 全部 miss → 既有 63 條全被報成
-        # 「新增超標」，而升級後第一次收工正是最不該噴假警報的一次。
+        # 「新增超標」，而升級後第一次量測正是最不該噴假警報的一次。
         print(f"⚠ 快照 schema 是 {got!r}，這支需要 {SCHEMA} —— 是舊格式不是壞掉。")
         print("  舊格式沒有 project／file 維度，直接比對會把既有條目全報成新增。")
         print(f"  遷移：先備份 {SNAPSHOT_PATH.name}，再對每個專案跑一次")
@@ -915,7 +917,7 @@ def load_history() -> list[dict]:
 def append_history(targets: list[dict]) -> int:
     """每個檔 append 一筆。**去重看「值有沒有變」，不是看「今天寫過沒」。**
 
-    ⚠ 第一版寫成「同一天只留最新一筆」，理由是「收工流程可能重跑（exit 1 → 壓完
+    ⚠ 第一版寫成「同一天只留最新一筆」，理由是「量測流程可能重跑（exit 1 → 壓完
     再跑一次確認），不去重會讓『上次』指到自己剛剛那一次」。理由沒錯，但做法把
     **最有價值的那一組對比**一起殺掉了 —— 2026-08-13 實測：壓縮前寫了基準、壓完
     再寫一次，結果**基準被同一天的第二筆覆蓋**，於是「44,743 → 33,182」這個成果
@@ -1066,7 +1068,7 @@ def diff(old: "dict | None", targets: list[dict],
         # 不屬於任何專案的目錄跑 —— `only_project='__global__'` ⇒ blind=0 ⇒ **exit 0**。
         # 而 `D:\.ai-harness`（這支工具與測試自己所在的目錄）正是那種目錄。
         #
-        # 兩者的語意本來就不同層：「B 專案有膨脹」不該擋 A 專案收工（所以 reasons
+        # 兩者的語意本來就不同層：「B 專案有膨脹」不該擋 A 專案的工作（所以 reasons
         # 要收斂），但「B 專案量不到」是**工具說不出答案**，而檔頭契約寫的是
         # `0 = 該掃的都掃了且沒有新增膨脹` —— 把它藏起來就是在偽造那個「都掃了」。
         # 這支工具存在的唯一理由是分得出「量到了」與「沒量到」，靜默的綠燈比紅燈貴。
@@ -1129,8 +1131,8 @@ def diff(old: "dict | None", targets: list[dict],
                 "這個檔失明了**（掃描範圍被綁到別節／整節被未收尾的 fence 吃掉／條目被"
                 "改寫成工具認不得的形狀）—— 工具分不出來。怎麼讀上面那組數字："
                 "bytes 跟著少 ⇒ 字真的搬走了；bytes 幾乎沒變而條目少了 ⇒ 那些字還在，"
-                "只是沒被數到。確認是真的壓下去了，就重建基準："
-                "--write-snapshot --project <名稱>。")
+                "只是沒被數到。確認是真的壓下去了，**人明示接受現況後**才重建基準："
+                "--write-snapshot --project <名稱>（不是預設）。")
     return reasons, blind
 
 
@@ -1235,12 +1237,25 @@ def report_project(targets: list[dict], project: str) -> None:
             print(f"             切點：{cut}")
 
 
-def report_history() -> int:
-    """印時序，**回筆數**（0＝說不出任何趨勢，呼叫端要用非 0 exit code 表達·A-8）。"""
+def history_can_claim_trend(rows: list[dict]) -> bool:
+    """任一系列（project, file）真實量測 ≥2 筆才准宣稱趨勢。
+
+    單筆／空檔／只有合成列都說不出趨勢；exit 0 會讓步驟 5 把「工具綠了」當成下降成立。
+    """
+    by: dict[tuple, int] = {}
+    for r in rows:
+        key = (r.get("project"), r.get("file"))
+        by[key] = by.get(key, 0) + 1
+    return any(n >= 2 for n in by.values())
+
+
+def report_history() -> "tuple[int, bool]":
+    """印時序。回 (筆數, 能不能宣稱趨勢)。不能宣稱時呼叫端必須非 0 exit（A-8）。"""
     rows = load_history()
+    can = history_can_claim_trend(rows)
     if not rows:
-        print("還沒有時序資料 —— 跑 --append-history 寫第一筆（收工流程會自動做）。")
-        return 0
+        print("還沒有時序資料 —— 跑 --append-history 寫第一筆（手動 /context-health 才寫）。")
+        return 0, False
     keys = sorted({(r.get("project"), r.get("file")) for r in rows})
     print(f"時序（{HISTORY_PATH.name} · {len(rows)} 筆）")
     for proj, label in keys:
@@ -1249,7 +1264,9 @@ def report_history() -> int:
         st, why = trend(proj, label, vis[-1])
         spark = " → ".join(f"{v:,}" for v in vis[-6:])
         print(f"  {proj}/{label}: {spark}   [{st}] {why}")
-    return len(rows)
+    if not can:
+        print("⚠ 真實量測少於兩筆 ⇒ 不准宣稱趨勢（步驟 5 🔑 紅）。")
+    return len(rows), can
 
 
 def _under(child: Path, parent: Path) -> bool:
@@ -1269,8 +1286,8 @@ def _under(child: Path, parent: Path) -> bool:
 def resolve_cwd_project(targets: list[dict], cwd: "Path | None" = None) -> str:
     """cwd 落在哪個專案。**回專案名；不在任何專案時回 `GLOBAL_PROJECT`。**
 
-    只有它的膨脹算進 exit code —— 否則在 A 專案收工會被 B 專案的膨脹卡住，
-    那是被否決掉的「擋收工」從後門進來。
+    只有它的膨脹算進 exit code —— 否則在 A 專案跑會被 B 專案的膨脹卡住，
+    那是被否決掉的「擋收工」（C-2 (c)）從後門進來。禁止把這支 exit code 接回收工鏈。
 
     兩個 R8-8 的修正：
 
@@ -1301,12 +1318,13 @@ def main() -> None:
 
     # ⚠ 這三個旗標**不准一律 exit 0**（A-8）：0 的意思是「做了，結果是這樣」，
     #   不是「跑完了」。空轉（沒有時序可看／一個檔都沒量到）要用 2 講出來，
-    #   否則收工腳本看到 0 會以為量過了 —— 與 A-1 的「沒掃到長得像乾淨」同一種病。
+    #   否則呼叫端看到 0 會以為量過了 —— 與 A-1 的「沒掃到長得像乾淨」同一種病。
+    #   目前沒有 SOP 讀者；禁止接回收工鏈。
     if "--history" in argv:
-        n = report_history()
+        n, can = report_history()
         if not n:
             print("⚠ 一筆時序都沒有 ⇒ 壓下去了／沒動／反彈**全部說不出來**。")
-        sys.exit(0 if n else 2)
+        sys.exit(0 if can else 2)
 
     if "--append-history" in argv:
         # 先數「有幾個檔真的量得到」。只看 append_history 的回傳值分不出兩件事：
@@ -1363,8 +1381,9 @@ def main() -> None:
             print(f"  - {r}")
         print("\n處置：把超出的細節搬進對應 topic 檔／skill，常駐層只留「精髓＋去處」。")
         print("看候選與切分點：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list")
-        print("壓完或決定接受現況後：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py "
-              "--write-snapshot --project <名稱>")
+        print("壓完後看 `/context-health` 步驟 5。人明示接受現況當新基準才："
+              "py -3 D:\\.ai-harness\\rulefile\\check_bloat.py "
+              "--write-snapshot --project <名稱>（不是預設）")
 
     if blind:
         # **「說不出來」優先於「有膨脹」**：後者至少量到了、看得到要處理什麼；
@@ -1378,7 +1397,7 @@ def main() -> None:
         print("     （錨只在**自成一行**時才算數；夾在句子裡、包在反引號裡、"
               "寫在範例碼塊裡的同一串字都不會綁到範圍——所以這句話可以照抄。）")
         print("  ②範圍有字卻認不到可量單位 → 找那一節裡沒有收尾的 fence。")
-        print("  ③條目數比基準少 → 先看一眼是真的壓下去了（那就重建基準："
+        print("  ③條目數比基準少 → 先看一眼是真的壓下去了（人明示接受現況後才重建基準："
               "--write-snapshot --project <名稱>），還是這個檔已經失明。")
         print("三種任何一種沒排除之前，這個檔的『超標 0 條』不能當成結論。")
         sys.exit(2)
@@ -1390,9 +1409,9 @@ def run_guarded(fn) -> None:
     """跑 `fn`，**任何未捕捉的例外一律 exit 2**（R8-7 的根層·2026-08-15）。
 
     理由是 exit code 的語意被檔頭契約釘死：`1 = 有新增膨脹`。而 **Python 對未捕捉的
-    例外用的也是 exit 1** ⇒ 這支工具自己炸掉時，收工腳本會讀成「量過了、去壓」，
-    真相是「一個字都沒量」。**靜默，而且方向剛好相反** —— 比沒有守門更糟，
-    因為它產生了一個看起來像結論的東西。
+    例外用的也是 exit 1** ⇒ 這支工具自己炸掉時，把 exit 1 當結論的呼叫端會讀成
+    「量過了、去壓」，真相是「一個字都沒量」。**靜默，而且方向剛好相反** —— 比沒有守門更糟，
+    因為它產生了一個看起來像結論的東西。目前沒有 SOP 讀者；禁止接回收工鏈。
 
     `_markdown()` 那道 except 是同一件事的窄版（只管 parser 建不建得起來）；
     這一道管其餘所有路徑，兩道都要有：窄的那道給得出「去裝 markdown-it-py」這種

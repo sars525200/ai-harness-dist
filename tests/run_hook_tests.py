@@ -422,6 +422,7 @@ def main() -> int:
         import test_pyc_freshness
         import test_harness_config
         import test_context_health_skill
+        import test_anti_bloat_probe
         import test_js_source_probe
         import test_adversarial_exchange_gate
         import test_build_review_sandbox
@@ -441,6 +442,7 @@ def main() -> int:
             (test_check_prose_blocks.run, "散文塊偵測（check_prose_blocks）"),
             (test_harness_config.run, "harness 設定去專案化（P-12）"),
             (test_context_health_skill.run, "/context-health 可用性（V-14）"),
+            (test_anti_bloat_probe.run, "防膨脹探針不得把 shougong 字串當 SOP"),
             (test_js_source_probe.run, "JS 原始碼探針（抽函式／變異）"),
             # 這兩支守的是「對抗式覆核到底有沒有真的發生過」。PR-1 從 2026-08-25
             # （`dc3000d`）起會呼叫落檔交換守門 ⇒ 守門壞掉會直接改變 Stop 的判定，
