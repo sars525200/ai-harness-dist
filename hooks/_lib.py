@@ -121,6 +121,10 @@ class RealGitContext(GitContext):
             lambda: set(self._run_z(["diff", "--name-only", "-z", rev_range])),
         )
 
+    def staged_paths(self) -> "list[str]":
+        """`git diff --cached --name-only -z` —— index 裡現在有哪些檔（有序）。"""
+        return self._run_z(["diff", "--cached", "--name-only", "-z"])
+
     def status_paths(self) -> set[str]:
         """`git status --porcelain -z` 的路徑集合（已改未 commit，含未追蹤）。
 

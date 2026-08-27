@@ -66,11 +66,16 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "PR-1", "ENC-1",
+ORDER = ["IDX-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "PR-1", "ENC-1",
          "HTML-1", "UI-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
+    "IDX-1": {
+        "badge": "8/27 WARN", "on": "PreToolUse git commit",
+        "why": "commit 前攤開整份 staged 清單，並標出這一輪從沒提過的檔"
+               "（同日被 index 污染咬三次·第三次是用 grep 查特定檔名而漏掉沒預期的那個）",
+    },
     "DB-1": {
         "badge": "enforce", "on": "PreToolUse push vm",
         "why": "?v= 未升／dual-edit 缺一邊／語法錯",

@@ -92,6 +92,14 @@ REGISTRY = [
         "tools": {"Bash", "PowerShell"},
     },
     {
+        # IDX-1：commit 前把整份 staged 清單攤開。純 WARN，不判對錯 ——
+        # 它沒有能力知道「誰改的」，只保證清單看得見（見該檔的三次失效紀錄）。
+        "id": "IDX-1",
+        "module": "idx1_staged_visibility",
+        "events": {"PreToolUse"},
+        "tools": {"Bash", "PowerShell"},
+    },
+    {
         "id": "R4",
         "module": "r4_server_dbpath",
         "events": {"PreToolUse"},

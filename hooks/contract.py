@@ -369,6 +369,15 @@ class GitContext:
         """
         raise NotImplementedError
 
+    def staged_paths(self) -> "list[str]":
+        """`git diff --cached --name-only -z` 的路徑清單（**有序**，供逐行讀）。
+
+        回 list 不回 set：這一支的用途是「把整份清單攤在眼前」，
+        而 set 會讓每次輸出順序不同，人就無法用「跟上次比」的方式看它。
+        -z 的理由同 `status_paths`。
+        """
+        raise NotImplementedError
+
     def show(self, ref_path: str) -> str:
         """`git show <ref>:<path>` 的文字內容。ref_path 形如 'HEAD:a/b.js'。"""
         raise NotImplementedError
