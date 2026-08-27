@@ -38,6 +38,9 @@
     },
     "ESC-1": {
       "shadow": false
+    },
+    "CTX-1": {
+      "shadow": false
     }
   }
 }
