@@ -104,6 +104,14 @@ TOOLS = [
     #      守門的正則已放寬到容許標記字元，**值本身仍逐字比對**。
     #   5. **沙箱的父目錄也要乾淨**：`D:\AI-Projects` 與 `D:\.ai-harness` 底下都有
     #      `CLAUDE.md`，把沙箱開在它們底下等於白做。實際落點 `D:\reviewer-sandbox`。
+    #   6. **沙箱不是存取邊界，只是「不主動餵脈絡」**（2026-08-27 三組實測推翻舊敘述）：
+    #      `--workspace` 官方語意就只是工作目錄、`--trust` 只是跳過確認提示。審查者
+    #      **讀得到整台機器**——絕對路徑讀得到、沙箱內 junction 指向外部也讀得到、
+    #      `--sandbox enabled` 在 Windows 直接 exit 1（原生沙箱限 macOS/Linux，且管的是
+    #      command execution 不是 Read 工具）。要真的擋，在沙箱放 `.cursor/cli.json`
+    #      的 `permissions.deny`（見 skill 步驟 3.1）。⚠ **deny 路徑在 Windows 必須用
+    #      反斜線**：實測 `Read(D:/...)` 照樣讀得到且不報錯、`Read(D:\...)` 才擋得住，
+    #      而官方範例寫的正是正斜線。⇒ 黑名單列不完，敏感題目仍然不要派。
     {
         "id": "cursor-cli",
         "name": "Cursor CLI（全自動）",
@@ -115,6 +123,8 @@ TOOLS = [
                 "並從 `.claude/skills` 發現 skills（官方文件明載），直接在本 repo 跑等於"
                 "讓審查者載入跟作者同一套脈絡，**「不共用推理脈絡」當場失效**。"
                 "沙箱作法＝乾淨目錄 + junction 連要查證的程式碼目錄，不連 `CLAUDE.md`／`.claude`。"
+                "⚠ **但沙箱不是存取邊界**（2026-08-27 實測）：它只保證 CLI 不會自動載入你的 "
+                "`CLAUDE.md` 與 skills，**擋不住它主動去讀機器上任何檔案**。敏感題目不要派給它。"
                 "⚠ 唯讀靠 `--mode ask` 且**不給 `--force`**；給了 `--force` 它就能改任何檔。",
         "probe": "agent",
         "probe_paths": [CURSOR_AGENT_CMD],

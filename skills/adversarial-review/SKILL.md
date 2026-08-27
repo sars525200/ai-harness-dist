@@ -73,8 +73,36 @@ ask 凍結後不得修改；題目要改就開下一輪。
 agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 prompt>"
 ```
 
-1. `--workspace` 必須是乾淨沙箱，父目錄也不能載入本 repo 的 `CLAUDE.md` 或
-   `.claude/skills`。只用 junction 連需要查證的程式碼與 effort 目錄。
+1. `--workspace` 指到乾淨沙箱，父目錄也不要有本 repo 的 `CLAUDE.md` 或
+   `.claude/skills`；要查證的程式碼用 junction 連進來。
+   ⚠ **這是「不主動餵脈絡」，不是「阻止存取」**（2026-08-27 三組實測）：
+   `--workspace` 的官方語意只是**工作目錄**、`--trust` 只是**跳過確認提示**，
+   兩者都不限制讀取範圍。審查者**讀得到整台機器** —— 給絕對路徑讀得到、
+   沙箱內 junction 指向外部也讀得到、`--sandbox enabled` 在 Windows 直接
+   `exit 1`（原生沙箱只支援 macOS/Linux，而且它管的是 command execution，
+   不是 Read 工具）。所以沙箱只保證「它不會**自動載入**你的 CLAUDE.md 與 skills」。
+   ⇒ **要真的擋，在沙箱放一份 `.cursor/cli.json`**（官方機制；專案層唯一能設的
+   就是 permissions，所以它只影響這一次審查）：
+
+   ```json
+   {"permissions": {
+     "allow": ["Read(**)"],
+     "deny": ["Read(C:\\Users\\<你>\\.claude\\**)",
+              "Read(C:\\Users\\<你>\\.cursor\\**)",
+              "Read(D:\\IT-department\\**)"]}}
+   ```
+
+   ⚠ **Windows 上 deny 的路徑一定要用反斜線**。2026-08-27 同題對照實測：
+   `Read(D:/.ai-harness/**)`（**官方範例的寫法**）→ 檔案照樣讀得到、**不報錯**；
+   `Read(D:\.ai-harness\**)` → 回 `Permission denied`。照抄官方範例會得到一份
+   **看起來設好、實際沒擋**的設定 —— 這是最難發現的失敗形狀。
+   ⚠ JSON 裡反斜線要寫**兩個**（上面範例已是正確寫法）：單反斜線是非法跳脫，
+   CLI 會回 `Bad escaped character in JSON` 並 `exit 1`。
+   ⚠ `allow` 是**必填**：缺了整份 config 被 schema 拒絕、`exit 1`（訊息會明講）。
+   ⚠ deny 是**黑名單、列不完** ⇒ 涉及憑證、個資、客戶資料的題目**仍然不要派**。
+   ⚠ 舊紀錄說「junction 目標落在 `--workspace` 之外會被 CLI 自己的沙箱擋掉」
+   （`.scratch/plaintext-credential-gate/PLAN.md`）**是誤歸因** —— 那次是被
+   `dispatch.py` fail-closed 擋死，不是沙箱。
 2. 使用 `--mode ask`，不得加 `--force`。
 3. 先跑 `agent --list-models` 確認 model slug；若偏離設定，必須回報。
 4. Windows 用 `%LOCALAPPDATA%\cursor-agent\agent.cmd` 完整路徑，避免舊行程 PATH 未更新。

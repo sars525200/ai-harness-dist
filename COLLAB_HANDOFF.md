@@ -176,6 +176,11 @@ Cursor 是這台機器上**唯一真正跨模型族**的審查者。
 ⚠ 代價是**沙箱**：CLI 會讀專案根 `CLAUDE.md`、從 `.claude/skills` 發現 skills，
 在本 repo 直接跑＝審查者載入跟作者同一套脈絡，**「不共用推理脈絡」當場失效**。
 必須 `--workspace` 指到隔離沙箱、`--mode ask` 且**不給** `--force`。
+⚠ **沙箱只擋「自動載入」，不擋「主動去讀」**（2026-08-27 實測）：`--workspace` 只是
+工作目錄、`--trust` 只是跳過確認提示，審查者**讀得到整台機器**（絕對路徑與 junction
+都試過），`--sandbox enabled` 在 Windows 不支援。要真的擋，在沙箱放一份
+`.cursor/cli.json` 的 `permissions.deny`（**路徑必須用反斜線**，正斜線靜默失效；
+`allow` 必填）。黑名單列不完 ⇒ 敏感題目仍然不要派給外部 CLI。
 
 **PR-1 會強制交換齊全**：這輪動過 `.scratch/**/map.md` 且同目錄有 `round-N-ask.md` 時，
 `_exchange_gate_verdict()` 會呼叫守門，非零就 BLOCK。沒有 ask 檔＝行為與接線前一模一樣。

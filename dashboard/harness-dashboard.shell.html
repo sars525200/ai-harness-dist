@@ -2470,7 +2470,11 @@
             <i>Cursor 官方 CLI（<code>agent -p</code>，Windows 原生）。跟上面那個 Cursor 同樣跨模型族，
             但<b>不需要人當傳話筒</b>——skill 直接跑、收 stdout 落檔。
             ⚠ 必須 <code>--workspace</code> 指到隔離沙箱：CLI 會讀專案根 CLAUDE.md 與 .claude/skills，
-            在本 repo 直接跑等於審查者載入跟作者同一套脈絡</i></span></label>
+            在本 repo 直接跑等於審查者載入跟作者同一套脈絡。
+            ⚠ 但沙箱<b>只擋自動載入、不擋主動去讀</b>（2026-08-27 實測：絕對路徑與 junction 都讀得到，
+            <code>--sandbox</code> 在 Windows 不支援）。要真的擋要在沙箱放 <code>.cursor/cli.json</code>
+            的 <code>permissions.deny</code>，<b>路徑必須用反斜線</b>（正斜線靜默失效）——
+            黑名單列不完，敏感題目仍然不要派</i></span></label>
         </div>
         <!-- 模型清單依審查者而定（2026-08-25）：cursor-cli 吃 Cursor 的 model slug、
              claude-code 吃抽象檔位。兩組不能混——混了會選到對該工具無效的值。
