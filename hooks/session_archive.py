@@ -159,6 +159,30 @@ def _spawn_sweep(path: str, dest: str) -> None:
         _log("sweep 起不來（重生的檔會留在列表）%s: %s" % (type(exc).__name__, exc))
 
 
+def _spawn_scan(session_id: str) -> None:
+    """把「收拾其餘列表」丟到背景給 `session_scan.py`。
+
+    刻意用 spawn 而不是 import 後直接呼叫：`scan()` 要枚舉 250 則、可能搬幾百 MB，
+    而 SessionEnd 同步阻塞。當則的 uuid 傳進去當 skip —— 它剛被上面處理過，
+    再掃一次只會撞到「檔案不存在」而在 log 留一筆沒意義的失敗。
+    """
+    try:
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "session_scan.py")
+        if not os.path.exists(script):
+            return
+        flags = 0
+        if os.name == "nt":
+            flags = (getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+                     | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200))
+        subprocess.Popen(
+            [sys.executable, script, "--scan", session_id],
+            creationflags=flags, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+    except Exception as exc:
+        _log("scan 起不來（列表這輪不會被收）%s: %s" % (type(exc).__name__, exc))
+
+
 def _decode_payload(data: bytes) -> str:
     """stdin bytes -> JSON 文字。剝掉**所有**前置 BOM，不是只剝一個。
 
@@ -219,6 +243,11 @@ def main() -> int:
         except OSError as exc:
             # 刪不掉不是災難：封存已完成，只是列表還會看到那一列。
             _log("archived, 但原檔刪不掉（列表仍會顯示）%s: %s" % (session_id[:8], exc))
+
+        # 順手把列表其餘的也收一收（放生的空殼＋過期的舊對話）。
+        # **一定要背景跑**：SessionEnd 是同步阻塞的，枚舉 250 則、搬 800MB
+        # 放在這裡等於讓 `/clear` 卡住。這支只負責 spawn，不做任何枚舉。
+        _spawn_scan(session_id)
     except Exception as exc:
         # fail-open 但不 fail-silent（HARNESS_PLAN D7）
         _log("FAILED %s: %s" % (type(exc).__name__, exc))

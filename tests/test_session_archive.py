@@ -50,6 +50,15 @@ def _load(tmp):
     """每次都在暫存目錄裡重載：archive root 與 log 都是 import 期讀環境變數決定的。"""
     os.environ["CLAUDE_SESSION_ARCHIVE_DIR"] = os.path.join(tmp, "archive")
     os.environ["CLAUDE_SESSION_ARCHIVE_LOG"] = os.path.join(tmp, "archive.log")
+    # ⚠ 下面三個是 2026-08-27 事故之後補的，**不是這支自己用得到的**：
+    # `main()` 現在會 spawn `session_scan.py --scan` 出去（DETACHED，真的另起行程）。
+    # 那個子行程繼承這裡的環境；只覆寫 ARCHIVE 而不覆寫 PROJECTS，等於叫它拿
+    # **真實**的 `~/.claude/projects` 配上**測試的暫存**封存夾 —— 實地把 154 則
+    # 真實對話搬進一個測試結束就 rmtree 的資料夾（當次全數救回）。
+    # `session_scan.py` 那邊也有「半套設定拒跑」的守門，這裡是第二道。
+    os.environ["CLAUDE_PROJECTS_DIR"] = os.path.join(tmp, "projects")
+    os.environ["CLAUDE_SESSION_SCAN_LOG"] = os.path.join(tmp, "scan.log")
+    os.environ["CLAUDE_SESSION_SCAN_LOCK"] = os.path.join(tmp, "scan.lock")
     spec = importlib.util.spec_from_file_location("session_archive_under_test", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

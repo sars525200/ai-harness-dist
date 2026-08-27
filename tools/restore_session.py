@@ -143,6 +143,12 @@ def cmd_restore(prefix: str) -> int:
 
     os.makedirs(dest_dir, exist_ok=True)
     shutil.copy2(fp, dest)
+    # ⚠ **還原之後一定要把 mtime 更新到現在**（規劃圖 R1-F5）。
+    # `copy2` 保留原 mtime，而 `session_scan.py` 的 7 天門用的正是
+    # `max(mtime, 最後一筆 timestamp)` —— 不改的話，剛叫回來的那一列會在
+    # **下一次 `/clear`** 觸發掃描時立刻被收回去，使用者看到的是「還原沒有用」。
+    # 改 mtime 不影響封存那一份的時間戳（dest 檔名早就定好了）。
+    os.utime(dest, None)
     print("已還原：%s\n   -> %s（%.1f MB）" % (title_of(fp) or uuid[:8], dest, size / 1048576))
     print("\n注意：側邊欄列表要 **Reload Window** 才會出現這一列（extension 沒有掛 watcher）。")
     print("  封存那一份留著沒動：%s" % fp)
