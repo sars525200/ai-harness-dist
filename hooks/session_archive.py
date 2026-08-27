@@ -34,6 +34,17 @@ reason 有 clear / resume / logout / prompt_input_exit / other。只有 `clear`
 是使用者主動宣告「這則收掉」；其餘多半是暫離、下次還要 resume 回同一份檔——
 把那些也搬走等於**關個視窗就再也接不回去**。matcher 濾一次，`main()` 再擋一次。
 
+## 順手做的第二件事：把雲端那一列改成佔位名（票 02 Q5，2026-08-27）
+
+`/clear` 之後側邊欄那一列會**頂著被 clear 掉那則的名字**，因為那一列從頭到尾就是
+同一列（`cse_…` 綁面板、跨 `/clear` 不變），而新殼永遠不會有 `Stop` ⇒ 沒有人再推
+一次新名字。改名的入口只有雲端，且只有背景 sweep 那個時機同時握有兩樣東西：
+封存那份裡的 `cse_…`，與「使用者到底開工了沒」的證據。細節見 `_push_idle_title()`。
+
+**它只修雲端那一份**（claude.ai／手機）。VSCode 側邊欄讀的是本機檔最後一筆
+`custom-title`，而 bridge session 的那個欄位由 client 擁有（我方 append 只有第一次
+有效）—— 那一半修不動，是已知限制，不是這支壞了。
+
 ## 做不到的那一半（別誤會成壞掉）
 
 SessionEnd **不能擋、也不能注入 prompt**（官方：`Shows stderr to user only`），
@@ -116,9 +127,15 @@ def sweep(path: str, dest: str, delays=None) -> None:
     順序永遠是「先確保封存那份夠完整，才刪」，與 `main()` 同一個紀律：
     刪不掉只是列表多一列，封存丟了才是真的沒了。
     """
+    pushed = False
     for delay in (delays if delays is not None else _SWEEP_DELAYS):
         try:
             time.sleep(delay)
+            if not pushed:
+                # 只在第一個 tick 之後推一次。放在刪檔判斷**之前**：新殼的改名
+                # 與「原檔有沒有被 client 重建」是兩件無關的事，不該被 continue 跳過。
+                pushed = True
+                _push_idle_title(path, dest)
             if not os.path.exists(path):
                 continue
             size = os.path.getsize(path)
@@ -138,6 +155,110 @@ def sweep(path: str, dest: str, delays=None) -> None:
                      % (size, os.path.basename(path)[:8]))
         except Exception as exc:
             _log("sweep FAILED %s: %s" % (type(exc).__name__, exc))
+
+
+# --- /clear 之後把雲端那一列改成佔位名（票 02 Q5，2026-08-27） -----------------
+# 為什麼掛在 sweep 而不是別的地方：
+#   * **不能內聯在 SessionEnd**：那是同步阻塞事件，一個最壞 5 秒的網路請求
+#     會讓 `/clear` 卡住 5 秒。sweep 本來就是背景行程、本來就有延遲。
+#   * **不能走 SessionStart**：2026-08-27 20:44:53 實測（票 06），新殼那一刻
+#     `transcript` 只有第 1 行 custom-title、**還沒有 `cse_…`**；退而求其次的
+#     「拿同目錄最近一則的 cse」會抓到**別的面板**——因為 archive 在同一秒就把
+#     正確的那一份搬走了。照它改名＝改到別人那一列。
+#   * **封存那份裡有 `cse_…`**，而 `cse_…` 跨 `/clear` 不變（票 01 覆驗：
+#     `327bc614` 與新殼 `4cfde0c3` 同為 `cse_01X7hm…`）⇒ 它就是新殼會用的那個。
+_IDLE_SCAN_MAX = 60                   # 最多回頭看幾個 jsonl（IO 上限，不是判準）
+
+
+def _panel_in_use(projects_dir: str, cse: str, exclude: str) -> str:
+    """這個面板現在有沒有人在用。有＝回「證據檔名」，沒有＝回空字串。
+
+    判準：projects 目錄裡**還存在**、bridge id 與封存那份相同、且有真實 user
+    訊息的 jsonl。`/clear` 會在同一秒把前一則封存搬走，所以還留著又有內容的，
+    只可能是使用者已經在新殼裡開工了 —— 那時把列名改成「等待任務」是錯的
+    （票 02 Q5 自己問的就是這一條）。
+
+    `exclude` 是被封存那份自己的檔名：client 常把它整個重建回來，而它當然有
+    內容、cse 也相同 —— 不排掉的話這道門會永遠判「有人在用」，Q5 等於沒做。
+
+    **讀不到／判不準一律回「有人在用」**：這道門的兩個方向不對稱 —— 誤判成
+    「沒人用」會去改一列正在做事的對話，誤判成「有人用」只是少改一次名字。
+    """
+    try:
+        import session_scan as S
+        import session_title as T
+    except Exception as exc:
+        return "import_failed(%s)" % type(exc).__name__
+    try:
+        names = [f for f in os.listdir(projects_dir)
+                 if f.endswith(".jsonl") and f != exclude]
+        names.sort(key=lambda f: os.path.getmtime(os.path.join(projects_dir, f)),
+                   reverse=True)
+    except OSError as exc:
+        return "listdir_failed(%s)" % type(exc).__name__
+    for name in names[:_IDLE_SCAN_MAX]:
+        full = os.path.join(projects_dir, name)
+        try:
+            if T._bridge_session_id(full) != cse:
+                continue
+            if S.has_real_user_message(full):
+                return name[:8]
+        except Exception:
+            return "scan_failed(%s)" % name[:8]
+    return ""
+
+
+def _push_idle_title(path: str, dest: str) -> None:
+    """把 `專案名｜等待任務｜上一個任務` 推到這個面板的雲端那一列。
+
+    **這裡刻意不呼叫 `session_title._push_cloud()`**，而是自己組請求：那一支
+    **成功不留任何痕跡**（只在非 200／例外時 log），而票 01 卡了兩小時的正是
+    「推了沒有？沒有證據」。這條路徑一年跑不了幾次，成功那一行 log 才是它
+    日後唯一能被查證的地方（票 02 Q3 的一半）。token 過期同理要留痕 —— 現況
+    `_access_token()` 是靜默 return，那條路徑在 log 上完全看不見（Q2）。
+
+    整支包在 try 裡：改名是錦上添花，不准影響 sweep 的本業（收檔）。
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        if os.environ.get("CLAUDE_SESSION_TITLE_NO_CLOUD"):
+            _log("idle-title 跳過：NO_CLOUD 開關")
+            return
+        # **沙箱不准寫真實雲端**（2026-08-27 事故的同型防護，見 session_scan.py §半套設定）。
+        # 雲端那一列是全域的真資源、沒有測試替身：本機路徑被覆寫＝呼叫者在沙箱裡，
+        # 那時拿真 token 去 PUT 會改到一列真的側邊欄。既有的 sweep 測試就是這樣
+        # 被動變成寫入入口的 —— 守門放在這裡，不必仰賴每個測試作者記得關。
+        # 一定要留痕：靜默拒跑會被誤讀成「功能沒生效」，然後有人來把守門拿掉。
+        if "CLAUDE_PROJECTS_DIR" in os.environ:
+            _log("idle-title 拒跑：PROJECTS_DIR 被覆寫（沙箱）= %s"
+                 % os.environ["CLAUDE_PROJECTS_DIR"])
+            return
+        import session_title as T
+        src = dest if os.path.exists(dest) else path
+        cse = T._bridge_session_id(src)
+        if not cse:
+            return                        # 純本機對話，沒有雲端那一份
+        title = T.compose_idle(T.project_name("", path),
+                               T._recall_last_task(T._project_key(path)))
+        if not title:
+            _log("idle-title 跳過：專案名取不到 %s" % os.path.basename(path)[:8])
+            return
+        busy = _panel_in_use(os.path.dirname(path), cse, os.path.basename(path))
+        if busy:
+            _log("idle-title 跳過：面板已有人在用 %s (證據 %s)" % (cse[:16], busy))
+            return
+        token = T._access_token()
+        if not token:
+            _log("idle-title 跳過：token 沒有或已過期 %s" % cse[:16])
+            return
+        url, headers, body = T.cloud_request(cse, title, token)
+        import urllib.request
+        req = urllib.request.Request(url, data=body, method="PUT", headers=headers)
+        with urllib.request.urlopen(req, timeout=T._CLOUD_TIMEOUT) as resp:
+            _log("idle-title PUT %s -> HTTP %s title=%s"
+                 % (cse[:16], resp.status, title))
+    except Exception as exc:
+        _log("idle-title FAILED %s: %s" % (type(exc).__name__, exc))
 
 
 def _spawn_sweep(path: str, dest: str) -> None:
