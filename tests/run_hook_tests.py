@@ -506,6 +506,28 @@ def main() -> int:
                 unit_failed.append("看板結構")
                 print("  FAIL  看板結構（頁籤↔面板配對／標籤平衡）")
 
+        # skill 來歷與文件引用。同樣走子進程（獨立可執行腳本），理由同上。
+        # **為什麼接在這裡而不是留在 `/audit` 的清單**：清單只是「要人記得」的
+        # 更好版本，而 `HARNESS_PROGRESS.md` 停在 7/28 兩天就是那樣來的。
+        # 這兩件事過期的症狀都是「表還在、看起來完整」—— 缺口長得跟已驗證一樣。
+        prov_test = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "test_skill_provenance.py")
+        if os.path.exists(prov_test):
+            r = subprocess.run([sys.executable, "-X", "utf8", prov_test],
+                               capture_output=True, text=True, encoding="utf-8",
+                               errors="replace")
+            if r.returncode == 0:
+                unit_passed += 1
+                print("  PASS  skill 來歷與文件引用")
+            else:
+                detail = "; ".join(
+                    ln.strip()[2:] for ln in (r.stdout or "").splitlines()
+                    if ln.strip().startswith("- ")
+                ) or f"exit {r.returncode}"
+                failed.append(("skill 來歷與文件引用", detail))
+                unit_failed.append("skill 來歷與文件引用")
+                print("  FAIL  skill 來歷與文件引用")
+
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
     print(f"{'=' * 60}")
