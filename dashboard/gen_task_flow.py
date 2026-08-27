@@ -161,9 +161,18 @@ def wired_events() -> dict:
     圖上就該跟著變；寫死的話畫面會繼續宣稱一個已經不成立的拓樸。
     """
     proj = _current_project()
+    # ⚠ **全域層也要看**（2026-08-28 修）：Claude Code 是把使用者層與專案層**合併**載入的，
+    # 而這個 harness 的 dispatch 實際掛在 `~/.claude/settings.json`——專案層兩個檔裡一個都沒有。
+    # 原本只掃專案層 ⇒ 這支從此每次都拒跑（exit 1），「任務動線」那張圖停在最後一次成功的日子。
+    # 拒跑本身是對的（不畫空的閘門帶），錯的是它找的地方少一層。
+    # 順序＝專案層在前、全域在後，配 `setdefault` ⇒ **專案層覆寫全域**，與平台的合併方向一致。
+    sources = [
+        (proj / ".claude" / "settings.json", "settings.json"),
+        (proj / ".claude" / "settings.local.json", "settings.local.json"),
+        (Path.home() / ".claude" / "settings.json", "~/.claude/settings.json"),
+    ]
     out: dict = {}
-    for name in ("settings.json", "settings.local.json"):
-        p = proj / ".claude" / name
+    for p, label in sources:
         if not p.exists():
             continue
         try:
@@ -174,9 +183,10 @@ def wired_events() -> dict:
             for entry in entries or []:
                 for h in (entry.get("hooks") or []):
                     if "dispatch.py" in (h.get("command") or ""):
-                        out.setdefault(event, name)
+                        out.setdefault(event, label)
     if not out:
-        raise SystemExit(f"{proj}\\.claude 底下找不到任何指向 dispatch.py 的 hook —— 拒絕畫一條空的閘門帶。")
+        where = "、".join(str(p) for p, _ in sources)
+        raise SystemExit(f"這些地方都找不到指向 dispatch.py 的 hook（{where}）—— 拒絕畫一條空的閘門帶。")
     return out
 
 

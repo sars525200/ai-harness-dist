@@ -168,23 +168,45 @@
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
   "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
-          }
-        ]
-      }
-    ],
     "SessionEnd": [
       {
-        "matcher": "clear",
+        "matcher": "clear|logout|prompt_input_exit|other",
         "hooks": [
           {
             "type": "command",
             "command": "py -3 \"D:\\.ai-harness\\hooks\\session_archive.py\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\state\\sessionstart_probe.py\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Skill|Write|Edit|MultiEdit|NotebookEdit|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
@@ -194,17 +216,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
     ],
-    "PreToolUse": [
+    "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_title.py\""
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
