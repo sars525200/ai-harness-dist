@@ -58,6 +58,8 @@ Iterate until the user approves the breakdown.
 
 ### 5. Publish the tickets to the configured tracker
 
+**LOCAL EDIT (2026-08-21):** upstream pointed this at a setup skill that has since been removed, which made the fallback a dead route. It now points at `docs/agents/*` like step 1 does. **Restoring this file from upstream without re-applying this brings the dead route back**, and nothing will report it — the skill still runs, it just sends you to a skill that is not there. (Recorded in `SKILL_IMPORT_WAYFINDER_PLAN.md` V-2, which lists both this edit and the one at the top of the file.)
+
 Publish the approved tickets. **How** depends on the tracker configured in `docs/agents/issue-tracker.md` (here: local markdown under `.scratch/`); the tickets are the same either way, only the shape of the blocking edges changes:
 
 - **Local files** → write one file per ticket under `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` in dependency order (blockers first). Each file's "Blocked by" lists the numbers/titles it depends on. Use the per-ticket file template below: one ticket per file, never a single combined file.

@@ -72,10 +72,10 @@
       "local_edit_marks": 0
     },
     "to-tickets": {
-      "tree": "ab92b9a86478d14011e4c75ce9eb2da02b1dd3c1",
+      "tree": "6799474438fd543278e0a4541f93ce67c9677c34",
       "upstream": "b32c94e5a51c24ee9c41fcb7fe9ea9fff9af6369",
       "diverged": true,
-      "local_edit_marks": 1
+      "local_edit_marks": 2
     },
     "visual-check": {
       "tree": "1ac21d17ef80652b9709c509a5fa90cb2fc50ef2",
