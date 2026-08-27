@@ -169,6 +169,27 @@ def _user_waived(transcript_path: str) -> bool:
     return bool(_USER_WAIVED.search(text))
 
 
+# ── 臨時探針（2026-08-28 裝）：驗防迴圈 A 的旗標平台到底有沒有帶 ──────────
+# 問題：A 與 B 互相遮蔽 —— 旗標若有帶，A 先回、B 永遠不觸發；旗標若沒帶，
+# B 觸發而 A 看不到。**所以在兩個分支各記一筆，哪個記到就知道答案**，
+# 不必為了驗它而拆掉任何一道防護（那才是拿安全網換資訊）。
+# 路徑從 STATE_PATH 推導 ⇒ 測試改指 STATE_PATH 時探針自動跟著搬，不污染正式檔。
+# ⚠ 問題答完就把這個 helper 與兩處呼叫一起刪掉。追蹤：TODOS.md
+def _probe(branch: str, ctx) -> None:
+    try:
+        import time as _t
+        path = os.path.join(os.path.dirname(STATE_PATH), "awc1_probe.ndjson")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        row = {"ts": _t.time(), "branch": branch,
+               "stop_hook_active": ctx.payload.get("stop_hook_active"),
+               "has_key": "stop_hook_active" in ctx.payload,
+               "session": str(ctx.payload.get("session_id") or "")[:8]}
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + chr(10))
+    except Exception:
+        pass  # 探針壞掉不可以影響閘門
+
+
 def applies(ctx) -> bool:
     """每一則回覆都適用——放行條件全部搬進 check()。
 
@@ -180,6 +201,7 @@ def applies(ctx) -> bool:
 def check(ctx):
     # ① 防迴圈 A：被本 hook 擋下後的重跑
     if ctx.payload.get("stop_hook_active"):
+        _probe("A", ctx)
         return allow()
 
     # ② 防迴圈 B：同一個 user 回合只擋一次（不依賴 ①）
@@ -187,6 +209,7 @@ def check(ctx):
     if key is None:
         return allow()  # 讀不到 transcript → fail-open
     if _already_blocked(key):
+        _probe("B", ctx)
         return allow()
 
     # ③ 這輪真的呼叫過選擇題工具
