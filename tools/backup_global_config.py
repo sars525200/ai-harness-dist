@@ -54,11 +54,28 @@ GLOBAL_DIR = os.environ.get("BACKUP_GLOBAL_DIR") or os.path.join(
 # 只收**實體檔**。`agents`／`skills` 是 junction、已經在 repo 裡了，
 # `projects\` 是 transcript（每台機器不同、且會長到 GB 級），一律不碰。
 TRACKED = ["CLAUDE.md", "settings.json"]
+# 回報樣式（output style）改的是系統提示本身，換一台機器沒有它就換回預設 ——
+# 跟 CLAUDE.md 同一級的東西，所以一起收。
+# **收整個資料夾不是列檔名**：列檔名的話，下次新增一支樣式不會有人回來改這張表，
+# 而漏收是靜默的（機器還在時看不出來，重灌才發現）。
+# 只收 .md：其餘是編輯器暫存或平台快取。
+TRACKED_DIRS = ["output-styles"]
 
 
 def _pairs():
     for name in TRACKED:
         yield name, os.path.join(GLOBAL_DIR, name), os.path.join(DEST_DIR, name)
+    for d in TRACKED_DIRS:
+        # 兩邊都掃：只在 repo 有的（live 被刪）也要現形，否則 --check 會說「一致」。
+        names = set()
+        for base in (GLOBAL_DIR, DEST_DIR):
+            root = os.path.join(base, d)
+            if os.path.isdir(root):
+                names.update(f for f in os.listdir(root) if f.lower().endswith(".md"))
+        for fn in sorted(names):
+            yield ("%s/%s" % (d, fn),
+                   os.path.join(GLOBAL_DIR, d, fn),
+                   os.path.join(DEST_DIR, d, fn))
 
 
 def _state(live: str, repo: str) -> str:
@@ -137,6 +154,7 @@ def cmd_backup() -> int:
             continue
         # ⚠ 用 `copy` 不是 `copy2`：`copy2` 會保留**來源的 mtime**，於是「三十天沒改的
         # 設定今天剛備份」會被判成舊備份。這裡要的語意是「這份副本是什麼時候取的」。
+        os.makedirs(os.path.dirname(repo), exist_ok=True)
         shutil.copy(live, repo)
         changed.append(name)
     if changed:

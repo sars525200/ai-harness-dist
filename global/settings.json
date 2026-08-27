@@ -1,4 +1,5 @@
 {
+  "outputStyle": "PM-Challenger",
   "permissions": {
     "allow": [
       "Bash(ls:*)",
