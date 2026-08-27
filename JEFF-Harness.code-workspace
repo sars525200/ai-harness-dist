@@ -4,5 +4,10 @@
       "name": "JEFF-Harness",
       "path": "."
     }
-  ]
+  ],
+  "settings": {
+    "git.enabled": false,
+    "git.autoRefresh": false,
+    "git.autofetch": false
+  }
 }

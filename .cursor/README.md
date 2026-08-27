@@ -31,4 +31,4 @@ IT 專案把 `.claude/rules` 與 `.claude/skills` **拷成** `.cursor/`（完整
 - **選擇題全域通道**：Cursor Settings → Rules（User Rules）。專案 `ask-choices.mdc` 只覆蓋本工作區。`~\.cursor\rules\*.mdc` 在 2026-08-25 實測**沒被注入**。
 - **path-scoped**（`dashboard-generators`／`harness-hooks`／`harness-skills`）：YAML 有 glob，但 2026-08-24 實測 **不會**把本文注入模型（開檔、改 glob 寫法、新開對話都沒進；`alwaysApply: true` 才進，探針已改回 `false`）。改那些目錄請 `@` 對應規則或手動 Read `.mdc`。
 - 若 Cursor 只開了 `IT-department`、沒把本目錄加進工作區：更不會進。動看板請手動 Read 本目錄的 `.mdc`，或把 `D:\.ai-harness` 加進工作區後再用 `@`。
-- **本工作區 `.vscode/settings.json`**：`git.autoRefresh`／`git.autofetch` false，並排除看板 html／`state/**`，減少 Cursor SCM 生 conhost。**需 Reload Window 才生效**。
+- **本工作區 `.vscode/settings.json` 與 `JEFF-Harness.code-workspace`**：兩邊都關 `git.enabled`（SCM 面板會空），並關 `git.autoRefresh`／`git.autofetch`、排除看板 html／`state/**`。autoRefresh 不夠（2026-08-26 探針仍見 git diff → conhost）；只寫資料夾 `.vscode` 時 Cursor 內建 git 仍會 `rev-parse --show-toplevel`。**需 Reload Window 才生效**。

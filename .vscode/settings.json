@@ -1,6 +1,9 @@
 {
   // Cursor 每次檔案變動會生 git.exe → conhost，打字／看板重生時閃黑窗。
-  // 探針 2026-08-25：Cursor.exe → git status -z -uall。此二開關只影響本工作區 SCM 自動刷新。
+  // 探針 2026-08-25：Cursor.exe → git status -z -uall；autoRefresh 不夠。
+  // 探針 2026-08-26 03:42：仍生 git diff / rev-parse / for-each-ref → conhost。
+  // git.enabled=false 關掉本資料夾 SCM（面板會空）；需 Reload Window。
+  "git.enabled": false,
   "git.autoRefresh": false,
   "git.autofetch": false,
   "files.watcherExclude": {
