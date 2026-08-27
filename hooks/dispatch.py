@@ -136,6 +136,16 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # 同一個槽位、同一條理由：驗的是「寫進去之後長多大」。
+        # 掛 Stop 的話得自己算「哪些檔算常駐層」，那會變成 check_bloat.discover_targets()
+        # 的第二份實作 —— 兩份判準遲早漂移，而漂移的症狀是「量的不是你以為的那個檔」。
+        # 掛這裡則是誰改我就量誰。⚠ 產生器（gen_rule_hub.py）走 Bash 寫檔，這條抓不到。
+        "id": "CTX-1",
+        "module": "ctx1_resident_budget",
+        "events": {"PostToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         "id": "R1",
         "module": "r1_default_migration",
         "events": {"PreToolUse"},
