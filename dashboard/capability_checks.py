@@ -353,7 +353,7 @@ def _p_reversibility():
         bad.append("①")
 
     # 只認明確指定的落點，且檔名必須真的是 settings.json 的副本
-    # 2026-08-23 補第三個落點：`toolsackup_global_config.py` 把全域層實體檔
+    # 2026-08-23 補第三個落點：`tools/backup_global_config.py` 把全域層實體檔
     # 複製進 `harness\global\`（**進版控**，比 state/ 更強：有歷史、有還原點）。
     # 原方案「檔案搬進 repo ＋ 原位置建連結」實測做不到 —— 跨磁碟硬連結是
     # 「無效的參數」、符號連結要管理員權限；junction 是目錄專用，單檔沒這條路。
