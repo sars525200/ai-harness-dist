@@ -2,9 +2,9 @@
   "schema": 2,
   "files": {
     "__global__\u0001全域 CLAUDE.md": {
-      "bytes": 10870,
-      "entry_count": 42,
-      "over_limit_count": 0,
+      "bytes": 11752,
+      "entry_count": 46,
+      "over_limit_count": 1,
       "entries": {
         "__global__\u0001全域 CLAUDE.md\u0001**全程繁體中文回覆**：不論任務內容、程式語言": 53,
         "__global__\u0001全域 CLAUDE.md\u0001**問題一律用選擇題**：需要使用者決定或釐清的": 88,
@@ -17,7 +17,7 @@
         "__global__\u0001全域 CLAUDE.md\u0001**規模欄三選一**＝L／S／M（判準見§3，動": 53,
         "__global__\u0001全域 CLAUDE.md\u0001任務／階段／規模三欄「為什麼是這個形狀」＋實測踩": 70,
         "__global__\u0001全域 CLAUDE.md\u0001**「修改檔案」欄寫實際會動的檔**：不改任何檔": 95,
-        "__global__\u0001全域 CLAUDE.md\u0001**對話名稱由hook從宣告自動組**（不必手動": 111,
+        "__global__\u0001全域 CLAUDE.md\u0001**對話名稱由hook從宣告自動組**（不必手動": 171,
         "__global__\u0001全域 CLAUDE.md\u0001**M大型**＝資料遷移/DELETE・動角色·": 106,
         "__global__\u0001全域 CLAUDE.md\u0001**S標準**＝改**≥3檔**・碰硬規則區・改": 71,
         "__global__\u0001全域 CLAUDE.md\u0001**L輕量**＝以上都不命中→Research壓": 40,
@@ -41,13 +41,17 @@
         "__global__\u0001全域 CLAUDE.md\u0001**角色回報的`【需要但沒有】`必落檔**：抄進": 96,
         "__global__\u0001全域 CLAUDE.md\u0001**預設Sonnet**（日常維護／UI打磨／低": 36,
         "__global__\u0001全域 CLAUDE.md\u0001**升Opus的時機**：任務碰到**DB／邏輯": 91,
+        "__global__\u0001全域 CLAUDE.md\u0001**Fable5燒獨立WeeklyFable桶＋": 48,
         "__global__\u0001全域 CLAUDE.md\u0001**最貴的模型<5%**：只留最硬的audit（": 49,
         "__global__\u0001全域 CLAUDE.md\u0001**目標落點Opus:Sonnet≈4:6**，": 54,
         "__global__\u0001全域 CLAUDE.md\u0001**skillfrontmatter的`mode": 93,
         "__global__\u0001全域 CLAUDE.md\u0001**做完要給結論＋成果落地**：規則寫進規範檔、": 46,
         "__global__\u0001全域 CLAUDE.md\u0001**改了沒當場驗到的**（需重啟／要真機／等排程": 79,
         "__global__\u0001全域 CLAUDE.md\u0001報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就": 28,
-        "__global__\u0001全域 CLAUDE.md\u0001同一個repo可能有別的session在改：開工": 105
+        "__global__\u0001全域 CLAUDE.md\u0001同一個repo可能有別的session在改：開工": 105,
+        "__global__\u0001全域 CLAUDE.md\u0001**動harness設計前先讀`UNIVERSA": 75,
+        "__global__\u0001全域 CLAUDE.md\u0001**改看板先手動讀`dashboard-gene": 76,
+        "__global__\u0001全域 CLAUDE.md\u0001**新增/改skill·角色·規則後跑`eval": 69
       }
     },
     "AI-Projects\u0001CLAUDE.md": {
@@ -191,8 +195,8 @@
       }
     },
     "IT-department\u0001CLAUDE.md": {
-      "bytes": 13994,
-      "entry_count": 19,
+      "bytes": 14189,
+      "entry_count": 20,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001CLAUDE.md\u0001**前端硬規則**（動`app.js`／`ind": 119,
@@ -205,6 +209,7 @@
         "IT-department\u0001CLAUDE.md\u0001commit訊息含引號/反引號走`-F<檔>`（": 75,
         "IT-department\u0001CLAUDE.md\u0001**外部程序會定期`gitadd-A`→inde": 82,
         "IT-department\u0001CLAUDE.md\u0001清理刪檔import-graph必涵蓋gitig": 78,
+        "IT-department\u0001CLAUDE.md\u0001叫`/wayfinder`／`/to-ticke": 95,
         "IT-department\u0001CLAUDE.md\u0001領域詞彙查root`CONTEXT.md`（di": 85,
         "IT-department\u0001CLAUDE.md\u0001診斷資產查`assets`/dump`it-as": 108,
         "IT-department\u0001CLAUDE.md\u0001IP設備：**動工前先從VM實測網段可達性**（": 104,
@@ -217,8 +222,8 @@
       }
     },
     "IT-department\u0001MEMORY.md": {
-      "bytes": 13542,
-      "entry_count": 93,
+      "bytes": 13791,
+      "entry_count": 94,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001MEMORY.md\u0001[[feedback-closure-scope": 70,
@@ -279,7 +284,8 @@
         "IT-department\u0001MEMORY.md\u0001[[feedback-dispatch-and-": 65,
         "IT-department\u0001MEMORY.md\u0001[[feedback-filter-trigge": 75,
         "IT-department\u0001MEMORY.md\u0001[[feedback-search-scope-": 71,
-        "IT-department\u0001MEMORY.md\u0001[[feedback-concurrent-se": 89,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-hook-spawn-tu": 63,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-concurrent-se": 95,
         "IT-department\u0001MEMORY.md\u0001[[project-it-asset-platf": 18,
         "IT-department\u0001MEMORY.md\u0001[[project-ai-harness-gat": 72,
         "IT-department\u0001MEMORY.md\u0001[[project-resource-overv": 67,
