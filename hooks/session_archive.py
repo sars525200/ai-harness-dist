@@ -28,11 +28,23 @@ extension 沒有對 session 檔掛 watcher，`ensureSessionLoaded` 還有一層�
 快取（`session_title.py` 的實測結論，同一個機制）。所以效果是「**下次重載後，
 列表少掉那幾列**」，不是當場消失。
 
-## 只掛 `clear`，不掛其他 reason
+## 掛四個 reason，只排除 `resume`（2026-08-28 使用者改，原本只掛 `clear`）
 
-reason 有 clear / resume / logout / prompt_input_exit / other。只有 `clear`
-是使用者主動宣告「這則收掉」；其餘多半是暫離、下次還要 resume 回同一份檔——
-把那些也搬走等於**關個視窗就再也接不回去**。matcher 濾一次，`main()` 再擋一次。
+reason 共五個 —— `["clear","resume","logout","prompt_input_exit","other"]`。
+這個列舉是從 client 2.1.247 的 binary 裡撈出來的字面值（緊鄰
+`hook_event_name:"SessionEnd"` 的那個 schema），不是從文件推測。
+
+本支收 clear／logout／prompt_input_exit／other，**只排除 `resume`**。
+
+⚠ 原本只掛 `clear`，理由是「其餘多半是暫離、下次還要 resume 回同一份檔，
+把那些也搬走等於**關個視窗就再也接不回去**」。2026-08-28 使用者在被明確告知
+這個代價之後仍選擇放寬——要的是「關掉分頁那一則就離開列表」。
+所以現在**關掉分頁＝那一列接不回去**，要回頭得用 `tools/restore_session.py`
+從封存夾還原。這是刻意付出的代價，不是漏掉，別「順手修回去」。
+
+`resume` 是唯一不能收的：那個 reason 代表這份檔**正要被接續**，搬走等於把
+source 刪在 resume 中途 —— 那是資料遺失，不是「列表長度」這個層級的取捨。
+matcher 濾一次（`~/.claude/settings.json`），`main()` 再擋一次（`_ARCHIVE_REASONS`）。
 
 ## 順手做的第二件事：把雲端那一列改成佔位名（票 02 Q5，2026-08-27）
 
@@ -66,6 +78,12 @@ import shutil
 import subprocess
 import sys
 import time
+
+# SessionEnd 的 reason 白名單（2026-08-28）。列舉字面值取自 client 2.1.247 binary，
+# 見模組 docstring。用白名單而不是「排除 resume」的黑名單：未來 client 多長出一個
+# reason 時，寧可漏收一則（列表多一列，看得到）也不要誤收（檔案不見了，看不到）。
+# "" / None 是給不帶 reason 的 payload 用的，維持原本的寬鬆行為。
+_ARCHIVE_REASONS = ("", None, "clear", "logout", "prompt_input_exit", "other")
 
 # harness 自己的根（hooks/ 的上一層）。**不寫死磁碟機路徑**：核心層換一台機器、
 # 換一個部門都要成立，而這兩個位置本來就是相對 harness 自身的（全域 §6）。
@@ -341,7 +359,7 @@ def main() -> int:
     try:
         if payload.get("hook_event_name") not in ("", None, "SessionEnd"):
             return 0
-        if payload.get("reason") not in ("", None, "clear"):
+        if payload.get("reason") not in _ARCHIVE_REASONS:
             return 0
 
         path = payload.get("transcript_path") or ""

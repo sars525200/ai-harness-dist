@@ -277,9 +277,45 @@ def run_idle_title():
         urllib.request.urlopen = real_urlopen
 
 
+# ── SessionEnd reason 白名單（2026-08-28 放寬之後補的網）────────────────────
+# 這一段防的是三個**靜默**的走錯方向：
+#   1. 放寬沒生效 → 使用者以為「關掉分頁就會離開列表」，實際只有 `/clear` 會收，
+#      而 log 一切正常（它本來就只在有收的時候才寫一行）。
+#   2. `resume` 被一起放進來 → 那是把 source 刪在 resume 中途，**資料遺失**。
+#      這條跟前一條不同層級：前者是列表變長（看得到），後者是對話沒了（看不到）。
+#   3. 未來 client 多長一個 reason 就被當成可收 → 白名單寫成黑名單就會這樣。
+#      所以這裡故意送一個不存在的 reason 進去，要求它被擋下來。
+def run_reason_gate():
+    tmp = tempfile.mkdtemp(prefix="arch_reason_")
+    _load(tmp)                     # ⚠ 必須先跑：它設的 PROJECTS/SCAN 三個環境變數
+    env = dict(os.environ)         #    是 spawn 出去的 session_scan 的沙箱守門
+    env["CLAUDE_SESSION_ARCHIVE_SWEEP_DELAYS"] = "0"
+    proj = os.path.join(tmp, "projects", "d--Demo")
+
+    # (reason, 應該要被收走嗎, 為什麼)
+    plan = [
+        ("clear", True, "原本就有的行為，放寬不能把它弄丟"),
+        ("logout", True, "登出＝這台不再回來接，收掉"),
+        ("prompt_input_exit", True, "終端機那條路的正常結束"),
+        ("other", True, "關掉分頁走的就是這個；不收＝使用者要的那件事沒發生"),
+        ("resume", False, "這份檔正要被接續，搬走＝刪在 resume 中途，資料遺失"),
+        ("brand_new_reason", False, "白名單語意：沒列到的一律不收，寧可列表多一列"),
+    ]
+    for i, (reason, should_archive, why) in enumerate(plan):
+        uid = ("%d" % i) * 36
+        live = _write(os.path.join(proj, uid + ".jsonl"), REAL)
+        payload = json.dumps({"hook_event_name": "SessionEnd", "reason": reason,
+                              "transcript_path": live, "session_id": uid})
+        subprocess.run([sys.executable, SCRIPT], input=payload, text=True,
+                       capture_output=True, env=env, encoding="utf-8")
+        case("reason=%s %s" % (reason, "會收" if should_archive else "不收"),
+             why, (not os.path.exists(live)), should_archive)
+
+
 def main():
     run()
     run_idle_title()
+    run_reason_gate()
     bad = 0
     for name, why, got, want in CASES:
         ok = got == want
