@@ -245,6 +245,17 @@ def run_idle_title():
             case("成功也留痕", "只在失敗留痕＝票 01 卡兩小時的『推了沒有？沒有證據』",
                  "HTTP 200" in log_text(), True)
 
+            # ③b 同 cse、有真實訊息，但**是這次 clear 之前的舊對話** ⇒ 不算在用
+            # 真機驗收打臉出來的（2026-08-27）：cse 每個面板固定不變，所以面板任何
+            # 一則沒被封存的歷史對話都會永久擋住推送，而 log 印「跳過」看起來很正常。
+            stale = _write(os.path.join(proj, "stale.jsonl"), BRIDGE + REAL)
+            old_ts = os.path.getmtime(dest) - 40 * 3600
+            os.utime(stale, (old_ts, old_ts))
+            sent[:] = []
+            M._push_idle_title(path, dest)
+            case("同面板的舊對話不算有人在用", "首版就是被 39.8 小時前的舊對話擋成靜默 no-op",
+                 len(sent), 1)
+
             # ④ 面板已經有人在用（別的檔、同 cse、有真實 user 訊息）⇒ 不推
             _write(os.path.join(proj, "new.jsonl"), BRIDGE + REAL)
             sent[:] = []

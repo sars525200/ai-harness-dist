@@ -170,13 +170,18 @@ def sweep(path: str, dest: str, delays=None) -> None:
 _IDLE_SCAN_MAX = 60                   # 最多回頭看幾個 jsonl（IO 上限，不是判準）
 
 
-def _panel_in_use(projects_dir: str, cse: str, exclude: str) -> str:
+def _panel_in_use(projects_dir: str, cse: str, exclude: str, since: float) -> str:
     """這個面板現在有沒有人在用。有＝回「證據檔名」，沒有＝回空字串。
 
-    判準：projects 目錄裡**還存在**、bridge id 與封存那份相同、且有真實 user
-    訊息的 jsonl。`/clear` 會在同一秒把前一則封存搬走，所以還留著又有內容的，
-    只可能是使用者已經在新殼裡開工了 —— 那時把列名改成「等待任務」是錯的
-    （票 02 Q5 自己問的就是這一條）。
+    判準三個條件同時成立：bridge id 與封存那份相同、**在 `since` 之後被寫過**、
+    且有真實 user 訊息。那就是「`/clear` 之後使用者又開工了」—— 那時把列名改成
+    「等待任務」是錯的（票 02 Q5 自己問的就是這一條）。
+
+    ⚠ **`since` 這道時間門不是保險，是判準的一半**（2026-08-27 真機驗收打臉）：
+    首版只比對「同 cse ＋ 有真實訊息」，結果兩次 `/clear` 都被 `0bc73280` 擋下 ——
+    那是同一個面板 **39.8 小時前**的舊對話。`cse_…` 每個面板固定不變（正是 Q5 的
+    立論基礎），所以面板**任何一則沒被封存的歷史對話**都會永久擋住推送。
+    失效態是靜默的：log 印「跳過：面板已有人在用」，看起來完全正常。
 
     `exclude` 是被封存那份自己的檔名：client 常把它整個重建回來，而它當然有
     內容、cse 也相同 —— 不排掉的話這道門會永遠判「有人在用」，Q5 等於沒做。
@@ -199,6 +204,8 @@ def _panel_in_use(projects_dir: str, cse: str, exclude: str) -> str:
     for name in names[:_IDLE_SCAN_MAX]:
         full = os.path.join(projects_dir, name)
         try:
+            if os.path.getmtime(full) < since:
+                continue                  # 這次 clear 之前就沒再動過 ⇒ 不是「現在在用」
             if T._bridge_session_id(full) != cse:
                 continue
             if S.has_real_user_message(full):
@@ -243,7 +250,13 @@ def _push_idle_title(path: str, dest: str) -> None:
         if not title:
             _log("idle-title 跳過：專案名取不到 %s" % os.path.basename(path)[:8])
             return
-        busy = _panel_in_use(os.path.dirname(path), cse, os.path.basename(path))
+        # 時間基準取封存那份的 mtime（copy2 保留原檔時間）＝這個面板上一則對話的
+        # 最後一次寫入。比它新的活動才算「clear 之後又開工」。留 5 秒餘裕擋時鐘誤差。
+        try:
+            since = os.path.getmtime(src) - 5
+        except OSError:
+            since = 0                     # 讀不到就退回舊行為（寧可不改名）
+        busy = _panel_in_use(os.path.dirname(path), cse, os.path.basename(path), since)
         if busy:
             _log("idle-title 跳過：面板已有人在用 %s (證據 %s)" % (cse[:16], busy))
             return
