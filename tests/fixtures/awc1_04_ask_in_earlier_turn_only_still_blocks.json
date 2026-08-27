@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 AskUserQuestion 只出現在更早的一輪，這輪沒呼叫 → BLOCK",
+  "rule": "awc1_choices_check",
+  "why": "輪次邊界：工具呼叫必須落在**這一輪**。上一輪問過不能抵這一輪 —— 否則一則對話只要開頭問一次就永久豁免。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-04",
+    "last_assistant_message": "這個要接著做嗎？",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\earlier_turn_ask_not_this_turn.jsonl"
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "AskUserQuestion"
+  }
+}

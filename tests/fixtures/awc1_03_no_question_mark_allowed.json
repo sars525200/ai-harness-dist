@@ -1,7 +1,7 @@
 {
-  "name": "AWC-1 結尾不是問句 → ALLOW（applies 不成立，連 transcript 都不用讀）",
+  "name": "AWC-1 transcript 路徑不存在 → fail-open ALLOW（與 05 不同的缺法）",
   "rule": "awc1_choices_check",
-  "why": "正面測試：陳述句結尾完全不該觸發，且 applies() 該在讀檔前就篩掉——這裡故意給一個不存在的 transcript_path，若 applies() 沒篩掉、跑到 check() 去讀檔，也不該因為讀檔失敗而誤判成別的結果（fail-open 之外，這裡更該是『根本沒進去讀』）。",
+  "why": "2026-08-28 前這一筆叫「結尾不是問句 → ALLOW」，靠的是舊版 applies() 篩掉陳述句。改制後 applies() 恆真，它現在證明的是**另一件事**：transcript 讀不到時三道 fail-open 把結果撐成 ALLOW。⚠ 正因為它的 ALLOW 來自 fail-open 而非判定，它抓不到「判定寫錯」——那要靠 08（可讀、乾淨的 transcript）。兩筆缺一不可。",
   "payload": {
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-03",

@@ -1,7 +1,7 @@
 {
-  "name": "AWC-1 措辭在正文中段、尾段是交付敘述 → ALLOW（尾段限定）",
+  "name": "AWC-1 措辭在正文中段、尾段是交付敘述 → BLOCK",
   "rule": "awc1_choices_check",
-  "why": "鎖住 `tail = msg[-_TAIL_CHARS:]` 這道尾段限定。正文中段的「評估要不要拆成兩張表」是在**敘述做過的判斷**不是在問人，而收尾是純交付敘述。把 tail 放大到全文就會誤報 —— 那正是變異 10 要測的。現有的 ALLOW 案例正文中段都沒有措辭，所以擋不住那個變異。已實跑變異版確認會翻面。",
+  "why": "2026-08-28 改制：判準從「結尾像不像該問」改成「這輪有沒有呼叫 AskUserQuestion」。句型不再影響判定 —— 這一筆的收尾形狀原本是放行/唸一下的分界，現在一律 BLOCK，留著是為了證明**形狀真的不再是變因**（舊版靠它分流，改壞了這裡會回到 ALLOW）。",
   "payload": {
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-13",
@@ -9,6 +9,7 @@
     "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
-    "decision": "ALLOW"
+    "decision": "BLOCK",
+    "message_contains": "AskUserQuestion"
   }
 }

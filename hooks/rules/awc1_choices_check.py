@@ -1,117 +1,78 @@
-"""AWC-1 —— Stop 事件觀察：這輪結尾像開放式問句，卻沒呼叫 AskUserQuestion。
+"""AWC-1 —— Stop 事件閘門：這一輪沒有呼叫 AskUserQuestion 就擋下來。
 
-CLAUDE.md §2【硬規則・6/15】：「需 user 決定/釐清一律 AskUserQuestion
-（2–4 選項、第一個標「(推薦)」+理由），不用開放式問句；事實可查證的直接做」。
+回覆方式（`~/.claude/output-styles/pm-challenger.md`）§「結尾的決定一律用選擇題」
+＋ CLAUDE.md §2【硬規則・6/15】：需 user 決定/釐清一律走 AskUserQuestion
+（2–4 選項、第一個標「(推薦)」+理由），不用開放式問句。
 
-為什麼這條只 WARN、不走 BLOCK：這條完全不需要擋，偵測到就記錄/提醒即可。
-    （原本還有第二個理由「exit 2 能不能擋根本沒驗過」——2026-07-28 已實測
-    確認 exit 2 真能擋、stderr 真的餵回模型，見 STOP_HOOK_MARKER_PLAN.md §4.1。
-    地基已不是理由，但「這條本來就不該擋」這個理由仍成立，維持 WARN。）
+## 2026-08-28 改制：從「像不像問句」改成「有沒有呼叫工具」
 
-判定分兩步，第二步才碰檔案 I/O：
-    1. applies()：結尾是問號**或**尾段出現「把決定權丟回去」的措辭——便宜，只查字串。
-    2. check()：只有 applies() 為真才讀 transcript，判斷「這一輪」有沒有
-       真的呼叫過 AskUserQuestion。
+**舊版判準是字面偵測**（結尾有沒有問號、尾段有沒有「待你確認」這類措辭），
+於是同一件事只要換個句型就繞過去。實際發生過的繞法：一輪的收尾寫成
+「三個檔都還沒 commit。」——句號結尾、沒有徵詢措辭、沒有待辦標題，
+三種偵測全部不命中，而它就是在等使用者回話。**使用者為此第三次糾正。**
 
-## 為什麼不能只抓問號（2026-07-31 擴充）
+字面偵測的失敗史（每一版都死在同一件事：說法無窮多，白名單永遠差一個詞）：
+    7/31 漏「兩件事留給你決定」→ 修法是再加幾個詞
+    8/05 漏「## 待你確認」→ 表裡有 `等你確認`、沒有 `待你確認`，**差一個字**
+    8/05 第三版升級成「動詞＋人稱」骨架，仍然只是更大的白名單
+    8/28 漏「三個檔都還沒 commit。」→ **純敘述句，任何措辭骨架都抓不到**
 
-原版只有 `_ENDS_WITH_QUESTION`，而當天實際漏掉的那一次長這樣：
+⇒ 判準改成**唯一不能被句型繞過的事實**：這一輪有沒有真的呼叫過那個工具。
+偵測「像不像該問」永遠有下一種寫法；偵測「有沒有呼叫」沒有第二種答案。
 
-    「兩件事留給你決定：變更尚未 commit（…），以及 Phase 2 的成本上限閘門
-      ——現在計量單位有了，那道閘門才談得上做。」
+## 為什麼從 WARN 升成 BLOCK
 
-**句號結尾，一個問號都沒有**，但它就是在等使用者回答，而且使用者為此再次糾正
-（「這件事講了好多次」）。**違反這條規則的典型形態不是問句，是陳述句**：
-把待決事項列出來、然後停下來等人回話。只抓問號等於只抓最不容易犯的那一種。
+WARN 走的是便箋機制、**下一輪才送達**——它是事後糾正，攔不住這一輪。
+8/28 那次實測：WARN 在本輪之前就送過一次，模型照樣在後續兩輪各繞過一次。
+使用者要的是「每則都有」，事後提醒達不到。
 
-實測 7 個案例，原版判錯 4 個，全部是這個形狀的漏報。
+## 兩道各自獨立的防迴圈（缺一不可）
 
-輪次邊界的掃描邏輯已抽到 contract.iter_turn_tool_uses（PR-1 用同一段，
-不留第二份 copy）。
+BLOCK 掛在 Stop 上會讓模型被重新叫起來。若重跑時又不呼叫工具，就是無限迴圈。
+
+    A. `stop_hook_active`：Claude Code 在「被 Stop hook 擋下後重跑」時帶這個旗標。
+       **但 dispatch 從來沒讀過它，本環境未經實測**——所以它不能當唯一防線
+       （這個檔自己記著「exit 2 能不能擋根本沒驗過」那次教訓）。
+    B. 同一個 user 回合只擋一次：把 session_id＋本輪 user 文字的雜湊記進 state，
+       命中就放行。**不依賴 A**，即使 A 完全失效也保證最多一次重試。
+
+判定順序刻意把兩道防迴圈放最前面：任何一條後續邏輯出錯，都不會演變成迴圈。
+
+輪次邊界的掃描邏輯用 contract.iter_turn_tool_uses（PR-1 用同一段，不留第二份 copy）。
 
 【核心層】「需要使用者決定就給選擇題」是協作紀律，跟業務內容無關。
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import re
+import time
 
-from contract import allow, iter_turn_tool_uses, turn_user_text, warn
+from contract import allow, block, iter_turn_tool_uses, turn_user_text
 
 RULE_ID = "AWC-1"
 
-_ENDS_WITH_QUESTION = re.compile(r"[?？]\s*$")
+# U-1：不寫死絕對路徑。從本檔位置往上推三層＝harness 根（hooks/rules/x.py）。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 模組層常數：測試改指到暫存目錄，不碰正式檔（照 ESC-1 的做法，別重蹈 DISP-1 覆轍）。
+STATE_PATH = os.path.join(_HARNESS_ROOT, "state", "awc1_state.json")
+# 擋過的回合留多久。只是防迴圈用，短即可；留太久會讓「同一句話再問一次」被誤放行。
+_STATE_TTL_SEC = 6 * 3600
 
-# 「把決定權丟回給使用者」的**語法骨架**。只在訊息尾段比對（見 _TAIL_CHARS）：
-# 待決事項幾乎都放在收尾，限定尾段能大幅降低誤報 —— 正文中間出現「要不要」
-# 多半是在敘述做過的判斷（「我評估過要不要拆，結論是不拆」），那不是在問人。
-#
-# 2026-08-05 第三版：從**逐詞列舉**改成**動詞＋人稱的骨架**。
-# 前兩版都死在同一件事——人講同一個意思的說法無窮多，白名單永遠差一個詞：
-#   7/31 漏「兩件事留給你決定」→ 修法是再加幾個詞
-#   8/05 漏「## 待你確認」→ 表裡有 `等你確認`、沒有 `待你確認`，**差一個字**
-# 骨架把粒度從「詞」升到「動詞＋人稱」，`[待等留交給讓](你|您)` 一條就涵蓋
-# 待你／等你／留給你／交給你／讓你／給你，不必逐個補。
-_PENDING_DECISION = re.compile(
-    # ① 動詞＋人稱：待你確認／等你給／留給你／交給你／讓你跑
-    r"[待等留交給讓](你|您)"
-    # ② 人稱＋決定類動詞（中間可有「來/自己/可以/要」）
-    r"|(你|您)(來|自己|可以|要)?(決定|挑|選|確認|驗|回報)"
-    # ③ 明確索取／回報約定。刻意**不收**泛用的「跟我說」「告訴我」：
-    #    2026-08-05 用 1704 個真實回合量過，全收會讓 WARN 率從 10.3% 衝到 22.6%
-    #    （每 4–5 回合叫一次）。那些多半確實是真陽性，但頻率過高會把閘門訓練成噪音
-    #    ——規則本體註解：會亂叫的閘門三次之後就被無視，那比沒有閘門更糟。
-    #    收窄後 14.4%，這次漏的「待你確認」與 7/31 漏的「留給你決定」都仍抓得到。
-    r"|需要(你|您)提供|(貼|丟|傳|發)給我|(跟|告訴)我一聲|完(再|就)?(跟|告訴)我"
-    # ④ 徵詢語氣
-    r"|要不要|需不需要|是否要|是否需要|該不該"
-    r"|看(你|您)(要|想|覺得|決定|怎麼|哪)"
-    r"|(你|您)覺得(呢|如何|怎樣|哪)"
-    r"|(想|要)先做哪|選哪|挑哪|要哪(個|一)"
-)
-_TAIL_CHARS = 300
-
-# 結構偵測：訊息以「待辦性標題段」收尾。
-# 抓的是措辭偵測抓不到的形態 —— 用 markdown 標題把待辦圈起來、內文卻沒有任何
-# 徵詢措辭（8/05 那次就是「## 待你確認」＋一段純敘述）。
-# 兩個守門避免誤報：標題本身要有待辦語意，且標題到訊息結尾要夠短
-# （標題後面還有一大段正文＝那是章節標題，不是收尾的交辦）。
-_HEAD_RE = re.compile(r"^#{1,4}\s*(.+?)\s*$", re.M)
-_HEAD_PENDING = re.compile(r"待|下一步|需要你|請你|你要|接下來|等你|給你")
-# 200 是量出來的不是估的：真實的收尾交辦（8/05 那則「## 待你確認」）標題後只有 ~80 字，
-# 而刻意寫長的章節正文實測 283～363 字。原本設 400 幾乎擋不到任何東西 ——
-# 結構偵測等於無限放行，語料命中率會從 17% 衝到 37%。
-_HEAD_TAIL_LIMIT = 200
-
-
-def _structural_pending(msg: str) -> bool:
-    heads = list(_HEAD_RE.finditer(msg))
-    if not heads:
-        return False
-    last = heads[-1]
-    if not _HEAD_PENDING.search(last.group(1)):
-        return False
-    return (len(msg) - last.end()) < _HEAD_TAIL_LIMIT
-
-# 「這件事我已經有答案了」的措辭。待決措辭與它同時出現時不報 ——
-# 「我評估過**要不要**拆成兩支，結論是不拆」是在**敘述已完成的判斷**，不是在問人。
-# 方向與本檔其餘 fail-open 一致：這條是 WARN，寧可漏報也不要誤報
-# （會亂叫的閘門三次之後就被無視，那比沒有閘門更糟）。
-_ALREADY_DECIDED = re.compile(
-    r"結論是|結論就是|我(評估|判斷|確認|盤|查)過|已經決定|決定了|定案"
-    r"|答案是|所以我(選|採用|直接)|照你(說|講)的|依你的決定"
+# ── 豁免：user 自己說了不用問 ───────────────────────────────────────────
+# 回覆方式：「我說『照做就好』時停止挑戰，直接執行」；
+# CLAUDE.md §1：「說停就停」。這兩種情況下還硬要給選擇題是反效果。
+_USER_WAIVED = re.compile(
+    r"照做就好|照做|就這樣做|直接做|不用問|別問|不要問|無需詢問"
+    r"|^\s*(停|夠了|不用了|先這樣|好了)\s*$"
+    r"|(你|您)決定就好|(你|您)自己決定|(都|全)聽(你|你的)",
+    re.M,
 )
 
-# 對話管理動作（清空／開新室）不算「該問卻沒問」。
-# 2026-07-31 量真實語料時發現的：161 個 session 收尾訊息命中 39.8%，樣本幾乎
-# 全是收工的「要不要 /clear 由你決定」——那是 CLAUDE.md §5 明訂的**建議性提示**，
-# 不是需要 2–4 個選項的技術決定，而且使用者隨時可自己做。
-# 這類全報等於把閘門訓練成噪音；扣掉後才剩真正該問的那些。
-_CONVERSATION_MGMT = re.compile(r"/clear|清空|開新室|新對話室|換室|開新對話")
-
-# slash command 常會要求「把這段照抄出去」。那段文案的結尾如果是問句，
-# 用它來判「該用選擇題卻沒用」是**假陽性**——那句話不是模型寫的。
-# 2026-07-30 實測抓到第一筆：`/insights` 的收尾文案是
-# 「Want to dig into any section or try one of the suggestions?」
+# slash command 常會要求「把這段照抄出去」。那段文案不是模型自己寫的，
+# 用它來判「該問卻沒問」是假陽性（2026-07-30 抓到第一筆：`/insights` 的收尾文案）。
 _VERBATIM_DIRECTIVE = re.compile(
     r"verbatim"
     r"|逐字(輸出|複製|照抄|照貼)"
@@ -120,41 +81,72 @@ _VERBATIM_DIRECTIVE = re.compile(
     re.IGNORECASE,
 )
 
+# ── 以下三組只用來讓擋下的訊息更具體，**不再參與放行判定** ──────────────
+# 保留的理由：它們記錄了三輪調校量到的東西（見 docstring 的失敗史）。
+# 拿來說「你這輪是哪一種形狀」比只說「你沒呼叫工具」有用。
+_ENDS_WITH_QUESTION = re.compile(r"[?？]\s*$")
+_PENDING_DECISION = re.compile(
+    r"[待等留交給讓](你|您)"
+    r"|(你|您)(來|自己|可以|要)?(決定|挑|選|確認|驗|回報)"
+    r"|需要(你|您)提供|(貼|丟|傳|發)給我|(跟|告訴)我一聲|完(再|就)?(跟|告訴)我"
+    r"|要不要|需不需要|是否要|是否需要|該不該"
+    r"|看(你|您)(要|想|覺得|決定|怎麼|哪)"
+    r"|(你|您)覺得(呢|如何|怎樣|哪)"
+    r"|(想|要)先做哪|選哪|挑哪|要哪(個|一)"
+)
+_TAIL_CHARS = 300
 
-def applies(ctx) -> bool:
-    msg = ctx.last_assistant_message.strip()
-    if _ENDS_WITH_QUESTION.search(msg):
-        return True
-    tail = msg[-_TAIL_CHARS:]
-    # 排除條件必須在兩種偵測**之前**：否則結構偵測會繞過「已經決定」「對話管理」的豁免
-    if _ALREADY_DECIDED.search(tail) or _CONVERSATION_MGMT.search(tail):
-        return False
-    return bool(_PENDING_DECISION.search(tail)) or _structural_pending(msg)
+
+def _load_state() -> dict:
+    try:
+        with open(STATE_PATH, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        return dict(data) if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
 
-def check(ctx):
-    if not applies(ctx):
-        return allow()
+def _save_state(state: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+        tmp = f"{STATE_PATH}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False)
+        os.replace(tmp, STATE_PATH)
+    except Exception:
+        pass  # fail-open：記不住最壞是多擋一次，不值得讓 hook 爆掉
 
-    if _asked_via_tool_this_turn(ctx.transcript_path):
-        return allow()  # 用了 AskUserQuestion，問號只是選項說明文字的一部分
 
-    if _verbatim_output_demanded(ctx.transcript_path):
-        return allow()  # 結尾那句是被指令要求照抄的，不是模型自己的提問
+def _turn_key(ctx) -> str | None:
+    """本輪的穩定識別：session_id ＋ 本輪 user 文字。
 
-    msg = ctx.last_assistant_message.strip()
-    tail = msg[-80:] if len(msg) > 80 else msg
-    shape = ("結尾是問句" if _ENDS_WITH_QUESTION.search(msg)
-             else "尾段把決定權交回給 user（陳述句形態，不是問句）")
-    return warn(
-        f"CLAUDE.md §2【硬規則】：這輪{shape}（結尾：「…{tail}」），"
-        "但這輪沒有呼叫 AskUserQuestion。需要 user 決定/釐清一律走選擇題"
-        "（2–4 選項、第一個標「(推薦)」）；事實可查證的直接做，不要用開放式問句等答案。"
-    )
+    重跑時 user 文字不變 ⇒ 同一把鑰匙 ⇒ 防迴圈 B 認得出來。
+    讀不到 user 文字就回 None（呼叫端會 fail-open）。
+    """
+    user_text = turn_user_text(ctx.transcript_path)
+    if user_text is None:
+        return None
+    session = str(ctx.payload.get("session_id") or "")
+    raw = f"{session}\x00{user_text}".encode("utf-8", "replace")
+    return hashlib.sha1(raw).hexdigest()
+
+
+def _already_blocked(key: str) -> bool:
+    state = _load_state()
+    hit = state.get(key)
+    return bool(hit) and (time.time() - float(hit or 0)) < _STATE_TTL_SEC
+
+
+def _record_block(key: str) -> None:
+    now = time.time()
+    state = {k: v for k, v in _load_state().items()
+             if isinstance(v, (int, float)) and (now - float(v)) < _STATE_TTL_SEC}
+    state[key] = now
+    _save_state(state)
 
 
 def _asked_via_tool_this_turn(transcript_path: str) -> bool:
-    """讀不到／判斷不出來一律回 True（fail-open：判斷不了就不誤報 WARN）。"""
+    """讀不到／判斷不出來一律回 True（fail-open：判斷不了就不擋）。"""
     blocks = iter_turn_tool_uses(transcript_path)
     if blocks is None:
         return True
@@ -162,12 +154,66 @@ def _asked_via_tool_this_turn(transcript_path: str) -> bool:
 
 
 def _verbatim_output_demanded(transcript_path: str) -> bool:
-    """本輪的 user 訊息有沒有要求「把某段文字照抄輸出」。
-
-    讀不到回 True（fail-open，與 `_asked_via_tool_this_turn` 同向：
-    這條是 WARN，寧可漏報也不要誤報）。
-    """
+    """本輪的 user 訊息有沒有要求「把某段文字照抄輸出」。讀不到回 True（fail-open）。"""
     text = turn_user_text(transcript_path)
     if text is None:
         return True
     return bool(_VERBATIM_DIRECTIVE.search(text))
+
+
+def _user_waived(transcript_path: str) -> bool:
+    """本輪 user 是不是說了「照做就好／停」。讀不到回 True（fail-open，與上面同向）。"""
+    text = turn_user_text(transcript_path)
+    if text is None:
+        return True
+    return bool(_USER_WAIVED.search(text))
+
+
+def applies(ctx) -> bool:
+    """每一則回覆都適用——放行條件全部搬進 check()。
+
+    舊版在這裡做字面偵測，等於讓模型換個句型就能讓規則「不成立」。
+    """
+    return True  # 恆真：放行條件全部在 check()
+
+
+def check(ctx):
+    # ① 防迴圈 A：被本 hook 擋下後的重跑
+    if ctx.payload.get("stop_hook_active"):
+        return allow()
+
+    # ② 防迴圈 B：同一個 user 回合只擋一次（不依賴 ①）
+    key = _turn_key(ctx)
+    if key is None:
+        return allow()  # 讀不到 transcript → fail-open
+    if _already_blocked(key):
+        return allow()
+
+    # ③ 這輪真的呼叫過選擇題工具
+    if _asked_via_tool_this_turn(ctx.transcript_path):
+        return allow()
+
+    # ④ 結尾那段是被要求照抄的，不是模型自己的話
+    if _verbatim_output_demanded(ctx.transcript_path):
+        return allow()
+
+    # ⑤ user 明說「照做就好／停」——這時再問是反效果
+    if _user_waived(ctx.transcript_path):
+        return allow()
+
+    msg = ctx.last_assistant_message.strip()
+    tail = msg[-80:] if len(msg) > 80 else msg
+    if _ENDS_WITH_QUESTION.search(msg):
+        shape = "這輪用開放式問句收尾"
+    elif _PENDING_DECISION.search(msg[-_TAIL_CHARS:]):
+        shape = "這輪尾段把決定權交回給 user，但寫成陳述句"
+    else:
+        shape = "這輪沒有把待決事項寫出來，仍要給下一步的選擇題"
+    _record_block(key)
+    return block(
+        f"回覆方式【硬規則】：每則回覆結尾一律用 AskUserQuestion 給選擇題"
+        f"（2–4 選項、第一個標「(推薦)」並附理由），這輪沒有呼叫。"
+        f"{shape}（結尾：「…{tail}」）。"
+        "沒有待決事項時就給下一步選項，不要寫成陳述句丟回去。"
+        "user 已說「照做就好／停」時本規則自動豁免。"
+    )

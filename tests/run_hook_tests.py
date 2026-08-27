@@ -206,11 +206,32 @@ def run_one(fx: dict) -> tuple[bool, str]:
             shutil.rmtree(tmpdir, ignore_errors=True)
             return False, f"workspace 建立失敗：{type(exc).__name__}: {exc}"
 
+    # 帶 state 的規則：每個 fixture 給一份**全新的**暫存 state，跑完丟掉。
+    # 不做隔離的話有兩個後果，第二個是靜默的：①污染正式 state 檔；
+    # ②同一份 fixture 跑第二次會讀到第一次留下的紀錄而改變判定 ——
+    # 2026-08-28 實測 AWC-1 就是這樣：第一次 9 紅、第二次剩 6 紅，
+    # 三條**因為測試自己寫進去的狀態**而假通過。
+    statedir = None
+    old_state = None
+    if hasattr(module, "STATE_PATH"):
+        statedir = tempfile.mkdtemp(prefix="hookstate_")
+        old_state = module.STATE_PATH
+        module.STATE_PATH = os.path.join(statedir, os.path.basename(old_state))
+
     try:
         return _run_with(fx, module, payload)
     finally:
+        if old_state is not None:
+            module.STATE_PATH = old_state
+        if statedir:
+            shutil.rmtree(statedir, ignore_errors=True)
         if tmpdir:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+def _ALLOW_VERDICT():
+    from contract import allow
+    return allow()
 
 
 def _run_with(fx: dict, module, payload: dict) -> tuple[bool, str]:
@@ -220,7 +241,13 @@ def _run_with(fx: dict, module, payload: dict) -> tuple[bool, str]:
     ctx = HookContext(payload, main, dev)
 
     try:
-        verdict = module.check(ctx)
+        # 2026-08-28：先跑 applies()，與 dispatch.py:457 的正式路徑一致。
+        # 在此之前 fixture 直接呼叫 check()，於是 applies() 的迴歸**完全照不到**——
+        # 變異「applies 退回字面偵測」當場存活（假綠燈：測試邊界選在錯的地方）。
+        if hasattr(module, "applies") and not module.applies(ctx):
+            verdict = _ALLOW_VERDICT()
+        else:
+            verdict = module.check(ctx)
     except AssertionError as exc:          # fixture 定義不足
         return False, f"fixture 不完整：{exc}"
     except Exception as exc:

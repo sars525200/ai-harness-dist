@@ -1,7 +1,7 @@
 {
-  "name": "AWC-1 結尾問句、這輪沒呼叫 AskUserQuestion → WARN",
+  "name": "AWC-1 結尾問句、這輪沒呼叫 AskUserQuestion → BLOCK",
   "rule": "awc1_choices_check",
-  "why": "CLAUDE.md §2 硬規則：需 user 決定一律走 AskUserQuestion，不用開放式問句。這是最基本的違規情境——結尾像問句，但完全沒呼叫工具。",
+  "why": "最基本的正例：該用選擇題卻用開放式問句。2026-08-28 從 WARN 升 BLOCK —— WARN 走便箋、下一輪才送達，攔不住這一輪，實測連續三輪都沒攔住。",
   "payload": {
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-01",
@@ -9,7 +9,7 @@
     "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
-    "decision": "WARN",
+    "decision": "BLOCK",
     "message_contains": "AskUserQuestion"
   }
 }

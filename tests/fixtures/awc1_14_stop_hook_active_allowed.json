@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 被本 hook 擋下後的重跑（stop_hook_active）→ ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "防迴圈 A。BLOCK 掛在 Stop 上會把模型重新叫起來；若重跑時又不呼叫工具就是無限迴圈。Claude Code 在重跑時帶 stop_hook_active=true，這一筆證明規則看得懂它。⚠ 這個旗標在本環境**沒有實測過**，所以它不是唯一防線——防迴圈 B（同一回合只擋一次）在 test_awc1_detection.py 另外驗。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-14",
+    "stop_hook_active": true,
+    "last_assistant_message": "已經改好了，兩個 repo 都 commit 完成。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

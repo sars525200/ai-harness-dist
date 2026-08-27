@@ -1,0 +1,14 @@
+{
+  "name": "AWC-1 本輪 user 說「照做就好」→ ALLOW",
+  "rule": "awc1_choices_check",
+  "why": "回覆方式「我說『照做就好』時停止挑戰，直接執行」＋ CLAUDE.md §1「說停就停」。使用者明說不用問時還硬給選擇題是反效果，這是本規則唯一由使用者主動觸發的豁免。transcript 可讀且無 AskUserQuestion，所以 ALLOW 只能來自豁免判定、不能來自 fail-open。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-15",
+    "last_assistant_message": "改好了。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\user_waived.jsonl"
+  },
+  "expect": {
+    "decision": "ALLOW"
+  }
+}

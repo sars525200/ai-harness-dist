@@ -1,0 +1,15 @@
+{
+  "name": "AWC-1 結尾是交付敘述、transcript 可讀且沒呼叫過工具 → BLOCK",
+  "rule": "awc1_choices_check",
+  "why": "**這一筆是改制的核心證據。** 舊版對「已經改好了，兩個 repo 都 commit 完成。」放行 —— 而 2026-08-28 使用者第三次糾正時，繞過閘門的正是這個形狀（「三個檔都還沒 commit。」）。transcript 給的是可讀、乾淨的（無 AskUserQuestion、無逐字指令），所以 BLOCK 只能來自「真的沒呼叫工具」，不能來自 fail-open。",
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fixture-awc1-08",
+    "last_assistant_message": "已經改好了，兩個 repo 都 commit 完成。",
+    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "AskUserQuestion"
+  }
+}

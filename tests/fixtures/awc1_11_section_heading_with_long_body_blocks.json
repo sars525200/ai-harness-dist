@@ -1,7 +1,7 @@
 {
-  "name": "AWC-1 待辦語意的標題在中段、結尾是交付敘述 → ALLOW（結構偵測的長度守門）",
+  "name": "AWC-1 待辦語意的標題在中段、結尾是交付敘述 → BLOCK",
   "rule": "awc1_choices_check",
-  "why": "結構偵測的誤報防線：標題含「待」但後面還有數百字正文、結尾是純交付敘述，那是**章節標題**不是收尾交辦。沒有這道長度守門，任何寫過「## 待辦…」的長回覆都會被報，閘門會被訓練成噪音（規則本體註解：會亂叫的閘門三次之後就被無視，比沒有更糟）。把 `< _HEAD_TAIL_LIMIT` 改成恆真就會紅。正文長度是量出來的不是估的——標題到結尾 283 字、門檻 200；內容刻意不含任何措辭骨架會命中的字，否則測到的是措辭那半邊。",
+  "why": "2026-08-28 改制：判準從「結尾像不像該問」改成「這輪有沒有呼叫 AskUserQuestion」。句型不再影響判定 —— 這一筆的收尾形狀原本是放行/唸一下的分界，現在一律 BLOCK，留著是為了證明**形狀真的不再是變因**（舊版靠它分流，改壞了這裡會回到 ALLOW）。",
   "payload": {
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-11",
@@ -9,6 +9,7 @@
     "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
-    "decision": "ALLOW"
+    "decision": "BLOCK",
+    "message_contains": "AskUserQuestion"
   }
 }

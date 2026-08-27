@@ -26,7 +26,9 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import shutil
 import sys
+import tempfile
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -48,9 +50,10 @@ def _load():
 
 
 class _Ctx:
-    def __init__(self, msg):
+    def __init__(self, msg, transcript="", session="awc1-unit", stop_hook_active=False):
         self.last_assistant_message = msg
-        self.transcript_path = ""
+        self.transcript_path = transcript
+        self.payload = {"session_id": session, "stop_hook_active": stop_hook_active}
 
 
 # ── 正例：applies() 必須為 True ────────────────────────────────────────────
@@ -102,40 +105,88 @@ KNOWN_GAPS = [
 ]
 
 
+TRANSCRIPTS = os.path.join(ROOT, "tests", "fixtures", "transcripts")
+CLEAN = os.path.join(TRANSCRIPTS, "no_askuserquestion.jsonl")   # 可讀、本輪沒呼叫工具
+WAIVED = os.path.join(TRANSCRIPTS, "user_waived.jsonl")         # 本輪 user 說「照做就好」
+
+
 def main() -> int:
     mod = _load()
     bad = []
 
-    print("正例（該報而沒報＝漏報，就是這條規則兩次出事的原因）")
-    for name, msg in POSITIVE:
-        got = mod.applies(_Ctx(msg))
-        ok = got is True
-        print(f"  {'PASS' if ok else 'FAIL'}  {name:<18} applies={got}")
+    # state 改指到暫存檔：正式 state 不可被測試污染，
+    # 而且不隔離的話跑第二次會讀到第一次的紀錄而改變判定（2026-08-28 實測）。
+    tmp = tempfile.mkdtemp(prefix="awc1_unit_")
+    mod.STATE_PATH = os.path.join(tmp, "awc1_state.json")
+
+    try:
+        # ── 語料：形狀不再是變因，全部都該擋 ──────────────────────────
+        # 2026-08-28 前這一段驗的是 applies() 的形狀偵測（正例該報、負例不該報）。
+        # 改制後 applies() 恆真，形狀不再影響判定 —— 語料的新職責是**證明這件事**：
+        # 同一批句子，不論當初被判成正例還是負例，在「沒呼叫工具」下一律 BLOCK。
+        # ⚠ 每筆用不同 session_id：防迴圈 B 認的是 session＋本輪 user 文字，
+        #    共用同一個 id 會讓第二筆之後全部被當成「已擋過」而放行（假綠燈）。
+        print("語料回歸：沒呼叫 AskUserQuestion 時，任何收尾形狀都要 BLOCK")
+        # KNOWN_GAPS 是舊版刻意放過的語料（收窄措辭表的代價）。改制後它們也該擋，
+        # 併進來一起驗 —— 留著不用就是死碼，而它們是真實語料，有驗證價值。
+        for label, group in (("原正例", POSITIVE), ("原負例", NEGATIVE),
+                             ("原已知缺口", KNOWN_GAPS)):
+            for name, msg in group:
+                v = mod.check(_Ctx(msg, CLEAN, session="corpus-%s-%s" % (label, name)))
+                ok = v.decision == "BLOCK"
+                print("  %s  [%s] %-18s %s" % ("PASS" if ok else "FAIL", label, name, v.decision))
+                if not ok:
+                    bad.append((label + "未擋", name))
+
+        # ── 三道放行條件的正面驗證 ────────────────────────────────────
+        print("")
+        print("放行條件（少一道就會變成擋住不該擋的）")
+        cases = [
+            ("user 說照做就好 → ALLOW", _Ctx("改好了。", WAIVED, session="waived"), "ALLOW"),
+            ("stop_hook_active → ALLOW",
+             _Ctx("改好了。", CLEAN, session="sha", stop_hook_active=True), "ALLOW"),
+            ("transcript 讀不到 → ALLOW（fail-open）",
+             _Ctx("改好了。", os.path.join(tmp, "nope.jsonl"), session="unreadable"), "ALLOW"),
+        ]
+        for name, ctx, want in cases:
+            v = mod.check(ctx)
+            ok = v.decision == want
+            print("  %s  %-34s %s" % ("PASS" if ok else "FAIL", name, v.decision))
+            if not ok:
+                bad.append(("放行條件", name))
+
+        # ── 防迴圈 B：同一個 user 回合只擋一次 ────────────────────────
+        # 這是 BLOCK 版最關鍵的安全網。防迴圈 A（stop_hook_active）在本環境
+        # 沒有實測過，所以 B 必須**獨立成立**：即使 A 完全失效也只會多跑一輪。
+        print("")
+        print("防迴圈 B：同一回合擋一次之後必須放行")
+        loop_ctx = _Ctx("已經改好了，兩個 repo 都 commit 完成。", CLEAN, session="loopguard")
+        first = mod.check(loop_ctx).decision
+        second = mod.check(loop_ctx).decision
+        ok = (first == "BLOCK" and second == "ALLOW")
+        print("  %s  第一次=%s、第二次=%s" % ("PASS" if ok else "FAIL", first, second))
         if not ok:
-            bad.append(("漏報", name))
+            bad.append(("防迴圈B", "第一次=%s 第二次=%s" % (first, second)))
 
-    print("\n負例（不該報卻報了＝誤報，會把閘門訓練成噪音）")
-    for name, msg in NEGATIVE:
-        got = mod.applies(_Ctx(msg))
-        ok = got is False
-        print(f"  {'PASS' if ok else 'FAIL'}  {name:<18} applies={got}")
-        if not ok:
-            bad.append(("誤報", name))
+        # 換一個 session 必須重新擋 —— 否則「擋過一次」會變成全域永久豁免。
+        other = mod.check(_Ctx("已經改好了，兩個 repo 都 commit 完成。",
+                               CLEAN, session="loopguard-other")).decision
+        ok2 = other == "BLOCK"
+        print("  %s  換 session 仍要擋：%s" % ("PASS" if ok2 else "FAIL", other))
+        if not ok2:
+            bad.append(("防迴圈B", "換 session 沒重新擋＝豁免外洩"))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
-    print("\n已知缺口（收窄第③組的代價，不列入判定）")
-    for name, msg in KNOWN_GAPS:
-        got = mod.applies(_Ctx(msg))
-        mark = "仍漏（如預期）" if got is False else "⚠ 現在抓得到了，可考慮移回 POSITIVE"
-        print(f"  ----  {name:<18} applies={got}  {mark}")
-
-    total = len(POSITIVE) + len(NEGATIVE)
-    print(f"\n{'=' * 60}")
+    total = len(POSITIVE) + len(NEGATIVE) + len(KNOWN_GAPS) + 5
+    print("")
+    print("=" * 60)
     if bad:
-        print(f"FAIL  {len(bad)}/{total} 不符預期：")
+        print("FAIL  %d/%d 不符預期：" % (len(bad), total))
         for kind, name in bad:
-            print(f"        [{kind}] {name}")
+            print("        [%s] %s" % (kind, name))
         return 1
-    print(f"PASS  {total}/{total} 全數符合")
+    print("PASS  %d/%d 全數符合" % (total, total))
     return 0
 
 

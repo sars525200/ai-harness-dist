@@ -151,7 +151,7 @@
 | Event | 設定位置 | 內容 | 模式 |
 |---|---|---|---|
 | `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·**R4 = enforce（BLOCK，8/07）** |
-| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | AWC-1／DECL-1 = enforce（WARN）·**PR-1 = enforce（BLOCK，8/07）** |
+| `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | DECL-1 = enforce（WARN）·**AWC-1 = enforce（BLOCK，8/28）**·**PR-1 = enforce（BLOCK，8/07）** |
 | `SubagentStop`（無 matcher） | `.claude/settings.local.json` | 同一支 `dispatch.py` | 2c 新掛，PR-1 改讀 `agent_transcript_path`。**新增一個 event key 必須重啟 session**（啟動時快照）；既有 key 的 matcher／command 才是熱生效 |
 | `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 生效（本機自動 commit，與上面那個 Stop hook 各自獨立、都會跑）·**7/30 補進 `styles.css`**（見章末） |
 | `permissions.deny` × **12** | `.claude/settings.json` | commit `--no-verify`／`-n`、push `--no-verify`／`--force`／`-f`／`--force-with-lease`，**Bash／PowerShell 各一份** | **真擋·熱生效** |
@@ -168,7 +168,7 @@
 | R1 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | `DEFAULT_\w+=` 值被改而非新增（已犯 3 次） |
 | R3 | PreToolUse push vm | WARN | 🟢 **enforce**（7/30） | ops timer 腳本改了但只 push 沒 scp（已咬 2 次，清單逐支讀 `.service` ExecStart 查證） |
 | R4 | PreToolUse **Write/Edit/MultiEdit** | BLOCK＋WARN | 🟢 **enforce**（8/07） | 腳本會 `connect()` 到 PROD DB 並寫入。**兩次 dead on arrival**：7/29 改綁前是守 `import server`（本 repo 不寫那形狀）；8/07 e2e 量到「路徑字面值寫在 connect() 括號裡」全 codebase **0/177 命中**，改成**變數追蹤**（賦予 PROD `.sqlite` 路徑的變數有沒有真的進 connect）後 4 支真陽性／0 誤判 |
-| AWC-1 | **Stop** | WARN | 🟢 **enforce** | assistant 訊息問號結尾但同輪未呼叫 `AskUserQuestion` |
+| AWC-1 | **Stop** | **BLOCK**（8/28 由 WARN 升級） | 🟢 **enforce** | **同輪未呼叫 `AskUserQuestion` 即擋**。8/28 改制：判準從「結尾像不像該問」（問號／措辭骨架／結構偵測）改成「有沒有真的呼叫工具」——字面偵測換個句型就繞過，實測連漏三輪。放行條件四道：`stop_hook_active`／同回合已擋過／逐字輸出指令／user 說「照做就好」 |
 | PR-1 | **Stop · SubagentStop** | BLOCK（便箋 hash 相符時降 WARN·8/23） | 🟢 **enforce**（8/07） | 這輪改過的 `.md` 標「> 狀態：待審核」**或**是 `.scratch/**/map.md`（存在即待審·8/22），但沒有 hash 對得上的 `ADVERSARIAL_REVIEW_PASSED` marker。**何時該標的判準**＝M 級 ＋ Design 收尾，載體是 `/design-spec` 步驟 5（`STOP_HOOK_MARKER_PLAN.md` §6） |
 
 fixture／回歸網總計 **492**（`py -3 tests\run_hook_tests.py`，8/07 實跑）。
