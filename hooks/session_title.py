@@ -32,9 +32,17 @@ extension 沒有對 session 檔掛任何 watcher（`watchFile` 六處全是監�
 **已有 persisted title**（我們寫過就會有）時，webview 不直接覆蓋，而是回頭重讀
 transcript，2 秒後再讀一次。
 
-⚠ 刷新取的是 tail 裡**最後一筆** `customTitle`。client 每個新 prompt 都 append
-自己的快取名，所以刷新若落在 client 回寫之後、本 hook 補寫之前，看到的仍是快取名。
-這不是壞掉，是下一次 `PreToolUse` 就會補回來。
+⚠ 刷新取的是 tail 裡**最後一筆** `customTitle`。
+
+⚠⚠ **上面這一整段只對「沒有 `cse_…` 的純本機對話」成立**（2026-08-28 訂正）。
+原本這裡寫「刷新若落在 client 回寫之後、本 hook 補寫之前會看到快取名，下一次
+`PreToolUse` 就會補回來」——**在 bridge session 上補不回來**：我方 append 的那一行
+**不留存**（實測 `c47c023b`：窗口內我方寫入新名字 4 次、log 都印了，檔案裡該值
+`customTitle` **零筆**；30 筆全是我方較早的那個值）。機制未直接觀測到，推測是 client
+週期性用自己的快取版本重寫整檔——**標為推測，不要往下當事實傳**。
+⇒ 側邊欄那一半在無人工介入時修不動。**唯一權威敘述**在 `session-list-cleanup`
+effort 的票 02「已知限制」段（該 effort 的規劃圖與決策票放在被服務的專案裡，
+核心層不寫死它的路徑）。本註解不重複維護第二份。
 
 ## 不要往 sidecar `custom-title.json` 寫（2026-08-27 對抗式覆核結論）
 
@@ -447,22 +455,26 @@ def _append_title(path: str, session_id: str, title: str) -> None:
         fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-def should_push(title: str, existing: str, bridge: str) -> bool:
+def should_push(title: str, cloud_memo: str, bridge: str) -> bool:
     """要不要把名字推到雲端。抽成純函式是為了能測 gate 而不必真的發請求。
 
     三道門，任何一道不過就不發：
 
     1. `CLAUDE_SESSION_TITLE_NO_CLOUD=1` —— 出事時不必改程式就能關掉。
     2. 沒有 `cse_…` ⇒ 這則對話沒有雲端那份，發請求是純浪費。
-    3. **名字沒變就不發**。窗口維持那種同名重寫是本機 64KB 窗口的問題，
-       雲端沒有這回事 —— 少了這道門會變成每輪一個網路呼叫，而 Stop hook
-       是同步阻塞的，等於每輪工作結束都被拖一次。
+    3. **與雲端現值相同就不發** —— 少了這道門會變成每輪一個網路呼叫，
+       而 Stop hook 是同步阻塞的，等於每輪工作結束都被拖一次。
+
+    ⚠ **第 3 道比的是 `cloud_memo`（上次成功推上去的），不是本機檔尾**
+    （2026-08-28 改）。本機檔尾答的是「本機現在叫什麼」，兩者一旦分岔就再也
+    校正不回來 —— 而分岔是常態：雲端有第二條寫入路徑（`/clear` 後的佔位名），
+    推送也會失敗。記錄為空（沒推過／推失敗過）⇒ 必推，這是刻意的。
     """
     if os.environ.get("CLAUDE_SESSION_TITLE_NO_CLOUD"):
         return False
     if not bridge or not title:
         return False
-    return title != existing
+    return title != cloud_memo
 
 
 def cloud_request(bridge: str, title: str, token: str) -> "tuple[str, dict, bytes]":
@@ -573,6 +585,91 @@ def restore_needed(remembered: str, existing: str) -> bool:
     return bool(remembered) and existing != remembered
 
 
+# --- 雲端那一列的去重記錄（票 02 Q2／Q3，2026-08-28）------------------------
+# **為什麼要新增這一份**：原本去重拿的是「本機檔尾的值」，那答的是「本機現在叫什麼」，
+# 不是「雲端現在叫什麼」。兩者一旦分岔（雲端被別條路改過、或推送失敗過），
+# 就再也校正不回來 —— 而且三種偏離全部既不可見也不自癒：token 過期是靜默 return、
+# 推送只在非 200／例外留痕（成功不留）、外力改名沒有人會發現。
+#
+# ⚠ **key 用 `cse_` 不是 session_id**：`cse_` 跨 `/clear` 不變（票 01 覆驗），
+# 而雲端那一列的身分就是 `cse_`。用 session_id 會讓每次 `/clear` 都失憶。
+_CLOUD_FAIL_LOUD = 5                  # 連續失敗幾次算「未公開 API 換版」的形狀
+
+
+def _cloud_path(bridge: str, kind: str = "cloud") -> str:
+    safe = "".join(c for c in bridge if c.isalnum() or c in "-_")[:64]
+    return os.path.join(_STATE_DIR, "%s.%s.txt" % (kind, safe))
+
+
+def recall_cloud(bridge: str) -> str:
+    """上次**成功**推給這個面板的名字。沒有記錄回空字串 ⇒ 下一次必推。"""
+    if not bridge:
+        return ""
+    try:
+        return open(_cloud_path(bridge), encoding="utf-8").read().strip()
+    except Exception:
+        return ""
+
+
+def remember_cloud(bridge: str, title: str) -> None:
+    """只在**確認推成功**之後呼叫。推之前就寫＝把「打算推」記成「推成功了」。"""
+    if not bridge:
+        return
+    try:
+        os.makedirs(_STATE_DIR, exist_ok=True)
+        with open(_cloud_path(bridge), "w", encoding="utf-8", newline="") as fh:
+            fh.write(title)
+    except Exception:
+        pass
+
+
+def forget_cloud(bridge: str) -> None:
+    """失敗或不確定時清掉記錄，讓下一次必推。
+
+    **三種都算不確定**：非 200、例外、`_access_token()` 回空（過期／沒登入）。
+    最後那種最容易被漏掉 —— 它在現行程式裡是靜默 return，看起來像「沒事發生」。
+    """
+    if not bridge:
+        return
+    try:
+        os.remove(_cloud_path(bridge))
+    except Exception:
+        pass
+
+
+def cloud_fail_bump(bridge: str) -> int:
+    """連續失敗次數 +1 並回傳。
+
+    **Q3 的訊號是「連續」不是「單次」**：單次失敗是常態（token 剛好過期），
+    連續失敗才是未公開 API 換版的形狀。用「成功也印 log」當訊號會被正常流量淹掉。
+    """
+    if not bridge:
+        return 0
+    n = 0
+    try:
+        n = int(open(_cloud_path(bridge, "cloudfail"), encoding="utf-8").read().strip() or 0)
+    except Exception:
+        n = 0
+    n += 1
+    try:
+        os.makedirs(_STATE_DIR, exist_ok=True)
+        with open(_cloud_path(bridge, "cloudfail"), "w", encoding="utf-8",
+                  newline="") as fh:
+            fh.write(str(n))
+    except Exception:
+        pass
+    return n
+
+
+def cloud_fail_reset(bridge: str) -> None:
+    if not bridge:
+        return
+    try:
+        os.remove(_cloud_path(bridge, "cloudfail"))
+    except Exception:
+        pass
+
+
 def _access_token() -> str:
     """讀 OAuth access token；沒有或已過期回空字串。
 
@@ -593,10 +690,19 @@ def _access_token() -> str:
     return token
 
 
-def _push_cloud(bridge: str, title: str) -> None:
+def _push_cloud(bridge: str, title: str) -> bool:
+    """推一次，並負責維護去重記錄與連續失敗計數。回傳有沒有成功。
+
+    **成功才寫記錄、失敗一律清掉**：記錄的語意是「雲端現在就是這個值」，
+    推失敗還留著記錄＝下一次會以為已經同步、再也不重試。
+    """
     token = _access_token()
     if not token:
-        return                            # 過期／沒登入：安靜跳過，不是錯誤
+        # 過期／沒登入不是錯誤，但**是一種不確定**：這一輪沒推成功，
+        # 記錄不能留。原本這裡是靜默 return，那條路徑在 log 上完全看不見（Q2）。
+        forget_cloud(bridge)
+        _log("cloud PUT %s -> 略過：token 沒有或已過期（記錄已清，下次必推）" % bridge)
+        return False
     url, headers, body = cloud_request(bridge, title, token)
     try:
         import urllib.request
@@ -604,8 +710,25 @@ def _push_cloud(bridge: str, title: str) -> None:
         with urllib.request.urlopen(req, timeout=_CLOUD_TIMEOUT) as resp:
             if resp.status != 200:
                 _log("cloud PUT %s -> HTTP %s" % (bridge, resp.status))
+                forget_cloud(bridge)
+                _cloud_after_fail(bridge)
+                return False
     except Exception as exc:
         _log("cloud PUT %s -> %s: %s" % (bridge, type(exc).__name__, exc))
+        forget_cloud(bridge)
+        _cloud_after_fail(bridge)
+        return False
+    remember_cloud(bridge, title)
+    cloud_fail_reset(bridge)
+    return True
+
+
+def _cloud_after_fail(bridge: str) -> None:
+    """失敗計數 +1；連續超過門檻就印一行醒目的（Q3 的訊號）。"""
+    n = cloud_fail_bump(bridge)
+    if n >= _CLOUD_FAIL_LOUD:
+        _log("!!! cloud PUT %s 連續失敗 %d 次 —— 未公開 API 可能換版了，去看 %s"
+             % (bridge, n, "cloud_request() 的介面"))
 
 
 def reconcile(declared: str, title: "str | None", existing: str,
@@ -635,12 +758,23 @@ def decide(declared: str, existing: str, distance: int,
     優先序（2026-08-26 改）：**宣告 > 補回自己被蓋掉的名字 > 佔位名 > 檔裡既有的**。
     原本是「宣告 > 既有 > 佔位名」，那假設了「既有＝上一次的結論或 user rename」。
     這個假設在 client 2.1.237 之後不成立了 —— 它每個 prompt 都把自己的快取名寫回
-    檔尾（見 `is_ours`），於是「既有」十之八九是 client 蓋上來的，讓路等於永遠輸。
+    檔尾，於是「既有」十之八九是 client 蓋上來的，讓路等於永遠輸。
 
-    所以檔尾那一筆**不是我們的格式**時（`foreign`），它不再有權留下：
+    所以檔尾那一筆**不是我們寫的**時（`foreign`），它不再有權留下：
     有 memo（我們上次決定的名字）就補回去，沒有就給佔位名。
+
+    ⚠ **「是不是我們寫的」比的是歸屬，不是格式**（2026-08-28 訂正）。
+    原本用 `is_ours()` 判格式（看有沒有【】前綴），那在 `/clear` 之後會判錯：
+    client 帶過來的是**上一則對話的名字**，而上一則也是我們命名的 —— 格式完全合格，
+    於是被當成自己人放行，佔位名永遠拿不到，側邊欄一直顯示上一則的任務名。
+    **它不是沒偵測到，是偵測到了並認可了。**
+
+    改用 `existing != memo`：memo 是「我替**這則**對話決定過的名字」，
+    新殼的 memo 必定是空的 ⇒ 檔尾任何值都算外來。格式判準沒有這個資訊，
+    因為它認得出「我方寫的」卻認不出「寫給誰的」。
+    （`is_ours()` 仍留著給 log 標記用 —— 那裡要的正是「長得像不像我方格式」。）
     """
-    foreign = bool(existing) and not is_ours(existing)
+    foreign = bool(existing) and existing != memo
     if declared:
         target = declared
     elif foreign and memo:
@@ -733,17 +867,37 @@ def main() -> int:
 
         # `prev` 一起記：佔位名沒出現時，成因只有兩種 —— 守門擋掉（prev 非空）
         # 或專案名取不到。少了這一欄，兩種在 log 上長得一模一樣。
+        # 檔尾那一筆的來歷分**三種**，log 上要看得出差別（2026-08-28 補第三種）：
+        #   (client) 不是我方格式 —— client 回寫的快取名
+        #   (別則)   是我方格式但不等於本則的 memo —— `/clear` 帶過來的上一則名字
+        #   無標記   就是我們替這則寫的
+        # 少了「別則」這一格，縫 A 那半年的症狀在 log 上與正常完全一樣。
         _log("decided=%s declared=%s existing=%s%s dist=%s idle=%s prev=%s"
              % (title, declared or "-", existing or "-",
-                "(client)" if (existing and not is_ours(existing)) else "",
+                ("" if not existing else
+                 ("(client)" if not is_ours(existing)
+                  else ("" if existing == prev_title else "(別則)"))),
                 distance, idle or "-", prev_title or "-"))
         if title:
             _append_title(path, session_id, title)
             _remember(session_id, title)
             _remember_last_task(_project_key(path), title)
-            bridge = _bridge_session_id(path)
-            if should_push(title, existing, bridge):
-                _push_cloud(bridge, title)
+
+        # 雲端推送**不再巢狀在「這輪有沒有決定」底下**（票 02 Q2，2026-08-28）。
+        # 原本它寫在 `if title:` 裡面 ⇒ `decide()` 回 None 就整段跳過，
+        # 而回 None 最常見的情形正是「本機檔尾已經是對的」—— 那時雲端可能早就
+        # 漂掉了（`/clear` 後的佔位名是第二條寫入路徑，某次推送也可能失敗過），
+        # 卻永遠等不到校正。**只要本機是對的，雲端就永遠不會被碰**，就是這個巢狀造成的。
+        #
+        # 目標值取 `title or existing`：這一輪沒決定就用檔尾現有的。
+        # ⚠ 這一句在 `decide()` 還用格式判準的時候是危險的 —— 新殼的檔尾是
+        # **上一則**對話的名字，會被推上雲端蓋掉剛設好的佔位名。判準改成看歸屬之後
+        # （見 `decide()` 的 2026-08-28 訂正），檔尾若不屬於本則就不會走到 title=None，
+        # 這一句才安全。兩個改動是綁在一起的，不要只搬其中一個。
+        target = title or existing
+        bridge = _bridge_session_id(path)
+        if should_push(target, recall_cloud(bridge), bridge):
+            _push_cloud(bridge, target)
     except Exception:
         pass                              # 錦上添花的東西不准擋工作
     return 0

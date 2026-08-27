@@ -24,6 +24,7 @@ import importlib.util
 import io
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -244,6 +245,12 @@ def run_idle_title():
                  CSE in url, True)
             case("成功也留痕", "只在失敗留痕＝票 01 卡兩小時的『推了沒有？沒有證據』",
                  "HTTP 200" in log_text(), True)
+            # 縫 C（票 02 Q3，2026-08-28）：雲端那一列有**兩個**寫入者，
+            # 去重記錄只有一邊寫的話，另一邊下次讀到空 ⇒ 判定「必推」⇒
+            # 把這裡剛設好的佔位名換成它手上的值。兩條路要嘛都寫、要嘛都不寫。
+            case("這條路推完也要寫去重記錄",
+                 "只有收尾那條寫的話，它下次會讀到空記錄、必推，把佔位名蓋掉",
+                 T.recall_cloud(CSE), "Demo｜等待任務｜上一個任務")
 
             # ③b 同 cse、有真實訊息，但**是這次 clear 之前的舊對話** ⇒ 不算在用
             # 真機驗收打臉出來的（2026-08-27）：cse 每個面板固定不變，所以面板任何
@@ -275,6 +282,73 @@ def run_idle_title():
             os.environ["CLAUDE_PROJECTS_DIR"] = os.path.join(tmp, "projects")
     finally:
         urllib.request.urlopen = real_urlopen
+
+
+def run_session_dir():
+    r"""同名 `<uuid>\` 目錄的收尾（2026-08-28 補）。
+
+    防的是什麼：封存原本只搬 `<uuid>.jsonl`，目錄從來沒人看 —— 首次量到已累積
+    116 個孤兒、137MB、570 份子代理紀錄。而**第一版判準會刪掉記憶庫**：
+    `memory` 資料夾沒有對應的 `.jsonl`，其中一個還是 junction，
+    `rmtree` 會穿過去刪掉被連結的實體。所以守門的兩個方向都要測，
+    不是只測「有沒有收到孤兒」。
+    """
+    tmp = tempfile.mkdtemp(prefix="arch_dir_")
+    M = _load(tmp)
+    proj = os.path.join(tmp, "projects", "proj")
+    uid = "11111111-2222-4333-8444-555555555555"
+
+    # --- 純函式層：兩道守門各自的方向 ---
+    os.makedirs(os.path.join(proj, uid), exist_ok=True)
+    case("uuid 形狀的普通目錄放行", "放行判準若太嚴，孤兒永遠收不掉",
+         M.is_session_dir(os.path.join(proj, uid), uid), "")
+    os.makedirs(os.path.join(proj, "memory"), exist_ok=True)
+    case("非 uuid 形狀擋下（memory）", "這是記憶庫本體，收它等於刪記憶",
+         M.is_session_dir(os.path.join(proj, "memory"), "memory") != "", True)
+
+    # reparse point：不依賴檔案系統權限，直接換掉 lstat 的回傳。
+    real_lstat = os.lstat
+
+    class _FakeStat:
+        st_file_attributes = stat.FILE_ATTRIBUTE_REPARSE_POINT
+
+    os.lstat = lambda p, *a, **k: _FakeStat()
+    try:
+        case("uuid 形狀但是連結點也擋下", "junction 會讓 rmtree 穿過去刪掉被連結的實體",
+             M.is_session_dir(os.path.join(proj, uid), uid) != "", True)
+    finally:
+        os.lstat = real_lstat
+
+    # lstat 讀不到時的方向：寧可少收一個，不可誤刪。
+    os.lstat = lambda p, *a, **k: (_ for _ in ()).throw(OSError("boom"))
+    try:
+        case("讀不到目錄屬性時當成連結點", "這道門兩個方向不對稱，讀不到要往安全那邊倒",
+             M.is_session_dir(os.path.join(proj, uid), uid) != "", True)
+    finally:
+        os.lstat = real_lstat
+
+    # --- 整合層：sweep 跑完之後，目錄該被收掉、子代理該進封存夾 ---
+    sub = os.path.join(proj, uid, "subagents")
+    _write(os.path.join(sub, "agent-a.jsonl"), '{"t":1}\n')
+    _write(os.path.join(proj, uid, "custom-title.json"), '{"customTitle":"x"}\n')
+    path = os.path.join(proj, uid + ".jsonl")          # 已封存 ⇒ 原檔不在
+    dest = os.path.join(tmp, "archive", "proj", "20260828-000000__%s.jsonl" % uid)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    _write(dest, SHELL)
+
+    M.sweep(path, dest, delays=[0])
+
+    case("sweep 收完對話也收同名目錄", "不收的話每封存一則派過工的對話就留一個孤兒",
+         os.path.isdir(os.path.join(proj, uid)), False)
+    case("子代理紀錄先進封存夾才刪", "主對話還原得回來，子代理那份從沒被封存過",
+         os.path.isfile(os.path.join(tmp, "archive", "proj",
+                                     "20260828-000000__%s.subagents" % uid,
+                                     "agent-a.jsonl")), True)
+    case("子代理封存不以 .jsonl 結尾", "restore 的 iter_archived 靠副檔名守門，"
+         "叫 .jsonl 會被誤收成一則對話",
+         [n for n in os.listdir(os.path.join(tmp, "archive", "proj"))
+          if n.endswith(".jsonl")],
+         ["20260828-000000__%s.jsonl" % uid])
 
 
 # ── SessionEnd reason 白名單（2026-08-28 放寬之後補的網）────────────────────
@@ -315,6 +389,7 @@ def run_reason_gate():
 def main():
     run()
     run_idle_title()
+    run_session_dir()
     run_reason_gate()
     bad = 0
     for name, why, got, want in CASES:

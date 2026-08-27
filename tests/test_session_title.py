@@ -262,7 +262,19 @@ case("找不到 repo 根就退回 cwd 的 leaf", "不是每個工作目錄都在
 case("新視窗落在佔位名", "沒宣告也沒既有標題時，現在會退回平台自產的英文標題",
      M.decide("", "", -1, _IDLE), _IDLE)
 case("我們寫過的名字優先於佔位名", "上一輪的任務名不該被「等待任務」蓋掉",
-     M.decide("", "【任務】甲｜Execute", -1, _IDLE), "【任務】甲｜Execute")
+     M.decide("", "【任務】甲｜Execute", -1, _IDLE, "【任務】甲｜Execute"),
+     "【任務】甲｜Execute")
+# ⚠ 上面那條原本沒傳 memo（＝空），於是它實際測到的是**新殼**的形狀，
+# 期望的卻是**同一則對話**的行為 —— 現行程式用格式判準，兩種分不開才碰巧通過。
+# 補上 memo 之後它才表達得出本來的意圖，而新殼那一格由下面這條單獨釘住。
+case("新殼帶來的別則舊名不算我們寫的",
+     "2026-08-28：/clear 之後 client 把**上一則**的名字帶過來，格式完全合格 —— "
+     "只看格式會判成自己人放行，佔位名永遠拿不到，側邊欄一直顯示上一則的任務名",
+     M.decide("", "【任務】甲｜Execute", -1, _IDLE, ""), _IDLE)
+case("同一則對話的名字不因窗口距離而被當成外來",
+     "memo 相同就是自己人，與檔尾距離無關（距離只決定要不要重寫）",
+     M.decide("", "【任務】甲｜Execute", 99999, _IDLE, "【任務】甲｜Execute"),
+     "【任務】甲｜Execute")
 case("client 快取名不敵佔位名", "2026-08-26：client 每個 prompt 回寫快取名，讓路等於永遠輸",
      M.decide("", "UI / 排版設計 (S)", -1, _IDLE), _IDLE)
 case("被 client 蓋掉就補回 memo", "memo 是我們上次的結論；檔尾不是我們的格式＝被蓋了",
@@ -452,13 +464,163 @@ def e2e():
     return results
 
 
+def cloud_memo() -> list:
+    r"""雲端去重記錄與失敗計數（票 02 Q2／Q3，2026-08-28）。
+
+    這一段防的是四個**既不可見也不自癒**的失效：
+
+      1. 去重拿本機檔尾比 → 雲端一旦漂掉就再也校正不回來（雲端有第二個寫入者）。
+      2. 推送巢狀在 `if title:` 底下 → `decide()` 回 None 就整段跳過，
+         而回 None 最常見的情形正是「本機是對的」—— 那時雲端漂了也沒人管。
+      3. 推失敗還留著記錄 → 下一次以為已同步，永遠不重試。
+      4. token 過期靜默 return → 那條路徑在 log 上完全看不見。
+
+    **全部走假的 `urlopen`**，一個真請求都不發。
+    """
+    import urllib.request
+    out = []
+
+    def c(name, why, got, want):
+        out.append((name, why, got, want))
+
+    tmp = tempfile.mkdtemp(prefix="cloud_memo_")
+    state = os.path.join(tmp, "state")
+    os.makedirs(state, exist_ok=True)
+    old_state = os.environ.get("CLAUDE_SESSION_TITLE_STATE_DIR")
+    os.environ["CLAUDE_SESSION_TITLE_STATE_DIR"] = state
+    os.environ.pop("CLAUDE_SESSION_TITLE_NO_CLOUD", None)
+    T = _load()                      # STATE_DIR 是 import 期讀的，要重載才吃得到
+    CSE = "cse_TESTONLY0000"
+
+    def log_text():
+        try:
+            return open(os.path.join(state, "session_title.log"),
+                        encoding="utf-8").read()
+        except OSError:
+            return ""
+
+    # ── 純函式：三態去重 ────────────────────────────────────────────────
+    c("雲端沒有記錄就必推", "沒推過／推失敗過都算沒有，這時保守推一次才校正得回來",
+      T.should_push("甲", "", CSE), True)
+    c("與雲端記錄相同不推", "Stop 是同步阻塞的，每輪一個網路呼叫會拖慢收尾",
+      T.should_push("甲", "甲", CSE), False)
+    c("與雲端記錄不同必推", "這正是雲端漂掉之後唯一的校正機會",
+      T.should_push("乙", "甲", CSE), True)
+
+    sent = []
+    status_box = [200]
+
+    class _Resp(object):
+        def __init__(self):
+            self.status = status_box[0]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        sent.append((req.full_url, req.data))
+        if status_box[0] == -1:
+            raise OSError("模擬網路失敗")
+        return _Resp()
+
+    real_urlopen = urllib.request.urlopen
+    real_token = T._access_token
+    urllib.request.urlopen = fake_urlopen
+    T._access_token = lambda: "FAKE"
+    try:
+        # ── 成功 → 寫記錄、失敗計數歸零 ──────────────────────────────
+        status_box[0] = 200
+        T.cloud_fail_bump(CSE)
+        ok = T._push_cloud(CSE, "甲")
+        c("推成功才寫記錄", "推之前就寫＝把「打算推」記成「推成功了」",
+          (ok, T.recall_cloud(CSE)), (True, "甲"))
+        c("推成功把失敗計數歸零", "不歸零的話偶發失敗會累積成假警報",
+          os.path.exists(T._cloud_path(CSE, "cloudfail")), False)
+
+        # ── 非 200 → 清記錄 ─────────────────────────────────────────
+        status_box[0] = 500
+        T._push_cloud(CSE, "乙")
+        c("非 200 要清掉記錄", "留著記錄＝下一次以為已同步，永遠不重試",
+          T.recall_cloud(CSE), "")
+
+        # ── 例外 → 清記錄 ───────────────────────────────────────────
+        T.remember_cloud(CSE, "丙")
+        status_box[0] = -1
+        T._push_cloud(CSE, "丁")
+        c("例外也要清掉記錄", "網路斷線與 API 換版在這一層分不出來，一律當沒推成",
+          T.recall_cloud(CSE), "")
+
+        # ── 連續失敗到門檻 → 印醒目那一行 ────────────────────────────
+        status_box[0] = 500
+        for _ in range(T._CLOUD_FAIL_LOUD):
+            T._push_cloud(CSE, "戊")
+        c("連續失敗到門檻才喊", "單次失敗是常態（token 剛好過期），連續才是 API 換版的形狀",
+          "連續失敗" in log_text(), True)
+        status_box[0] = 200
+        T._push_cloud(CSE, "己")
+        c("一次成功就清掉連續失敗", "不清的話下次再失敗一次就又喊，變成狼來了",
+          os.path.exists(T._cloud_path(CSE, "cloudfail")), False)
+
+        # ── token 拿不到 → 清記錄且留痕 ──────────────────────────────
+        T.remember_cloud(CSE, "庚")
+        T._access_token = lambda: ""
+        n0 = len(sent)
+        T._push_cloud(CSE, "辛")
+        c("token 過期不發請求但要清記錄", "原本是靜默 return —— 那條路徑在 log 上完全看不見（Q2）",
+          (len(sent) - n0, T.recall_cloud(CSE), "token" in log_text()),
+          (0, "", True))
+        T._access_token = lambda: "FAKE"
+
+        # ── 控制流：這輪沒決定，但雲端漂了 → 仍然要推（縫 B 的回歸測試）──
+        proj = os.path.join(tmp, "projects", "d--Demo")
+        os.makedirs(proj, exist_ok=True)
+        tp = os.path.join(proj, "22222222-3333-4444-8555-666666666666.jsonl")
+        with open(tp, "w", encoding="utf-8", newline="") as fh:
+            fh.write('{"type":"bridge-session","sessionId":"s","bridgeSessionId":"%s"}\n' % CSE)
+            fh.write('{"type":"custom-title","sessionId":"s","customTitle":"【任務】甲｜Fix"}\n')
+        # memo 與檔尾相同 ⇒ decide() 必定回 None（同名、又在窗口內）
+        T._remember("s-cloud", "【任務】甲｜Fix")
+        T.remember_cloud(CSE, "雲端漂掉的舊名")
+        status_box[0] = 200
+        n1 = len(sent)
+
+        class _Stdin(object):
+            buffer = None
+
+        payload = json.dumps({"hook_event_name": "Stop", "session_id": "s-cloud",
+                              "transcript_path": tp}).encode("utf-8")
+        real_stdin = sys.stdin
+        sys.stdin = _Stdin()
+        sys.stdin.buffer = __import__("io").BytesIO(payload)
+        try:
+            T.main()
+        finally:
+            sys.stdin = real_stdin
+
+        c("這輪沒決定但雲端漂了，仍然要推",
+          "推送巢狀在 if title 底下時，decide() 回 None 就整段跳過 —— "
+          "而回 None 最常見的情形正是「本機是對的」，那時雲端漂了也沒人管",
+          (len(sent) - n1, T.recall_cloud(CSE)), (1, "【任務】甲｜Fix"))
+    finally:
+        urllib.request.urlopen = real_urlopen
+        T._access_token = real_token
+        if old_state is None:
+            os.environ.pop("CLAUDE_SESSION_TITLE_STATE_DIR", None)
+        else:
+            os.environ["CLAUDE_SESSION_TITLE_STATE_DIR"] = old_state
+    return out
+
+
 def run() -> "tuple[int, list]":
     """給 run_hook_tests.py 的入口：回 (通過數, 失敗清單)。
 
     沒接進常規回歸網的測試，等於下次有人改壞了不會有人知道 —— 這支守的是
     三個事件的分工與雲端請求的組法，那些都是實測踩出來、不接就會退化的東西。
     """
-    cases = list(CASES) + e2e()
+    cases = list(CASES) + e2e() + cloud_memo()
     if not cases:
         return 0, ["零 fixture —— 一律視為失敗，不報全過"]
     passed, failed = 0, []
@@ -471,7 +633,7 @@ def run() -> "tuple[int, list]":
 
 
 def main():
-    cases = list(CASES) + e2e()
+    cases = list(CASES) + e2e() + cloud_memo()
     if not cases:
         print("FAIL: 零 fixture —— 一律視為失敗，不報全過")
         return 1

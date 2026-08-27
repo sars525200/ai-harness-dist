@@ -24,9 +24,15 @@ r"""SessionEnd 事件：`/clear` 收掉一則對話時，把它從側邊欄列�
 
 ## 列表不會立刻變乾淨：要 Reload Window
 
-extension 沒有對 session 檔掛 watcher，`ensureSessionLoaded` 還有一層記憶體
-快取（`session_title.py` 的實測結論，同一個機制）。所以效果是「**下次重載後，
-列表少掉那幾列**」，不是當場消失。
+extension 沒有對 session 檔掛 watcher，所以效果是「**下次重載後，列表少掉那幾列**」，
+不是當場消失。
+
+⚠ 2026-08-28 訂正：原本這裡把成因寫成「`ensureSessionLoaded` 還有一層記憶體快取」——
+**那個歸因 8/27 就被推翻了**（`session_title.py` 的「生效時機」段：側邊欄那一列
+每次都直接開檔讀，記憶體快取只餵 transcript 訊息內容、不餵這條路徑）。
+真正的原因是**沒人主動發 `list_sessions_request`**，所以按 session 列表的
+「重新整理」鈕就會當場生效，不必 Reload Window。
+（這一處是 8/28 收斂多真相時漏掉的第五處 —— 當時 grep 的關鍵字沒涵蓋「記憶體快取」。）
 
 ## 掛四個 reason，只排除 `resume`（2026-08-28 使用者改，原本只掛 `clear`）
 
@@ -54,8 +60,12 @@ matcher 濾一次（`~/.claude/settings.json`），`main()` 再擋一次（`_ARC
 封存那份裡的 `cse_…`，與「使用者到底開工了沒」的證據。細節見 `_push_idle_title()`。
 
 **它只修雲端那一份**（claude.ai／手機）。VSCode 側邊欄讀的是本機檔最後一筆
-`custom-title`，而 bridge session 的那個欄位由 client 擁有（我方 append 只有第一次
-有效）—— 那一半修不動，是已知限制，不是這支壞了。
+`custom-title`，而**我方寫進去的那一行在 bridge session 上不留存** —— 那一半在
+無人工介入時修不動，是已知限制，不是這支壞了。
+⚠ 2026-08-28 訂正措辭：原本這裡寫「那個欄位由 client 擁有」——那是**所有權**模型，
+會導出「碰不得」。實測支持的是**覆蓋時序**模型：我方寫得進去，隨後被 client 的版本
+蓋掉。兩者導出的對策不同。唯一權威敘述在 `session-list-cleanup` effort 的票 02
+「已知限制」段（含量到的數字，以及哪一部分仍是推測）。
 
 ## 做不到的那一半（別誤會成壞掉）
 
@@ -74,7 +84,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -173,6 +185,96 @@ def sweep(path: str, dest: str, delays=None) -> None:
                      % (size, os.path.basename(path)[:8]))
         except Exception as exc:
             _log("sweep FAILED %s: %s" % (type(exc).__name__, exc))
+
+    # 對話檔收完了，同名的 `<uuid>/` 目錄也要收 —— 放在**所有 tick 跑完之後**：
+    # client 重建 transcript 時也可能重建那個目錄，太早收等於白收一次。
+    try:
+        archive_session_dir(os.path.dirname(path),
+                            os.path.basename(path)[:-len(".jsonl")], dest)
+    except Exception as exc:
+        _log("sweep dir FAILED %s: %s" % (type(exc).__name__, exc))
+
+
+# --- 同名資料夾的收尾（2026-08-28）------------------------------------------
+# 封存原本只搬 `<uuid>.jsonl`，**同名的 `<uuid>/` 目錄從來沒人看**。那裡面裝的是
+# 子代理 transcript（`subagents/agent-*.jsonl`）、大型工具輸出落檔（`tool-results/`）
+# 與過期的 `custom-title.json`。首次量到時已累積 116 個孤兒、137MB、570 份子代理紀錄。
+#
+# **子代理紀錄要先進封存夾才准刪**：主對話還原得回來（封存夾裡有），
+# 子代理那份從沒被封存過，直接刪就是永久消失。與本檔「先確保封存那份夠完整，才刪」同紀律。
+#
+# 批次版（清理歷史存量）在 `tools/archive_orphan_dirs.py`，它 import 下面這兩支
+# —— **守門只有這一份**，不在兩邊各維護一套。
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def is_session_dir(path: str, name: str) -> str:
+    """能不能把這個資料夾當成「某則對話的附屬目錄」來收。可以回 ""，否則回拒收理由。
+
+    **兩道獨立的守門，缺一不可**（2026-08-28 血淚）：第一版判準是「沒有對應的
+    `.jsonl` 就是孤兒」，它抓到了三個 `memory` 資料夾與一個 `memory.bak.…` ——
+    那是記憶庫本體，而且其中一個是 **junction**。`shutil.rmtree` 會**穿過 junction
+    刪掉被連結的實體內容**，不是只移除連結。
+
+    1. 名字必須是對話 ID 的形狀 —— **正向白名單**。黑名單擋不住下一個沒想到的
+       目錄名，而 `memory` 正是沒想到的那個。
+    2. 目錄本身不得是 reparse point —— 就算哪天有人拿 uuid 當連結名也走不到 rmtree。
+
+    `os.path.islink` 在 Windows 對 junction 回 False（它只認 symlink），
+    所以要直接讀屬性位元。**讀不到一律當「是連結」**：這道門的兩個方向不對稱 ——
+    誤判成連結只是少收一個資料夾，誤判成普通目錄可能刪掉整個記憶庫。
+    """
+    if not _UUID_RE.match(name):
+        return "不是對話 ID 的形狀"
+    if os.path.islink(path):
+        return "是連結點（symlink）"
+    try:
+        if os.lstat(path).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            return "是連結點（junction）"
+    except Exception:
+        return "讀不到目錄屬性（當成連結點處理）"
+    return ""
+
+
+def archive_session_dir(projects_dir: str, uuid: str, dest_jsonl: str,
+                        keep_dir: bool = False) -> bool:
+    """把 `<projects_dir>/<uuid>/` 收掉：子代理紀錄進封存夾，其餘直接移除。
+
+    子代理放 `<dest_jsonl 去掉副檔名>.subagents/`，也就是與主封存檔**同前綴的平行目錄**。
+
+    ⚠ **不動主封存檔的路徑或檔名**（規劃圖 R2-8）：`restore_session.py` 寫死了
+    `<root>/<專案夾名>/<時間>__<uuid>.jsonl` 且只 split 第一個 `__`。這裡新增的是
+    平行目錄，而 `iter_archived()` 有 `endswith(".jsonl")` 守門 ⇒ 不會被誤收成一則對話。
+
+    回傳有沒有真的做事（沒有那個目錄就回 False，不是錯誤）。
+    """
+    src = os.path.join(projects_dir, uuid)
+    if not os.path.isdir(src):
+        return False
+    reason = is_session_dir(src, uuid)
+    if reason:
+        _log("dir 拒收 %s：%s" % (uuid[:8], reason))
+        return False
+
+    sub = os.path.join(src, "subagents")
+    if os.path.isdir(sub):
+        dest = dest_jsonl[:-len(".jsonl")] + ".subagents" \
+            if dest_jsonl.endswith(".jsonl") else dest_jsonl + ".subagents"
+        if os.path.exists(dest):
+            # 上次跑到一半。**不覆蓋**：舊的那份可能比較完整。
+            _log("dir 子代理封存已存在，跳過搬移 %s" % uuid[:8])
+        else:
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copytree(sub, dest)
+            _log("dir 子代理紀錄已封存 %s -> %s（%d 份）"
+                 % (uuid[:8], os.path.basename(dest), len(os.listdir(sub))))
+
+    if keep_dir or _KEEP_ORIGINAL:
+        return True
+    shutil.rmtree(src)
+    _log("dir 已移除 %s" % uuid[:8])
+    return True
 
 
 # --- /clear 之後把雲端那一列改成佔位名（票 02 Q5，2026-08-27） -----------------
@@ -280,6 +382,7 @@ def _push_idle_title(path: str, dest: str) -> None:
             return
         token = T._access_token()
         if not token:
+            T.forget_cloud(cse)           # 沒推成 ⇒ 記錄不能留（見下方說明）
             _log("idle-title 跳過：token 沒有或已過期 %s" % cse[:16])
             return
         url, headers, body = T.cloud_request(cse, title, token)
@@ -288,7 +391,20 @@ def _push_idle_title(path: str, dest: str) -> None:
         with urllib.request.urlopen(req, timeout=T._CLOUD_TIMEOUT) as resp:
             _log("idle-title PUT %s -> HTTP %s title=%s"
                  % (cse[:16], resp.status, title))
+            # **這一條路推完也要寫去重記錄**（票 02 Q3，2026-08-28）。
+            # 雲端那一列有兩個寫入者：這裡，與 `session_title.py` 的收尾推送。
+            # 記錄只有一邊寫的話，另一邊下次讀到空 ⇒ 判定「必推」⇒ 把剛設好的
+            # 佔位名換成它手上的值。兩條路要嘛都寫、要嘛都不寫，不能只有一邊。
+            if resp.status == 200:
+                T.remember_cloud(cse, title)
+                T.cloud_fail_reset(cse)
+            else:
+                T.forget_cloud(cse)
     except Exception as exc:
+        try:
+            T.forget_cloud(cse)
+        except Exception:
+            pass
         _log("idle-title FAILED %s: %s" % (type(exc).__name__, exc))
 
 

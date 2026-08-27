@@ -63,17 +63,47 @@ def _string_parts(node: ast.AST) -> list:
     return out
 
 
+def _parse_with_retry(path):
+    """回 (ast 樹 或 None, 說明)。解析失敗時**重讀一次再判**。
+
+    為什麼要重讀（2026-08-28 加）：這支在全套回歸網裡跑，而同一個 repo 常有
+    另一個 session 正在寫 `hooks/rules/*.py`。讀到寫了一半的檔，`ast.parse`
+    必定失敗 —— 但那不是「規則檔壞了」。
+
+    ⚠ **實際被騙過一次**：訊息報「規則檔解析失敗 → unterminated string literal」，
+    而那支檔案完好無缺（語法檢查、單獨重跑都通過）。差一點就有人去「修」一個
+    沒壞的東西，並在過程中覆蓋掉另一條線正在寫的改動。
+
+    判準的分界：**這個測試看得到的是「ast 丟了例外」，看不到「檔案是不是正在被寫」**。
+    重讀一次就把兩者分開了 —— 正在被寫的檔，兩次讀到的內容不會一樣。
+    """
+    import time as _t
+    try:
+        return ast.parse(path.read_text(encoding="utf-8")), ""
+    except SyntaxError as exc:
+        first = exc
+    _t.sleep(0.3)
+    try:
+        return (ast.parse(path.read_text(encoding="utf-8")),
+                "第一次讀解析失敗、重讀就好了（%s）—— 有人正在寫這個檔，不是它壞了"
+                % str(first).split("(")[0].strip())
+    except SyntaxError as exc2:
+        return None, ("讀了兩次都解析不了 —— 這次是真的語法問題，不是讀到寫一半的檔：%s"
+                      % exc2)
+
+
 def _warn_messages() -> list:
     """回 [(規則檔名, 訊息文字)]，每個 `warn(...)` 呼叫一筆。"""
     found = []
     for path in sorted(RULES_DIR.glob("*.py")):
         if path.stem.startswith("__"):
             continue
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except SyntaxError as exc:
-            found.append((path.stem, f"__PARSE_ERROR__ {exc}"))
+        tree, err = _parse_with_retry(path)
+        if tree is None:
+            found.append((path.stem, f"__PARSE_ERROR__ {err}"))
             continue
+        if err:                       # 重讀就好了 ⇒ 不是它壞了，但要留一句
+            found.append((path.stem, f"__RACED__ {err}"))
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
@@ -111,6 +141,12 @@ def run(verbose: bool = True):
             fails.append(f"{rule}：規則檔解析失敗 → {text}")
             if verbose:
                 print(f"  FAIL {rule} 解析失敗")
+            continue
+        if text.startswith("__RACED__"):
+            # **不算失敗**：重讀就好了 ⇒ 是競態不是壞檔。但要印出來，
+            # 否則「這一輪有沒有讀到完整的規則檔」變成沒有人知道的事。
+            if verbose:
+                print(f"  note {rule} {text[len('__RACED__ '):]}")
             continue
         hits = [w for w in _IMPERATIVE if w in text]
         if hits:
