@@ -108,6 +108,54 @@ def run() -> tuple[int, list]:
         check("--backup 把 live 收進 repo", (repo / "CLAUDE.md").read_text(encoding="utf-8") == "LIVE-NEW\n")
         check("--backup 不改 live", (live / "CLAUDE.md").read_text(encoding="utf-8") == "LIVE-NEW\n")
 
+    # ── 方向閘門（2026-08-27）────────────────────────────────────────────
+    # 旗標一次套用全部檔案，但漂移方向是逐檔的。方向相反的一起跑，其中一邊
+    # 必然被靜默蓋掉 —— 覆寫成功就是成功，沒有錯誤訊息。
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        live.mkdir(parents=True, exist_ok=True)
+        repo.mkdir(parents=True, exist_ok=True)
+        (live / "CLAUDE.md").write_text("OLD\n", encoding="utf-8")
+        (repo / "CLAUDE.md").write_text("NEW\n", encoding="utf-8")      # 該 restore
+        (repo / "settings.json").write_text("OLD\n", encoding="utf-8")
+        time.sleep(0.05)
+        (live / "settings.json").write_text("NEW\n", encoding="utf-8")  # 該 backup
+        now = time.time()
+        os.utime(repo / "CLAUDE.md", (now, now))
+        before_live, before_repo = _snap(live), _snap(repo)
+
+        mix = _run(live, repo, "--restore")
+        check("方向不一致：拒跑 exit 2", mix.returncode == 2, "got %s" % mix.returncode)
+        check("方向不一致：說得出哪個往哪走",
+              "repo → live" in mix.stdout and "live → repo" in mix.stdout, mix.stdout)
+        check("方向不一致：印出逐檔指令",
+              "--only CLAUDE.md" in mix.stdout and "--only settings.json" in mix.stdout,
+              mix.stdout)
+        check("方向不一致：兩邊都沒動",
+              _snap(live) == before_live and _snap(repo) == before_repo)
+
+        one = _run(live, repo, "--restore", "--only", "CLAUDE.md")
+        check("--only 收窄後閘門不擋", one.returncode == 0, one.stdout + one.stderr)
+        check("--only 只動指定的那個",
+              (live / "CLAUDE.md").read_text(encoding="utf-8") == "NEW\n"
+              and (live / "settings.json").read_text(encoding="utf-8") == "NEW\n")
+
+    # ── 收縮閘門：較新不等於較完整 ───────────────────────────────────────
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed(live, repo, "A\nB\nC\n", "A\n", repo_newer=True)
+        rst = _run(live, repo, "--restore")
+        check("來源較短：拒跑 exit 2", rst.returncode == 2, "got %s" % rst.returncode)
+        check("來源較短：說出少幾行", "少 2 行" in rst.stdout, rst.stdout)
+        check("來源較短：目的端完好",
+              (live / "CLAUDE.md").read_text(encoding="utf-8") == "A\nB\nC\n")
+        fr = _run(live, repo, "--restore", "--force")
+        check("--force 可以強蓋", fr.returncode == 0
+              and (live / "CLAUDE.md").read_text(encoding="utf-8") == "A\n",
+              fr.stdout + fr.stderr)
+
     return passed, failed
 
 

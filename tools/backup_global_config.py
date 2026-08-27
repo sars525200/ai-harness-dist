@@ -62,9 +62,13 @@ TRACKED = ["CLAUDE.md", "settings.json"]
 TRACKED_DIRS = ["output-styles"]
 
 
-def _pairs():
+def _pairs(only=None):
+    def _keep(name):
+        return (not only) or name in only or os.path.basename(name) in only
+
     for name in TRACKED:
-        yield name, os.path.join(GLOBAL_DIR, name), os.path.join(DEST_DIR, name)
+        if _keep(name):
+            yield name, os.path.join(GLOBAL_DIR, name), os.path.join(DEST_DIR, name)
     for d in TRACKED_DIRS:
         # 兩邊都掃：只在 repo 有的（live 被刪）也要現形，否則 --check 會說「一致」。
         names = set()
@@ -73,9 +77,11 @@ def _pairs():
             if os.path.isdir(root):
                 names.update(f for f in os.listdir(root) if f.lower().endswith(".md"))
         for fn in sorted(names):
-            yield ("%s/%s" % (d, fn),
-                   os.path.join(GLOBAL_DIR, d, fn),
-                   os.path.join(DEST_DIR, d, fn))
+            rel = "%s/%s" % (d, fn)
+            if _keep(rel):
+                yield (rel,
+                       os.path.join(GLOBAL_DIR, d, fn),
+                       os.path.join(DEST_DIR, d, fn))
 
 
 def _state(live: str, repo: str) -> str:
@@ -108,12 +114,73 @@ def _print_directions() -> None:
     print("  --backup   live → repo   把 live 的改動收進 git（會蓋掉 repo 上較新的內容）")
 
 
-def cmd_report() -> int:
+
+def _lines(path: str) -> int:
+    if not os.path.exists(path):
+        return 0
+    with open(path, "rb") as fh:
+        return len(fh.read().splitlines())
+
+
+def _net_delta(src: str, dst: str) -> int:
+    """套用後 dst 的行數變化。負值＝這次覆寫會讓目的端整體變少。"""
+    return _lines(src) - _lines(dst)
+
+
+def _drift_recs(only=None) -> dict:
+    """有差異的檔 → 各自該走的方向。相同的不列。"""
+    return {name: _recommend(live, repo)
+            for name, live, repo in _pairs(only)
+            if _state(live, repo) != "相同"}
+
+
+def _mixed_gate(action: str, only) -> int:
+    """跨檔方向不一致時拒跑整批。
+
+    旗標是**一次套用全部檔案**的，但漂移方向是逐檔的。方向相反的檔一起跑，
+    其中一邊必然被蓋掉，而且**不會有錯誤訊息** —— 覆寫成功就是成功。
+    2026-08-27 實例：CLAUDE.md 剛重新產生（該 restore）、settings.json 與
+    output-styles 是 live 才有的新內容（該 backup），任一旗標跑下去都會毀掉另外兩個。
+    `--only` 收窄到單檔後就是人明確指定，這道閘門不擋。
+    """
+    recs = _drift_recs(only)
+    if only or len(set(recs.values())) <= 1:
+        return 0
+    print("✋ 拒跑 --%s：這幾個檔的同步方向不一致。" % action)
+    print("   整批套用同一個旗標，方向相反的那邊會被蓋掉，而且不會有錯誤訊息。")
+    for nm, r in sorted(recs.items()):
+        print("   %-32s %s" % (nm, {"restore": "repo → live",
+                                    "backup": "live → repo",
+                                    "tie": "mtime 分不出，先看 diff"}[r]))
+    print("   逐檔做：")
+    for nm, r in sorted(recs.items()):
+        if r != "tie":
+            print("     py -3 tools/backup_global_config.py --%s --only %s" % (r, nm))
+    return 2
+
+
+def _shrink_blocked(name: str, src: str, dst: str, force: bool) -> bool:
+    """來源比目的端短就擋下來（除非 --force）。
+
+    **較新不等於較完整**。mtime 只說「誰最後被寫過」，而備份工具最常見的誤用
+    就是拿一份剛寫過但內容較舊的副本去蓋掉較完整的那邊。2026-08-27 實例：
+    repo 的 settings.json mtime 較新（剛補過一行），內容卻少了 live 才有的
+    一整個 SessionStart hook 區塊 —— 照建議 --restore 會把它靜默刪掉。
+    """
+    d = _net_delta(src, dst)
+    if d >= 0 or force:
+        return False
+    print("✋ %s 跳過：這次覆寫會讓目的端少 %d 行。" % (name, -d))
+    print("   mtime 說來源較新，但較新不等於較完整。先 diff 兩邊；確認要蓋加 --force。")
+    return True
+
+
+def cmd_report(only=None) -> int:
     print(f"live ：{GLOBAL_DIR}")
     print(f"repo ：{DEST_DIR}")
     drift = 0
     recs: list[str] = []
-    for name, live, repo in _pairs():
+    for name, live, repo in _pairs(only):
         st = _state(live, repo)
         if st != "相同":
             drift += 1
@@ -142,11 +209,14 @@ def cmd_report() -> int:
     return 1 if drift else 0
 
 
-def cmd_backup() -> int:
+def cmd_backup(only=None, force=False) -> int:
     """live → repo。"""
+    rc = _mixed_gate("backup", only)
+    if rc:
+        return rc
     os.makedirs(DEST_DIR, exist_ok=True)
-    changed = []
-    for name, live, repo in _pairs():
+    changed, blocked = [], 0
+    for name, live, repo in _pairs(only):
         if not os.path.exists(live):
             print(f"⚠ {name} live 不存在（{live}）。repo 保留不動，這可能就是要 --restore 的情況。")
             continue
@@ -154,6 +224,9 @@ def cmd_backup() -> int:
             continue
         # ⚠ 用 `copy` 不是 `copy2`：`copy2` 會保留**來源的 mtime**，於是「三十天沒改的
         # 設定今天剛備份」會被判成舊備份。這裡要的語意是「這份副本是什麼時候取的」。
+        if _shrink_blocked(name, live, repo, force):
+            blocked += 1
+            continue
         os.makedirs(os.path.dirname(repo), exist_ok=True)
         shutil.copy(live, repo)
         changed.append(name)
@@ -166,12 +239,16 @@ def cmd_backup() -> int:
         print(f"⚠ 副本在 git 裡才算數 —— 記得 commit `{rel}`。")
     else:
         print("repo 已與 live 相同，無需 --backup。")
-    return 0
+    return 2 if blocked else 0
 
 
-def cmd_restore() -> int:
+def cmd_restore(only=None, force=False) -> int:
     """repo → live。**會覆寫現行 live**。"""
-    for name, live, repo in _pairs():
+    rc = _mixed_gate("restore", only)
+    if rc:
+        return rc
+    blocked = 0
+    for name, live, repo in _pairs(only):
         if not os.path.exists(repo):
             print(f"⚠ {name} 沒有 repo 副本，跳過。")
             continue
@@ -179,11 +256,14 @@ def cmd_restore() -> int:
         if st == "相同":
             print(f"  {name}：相同，不動。")
             continue
+        if _shrink_blocked(name, repo, live, force):
+            blocked += 1
+            continue
         os.makedirs(os.path.dirname(live), exist_ok=True)
         shutil.copy2(repo, live)
         print(f"  {name}：已 --restore 到 live（原狀態：{st}）。")
     print("⚠ 還原後請重開 session —— 全域 CLAUDE.md 是開場載入的。")
-    return 0
+    return 2 if blocked else 0
 
 
 def main() -> int:
@@ -192,12 +272,17 @@ def main() -> int:
     g.add_argument("--check", action="store_true", help="只比對不寫（有差異回 exit 1）")
     g.add_argument("--restore", action="store_true", help="repo → live")
     g.add_argument("--backup", action="store_true", help="live → repo")
+    ap.add_argument("--only", default="",
+                    help="只處理這幾個（逗號分隔；檔名或 output-styles/xxx.md）")
+    ap.add_argument("--force", action="store_true",
+                    help="連「會讓目的端變短」的覆寫也做")
     a = ap.parse_args()
+    only = {x.strip() for x in a.only.split(",") if x.strip()} or None
     if a.restore:
-        return cmd_restore()
+        return cmd_restore(only, a.force)
     if a.backup:
-        return cmd_backup()
-    return cmd_report()
+        return cmd_backup(only, a.force)
+    return cmd_report(only)
 
 
 if __name__ == "__main__":
