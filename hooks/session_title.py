@@ -91,7 +91,11 @@ _TASK_RE = re.compile(r"任務\s*[:：]?\s*([^／/\n|｜]+)")
 # `任務 舊名→新名`（§2 的轉向寫法）→ 要的是箭頭後那個。
 _ARROW_RE = re.compile(r"\s*(?:→|->|=>)\s*")
 # 宣告行裡還有「任務分類」這一欄，正則會先咬到它。這些開頭一律不是任務名。
-_NOT_A_NAME = ("分類", "欄", "名稱", "模式", "階段", "規模")
+# 「待定」是 §2 給**規模欄／修改檔案欄**的合法佔位值，任務欄不適用 ——
+# 任務欄是這段工作的名字。放它過會一路傳進 `_remember_last_task()`，把整個
+# 專案的「上一個任務」污染成一個沒有資訊的詞（2026-08-27 log 11:01:09 實例：
+# 下一個新視窗因此叫「IT-department｜等待任務｜待定」）。
+_NOT_A_NAME = ("分類", "欄", "名稱", "模式", "階段", "規模", "待定", "未定")
 # 自我宣告固定寫在一輪的**開頭**。只在前 200 字內找，避免把正文裡談到的
 # 「任務工單」「任務中心」當成宣告 —— 那類誤判會把對話改成莫名其妙的名字。
 _DECL_WINDOW = 200
@@ -251,10 +255,16 @@ def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
         return ""
     for text in reversed(texts):
         head = text[:_DECL_WINDOW]
-        if not _looks_like_declaration(head):
+        # **判定與抓取必須同一個範圍**。2026-08-27 實機打臉：判定看整段 head、
+        # 抓取卻只看 `lines[0]` ⇒「開場白＋空行＋宣告」與「宣告包在 code fence
+        # 裡」兩種寫法都靜默回空（一整則對話五個 text block 全中）。而 log 只寫
+        # `declared=-`，與「這輪本來就沒宣告」**長得一模一樣**，看不出壞掉。
+        # 改成逐行找「自己就湊得滿欄位數」的那一行：門檻比原本**更嚴**
+        # （原本是整段 head 湊滿 3 個欄位，現在要同一行湊滿），誤報只會更少。
+        line = next((ln for ln in head.splitlines()
+                     if _looks_like_declaration(ln)), "")
+        if not line:
             continue
-        lines = head.splitlines()
-        line = lines[0] if lines else ""
         name = ""
         for m in _TASK_RE.finditer(line):
             name = _clean(m.group(1))
