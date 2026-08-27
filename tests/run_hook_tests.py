@@ -427,6 +427,8 @@ def main() -> int:
         import test_build_review_sandbox
         import test_cursor_payload
         import test_reviewer_config
+        import test_backup_global_config
+        import test_gen_rule_hub
         import test_session_title
         import test_index_health
         import test_log_error_slim
@@ -449,6 +451,8 @@ def main() -> int:
             # 報告照常回來，只是什麼都沒擋。上面那支守「有沒有交換」，這支守「隔離真不真」。
             (test_build_review_sandbox.run, "建覆核沙箱（deny 不會靜默寫錯）"),
             (test_reviewer_config.run, "審查者設定（未知值／缺檔不得靜默）"),
+            (test_backup_global_config.run, "全域設定備份方向（無旗標不寫／兩方向）"),
+            (test_gen_rule_hub.run, "規則中繼產生器（audience／針標／冪等）"),
             (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
             (test_index_health.run, "常駐層指向與容量（撞上限／死索引／glob 寫錯）"),
             (test_log_error_slim.run, "錯誤 log 瘦身（解析類不印 traceback／豁免不擴大）"),
