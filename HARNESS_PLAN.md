@@ -122,6 +122,7 @@ git 原生機制三個維度全勝 hook：
 | **D16** | **shadow mode 設定必須 per-rule，不是全域開關** | `dispatch_config.json` → `{"rules": {"DB-1": {"shadow": true}}}`；設定缺該規則 ID 預設 `shadow=true` | 全域開關會讓「DB-1 驗完轉正式」牽連「I1 也要跟著重新 shadow 一輪」或「I1 被迫跳過 shadow 直接上線」，兩者都違反 D2 的根治精神。per-rule 讓每條規則各自畢業 |
 | **D17** | **heartbeat／decision 分離記錄，且只記非 ALLOW** | `state/events.<session_id>.ndjson`，`kind` 欄位區分 `dispatch`／`applies`／`decision`；只有 `decision` 才含 `command`/`message` | 持續運行的 shadow mode 若比照 spike.py 全量記錄，會像 spike 那次一樣意外收錄其他 session 的完整操作內容；且 I1 這類掛在高頻 matcher（每次 Bash 呼叫）的規則，全量記錄的 log 量會遠超 DB-1。純 ALLOW 不留內容，只計數 |
 | **D18** | **轉正式需雙門檻，不只看日曆天數** | 時間窗（3–5 天）**且** `applies()` 命中次數 ≥ 最低樣本數（例如 5） | DB-1 只在 `git push vm` 觸發，若窗期內剛好只推了 1 次，would-block 清單樣本不足以支撐「沒誤判」的結論；且 `applies()` 命中數為 0（而非「大家都在忙沒空推」）本身就是 D7 定義的紅燈，不能解讀成「沒有誤判、可以轉正式」 |
+| **D19** | **量「持續成長的東西」不可拿固定基準比，必須棘輪** | 判準用 `max(基準, 上次為它報過的值)`；報警之後記住當時的值，要再長一個門檻才會再報。狀態放 gitignored 的 `state/`，**不放版控裡的基準檔** | 固定基準比持續成長 ⇒ **一旦跨線就每次都報**，然後被整條無視。2026-08-28 一天內同型 bug 出現兩次：①CTX-1 常駐層預算（309 個歷史版本回測：無棘輪 218 次改動報 215 次、最長連續 215；加棘輪後 15 次、最長連續 3）②eval 的 token 趨勢（基準停在 8/16，三支同時 +110%／+69%／+145%）。⚠ **兩者的「人工更新基準」都是純手動且沒有任何流程會跑** ⇒ 別把「叫人記得更新」當解法。⚠ 狀態寫進版控的基準檔 ⇒ 每跑一次檢查就弄髒一次工作樹，那正是別人 commit 時會誤收的形狀 |
 
 **執行環境已驗證**
 - `py -3` → Python 3.14.5 @ `C:\Users\<USER>\AppData\Local\Python\pythoncore-3.14-64\python.exe`
