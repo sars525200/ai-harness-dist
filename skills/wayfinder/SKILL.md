@@ -2,7 +2,10 @@
 name: wayfinder
 display_name: 大工程領航
 description: Plan a huge chunk of work (more than one agent session can hold) as a shared map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.
-disable-model-invocation: true
+# LOCAL EDIT (2026-08-28): upstream shipped `disable-model-invocation: true`, which hid this
+# skill from the model's tool-visible list entirely. Unlocked by the repo owner so M-scale work
+# no longer depends on a human remembering to type /wayfinder. Self-invocation threshold is in
+# the LOCAL EDIT note under `## Invocation`.
 ---
 
 A loose idea has arrived, too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** on the repo's issue tracker, then works its **decision tickets** (questions whose resolution is a decision, not slices of a build to execute) one at a time until the route is clear.
@@ -104,6 +107,13 @@ Ruling something out of scope is a scoping act, not a step on the route. When a 
 ## Invocation
 
 Two modes. Either way, **never resolve more than one ticket per session**, with the exception of research tickets.
+
+**LOCAL EDIT (2026-08-28) — when to invoke this yourself.** The model may now start this skill on its
+own, so it needs a floor. Chart a map only for **M-scale** work as this repo defines it: data
+migration or DELETE, changes to agents / rules / hooks, cross-repo work, or an effort expected to
+span sessions. If the scale is genuinely unclear, run `/design-spec` instead — that is the safe
+default, and a wrongly-charted map costs a whole session. A human typing `/wayfinder` overrides
+this floor: do what they asked.
 
 ### Chart the map
 

@@ -2,7 +2,10 @@
 name: to-tickets
 display_name: 拆工單
 description: Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each declaring its blocking edges, published to the configured tracker (edges as text in one file per ticket locally, or native blocking links on a real tracker).
-disable-model-invocation: true
+# LOCAL EDIT (2026-08-28): upstream shipped `disable-model-invocation: true`, which hid this
+# skill from the model's tool-visible list entirely. Unlocked by the repo owner alongside
+# `wayfinder`, its counterpart, so a charted map can be sliced without a human relaying the
+# handoff. Self-invocation threshold is in the LOCAL EDIT note below `# To Tickets`.
 ---
 
 # To Tickets
@@ -10,6 +13,13 @@ disable-model-invocation: true
 Break a plan, spec, or conversation into a set of **tickets**: tracer-bullet vertical slices, each declaring the tickets that **block** it.
 
 **LOCAL EDIT (2026-08-21):** read `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` in the current repo. Do NOT tell the user to run `/setup-matt-pocock-skills` — that skill was deliberately removed here (it edits `CLAUDE.md` in place, which this project's always-loaded rules file cannot tolerate), so pointing at it is a dead end. Its outputs were written by hand instead. If either file is genuinely missing, say so and stop.
+
+**LOCAL EDIT (2026-08-28) — when to invoke this yourself.** The model may now start this skill on
+its own, so it needs a floor. Slice into tickets only when a **settled plan already exists** — a
+written plan document, a design spec, or a `wayfinder` map whose fog is clear — **and** the work is
+expected to span sessions. Never slice a conversation that is still deciding what to build, and
+never slice L- or S-scale work: that belongs in the existing backlog file, not in a fresh set of
+tickets. A human typing `/to-tickets` overrides this floor: do what they asked.
 
 ## Process
 
