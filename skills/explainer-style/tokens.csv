@@ -1,0 +1,40 @@
+﻿kind,token,role,light,dark,palette,usage,count,status,note
+token,--canvas,底色,#ffffff,#0d1117,GitHub Primer,頁面背景,,active,body 必須明確指定，留空會借用外層底色
+token,--canvas-subtle,次層底,#f6f8fa,#161b22,GitHub Primer,卡片、程式碼區塊、表頭,,active,
+token,--canvas-inset,內凹底,#f6f8fa,#010409,GitHub Primer,嵌入式區塊,,active,
+token,--border,框線,#d1d9e0,#30363d,GitHub Primer,卡片框、分隔線,,active,
+token,--border-muted,淡框線,#d8dee4,#21262d,GitHub Primer,表格列線、標題底線,,active,
+token,--fg,正文,#1f2328,#e6edf3,GitHub Primer,標題與內文,,active,
+token,--fg-muted,次要文字,#59636e,#8b949e,GitHub Primer,說明、表頭文字,,active,
+token,--fg-subtle,更淡文字,#6e7781,#6e7681,GitHub Primer,圖說、標籤、註腳,,active,
+token,--accent,主色,#0969da,#4493f8,GitHub Primer,連結、資訊提示,,active,
+token,--success,成功,#1a7f37,#3fb950,GitHub Primer,通過、已完成,,active,
+token,--attention,注意,#9a6700,#d29922,GitHub Primer,待驗、有前提,,active,
+token,--danger,危險,#cf222e,#f85149,GitHub Primer,失敗、不可逆、硬規則,,active,
+token,--done,已處理,#8250df,#a371f7,GitHub Primer,已關閉、已歸檔,,active,
+token,--neutral-soft,中性淡底,"rgba(129,139,152,.12)","rgba(110,118,129,.20)",GitHub Primer,行內 code 底、斑馬紋,,active,
+token,--shadow,陰影,"0 1px 3px rgba(31,35,40,.10)","0 0 0 1px rgba(255,255,255,.04)",GitHub Primer,卡片浮起,,active,深色改用細邊而非投影
+type,,大標題,32px,,—,頁面主標，一頁一個,,active,六階之一，weight 600，line-height 1.25
+type,,章節標題,24px,,—,章節，帶底線,,active,六階之一，weight 600，padding-bottom 8px
+type,,小節標題,20px,,—,小節,,active,六階之一，weight 600
+type,,正文,16px,,—,內文段落,,active,六階之一，line-height 1.5
+type,,補充,13px,,—,圖說、註腳、卡片內文,,active,六階之一
+type,,標籤,12px,,—,eyebrow、表頭、徽章,,active,六階之一，uppercase 時加 letter-spacing .08em
+radius,,一般,6px,,—,卡片、按鈕、程式碼區塊,,active,
+radius,,大容器,12px,,—,大區塊,,active,
+radius,,膠囊,999px,,—,狀態徽章,,active,
+layout,,頁寬,1012px,,—,內容最大寬,,active,寬表可放寬到 1100px
+layout,,正文行寬,68ch,,—,段落換行點,,active,超過會讓人跳錯行
+layout,,章節間距,40px,,—,section 之間,,active,
+layout,,章節內間距,16px,,—,section 內元素之間,,active,
+layout,,行高,1.5,,—,基準行高,,active,中文比英文密，不低於此
+font,,正文字體,"-apple-system, BlinkMacSystemFont, ""Segoe UI"", ""Noto Sans TC"", ""Microsoft JhengHei"", Helvetica, Arial, sans-serif",,—,全頁,,active,Google Fonts 載 Noto+Sans+TC:wght@400;500;700
+font,,等寬字體,"ui-monospace, SFMono-Regular, ""SF Mono"", Menlo, Consolas, ""Liberation Mono"", monospace",,—,路徑、指令、色碼、版號,,active,
+component,,提示框 背景說明,--accent,,—,讀者不知道就看不懂下一段的前提,,active,左側 4px 色條＋標題帶圖示
+component,,提示框 可以這樣做,--success,,—,更快的做法，不做也不會出事,,active,
+component,,提示框 非知不可,--done,,—,不照做後面整段會走錯,,active,
+component,,提示框 注意,--attention,,—,有前提、待驗,,active,
+component,,提示框 會弄壞東西,--danger,,—,不可逆、會刪資料,,active,要寫清楚壞掉之後怎麼救
+component,,狀態徽章,--success/--attention/--danger/--accent/--fg-subtle,,—,狀態標示,,active,膠囊＋前置圓點，顏色與形狀雙重編碼
+component,,表格,--canvas-subtle 表頭,,—,多項目對照,,active,偶數列斑馬紋 --neutral-soft，數字欄 tabular-nums 靠右
+component,,程式碼區塊,--canvas-subtle,,—,技術細節,,active,6px 圓角、16px 內距、字級 13px
