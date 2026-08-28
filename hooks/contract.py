@@ -347,6 +347,111 @@ def bypassed(message: str) -> Verdict:
     return Verdict(ALLOW, message, bypassed=True)
 
 
+# ---------------------------------------------------------------------------
+# 便箋投遞回執（2026-08-28）
+# ---------------------------------------------------------------------------
+# 規則用「同一則只講一次」去重時，記號原本蓋在**排進便箋的當下**。便箋可能過期、
+# 也可能被容量擠掉 ⇒ 記號還在、訊息沒到 ⇒ 那一則對話再也不會收到那條提醒，
+# 而系統自己以為講過了。
+#
+# 實例（2026-08-28，發生在 harness 自己身上）：WIN-1 於 13:06:38 量到 149k、
+# 正確排入便箋；使用者離開約兩小時，15:06 才回來，便箋已過 90 分鐘 TTL 被丟。
+# 模型只收到「另有 1 則提醒沒能投遞」，沒收到內容 —— 而 WIN-1 的 140K 記號
+# 早就蓋下去了，那一則對話此後永遠不會再收到 140K 提醒。
+#
+# 所以「講過了」必須以**投遞成功**為準。dispatch 在 UserPromptSubmit 真的把
+# 便箋寫進 additionalContext 之後才呼叫 record_delivered；規則問的是這裡。
+#
+# 為什麼放 contract 不放 dispatch：寫的是 dispatch、讀的是規則，兩邊分家會漂。
+# 同一個檔裡定義路徑、讀、寫、清四件事，漂不了。
+#
+# 【核心層】不寫死專案路徑：state 目錄從本檔位置推。
+
+_STATE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "state")
+
+
+def _delivered_path(session_id: str) -> str:
+    return os.path.join(_STATE_DIR, f"delivered_notes.{session_id}.json")
+
+
+def _read_delivered(session_id: str) -> dict:
+    """回 `{rule_id: [key, ...]}`。讀不動回空的（fail-open）。
+
+    fail-open 的方向是**再講一次**，不是**不講**：讀壞了會讓提醒重複出現，
+    吵；反過來會讓提醒永久消失，靜默。吵勝過靜默。
+    """
+    try:
+        with open(_delivered_path(session_id), encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return {k: [str(x) for x in v] for k, v in data.items()
+                    if isinstance(v, list)}
+    except Exception:
+        pass
+    return {}
+
+
+def note_delivered(session_id: str, rule_id: str, key: str) -> bool:
+    """這一則對話裡，這條規則的這個 key 有沒有**真的送到過**模型眼前。"""
+    if not session_id or not rule_id or not key:
+        return False
+    return key in _read_delivered(session_id).get(rule_id, [])
+
+
+def record_delivered(session_id: str, pairs) -> None:
+    """記下「這些 (rule_id, key) 已經投遞成功」。dispatch 投遞後呼叫。
+
+    fail-open：寫不進去就算了 —— 代價是那條提醒下一輪再出現一次，可接受。
+    """
+    pairs = [(str(r), str(k)) for r, k in pairs if r and k]
+    if not session_id or not pairs:
+        return
+    try:
+        data = _read_delivered(session_id)
+        for rule_id, key in pairs:
+            keys = data.setdefault(rule_id, [])
+            if key not in keys:
+                keys.append(key)
+        os.makedirs(_STATE_DIR, exist_ok=True)
+        path = _delivered_path(session_id)
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
+def clear_delivered(session_id: str, rule_id: str, keys=None) -> None:
+    """把某條規則的回執清掉 —— 狀態掉回線下、之後再跨線要能再講一次。
+
+    `keys=None` 清該規則全部；給 list 就只清那幾個（例：量掉回 160k 以下時
+    只清 160／180 的回執，140 的留著，否則會從頭再念一次）。
+    """
+    if not session_id or not rule_id:
+        return
+    try:
+        data = _read_delivered(session_id)
+        if rule_id not in data:
+            return
+        if keys is None:
+            data.pop(rule_id, None)
+        else:
+            drop = {str(k) for k in keys}
+            kept = [k for k in data.get(rule_id, []) if k not in drop]
+            if kept == data.get(rule_id, []):
+                return
+            data[rule_id] = kept
+        path = _delivered_path(session_id)
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 class GitContext:
     """git 查詢介面。生產環境用 RealGitContext，測試用 FakeGitContext。
 

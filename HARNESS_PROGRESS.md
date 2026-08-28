@@ -44,7 +44,7 @@
 | 2 | **Tools**（工具） | 🟡 | CLI 齊全；allow 187→**115**（2d 清死條目＋冗餘）、deny **12** 條（Bash／PowerShell 對稱）；2 個 MCP 未授權 |
 | 3 | **Sandbox**（沙盒） | 🔴 **未起步** | 無隔離，直接讀寫本機與 VM |
 | 4 | **Orchestration**（編排） | 🟡 | **10** skills＋5 任務模式＋模型路由；**2 個自建角色已上線實測**（Phase 2） |
-| 5 | **Hook**（掛鉤） | 🟢 **16 條全數 enforce（0 shadow）** | 條數與 shadow 狀態的單一真相是 `hooks/dispatch_config.json`，**這裡不重抄清單**（重抄過一次，規則從 9 加到 12 之後這一格掛了兩週沒人發現）。交付形態分三種：BLOCK→exit 2、WARN→`additionalContext`、Stop 落便箋→UserPromptSubmit 投遞 |
+| 5 | **Hook**（掛鉤） | 🟢 **16 條全數 enforce（0 shadow）** | 條數與 shadow 狀態的單一真相是 `hooks/dispatch_config.json`，**這裡不重抄清單**（重抄過一次，規則從 9 加到 12 之後這一格掛了兩週沒人發現）。交付形態分三種：BLOCK→exit 2、WARN→`additionalContext`、Stop 落便箋→UserPromptSubmit 投遞。便箋分**狀態型／事件型**（8/28）：狀態型不過期、超量時最後才丟，且規則的「同一則只講一次」以**投遞成功**為準（回執在 `contract.py`）|
 | 6 | **Observability**（可觀測性） | 🟡 | 有 event log 與 decision log；無 traces／evals／成本儀表 |
 
 ---

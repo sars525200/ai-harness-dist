@@ -27,7 +27,12 @@ for p in (HOOKS, os.path.join(HOOKS, "rules")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from contract import ALLOW, WARN, HookContext  # noqa: E402
+import contract  # noqa: E402
+from contract import ALLOW, WARN, HookContext, record_delivered  # noqa: E402
+
+# 回執檔預設寫進真實 state/。測試一律改到暫存目錄 —— 不隔離的話，
+# 上一個 case 的回執會讓下一個 case 的「該講」變成「不講」，而且是安靜的。
+_REAL_STATE_DIR = contract._STATE_DIR
 
 RULE_PATH = os.path.join(HOOKS, "rules", "win1_total_input.py")
 
@@ -37,6 +42,7 @@ def _load(tmpdir):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod._STATE_PATH = os.path.join(tmpdir, "win1_state.json")
+    contract._STATE_DIR = tmpdir       # 回執也關進同一個暫存目錄（run() 收尾還原）
     return mod
 
 
@@ -93,7 +99,12 @@ def _case_cache_sum(fails):
             fails.append(f"訊息沒寫出門檻：{v.message[:80]}")
 
 
-def _case_140_once(fails):
+def _case_140_repeats_until_delivered(fails):
+    """**沒送到就要再講**（2026-08-28 改）。
+
+    舊行為是排進便箋就記「講過了」。便箋會過期、會被容量擠掉 ——
+    記號還在、訊息沒到 ⇒ 那一則對話永遠不會再收到 140K 提醒。實際咬過一次。
+    """
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "t.jsonl")
         _write_transcript(path, 141_000)
@@ -102,8 +113,39 @@ def _case_140_once(fails):
         v2 = m.check(_ctx(path, prompt="p2"))
         if v1.decision != WARN:
             fails.append("第一次跨 140k 沒出聲")
+        if v2.decision != WARN:
+            fails.append(f"還沒投遞成功就閉嘴了 —— 那一檔會永久遺失：{v2.decision}")
+
+
+def _case_140_silent_after_delivery(fails):
+    """投遞成功之後才閉嘴 —— 「同一則只講一次」的一次，是指送到的那一次。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "t.jsonl")
+        _write_transcript(path, 141_000)
+        m = _load(tmp)
+        v1 = m.check(_ctx(path, prompt="p1"))
+        record_delivered("sess-a", [("WIN-1", m.note_key(v1.message))])
+        v2 = m.check(_ctx(path, prompt="p2"))
+        if v1.decision != WARN:
+            fails.append("第一次跨 140k 沒出聲")
         if v2.decision != ALLOW:
-            fails.append(f"同一則第二次 140k 還在講：{v2.decision} {v2.message[:60] if v2.message else ''}")
+            fails.append(f"投遞成功之後還在講：{v2.decision} {(v2.message or '')[:60]}")
+
+
+def _case_note_contract(fails):
+    """便箋契約：狀態型 ＋ 鍵是門檻檔位（不是訊息，訊息裡的量每輪都在變）。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        m = _load(tmp)
+        if getattr(m, "NOTE_KIND", "event") != "state":
+            fails.append("NOTE_KIND 不是 state —— 便箋會跟事件型共用 90 分鐘 TTL 被丟掉")
+        for tier, want in ((m.TIER_REMIND, "140"), (m.TIER_SUGGEST, "160"),
+                           (m.TIER_STRONG, "180")):
+            got = m.note_key(m._message(tier + 1_234, tier, "測試線"))
+            if got != want:
+                fails.append(f"note_key 對 {want}k 回了 {got!r} —— 回執會對不上檔位")
+        drift = m.note_key("完全不同形狀的訊息")
+        if drift:
+            fails.append(f"訊息形狀變了卻還回了鍵 {drift!r} —— 應該回空字串讓上層退回摘要")
 
 
 def _case_160_after_140(fails):
@@ -203,7 +245,9 @@ def run():
     cases = [
         ("沒越線不出聲", _case_under_limit_silent),
         ("三欄合計才算", _case_cache_sum),
-        ("140k 同一則一次", _case_140_once),
+        ("140k 沒投遞成功就每輪再講", _case_140_repeats_until_delivered),
+        ("140k 投遞成功後才閉嘴", _case_140_silent_after_delivery),
+        ("便箋契約：狀態型＋鍵是檔位", _case_note_contract),
         ("升到 160k 再講", _case_160_after_140),
         ("180k 每輪再講、同 prompt 不重複", _case_180_each_prompt),
         ("壓回去再跨線會再提醒", _case_compact_resets),
@@ -228,6 +272,7 @@ def run():
         else:
             passed += 1
             print(f"  ok   {name}")
+    contract._STATE_DIR = _REAL_STATE_DIR   # 別把暫存目錄留給同一個行程裡的下一支
     return passed, failures
 
 

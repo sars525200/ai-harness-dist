@@ -65,8 +65,10 @@ MUTATIONS = [
     ),
     (
         "Stop 不再落便箋（訊息當場蒸發，回到「有記 log 但沒人收到」）",
-        "            _queue_pending_warning(session_id, joined)",
-        "            pass",
+        # 錨點 2026-08-28 更新：改成逐條排入之後，原本綁的
+        # `_queue_pending_warning(session_id, joined)` 那一行不存在了。改綁迴圈的呼叫。
+        "                _queue_pending_warning(session_id, w_msg, rule_id=w_rule,",
+        "                _noop_queue(session_id, w_msg, rule_id=w_rule,",
     ),
     (
         "便箋投遞後不清除（下一輪會重送 —— 重複提醒就是噪音）",
@@ -99,8 +101,9 @@ MUTATIONS = [
     ),
     (
         "同一則訊息不去重（容量會被同一句話吃光，把別人的提醒擠掉）",
-        '            if e.get("message") == message:',
-        "            if False:",
+        # 錨點 2026-08-28 更新：去重條件改成「有 key 就比 (rule, key)、沒有才比訊息」。
+        '            same = ((e["rule"] == rule_id and e["key"] == key) if keyed',
+        "            same = (False if keyed",
     ),
     (
         "不讀舊的單槽格式（state/ 裡的化石便箋會被靜靜丟掉）",
@@ -111,6 +114,27 @@ MUTATIONS = [
         "丟棄了卻不講（「沒有提醒」與「有提醒但沒送到」變得分不出來）",
         "        if lost:",
         "        if False:",
+    ),
+    # ---- 2026-08-28 這一批守的是「講過了以投遞成功為準」那次改動 ----
+    (
+        "狀態型便箋也吃 TTL（人離開兩小時，該講的就永久消失）",
+        '    if entry.get("kind") == "state":',
+        "    if False:",
+    ),
+    (
+        "超量一律丟最舊（狀態型會先被事件型擠掉）",
+        '        if e.get("kind") != "state":',
+        "        if False:",
+    ),
+    (
+        "投遞成功不寫回執（規則永遠以為沒講過，每輪重講）",
+        "        if joined and receipts:",
+        "        if False:",
+    ),
+    (
+        "規則宣告的 NOTE_KIND 讀不到（全部落回事件型）",
+        '        return "state" if str(kind) == "state" else "event"',
+        '        return "event"',
     ),
 ]
 all_red = True
@@ -138,5 +162,5 @@ restored = read()
 same = hashlib.sha256(restored.encode("utf-8")).hexdigest() == digest
 print("\n" + "=" * 60)
 print(f"dispatch.py 還原：{'✔ 內容雜湊一致' if same else '✘ 還原失敗，立刻人工檢查'}")
-print("五個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，回歸網需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，回歸網需補強")
 sys.exit(0 if (all_red and same) else 1)

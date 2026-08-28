@@ -17,10 +17,12 @@
 """
 from __future__ import annotations
 
+import contextlib
 import io
 import json
 import os
 import sys
+import tempfile
 from contextlib import redirect_stderr, redirect_stdout
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -30,6 +32,7 @@ HOOKS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if HOOKS not in sys.path:
     sys.path.insert(0, HOOKS)
 
+import contract  # noqa: E402
 import dispatch  # noqa: E402
 from contract import allow, block, warn  # noqa: E402
 
@@ -39,10 +42,15 @@ _CWD = os.path.dirname(HOOKS)
 
 
 class _FakeModule:
-    """假規則：applies 恆真、check 回預先給定的 verdict。"""
+    """假規則：applies 恆真、check 回預先給定的 verdict。
 
-    def __init__(self, verdict):
+    `kind` 給了就當規則宣告了 `NOTE_KIND`（狀態型便箋不過期，見 dispatch._expired）。
+    """
+
+    def __init__(self, verdict, kind=None):
         self._verdict = verdict
+        if kind:
+            self.NOTE_KIND = kind
 
     def applies(self, ctx):  # noqa: ARG002
         return True
@@ -51,7 +59,29 @@ class _FakeModule:
         return self._verdict
 
 
-def _run(event, verdicts, shadow, session_id="test-warn-channel"):
+@contextlib.contextmanager
+def _tmp_state():
+    """把回執檔關進暫存目錄 —— 測試不該在真實 state/ 留下 delivered_notes.*。"""
+    saved = contract._STATE_DIR
+    with tempfile.TemporaryDirectory() as tmp:
+        contract._STATE_DIR = tmp
+        try:
+            yield tmp
+        finally:
+            contract._STATE_DIR = saved
+
+
+def _put_pending(session_id, entries, dropped=0):
+    dispatch._write_pending(dispatch._pending_path(session_id),
+                            {"entries": entries, "dropped": dropped})
+
+
+def _entry(message, minutes_old=0, rule="", kind="event", key="", count=1):
+    return {"ts": dispatch._minutes_ago(minutes_old), "message": message,
+            "count": count, "rule": rule, "kind": kind, "key": key}
+
+
+def _run(event, verdicts, shadow, session_id="test-warn-channel", kinds=None):
     """隔離跑一次 _dispatch，回 (rc, stdout, stderr)。
 
     verdicts 是 list —— 多條規則同時 WARN 的情境要測得到（訊息會被 join）。
@@ -66,7 +96,8 @@ def _run(event, verdicts, shadow, session_id="test-warn-channel"):
         "_log_event": dispatch._log_event,
         "_resolve_dev_git": dispatch._resolve_dev_git,
     }
-    modules = {f"fake{i}": _FakeModule(v) for i, v in enumerate(verdicts)}
+    kinds = kinds or [None] * len(verdicts)
+    modules = {f"fake{i}": _FakeModule(v, kinds[i]) for i, v in enumerate(verdicts)}
     dispatch.REGISTRY = [
         {"id": f"FAKE-{i}", "module": f"fake{i}", "events": [event], "tools": None}
         for i in range(len(verdicts))
@@ -394,6 +425,100 @@ def _c9():
         "ensure_ascii 沒關掉 —— 訊息變成 \\uXXXX 逃脫序列，"
         "模型雖仍解得開但 log／人工核對全部不可讀"
     )
+
+
+@case("狀態型便箋不因 TTL 被丟 —— 人去吃個飯兩小時回來，該講的還在")
+def _c10():
+    sid = "test-warn-state-ttl"
+    _put_pending(sid, [_entry("WIN-1：本回合合計 input 約 149k tokens", minutes_old=120,
+                              rule="WIN-1", kind="state", key="140")])
+    with _tmp_state():
+        got = dispatch._take_pending_warning(sid)
+    assert "149k" in got, f"狀態型被當成過期丟掉了：{got!r}"
+    assert "沒能投遞" not in got, f"不該回報遺失：{got!r}"
+
+
+@case("事件型便箋仍會過期，而且**會講出丟了幾則**（靜默損失是這層的原罪）")
+def _c11():
+    sid = "test-warn-event-ttl"
+    _put_pending(sid, [_entry("覆核進行到第 6 輪", minutes_old=120, rule="PR-1", kind="event")])
+    with _tmp_state():
+        got = dispatch._take_pending_warning(sid)
+    assert "第 6 輪" not in got, f"事件型過了兩小時還在送：{got!r}"
+    assert "沒能投遞" in got, f"丟掉了卻沒講：{got!r}"
+
+
+@case("超量時先丟事件型，狀態型留到最後")
+def _c12():
+    sid = "test-warn-evict-order"
+    saved = dispatch._PENDING_MAX_ENTRIES
+    dispatch._PENDING_MAX_ENTRIES = 2
+    try:
+        _put_pending(sid, [
+            _entry("狀態型的那一則", rule="WIN-1", kind="state", key="140"),
+            _entry("事件型舊的", rule="PR-1", kind="event"),
+        ])
+        dispatch._queue_pending_warning(sid, "事件型新的", rule_id="ESC-1", kind="event")
+        with _tmp_state():
+            got = dispatch._take_pending_warning(sid)
+    finally:
+        dispatch._PENDING_MAX_ENTRIES = saved
+    assert "狀態型的那一則" in got, f"狀態型先被擠掉了 —— 那一則對話再也不會被告知：{got!r}"
+    assert "事件型舊的" not in got, f"該先丟最舊的事件型：{got!r}"
+
+
+@case("投遞成功才寫回執，而且回執對得上 (規則, 檔位)")
+def _c13():
+    sid = "test-warn-receipt"
+    _put_pending(sid, [_entry("WIN-1：越過 140k", rule="WIN-1", kind="state", key="140")])
+    with _tmp_state():
+        got = dispatch._take_pending_warning(sid)
+        delivered = contract.note_delivered(sid, "WIN-1", "140")
+        other = contract.note_delivered(sid, "WIN-1", "160")
+    assert "140k" in got
+    assert delivered, "送出去了卻沒記回執 —— 規則會以為沒講過而每輪重講"
+    assert not other, "回執記到別的檔位去了"
+
+
+@case("沒送出去就不記回執（空便箋不該讓規則以為講過了）")
+def _c14():
+    sid = "test-warn-no-receipt"
+    with _tmp_state():
+        got = dispatch._take_pending_warning(sid)
+        delivered = contract.note_delivered(sid, "WIN-1", "140")
+    assert got == "", f"沒有便箋卻回了東西：{got!r}"
+    assert not delivered, "什麼都沒送卻記了回執"
+
+
+@case("2026-08-28 之前的舊便箋（沒有 rule／kind）照樣送得出去")
+def _c15():
+    sid = "test-warn-legacy-entry"
+    _put_pending(sid, [{"ts": dispatch._minutes_ago(5), "message": "舊格式的一則", "count": 1}])
+    with _tmp_state():
+        got = dispatch._take_pending_warning(sid)
+    assert "舊格式的一則" in got, f"改版把正在排隊的舊便箋吃掉了：{got!r}"
+
+
+@case("Stop 逐條排入：兩條規則各成一則，狀態型那則不被事件型的 TTL 連坐")
+def _c16():
+    sid = "test-warn-stop-per-rule"
+    try:
+        os.remove(dispatch._pending_path(sid))
+    except OSError:
+        pass
+    _run("Stop", [warn("狀態那條"), warn("事件那條")], shadow=False,
+         session_id=sid, kinds=["state", None])
+    data = dispatch._read_pending(dispatch._pending_path(sid))
+    kinds = {e["message"]: e["kind"] for e in data["entries"]}
+    try:
+        assert len(data["entries"]) == 2, f"沒有逐條排入：{data['entries']}"
+        assert kinds.get("狀態那條") == "state", f"規則宣告的 NOTE_KIND 沒被讀到：{kinds}"
+        assert kinds.get("事件那條") == "event", f"沒宣告的該落回事件型：{kinds}"
+    finally:
+        try:
+            os.remove(dispatch._pending_path(sid))
+        except OSError:
+            pass
 
 
 def run() -> "tuple[int, list[str]]":

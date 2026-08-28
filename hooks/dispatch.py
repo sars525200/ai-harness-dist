@@ -42,6 +42,7 @@ Log 分工（state/events.<session_id>.ndjson，單一檔案＋kind 欄位區分
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -64,7 +65,7 @@ sys.dont_write_bytecode = True
 # `traceback` 刻意不在頂層 import：`-X importtime` 實測它連同相依的 `_colorize`
 # 要 20.2 ms，佔 dispatch 整包 import 成本（34.5 ms）的六成，而它只在
 # `_log_error` 的例外路徑用得到 —— 正常路徑每次都白付。
-from contract import ALLOW, BLOCK, HookContext
+from contract import ALLOW, BLOCK, HookContext, record_delivered
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 STATE_DIR = r"D:\.ai-harness\state"
@@ -247,6 +248,38 @@ def _rule_module(name: str):
         mod = importlib.import_module(f"rules.{name}")
         _RULE_CACHE[name] = mod
     return mod
+
+
+def _note_kind(entry) -> str:
+    """這條規則的便箋是「狀態」還是「事件」。預設事件（＝維持舊行為）。
+
+    狀態型：「這則對話已經 149k」隔兩小時仍然為真，而且隨時能重新量 ⇒ 不該過期。
+    事件型：「覆核進行到第 6 輪」隔兩小時就對不上是哪一輪了 ⇒ 該過期。
+    兩者共用一個 TTL 是 2026-08-28 那次永久遺失的根。
+    """
+    try:
+        kind = getattr(_rule_module(entry["module"]), "NOTE_KIND", "event")
+        return "state" if str(kind) == "state" else "event"
+    except Exception:
+        return "event"          # 讀不到就照舊：不因為一個屬性讓投遞整條掛掉
+
+
+def _note_key(entry, message: str) -> str:
+    """回執用的去重鍵。規則自己給最準（WIN-1 給的是門檻檔位）。
+
+    沒給就退回訊息本身的摘要 —— 對「訊息每輪都一樣」的規則夠用；
+    訊息會隨數字變動又需要「只講一次」的規則**必須**自己實作 note_key，
+    否則每一輪都會被當成新的一條。
+    """
+    try:
+        fn = getattr(_rule_module(entry["module"]), "note_key", None)
+        if callable(fn):
+            key = str(fn(message) or "")
+            if key:
+                return key[:60]
+    except Exception:
+        pass
+    return hashlib.sha1(message.encode("utf-8", "replace")).hexdigest()[:16]
 
 
 def _now() -> str:
@@ -497,7 +530,10 @@ def _dispatch(payload: dict) -> int:
 
     config = _load_shadow_config()
     block_message = None
-    warn_messages: list[str] = []
+    # (rule_id, kind, key, message)。2026-08-28 從純字串改成四元組：便箋要分
+    # 「狀態型／事件型」（決定過不過期）並記回執（決定規則能不能說「講過了」），
+    # 兩件事都得知道**這句話是誰講的** —— join 成一串就再也分不開。
+    warn_items: list[tuple] = []
 
     for entry in applicable:
         rule_id = entry["id"]
@@ -519,14 +555,15 @@ def _dispatch(payload: dict) -> int:
         if verdict.decision == BLOCK:
             block_message = verdict.message  # 第一個 BLOCK 就夠了，不必湊齊全部
         elif verdict.message:
-            warn_messages.append(verdict.message)
+            warn_items.append((rule_id, _note_kind(entry),
+                               _note_key(entry, verdict.message), verdict.message))
 
     if block_message:
         sys.stderr.write(block_message + "\n")
         return 2
 
-    if warn_messages:
-        joined = "\n".join(warn_messages)
+    if warn_items:
+        joined = "\n".join(m for _, _, _, m in warn_items)
         if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):
             # 2026-07-30 實測（隔離 cwd ＋ 自帶 settings.json 的暗號探針，三條路徑同時測）：
             #   stderr + exit 0        → **完全蒸發**。hook 確實執行（落檔 marker 為證），
@@ -565,7 +602,10 @@ def _dispatch(payload: dict) -> int:
             # UserPromptSubmit（使用者開口的那一刻，模型正要重新讀 context）
             # 再送出去。同一輪實測確認 UserPromptSubmit 的 additionalContext
             # 到得了，且模型能正確引用識別碼與規則內容。
-            _queue_pending_warning(session_id, joined)
+            # 逐條排入、不排 joined 那一串：過不過期與回執都是**每條規則各自**的事。
+            for w_rule, w_kind, w_key, w_msg in warn_items:
+                _queue_pending_warning(session_id, w_msg, rule_id=w_rule,
+                                       kind=w_kind, key=w_key)
 
     return 0
 
@@ -581,6 +621,23 @@ _PENDING_MAX_ENTRIES = 20
 _PENDING_MAX_CHARS = 20000
 
 
+def _norm_entry(e: dict) -> dict:
+    """把一則便箋補齊成現行欄位形狀。
+
+    2026-08-28 之前的便箋沒有 rule／kind／key —— 讀不動就丟掉的話，
+    正在排隊的舊便箋會在改版當下靜靜消失。舊的一律當事件型（＝維持舊行為）。
+    """
+    kind = "state" if str(e.get("kind") or "") == "state" else "event"
+    return {
+        "ts": str(e.get("ts") or ""),
+        "message": str(e.get("message") or ""),
+        "count": int(e.get("count") or 1),
+        "rule": str(e.get("rule") or ""),
+        "kind": kind,
+        "key": str(e.get("key") or ""),
+    }
+
+
 def _read_pending(path: str) -> dict:
     """讀便箋，回 `{"entries": [...], "dropped": n}`。讀不動就回空的。
 
@@ -594,11 +651,12 @@ def _read_pending(path: str) -> dict:
     except Exception:
         return {"entries": [], "dropped": 0}
     if isinstance(data, dict) and isinstance(data.get("entries"), list):
-        return {"entries": [e for e in data["entries"] if isinstance(e, dict)],
+        return {"entries": [_norm_entry(e) for e in data["entries"] if isinstance(e, dict)],
                 "dropped": int(data.get("dropped") or 0)}
     if isinstance(data, dict) and data.get("message"):
-        return {"entries": [{"ts": data.get("ts") or "",
-                             "message": data["message"], "count": 1}], "dropped": 0}
+        return {"entries": [_norm_entry({"ts": data.get("ts") or "",
+                                         "message": data["message"], "count": 1})],
+                "dropped": 0}
     return {"entries": [], "dropped": 0}
 
 
@@ -615,7 +673,32 @@ def _write_pending(path: str, payload: dict) -> None:
     os.replace(tmp, path)
 
 
-def _queue_pending_warning(session_id: str, message: str) -> None:
+def _expired(entry: dict, cutoff: str) -> bool:
+    """這一則便箋過期了沒。**狀態型永不過期**。
+
+    2026-08-28 加上 kind 這個分岔。原本一律 90 分鐘，於是 WIN-1 那種
+    「這則對話已經 149k」——隔兩小時仍然為真的事實——會跟
+    「覆核進行到第 6 輪」用同一把尺被丟掉。實際咬到了（見 contract.py 的回執註解）。
+    """
+    if entry.get("kind") == "state":
+        return False
+    return (entry.get("ts") or "") < cutoff
+
+
+def _evict_index(entries: list) -> int:
+    """超量要丟哪一則：**先丟最舊的事件型**，狀態型留到最後。
+
+    狀態型是「還沒被處理的持續狀況」，丟掉＝那一則對話再也不會被告知；
+    事件型丟掉頂多是漏講一次已經過去的事。優先序不同，不該用同一個 pop(0)。
+    """
+    for i, e in enumerate(entries):
+        if e.get("kind") != "state":
+            return i
+    return 0
+
+
+def _queue_pending_warning(session_id: str, message: str, rule_id: str = "",
+                           kind: str = "event", key: str = "") -> None:
     """把 Stop 事件的 WARN **累積**進便箋，等下一次 UserPromptSubmit 投遞。
 
     **2026-08-22 從單槽改成累積**（E-8 定案）。原本是 `open(path, "w")` 直接覆寫，
@@ -625,8 +708,14 @@ def _queue_pending_warning(session_id: str, message: str) -> None:
     11 筆 session 結束時仍未投遞、1 筆過 TTL ⇒ 23 筆（27%）從沒到達任何人**，
     而 `report.py` 把它們全部算成 findings —— 規則的自我報告說成功，實際上什麼都沒到。
 
-    同一則訊息重複進來只累加次數、不重複佔位：Stop 每輪都跑，一條沒被處理的
-    提醒會每輪重來，不去重的話容量會被同一句話吃光。
+    **2026-08-28 再改**：改成每條規則各排一則（原本是把整輪 WARN join 成一串排一則），
+    並帶 rule／kind／key。理由見 `_expired` 與 contract.py 的回執註解 ——
+    「過不過期」和「算不算講過了」都是每條規則各自的事，串在一起就分不開。
+
+    同一條規則的同一個 key 重複進來只更新內容與時間、不重複佔位：Stop 每輪都跑，
+    一條沒被處理的提醒會每輪重來，不去重的話容量會被同一件事吃光。
+    **內容更新成最新的一份** —— 狀態型的訊息裡帶著會變動的數字，
+    留著第一次那份會投遞出一個已經過時的量。
 
     fail-open：寫不進去就算了。這條是提醒，不值得讓 hook 爆掉去擋住對話。
     """
@@ -635,22 +724,31 @@ def _queue_pending_warning(session_id: str, message: str) -> None:
         path = _pending_path(session_id)
         data = _read_pending(path)
         cutoff = _minutes_ago(_PENDING_TTL_MIN)
-        entries = [e for e in data["entries"] if (e.get("ts") or "") >= cutoff]
-        dropped = data["dropped"] + (len(data["entries"]) - len(entries))
+        entries, dropped = [], data["dropped"]
+        for e in data["entries"]:
+            if _expired(e, cutoff):
+                dropped += 1
+            else:
+                entries.append(e)
 
+        keyed = bool(rule_id and key)
         for e in entries:
-            if e.get("message") == message:
+            same = ((e["rule"] == rule_id and e["key"] == key) if keyed
+                    else (not e["key"] and e["message"] == message))
+            if same:
                 e["ts"] = _now()
+                e["message"] = message
+                e["kind"] = kind
                 e["count"] = int(e.get("count") or 1) + 1
                 break
         else:
-            entries.append({"ts": _now(), "message": message, "count": 1})
+            entries.append({"ts": _now(), "message": message, "count": 1,
+                            "rule": rule_id, "kind": kind, "key": key})
 
-        # 超量丟最舊的。留至少一則 —— 一則超長訊息不該把自己也丟掉。
         while len(entries) > 1 and (
                 len(entries) > _PENDING_MAX_ENTRIES
                 or sum(len(e.get("message") or "") for e in entries) > _PENDING_MAX_CHARS):
-            entries.pop(0)
+            entries.pop(_evict_index(entries))
             dropped += 1
 
         _write_pending(path, {"entries": entries, "dropped": dropped})
@@ -664,10 +762,14 @@ def _take_pending_warning(session_id: str) -> str:
     刪除發生在「即將送出」的當下：留著會在下一輪重送一次，而重複的提醒
     正是讓閘門變成噪音的方式。
 
-    過期的便箋丟掉不送 —— 隔了幾小時才冒出來的提醒，模型與使用者都對不上是
+    過期的事件型便箋丟掉不送 —— 隔了幾小時才冒出來的提醒，模型與使用者都對不上是
     哪一輪的事，那種訊息只會製造困惑。**但丟掉幾則會講出來**：
     「沒有提醒」與「有提醒但沒送到」在畫面上必須分得出來，
     否則這次改動只是把靜默損失從 27% 降到某個未知的數字。
+    狀態型不受這條管轄（`_expired`）。
+
+    **2026-08-28 加上回執**：真的送出去之後才 `record_delivered`。規則的
+    「同一則只講一次」從此以投遞成功為準，不再以排入佇列為準。
     """
     path = _pending_path(session_id)
     try:
@@ -676,21 +778,35 @@ def _take_pending_warning(session_id: str) -> str:
         data = _read_pending(path)
         os.remove(path)
         cutoff = _minutes_ago(_PENDING_TTL_MIN)
-        fresh = [e for e in data["entries"] if (e.get("ts") or "") >= cutoff]
-        lost = data["dropped"] + (len(data["entries"]) - len(fresh))
+        fresh, lost = [], data["dropped"]
+        for e in data["entries"]:
+            if _expired(e, cutoff):
+                lost += 1
+            else:
+                fresh.append(e)
 
-        parts = []
+        parts, receipts = [], []
         for e in fresh:
             msg = e.get("message") or ""
             if not msg:
                 continue
             n = int(e.get("count") or 1)
-            parts.append(f"{msg}（同一則累計 {n} 次）" if n > 1 else msg)
+            if e.get("kind") == "state":
+                # 狀態型是一件**還在持續**的事，不是發生了 N 次的事件。
+                # 報「累計 N 次」會讓人以為越線了 N 回。
+                parts.append(msg)
+            else:
+                parts.append(f"{msg}（同一則累計 {n} 次）" if n > 1 else msg)
+            if e.get("rule") and e.get("key"):
+                receipts.append((e["rule"], e["key"]))
         if lost:
             parts.append(
                 f"⚠ 另有 {lost} 則提醒沒能投遞（超過 {_PENDING_TTL_MIN} 分鐘、"
                 f"或超出便箋容量而被丟棄）。")
-        return "\n".join(parts)
+        joined = "\n".join(parts)
+        if joined and receipts:
+            record_delivered(session_id, receipts)
+        return joined
     except Exception:
         try:
             os.remove(path)
