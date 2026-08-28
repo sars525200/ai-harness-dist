@@ -36,6 +36,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -667,10 +668,23 @@ def _shadow_cfg():
     return ((_json(HOOKS / "dispatch_config.json") or {}).get("rules") or {})
 
 
+def _registry_ids():
+    # dispatch_config.json 只登記「已決定要不要 enforce」的規則；REGISTRY 裡但
+    # 設定檔沒登記的（如 IDX-1），dispatch.py 預設 shadow=true——不是不存在，
+    # 是還沒決定。這支直接讀 REGISTRY 原始碼，不靠設定檔回推「有幾條」。
+    src = _read(HOOKS / "dispatch.py")
+    return set(re.findall(r'"id":\s*"([A-Z0-9-]+)"', src))
+
+
 def _p_per_rule_shadow():
     rules = _shadow_cfg()
+    registered = _registry_ids()
+    unconfigured = sorted(registered - set(rules))
     ok = bool(rules) and all(isinstance(v, dict) and "shadow" in v for v in rules.values())
-    return ok, f"per-rule shadow：{len(rules)} 條各自獨立畢業（非全域開關）"
+    msg = f"per-rule shadow：{len(registered)} 條已註冊、{len(rules)} 條在設定檔各自獨立畢業（非全域開關）"
+    if unconfigured:
+        msg += f"；{len(unconfigured)} 條未進設定檔（預設 shadow）：{'、'.join(unconfigured)}"
+    return ok, msg
 
 
 def _p_has_enforce():

@@ -195,14 +195,12 @@
       }
     },
     "IT-department\u0001CLAUDE.md": {
-      "bytes": 14189,
-      "entry_count": 20,
+      "bytes": 13930,
+      "entry_count": 17,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001CLAUDE.md\u0001**前端硬規則**（動`app.js`／`ind": 119,
         "IT-department\u0001CLAUDE.md\u0001純client權威欄位走專屬endpoint直寫": 112,
-        "IT-department\u0001CLAUDE.md\u0001**禁全域sed過度匹配**（動作類·綁不住檔；": 111,
-        "IT-department\u0001CLAUDE.md\u0001**改名/改制遷移必「先audit字面值→修程式": 115,
         "IT-department\u0001CLAUDE.md\u0001**server／db硬規則**（碰`serve": 110,
         "IT-department\u0001CLAUDE.md\u0001**PROD重啟**只「停舊→起新→驗證」（動作": 94,
         "IT-department\u0001CLAUDE.md\u0001**權限詢問一直跳＝三層依序查**：①permi": 107,
@@ -217,13 +215,12 @@
         "IT-department\u0001CLAUDE.md\u0001**視覺爭議先量再改**→`/visual-ch": 106,
         "IT-department\u0001CLAUDE.md\u0001自研EXE受管機被擋有兩機制：SAC／**Def": 119,
         "IT-department\u0001CLAUDE.md\u0001擷取器檔集中`collector/`（gitig": 108,
-        "IT-department\u0001CLAUDE.md\u0001**行尾逐檔量**（8/26訂正：舊寫的「ind": 112,
         "IT-department\u0001CLAUDE.md\u0001**一個狀態有多個觸發入口時，收斂成一個入口，別": 111
       }
     },
     "IT-department\u0001MEMORY.md": {
-      "bytes": 13791,
-      "entry_count": 94,
+      "bytes": 14100,
+      "entry_count": 95,
       "over_limit_count": 0,
       "entries": {
         "IT-department\u0001MEMORY.md\u0001[[feedback-closure-scope": 70,
@@ -254,6 +251,7 @@
         "IT-department\u0001MEMORY.md\u0001[[feedback-sql-get-inser": 27,
         "IT-department\u0001MEMORY.md\u0001[[feedback-sqlite-busy-t": 109,
         "IT-department\u0001MEMORY.md\u0001[[feedback-retry-queue-d": 29,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-notified-flag": 52,
         "IT-department\u0001MEMORY.md\u0001[[feedback-asset-name-fa": 15,
         "IT-department\u0001MEMORY.md\u0001[[feedback-server-restar": 24,
         "IT-department\u0001MEMORY.md\u0001[[feedback-prod-autosave": 24,
@@ -262,7 +260,7 @@
         "IT-department\u0001MEMORY.md\u0001[[feedback-inout-table-u": 14,
         "IT-department\u0001MEMORY.md\u0001[[feedback-component-bom": 10,
         "IT-department\u0001MEMORY.md\u0001[[feedback-grep-before-c": 20,
-        "IT-department\u0001MEMORY.md\u0001[[feedback-rename-migrat": 49,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-rename-migrat": 68,
         "IT-department\u0001MEMORY.md\u0001[[feedback-client-boot-m": 64,
         "IT-department\u0001MEMORY.md\u0001[[feedback-id-generator-": 20,
         "IT-department\u0001MEMORY.md\u0001[[feedback-powershell-ba": 12,
@@ -277,7 +275,7 @@
         "IT-department\u0001MEMORY.md\u0001[[feedback-headless-visu": 54,
         "IT-department\u0001MEMORY.md\u0001[[feedback-fake-settings": 49,
         "IT-department\u0001MEMORY.md\u0001[[feedback-execution-tes": 60,
-        "IT-department\u0001MEMORY.md\u0001[[feedback-python-write-": 67,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-python-write-": 90,
         "IT-department\u0001MEMORY.md\u0001[[feedback-cost-diagnosi": 59,
         "IT-department\u0001MEMORY.md\u0001[[feedback-ai-output-loc": 51,
         "IT-department\u0001MEMORY.md\u0001[[feedback-windows-deplo": 91,
@@ -285,7 +283,7 @@
         "IT-department\u0001MEMORY.md\u0001[[feedback-filter-trigge": 75,
         "IT-department\u0001MEMORY.md\u0001[[feedback-search-scope-": 71,
         "IT-department\u0001MEMORY.md\u0001[[feedback-hook-spawn-tu": 63,
-        "IT-department\u0001MEMORY.md\u0001[[feedback-concurrent-se": 95,
+        "IT-department\u0001MEMORY.md\u0001[[feedback-concurrent-se": 74,
         "IT-department\u0001MEMORY.md\u0001[[project-it-asset-platf": 18,
         "IT-department\u0001MEMORY.md\u0001[[project-ai-harness-gat": 72,
         "IT-department\u0001MEMORY.md\u0001[[project-resource-overv": 67,
