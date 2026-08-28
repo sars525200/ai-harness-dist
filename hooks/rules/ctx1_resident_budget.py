@@ -142,17 +142,27 @@ def _candidate_keys(file_path: str, cwd: str) -> list:
             return [_GLOBAL_KEY]
 
     label = "CLAUDE.md" if name == "claude.md" else "MEMORY.md"
-    cur = os.path.abspath(cwd) if cwd else ""
-    for _ in range(_MAX_PARENTS):
-        if not cur:
-            break
-        proj = os.path.basename(cur)
-        if proj:
-            keys.append(proj + _SEP + label)
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
+
+    def _walk_up(start: str) -> None:
+        cur = os.path.abspath(start) if start else ""
+        for _ in range(_MAX_PARENTS):
+            if not cur:
+                return
+            proj = os.path.basename(cur)
+            key = proj + _SEP + label
+            if proj and key not in keys:
+                keys.append(key)
+            parent = os.path.dirname(cur)
+            if parent == cur:
+                return
+            cur = parent
+
+    # ⚠ **被改的檔案排在 cwd 前面**。cwd 是「session 在哪裡開的」，不是
+    #   「這個檔屬於誰」——在 A 專案的 session 裡改 B 專案的 CLAUDE.md 是常態
+    #   （2026-08-28 這條規則上線第一次真的開口，就是這樣拿錯基準：
+    #   把 D:\AI-Projects\CLAUDE.md 對到了 IT-department 的基準，多報 82%）。
+    _walk_up(os.path.dirname(file_path or ""))
+    _walk_up(cwd)
     return keys
 
 

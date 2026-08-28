@@ -194,6 +194,44 @@ def test_state_write_failure_is_not_fatal(tmpdir):
     _check("狀態檔寫不進去仍然給得出判定", v.decision == WARN)
 
 
+def test_file_path_beats_cwd(tmpdir):
+    """8. 被改的檔案決定基準，不是 session 在哪開的。
+
+    在 A 專案的 session 裡改 B 專案的 CLAUDE.md 是常態。拿 cwd 推專案名的話
+    會去比 A 的基準——2026-08-28 這條規則第一次真的開口就是這樣報錯的
+    （D:\AI-Projects\CLAUDE.md 對到 IT-department 的基準，多報 82%）。
+    """
+    snap = _write_snapshot(tmpdir, {
+        "AI-Projects" + _SEP + "CLAUDE.md": {"bytes": 26_000},   # 檔案自己的專案：不該叫
+        "IT-department" + _SEP + "CLAUDE.md": {"bytes": 14_000},  # cwd 的專案：拿錯就會叫
+    })
+    mod = _load(snap)
+    ctx = _ctx(r"D:\AI-Projects\CLAUDE.md", "x" * 26_500, cwd=r"D:\IT-department")
+    v = mod.check(ctx)
+    _check("跨專案編輯時用檔案路徑而不是 cwd", v.decision == ALLOW,
+           f"實際 {v.decision}：{(v.message or '')[:60]}")
+
+    # 反向：檔案路徑推不出專案時（例如暫存目錄），仍該退回用 cwd
+    mod2 = _load(snap)
+    ctx2 = _ctx(r"D:\IT-department\CLAUDE.md", "x" * 16_000, cwd=r"D:\IT-department")
+    _check("同專案時照樣叫得出來", mod2.check(ctx2).decision == WARN)
+
+
+def test_cwd_fallback_for_memory_file(tmpdir):
+    """8b. 記憶檔的路徑推不出專案名，只能靠 cwd —— 這是 cwd 後備唯一的用武之地。
+
+    MEMORY.md 住在 `~\.claude\projects\d--IT-department\memory\`：
+    父目錄叫 `memory`、再上一層是**編碼過**的 `d--IT-department`（不等於專案名
+    `IT-department`，而且照 check_bloat 的規矩不准反解）⇒ 檔案路徑那條走不通。
+    少了 cwd 後備，所有記憶檔都會靜靜地不受檢查。
+    """
+    mod = _load(_write_snapshot(tmpdir, {"IT-department" + _SEP + "MEMORY.md": {"bytes": 10_000}}))
+    p = os.path.join(os.path.expanduser("~"), ".claude", "projects",
+                     "d--IT-department", "memory", "MEMORY.md")
+    _check("記憶檔靠 cwd 對得上基準",
+           mod.check(_ctx(p, "x" * 12_000, cwd=r"D:\IT-department")).decision == WARN)
+
+
 def main() -> int:
     print("CTX-1 回歸網")
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -202,7 +240,7 @@ def main() -> int:
                    test_silent_under_limit, test_warns_over_limit,
                    test_small_file_uses_floor, test_global_key_mapping,
                    test_cwd_in_subdirectory, test_ratchet_suppresses_repeat,
-                   test_state_write_failure_is_not_fatal):
+                   test_state_write_failure_is_not_fatal, test_file_path_beats_cwd, test_cwd_fallback_for_memory_file):
             fn(tmpdir)
     passed = sum(1 for _, ok, _ in _results if ok)
     total = len(_results)
