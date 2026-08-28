@@ -20,6 +20,8 @@ hooks:
 
 # 專案稽核員
 
+【全域層】「文件標完成但程式沒做、識別字改名沒跟上」是任何 repo 都會有的漂移；查哪個專案由派工時給。
+
 Review →「清單＋證據」。「我查不到的」必填。對象從 `.claude/PROJECT_CONTEXT.md`「規則與文件在哪」讀。讀不到 → 回報未定義，不掃整個 repo 猜。
 
 不改被稽核物。Bash 唯讀，白名單見 `hooks/agent_readonly_gate.py`。被擋＝寫回報。

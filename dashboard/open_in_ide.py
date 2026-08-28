@@ -3,6 +3,8 @@
 
 白名單靠重算目錄（config.iter_skill_paths ＋ agents/*.md），不收客戶端給的路徑。
 客戶端只傳 kind＋id；id 對不上就不開。這是 §10「清單＋在 IDE 開檔、不當 CMS」。
+
+【核心層】白名單靠重算目錄、不收客戶端路徑 —— 這是看板的安全邊界，不綁任何專案。
 """
 from __future__ import annotations
 

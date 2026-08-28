@@ -5,6 +5,8 @@
 
 改殼請改 `harness-dashboard.shell.html`。這支只在「產物裡的 chrome 漂了、
 要從產物收斂回殼」時跑，不是 8099 熱路徑。
+
+【核心層】殼↔產物的收斂是看板自己的維運動作，與被服務的專案無關。
 """
 from __future__ import annotations
 

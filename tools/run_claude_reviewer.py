@@ -26,6 +26,9 @@ import sys
 import time
 from pathlib import Path
 
+# U-1：harness 根從自身位置推，不寫死。這支住在 `<harness>/tools/`。
+HARNESS_ROOT = Path(__file__).resolve().parent.parent
+
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
@@ -192,7 +195,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--ask", required=True, type=Path)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--raw", type=Path)
-    ap.add_argument("--cwd", type=Path, default=Path(r"D:\.ai-harness"),
+    ap.add_argument("--cwd", type=Path, default=HARNESS_ROOT,
                     help="審查者工作目錄（預設 harness 根＝無 .claude，避免專案 hook）")
     ap.add_argument("--add-dir", action="append", default=[], type=Path,
                     help="額外允許的目錄（可重複）。討論跨 repo 時加上對方 repo。")

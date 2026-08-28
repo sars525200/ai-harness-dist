@@ -47,10 +47,16 @@ def run() -> "tuple[int, list]":
         ("專案層非空", bool(r["project"]),
          "一支專案層都沒有 —— 若真的全部通用，那 UNIVERSAL_HARNESS_PLAN §1 的"
          "「4 條專案專屬規則」就過期了，兩者必有一錯"),
+        # ⚠ 掃描範圍必含 missing：2026-08-28 之前這裡只掃已標的三層，
+        #   而**六支角色檔全部未標** ⇒ 迴圈跑零次 ⇒ all() 恆真 ⇒ 這條長期印 PASS，
+        #   同時「全域層非空」長期印 FAIL。兩條互相矛盾卻並存了三週沒人發現，
+        #   因為紅的那條被當成既有債、綠的那條沒人會去看。
+        #   **未標不等於標對了**，未標的角色檔要在這裡也紅一次。
         ("角色都在全域層",
-         all(str(p).endswith(".md") is False or p in r["global"]
-             for p in r["global"] + r["core"] + r["project"] if str(p).endswith(".md")),
-         "有角色檔被標成非全域層 —— 角色的能力跨專案通用，"
+         all(p in r["global"] for p in
+             r["global"] + r["core"] + r["project"] + r["missing"]
+             if str(p).endswith(".md")),
+         "有角色檔不在全域層（未標也算）—— 角色的能力跨專案通用，"
          "綁專案的是它的作用對象（那些該進 PROJECT_CONTEXT.md）"),
         ("掃描範圍沒有縮水（至少 30 支）", r["total"] >= 30,
          f"只掃到 {r['total']} 支 —— SCAN_DIRS 可能被改窄，覆蓋率會假性變好看"),

@@ -17,6 +17,7 @@ r"""P-12 去專案化的回歸網（CONTEXT_HEALTH_PLAN v5·V-15）。
 from __future__ import annotations
 
 import ast
+import contextlib
 import io
 import json
 import os
@@ -48,6 +49,42 @@ def check(name: str, cond: bool, detail: str = "") -> None:
         _failed += 1
         _details.append(f"{name}" + (f"：{detail}" if detail else ""))
         print(f"  FAIL {name}" + (f"\n       {detail}" if detail else ""))
+
+
+@contextlib.contextmanager
+def swapped_config(tag: str):
+    """把 `harness.config.json` 借走驗拒跑，結束保證還回來。
+
+    ## 為什麼不能只寫 try/finally
+
+    finally 擋不住**整個進程被硬殺**。真實案例（2026-08-24 → 08-28）：
+
+      硬殺 → 備份留在原地 → 現行 config 停在測試造出的「缺欄位」中間態
+      → `discover_projects()` 連續四天直接拒跑（那個檔 gitignored，git 不會提醒）
+      → 下次跑測試 `os.rename` 撞名拋例外 → `run()` 的 except 只塞進 `_details`
+      **不印 FAIL** → 畫面上只有「23 通過、1 失敗」的計數對不上會露餡
+
+    所以這裡多做一件事：**開場先自癒**。備份還在 ⇒ 上一輪沒善終 ⇒
+    現行 config 是測試寫的壞資料、備份才是原版 ⇒ 換回來再開工。
+    現行那份不刪，另存 `.rescued` 留證（萬一人在硬殺後手動改過，改動還在）。
+    """
+    backup = CONFIG.with_suffix(f".json.{tag}")
+    if backup.exists():
+        rescued = CONFIG.with_suffix(f".json.{tag}-rescued")
+        print(f"       ※ 發現殘留備份 {backup.name} —— 上一輪沒善終。"
+              f"以備份為原版還原；現行那份另存 {rescued.name}")
+        if CONFIG.exists():
+            if rescued.exists():
+                rescued.unlink()
+            os.rename(CONFIG, rescued)
+        os.rename(backup, CONFIG)
+    os.rename(CONFIG, backup)
+    try:
+        yield
+    finally:
+        if CONFIG.exists():
+            CONFIG.unlink()
+        os.rename(backup, CONFIG)
 
 
 _DRIVE_RE = __import__("re").compile(r"[A-Za-z]:[\\/]?")
@@ -277,12 +314,10 @@ def test_project_dir_comes_from_config() -> None:
 
 def test_refuses_without_config() -> None:
     """V-15 ②：設定檔不在時必須拒跑、講清楚缺什麼，且不得 fallback。"""
-    backup = CONFIG.with_suffix(".json.v15bak")
     if not CONFIG.exists():
         check("設定檔存在（前置）", False, f"{CONFIG} 不存在，無法測")
         return
-    os.rename(CONFIG, backup)
-    try:
+    with swapped_config("v15bak"):
         r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
                            capture_output=True, text=True, encoding="utf-8", timeout=60)
         out = (r.stdout or "") + (r.stderr or "")
@@ -297,16 +332,12 @@ def test_refuses_without_config() -> None:
         check("缺設定時**不得**產出專案盤點（U-2：不猜）",
               "allow=" not in out,
               "沒有設定卻仍印出盤點結果 —— 代表有 fallback 路徑")
-    finally:
-        os.rename(backup, CONFIG)
 
 
 def test_config_schema_guard() -> None:
     """schema 不符要拒跑，不是照舊解析（沿用 check_bloat 的 schema 2 教訓）。"""
-    backup = CONFIG.with_suffix(".json.v15bak2")
     orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    os.rename(CONFIG, backup)
-    try:
+    with swapped_config("v15bak2"):
         bad = dict(orig)
         bad["schema"] = 999
         CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -315,10 +346,6 @@ def test_config_schema_guard() -> None:
         out = (r.stdout or "") + (r.stderr or "")
         check("schema 不符時拒跑", r.returncode != 0 and "schema" in out,
               f"returncode={r.returncode}, out={out[:200]}")
-    finally:
-        if CONFIG.exists():
-            CONFIG.unlink()
-        os.rename(backup, CONFIG)
 
 
 def test_nonexistent_current_project_refuses() -> None:
@@ -330,10 +357,8 @@ def test_nonexistent_current_project_refuses() -> None:
     換部門的人跑健檢會看到「報告第一列是一個不存在的專案、CLAUDE.md 印無」，
     **那跟「那個專案很乾淨」長得一模一樣**。
     """
-    backup = CONFIG.with_suffix(".json.v15bak4")
     orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    os.rename(CONFIG, backup)
-    try:
+    with swapped_config("v15bak4"):
         bad = dict(orig)
         bad["currentProject"] = "D:\\完全不存在的專案目錄-v15probe"
         CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -346,10 +371,6 @@ def test_nonexistent_current_project_refuses() -> None:
               f"out={out[:200]}")
         check("不存在時**不得**產出盤點（U-2）", "allow=" not in out,
               "竟然印出盤點 —— 幽靈專案沒被擋住")
-    finally:
-        if CONFIG.exists():
-            CONFIG.unlink()
-        os.rename(backup, CONFIG)
 
 
 def test_init_bootstrap_creates_template() -> None:
@@ -358,9 +379,7 @@ def test_init_bootstrap_creates_template() -> None:
     P-12 正文寫過「要附一支 bootstrap，否則看板六支產生器同時停擺」，
     但實際沒做（`git ls-files | grep bootstrap` = 0）——覆核抓到的。
     """
-    backup = CONFIG.with_suffix(".json.v15bak5")
-    os.rename(CONFIG, backup)
-    try:
+    with swapped_config("v15bak5"):
         r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--init"],
                            capture_output=True, text=True, encoding="utf-8", timeout=60)
         out = (r.stdout or "") + (r.stderr or "")
@@ -376,10 +395,6 @@ def test_init_bootstrap_creates_template() -> None:
                   not Path(cfg["currentProject"]).is_dir(),
                   "範本的 currentProject 竟然指向真實目錄")
             CONFIG.unlink()
-    finally:
-        if CONFIG.exists():
-            CONFIG.unlink()
-        os.rename(backup, CONFIG)
 
 
 def test_config_is_gitignored() -> None:
@@ -392,10 +407,8 @@ def test_config_is_gitignored() -> None:
 
 def test_missing_field_guard() -> None:
     """缺必填欄位要指名是哪一個，不是回一個空清單。"""
-    backup = CONFIG.with_suffix(".json.v15bak3")
     orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    os.rename(CONFIG, backup)
-    try:
+    with swapped_config("v15bak3"):
         bad = {k: v for k, v in orig.items() if k != "scanRoots"}
         CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
         r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
@@ -403,16 +416,14 @@ def test_missing_field_guard() -> None:
         out = (r.stdout or "") + (r.stderr or "")
         check("缺欄位時指名哪個欄位", r.returncode != 0 and "scanRoots" in out,
               f"returncode={r.returncode}, out={out[:200]}")
-    finally:
-        if CONFIG.exists():
-            CONFIG.unlink()
-        os.rename(backup, CONFIG)
 
 
 # ⚠ **U-1 未償債務的凍結清單**（2026-08-13 覆核 F-4 實測）。
 # 這不是「可接受清單」是**債務台帳**：計畫書原本只登記 2 處，實掃是 11 處。
 # 作用是**擋新增**——現有的不阻斷工作，但多一處就紅。
 # 償還一處就從這裡刪一行；**只准變短，不准變長**。
+# 2026-08-28 清帳：11 筆 → 8 筆（`dashboard/` 五處在去專案化那一輪已改走 `config.py`，
+#   台帳沒跟著刪 ⇒ 「已償還但台帳未更新」的提醒印了三週沒人處理）。
 # ⚠ **記「實際的字面值」不是「處數」**（Round 4 自驗抓到）：
 # 用處數當 key 的話，同一檔案裡「修掉 L40、在 L200 新增一處」處數不變 → **靜默通過**。
 # ⚠ **值 → 出現次數**，不是集合（Round 4 覆核 R4-D）：
@@ -422,13 +433,8 @@ def test_missing_field_guard() -> None:
 # Counter 兩邊都守得住：值變了會出現在差集、同值變多會被 count 比對抓到。
 _KNOWN_U1_DEBT = {
     "dashboard/capability_checks.py": {
-        r"D:\IT-department": 1, r"~\.claude\projects\d--IT-department\memory": 1},
-    "dashboard/check_freshness.py": {
-        r"D:\IT-department\.claude\skills": 1,
-        r"D:\IT-department\SOP_PROD\05_UI_Demo\ops": 1},
-    "dashboard/gen_cost_panel.py": {r"D:\IT-department": 1, "d--IT-department": 1},
-    "dashboard/gen_roles_topology.py": {r"D:\IT-department": 1},
-    "dashboard/refresh_dashboard.py": {r"D:\IT-department": 1},
+        r"~\.claude\projects\d--IT-department\memory": 1},
+    "dashboard/gen_cost_panel.py": {"d--IT-department": 1},
     "dashboard/subagent_stats.py": {"d--IT-department": 1},
     "hooks/rules/budget1_daily_usage.py": {
         r"~\.claude\projects\d--IT-department": 1,
@@ -463,6 +469,52 @@ _KNOWN_U1_DEBT = {
 _DEBT_SCAN_SKIP = {"tests", "state", "__pycache__", ".git", "參考", "SkillViewer"}
 
 
+def _exempt_untracked_ignored(rels: "list[str]") -> "tuple[set, str]":
+    """哪些檔是「gitignore 排除**且**未進版控」的拋棄物。回 (豁免集合, 說明)。
+
+    ## 為什麼要這條豁免
+
+    U-1 問的是「**換一個部門還成立嗎**」。`.scratch/` 底下的拋棄腳本
+    **根本不會跟著走**——它們被 `.gitignore:11` 排除、不在任何一次分發裡。
+    對它們開火的結果是一條**長期常駐的紅**，而長期常駐的紅等於沒有紅
+    （2026-08-28 實測：這條紅擋在 1488/1491 裡三週，每次都要人工比對點名清單
+    才敢說「不是我造成的」）。
+
+    ## 兩道防線，避免這個豁免變成後門
+
+    1. **已追蹤的檔一律不豁免**：`git check-ignore` 只看規則不看追蹤狀態，
+       強制 `add -f` 過的檔仍會命中規則。真正該豁免的是「規則排除 **且** 沒進版控」。
+    2. **拿不到 git 就不豁免**（回空集合＝照掃）。fail-open 的方向是**寧可誤報**，
+       因為反過來會讓「git 壞掉」長得跟「沒有債」一樣。
+
+    ⚠ 豁免**必須留痕**：呼叫端會把豁免了哪幾支印出來。靜靜跳過的豁免
+    等於把閘門的範圍偷偷改小，而畫面上看不出來。
+    """
+    if not rels:
+        return set(), "沒有候選"
+    def _git(args, stdin=None):
+        # ⚠ **bytes 模式，不可用 text=True**：Windows 上 text 模式寫 stdin 會把
+        #   `\n` 轉成 `\r\n`，git check-ignore 收到 `path\r` 對不上任何規則。
+        #   2026-08-28 實測：5 支候選只豁免到 1 支（最後一行沒有尾隨換行，
+        #   所以只有它匹配）——**而且畫面上長得像「其他四支真的不該豁免」**。
+        return subprocess.run(["git", "-C", str(HARNESS), *args],
+                              input=stdin, capture_output=True, timeout=30)
+    try:
+        payload = "\n".join(rels).encode("utf-8")
+        ig = _git(["check-ignore", "--stdin"], stdin=payload)
+        if ig.returncode not in (0, 1):          # 0＝有命中、1＝都沒命中
+            return set(), f"check-ignore 回 {ig.returncode} —— 不豁免，照掃"
+        tr = _git(["ls-files", "-z"])
+        if tr.returncode != 0:
+            return set(), f"ls-files 回 {tr.returncode} —— 不豁免，照掃"
+    except Exception as exc:                     # git 不在／逾時
+        return set(), f"{type(exc).__name__} —— 不豁免，照掃"
+    _dec = lambda b: b.decode("utf-8", "replace").replace("\\", "/")
+    ignored = {ln.strip() for ln in _dec(ig.stdout).splitlines() if ln.strip()}
+    tracked = {x for x in _dec(tr.stdout).split("\0") if x}
+    return ignored - tracked, ""
+
+
 def test_u1_debt_does_not_grow() -> None:
     """U-1 債務只准變少（覆核 F-4）。
 
@@ -487,6 +539,15 @@ def test_u1_debt_does_not_grow() -> None:
             actual[f.relative_to(HARNESS).as_posix()] = Counter(v for _, v in hits)
 
     new_files = sorted(set(actual) - set(_KNOWN_U1_DEBT))
+    exempt, why = _exempt_untracked_ignored(new_files)
+    if why:
+        print(f"       ※ 未套用 gitignore 豁免：{why}")
+    skipped = [f for f in new_files if f in exempt]
+    new_files = [f for f in new_files if f not in exempt]
+    if skipped:
+        # 留痕：豁免了什麼一定要看得見，否則等於偷偷把閘門範圍改小。
+        print(f"       ※ 豁免 {len(skipped)} 支未進版控的拋棄物（gitignore 排除）："
+              f"{'、'.join(skipped)}")
     check("沒有新檔案引入 U-1 債（F-4 閘門·全 harness 掃描）", not new_files,
           f"新增檔案：{ {k: dict(actual[k]) for k in new_files} }")
 
@@ -528,7 +589,7 @@ def run() -> "tuple[int, list]":
     """給 `run_hook_tests.py` 呼叫。
 
     ⚠ 這一組會**暫時改名 `harness.config.json`**（驗 U-2 拒跑）。每個 case 都有
-    try/finally 還原；若整個進程被硬殺，還原不會發生 —— 找 `*.v15bak*` 改回來。
+    `swapped_config()` 還原；整個進程被硬殺時還原不會發生，但**下次跑會自癒**（備份還在＝上次沒善終，以它為原版換回來）。
     """
     global _passed, _failed, _details
     _passed, _failed, _details = 0, 0, []
@@ -541,8 +602,12 @@ def run() -> "tuple[int, list]":
         try:
             fn()
         except Exception as exc:                       # noqa: BLE001
+            # ⚠ **一定要 print**：只塞進 _details 的話畫面上看不到任何 FAIL 行，
+            #   只有結尾「N 通過、M 失敗」的計數對不上會露餡 —— 而沒人會去對那個。
+            #   2026-08-28 就是這樣讓一支撞名例外藏了四天（見 swapped_config）。
             _failed += 1
             _details.append(f"{fn.__name__} 拋例外：{exc}")
+            print(f"  FAIL {fn.__name__} 拋例外\n       {exc}")
     return _passed, list(_details)
 
 

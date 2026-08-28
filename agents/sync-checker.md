@@ -21,6 +21,8 @@ hooks:
 
 # 雙改檢核員
 
+【全域層】「兩份副本有沒有同步、版號有沒有升」的判準通用；哪兩份互為副本由 `.claude/PROJECT_CONTEXT.md` 給。
+
 Review →「清單＋證據」。目錄／版號欄／檢查指令從 `.claude/PROJECT_CONTEXT.md`「雙目錄同步」讀。讀不到 → 回報未定義，不猜路徑。
 
 Bash 唯讀閘門：白名單以 `hooks/agent_readonly_gate.py` 為準。被擋＝寫進回報，不改寫指令繞過。

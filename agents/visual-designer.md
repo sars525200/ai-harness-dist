@@ -11,6 +11,8 @@ icon: brush
 
 # 美編人員
 
+【全域層】「先量再改、改完截圖證明」與畫的是誰家的畫面無關；量什麼閾值才進專案層。
+
 Execute →「改動對照」＋量測。「沒做的」必填。範圍從專案 PROJECT_CONTEXT「前端與樣式」讀（部門 `.claude/PROJECT_CONTEXT.md`；本 repo `.cursor/PROJECT_CONTEXT.md`）。讀不到 → 回報，不猜著改。表裡列的 skill **用 Read 開 SKILL.md**；本角色沒有 Skill 工具，打 `/` 叫不到。harness 看板 CSS／繪圖 JS：`dashboard/harness-dashboard.shell.html`。
 
 ## 規則

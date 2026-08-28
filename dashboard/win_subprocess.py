@@ -3,6 +3,8 @@
 
 看板服務每 10 秒跑一次重生；`python.exe` 沒設 CREATE_NO_WINDOW 會閃小黑窗、
 搶輸入法焦點。非 Windows 原樣呼叫 subprocess.run。
+
+【核心層】Windows 上不彈黑窗，跟跑的是哪個部門的看板無關。
 """
 from __future__ import annotations
 

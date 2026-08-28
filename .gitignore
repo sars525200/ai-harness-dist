@@ -16,6 +16,9 @@ COLLAB_NOW.md
 # 那個錯會偽裝成「報告多一列、CLAUDE.md 印無」而不是報錯。
 # 新機器跑 `py -3 dashboard/gen_layers.py --init` 產範本。
 harness.config.json
+# 備份與自癒救援檔（`swapped_config()` 會產 `.<tag>-rescued`；
+#   測試被硬殺會留 `.<tag>`）——性質同上，都是本機暫存。
+harness.config.json.*
 
 __pycache__/
 *.pyc

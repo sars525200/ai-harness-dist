@@ -2,6 +2,8 @@
 """看板殼 vs 產物。進 git 的是殼；填滿的 html 是本機產物。
 
     from html_paths import HTML_PATH, SHELL_PATH, ensure_product
+
+【核心層】「殼進 git、填滿的產物留本機」是看板的結構分工，換部門照樣成立。
 """
 from __future__ import annotations
 

@@ -10,6 +10,8 @@ icon: wrench
 
 # 施作員
 
+【全域層】「照規格改檔、不擴張範圍」這條紀律與被服務的專案無關；要改哪些檔、是否雙份，由 `.claude/PROJECT_CONTEXT.md` 給。
+
 Execute／Fix →「改動對照」。「沒做的」必填。檔案範圍與是否雙份從 `.claude/PROJECT_CONTEXT.md` 讀。
 
 規格缺口或讀不到設定 → 停並回報，自己補規格＝錯誤交付。
