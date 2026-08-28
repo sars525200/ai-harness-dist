@@ -101,6 +101,17 @@ REGISTRY = [
         "tools": {"Bash", "PowerShell"},
     },
     {
+        # EOL-1：commit 前擋下「差異只有行尾」的檔。與 IDX-1 同槽位、同 commit 判準。
+        # 判準零誤判：`git diff --cached` 非空但加了 `--ignore-cr-at-eol` 之後變空
+        # ⇒ 內容一個字沒改、只有行尾被翻。沒有人會為這個特地 commit。
+        # ⚠ 擋的是「commit 前」不是「寫入當下」——腳本寫檔不觸發任何 hook，
+        #   而 2026-08-28 一天翻三次行尾，其中兩次正是 python 腳本寫的。
+        "id": "EOL-1",
+        "module": "eol1_pure_eol_change",
+        "events": {"PreToolUse"},
+        "tools": {"Bash", "PowerShell"},
+    },
+    {
         "id": "R4",
         "module": "r4_server_dbpath",
         "events": {"PreToolUse"},

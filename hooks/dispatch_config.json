@@ -47,6 +47,9 @@
     },
     "CHK-1": {
       "shadow": false
+    },
+    "EOL-1": {
+      "shadow": false
     }
   }
 }

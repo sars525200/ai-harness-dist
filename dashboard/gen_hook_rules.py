@@ -66,8 +66,8 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["IDX-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "WIN-1", "PR-1", "ENC-1",
-         "HTML-1", "UI-1", "CHK-1", "CTX-1"]
+ORDER = ["IDX-1", "EOL-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "WIN-1",
+         "PR-1", "ENC-1", "HTML-1", "UI-1", "CHK-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -77,6 +77,18 @@ DESC = {
                "<b>帶棘輪</b>：叫過之後要再長一成才會再叫"
                "（309 個歷史版本回測：少了棘輪 218 次改動叫 215 次、最長連續 215；"
                "加了之後 15 次、最長連續 3）",
+    },
+    "EOL-1": {
+        "badge": "8/28 新·enforce", "on": "PreToolUse git commit",
+        "why": "staged 檔的差異<b>只有行尾</b>（`--ignore-cr-at-eol` 後 diff 變空）·BLOCK",
+        "tip": "判準零誤判：沒有人會為了「把 CRLF 換成 LF」特地 commit 一次。"
+               "⚠ 擋的是<b>commit 前</b>不是寫入當下——腳本寫檔不觸發任何 hook，"
+               "而 8/28 一天翻三次行尾其中兩次正是 python 腳本寫的（對象是 .md，"
+               "也不在 ENC-1 的守備範圍：它只盯 app.js／styles.css／index.html）。"
+               "BLOCK 不 WARN 的理由是修復成本不對稱：翻掉後改回去很便宜，"
+               "混進 commit 之後要 revert 或 rebase、而且通常是別人來收。"
+               "⚠ 回歸網的兩個案例是<b>變異測試逼出來的</b>——只有空白改變（分得出 "
+               "`--ignore-cr-at-eol` 與 `--ignore-all-space`）、git 算不出來走 None 不走 []。",
     },
     "IDX-1": {
         "badge": "8/27 WARN", "on": "PreToolUse git commit",
