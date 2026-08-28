@@ -230,6 +230,61 @@ case("沒有專案名就不寫", "只叫「等待任務」說不出是哪個專�
 case("佔位名不會被記成上一個任務", "它沒有【】⇒ previous_name 抽不出 ⇒ 自己永遠不會被記進去",
      M.previous_name(M.compose_idle("AI-Projects", "三段式命名")), "")
 
+# ── 沒宣告時拿第一句話當名字（user 2026-08-28 定）──────────────────────────
+case("有主題就用主題，專案名退到第二段", "側欄截尾巴，同一專案好幾則對話時專案名分不出誰是誰",
+     M.compose_idle("AI-Projects", "上一個任務", "改進出庫同步"),
+     "【待】改進出庫同步｜AI-Projects")
+case("有主題就不必有專案名", "主題本身說得出這則在講什麼，比「哪個專案在等待」更能分辨",
+     M.compose_idle("", "", "改進出庫同步"), "【待】改進出庫同步")
+case("有主題時不再帶上一個任務", "那是別則對話的名字，會蓋過這則真正在講的事",
+     M.compose_idle("AI-Projects", "修進出庫同步", "改權限判定"),
+     "【待】改權限判定｜AI-Projects")
+case("猜的名字不會被記成上一個任務", "【待】不是任務名，傳給下一個視窗等於把隨口一句當任務",
+     M.previous_name(M.compose_idle("AI-Projects", "", "改權限判定")), "")
+case("猜的名字仍算我們寫的", "認不出來就會被當成 client 快取名，log 的來歷標記會反過來",
+     M.is_ours(M.compose_idle("AI-Projects", "", "改權限判定")), True)
+
+case("主題取第一行有字的", "使用者常換行補述，第一行才是他要講的事",
+     M.topic_from_user("修保管人自動帶入\n順便看一下座位"), "修保管人自動帶入")
+case("剝掉平台插進來的標籤", "8/28 掃 6 則對話，4 則的第一則 user 是 slash command 展開的殘留",
+     M.topic_from_user("<local-command-caveat>Caveat: The messages below</local-command-caveat>"), "")
+case("跳過 slash command", "`/shougong` 不是這則在講的事，是一個動作",
+     M.topic_from_user("/shougong\n收工"), "收工")
+case("空訊息回空", "取不到就走退路，不要生出一個空的【待】",
+     M.topic_from_user(""), "")
+case("主題沿用同一套長度上限", "另立第二套截斷規則遲早會與宣告那條分岔",
+     M.topic_from_user("一二三四五六七八九十十一十二十三"), "一二三四五六七八九十十…")
+
+# ↓↓ 以下五條全部是「fixture 全綠、真檔一跑就錯」補回來的（2026-08-28 三次實機打臉）↓↓
+case("command 標籤整段丟", "剝完標籤只剩「/clear clear」，`clear` 那行會大搖大擺變成標題",
+     M.topic_from_user("<command-name>/clear</command-name>\n<command-message>clear</command-message>"), "")
+case("延續詞不是主題", "實測寫出過「【待】繼續任務」——它說的是接著做，不是在做什麼",
+     M.topic_from_user("繼續任務"), "")
+case("延續詞之後那行才是主題", "「繼續任務／改保管人自動帶入」要的是第二行，不是就此收工",
+     M.topic_from_user("繼續任務\n改保管人自動帶入"), "改保管人自動帶入")
+case("清完是空的要往下一行找", "原本 `return _clean(line)` 清成空也直接回，第二行永遠讀不到",
+     M.topic_from_user("、、、\n改權限判定"), "改權限判定")
+
+# ── 舊佔位名要能升級（不然改動只對新對話生效）─────────────────────────────
+case("認得出舊格式佔位名", "memo 有值就不算 idle，那些對話會永遠停在「等待任務」",
+     M.is_legacy_idle("IT-department｜等待任務｜分心防治"), True)
+case("新格式佔位名不算舊的", "認了就等於每輪重掃檔頭（實測 78–247ms），而 Stop 是同步阻塞",
+     M.is_legacy_idle("【待】改權限判定｜IT-department"), False)
+case("真正的任務名不算佔位名", "認錯會把一則正在做事的對話改名成猜的",
+     M.is_legacy_idle("【任務】修進出庫同步｜Execute"), False)
+case("舊佔位名讓位給新佔位名", "沒有這條，改動只對全新對話生效，眼前那幾則永遠不會變",
+     M.decide("", "AI-Projects｜等待任務", 100, "【待】改權限判定｜AI-Projects",
+              "AI-Projects｜等待任務"),
+     "【待】改權限判定｜AI-Projects")
+case("升級要贏過「補回自己的名字」", "排在 foreign 分支之後的話，client 一蓋就補回舊佔位名，再也升不上去",
+     M.decide("", "client的快取名", 100, "【待】改權限判定｜AI-Projects",
+              "AI-Projects｜等待任務"),
+     "【待】改權限判定｜AI-Projects")
+case("真任務名不會被佔位名蓋掉", "升級分支若不限定舊格式，做到一半的對話會被改成猜的名字",
+     M.decide("", "【任務】修進出庫同步｜Execute", 100, "【待】改權限判定｜AI-Projects",
+              "【任務】修進出庫同步｜Execute"),
+     None)
+
 case("專案名取工作目錄 leaf", "核心層不得寫死專案路徑，只做字串運算",
      M.project_name(os.path.join("d:", os.sep, "AI-Projects")), "AI-Projects")
 case("拿不到 cwd 退回 transcript 目錄", "payload 沒帶 cwd 時仍要有名字；平台目錄名有 d-- 前綴",
@@ -299,12 +354,12 @@ case("競態重判要帶著佔位名", "reconcile 漏傳 idle，重判那條路�
      M.reconcile("", _IDLE, "", "", 100, _IDLE), _IDLE)
 
 
-def _write_transcript(path, decl_text, bridge=None):
+def _write_transcript(path, decl_text, bridge=None, user_text="幫我改這個"):
     lines = []
     if bridge:
         lines.append({"type": "bridge-session", "sessionId": "s-1", "bridgeSessionId": bridge})
     lines += [
-        {"type": "user", "message": {"role": "user", "content": "幫我改這個"}},
+        {"type": "user", "message": {"role": "user", "content": user_text}},
         {"type": "assistant", "message": {"role": "assistant",
                                           "content": [{"type": "text", "text": decl_text}]}},
     ]
@@ -316,11 +371,14 @@ def _write_transcript(path, decl_text, bridge=None):
 _STATE = None  # e2e 進場時指向該次跑的專屬暫存目錄
 
 
-def _run_hook(transcript, session_id="s-1", last_msg=None, event="Stop", cwd=None):
+def _run_hook(transcript, session_id="s-1", last_msg=None, event="Stop", cwd=None,
+              prompt=None):
     payload = {"hook_event_name": event, "session_id": session_id,
                "transcript_path": transcript}
     if cwd is not None:
         payload["cwd"] = cwd
+    if prompt is not None:
+        payload["prompt"] = prompt
     if last_msg is not None:
         payload["last_assistant_message"] = last_msg
     # 測試一律關掉雲端推送：這份回歸網不該對 api.anthropic.com 發任何請求
@@ -342,6 +400,53 @@ def _titles(path):
             except Exception:
                 pass
     return out
+
+
+def first_user_topic_cases():
+    """`first_user_topic` 要吃真 transcript 的形狀，所以另開一段造檔案測。
+
+    這三條的形狀全部來自 2026-08-28 的實機打臉，不是想像出來的邊界：
+    截圖把檔頭撐爆、圖片 block 排在文字前、開場是 `/clear`。
+    """
+    results = []
+
+    def probe(name, why, lines, want):
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "t.jsonl")
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                for o in lines:
+                    fh.write(json.dumps(o, ensure_ascii=False) + "\n")
+            results.append((name, why, M.first_user_topic(p), want))
+
+    def user(*blocks):
+        return {"type": "user", "message": {"role": "user", "content": list(blocks)}}
+
+    probe("圖片 block 排在文字前也讀得到",
+          "只看第一個 block 的話，帶截圖的提問會被整則跳過（本則對話就是這個形狀）",
+          [user({"type": "image", "source": {"data": "x" * 100}},
+                {"type": "text", "text": "任務名稱又沒有跑了"})],
+          "任務名稱又沒有跑了")
+
+    probe("附件撐爆檔頭仍讀得到",
+          "原本讀前 64KB，量的是附件大小不是對話深度；一張截圖就把第一句擠出窗口",
+          [{"type": "attachment", "blob": "x" * 90000},
+           {"type": "user", "message": {"role": "user", "content": "改保管人自動帶入"}}],
+          "改保管人自動帶入")
+
+    probe("開場是 /clear 就往下找",
+          "8/28 掃 6 則對話，4 則的第一則是 slash command 殘留；停在第一則等於永遠取不到",
+          [{"type": "user", "message": {"role": "user",
+            "content": "<command-name>/clear</command-name>\n<command-message>clear</command-message>"}},
+           {"type": "user", "message": {"role": "user",
+            "content": [{"type": "tool_result", "content": "ok"}]}},
+           {"type": "user", "message": {"role": "user", "content": "改權限判定"}}],
+          "改權限判定")
+
+    probe("整則都沒有真人訊息就回空",
+          "取不到要讓路給退路，不要生出一個空的【待】",
+          [{"type": "assistant", "message": {"role": "assistant", "content": []}}],
+          "")
+    return results
 
 
 def e2e():
@@ -425,26 +530,86 @@ def e2e():
         n = os.path.join(nd, "newwin.jsonl")
         _write_transcript(n, "隨便聊兩句，這一則沒有自我宣告")
         rc = _run_hook(n, session_id="s-new", cwd=cwd)
-        results.append(("e2e 新視窗寫佔位名", "沒宣告也沒既有標題時會退回平台英文標題",
-                        (rc, _titles(n)), (0, ["AI-Projects｜等待任務"])))
+        results.append(("e2e 沒宣告就拿第一句話當名字", "掉回「等待任務」＝一則有內容的對話對外看起來像沒開始",
+                        (rc, _titles(n)), (0, ["【待】幫我改這個｜AI-Projects"])))
 
-        # 佔位名不准把自己記成「上一個任務」：第二個新視窗還是只有兩段，
-        # 不是「AI-Projects｜等待任務｜AI-Projects｜等待任務」。
+        # 佔位名不准把自己記成「上一個任務」：驗證方式是讓下一則**取不到主題**
+        # （只有平台雜訊），逼它走退路 —— 那時第三段若冒出「幫我改這個」就是污染了。
         n1b = os.path.join(nd, "newwin1b.jsonl")
-        _write_transcript(n1b, "第二個新視窗，一樣沒有任務")
+        _write_transcript(n1b, "第二個新視窗，一樣沒有任務",
+                          user_text="<local-command-caveat>Caveat: The messages below</local-command-caveat>")
         rc = _run_hook(n1b, session_id="s-new1b", cwd=cwd)
-        results.append(("e2e 佔位名不自我污染", "沒過濾的話下一個視窗會變成四段疊字",
+        results.append(("e2e 佔位名不自我污染", "沒過濾的話下一個視窗的第三段會冒出上一則的隨口一句",
                         (rc, _titles(n1b)), (0, ["AI-Projects｜等待任務"])))
 
-        # 同一個專案先跑完一件有名字的任務，下一個新視窗要把它帶出來
+        # 同一個專案先跑完一件有名字的任務，下一個新視窗要把它帶出來。
+        # 這是**退路**（主題取不到才走），所以 user 訊息刻意只放平台雜訊。
         o = os.path.join(nd, "old.jsonl")
         _write_transcript(o, _DECL)
         _run_hook(o, session_id="s-old", cwd=cwd)
         n2 = os.path.join(nd, "newwin2.jsonl")
-        _write_transcript(n2, "又一個新視窗，還沒有任務")
+        _write_transcript(n2, "又一個新視窗，還沒有任務",
+                          user_text="<local-command-caveat>Caveat: The messages below</local-command-caveat>")
         rc = _run_hook(n2, session_id="s-new2", cwd=cwd)
         results.append(("e2e 帶出上一個任務", "跨 session 的紀錄沒寫成功的話這裡只會有兩段",
                         (rc, _titles(n2)), (0, ["AI-Projects｜等待任務｜修進出庫同步"])))
+
+        # UserPromptSubmit 那一輪：prompt 還沒寫進 transcript，只有 payload 拿得到。
+        # 少了這條，全新對話的第一輪永遠退回「等待任務」。
+        n3 = os.path.join(nd, "newwin3.jsonl")
+        _write_transcript(n3, "還沒有回覆",
+                          user_text="<local-command-caveat>Caveat: The messages below</local-command-caveat>")
+        rc = _run_hook(n3, session_id="s-new3", cwd=cwd,
+                       event="UserPromptSubmit", prompt="任務名稱又沒有跑了")
+        results.append(("e2e 第一輪用 payload 的 prompt", "只掃 transcript 的話第一輪讀不到剛送出的那句話",
+                        (rc, _titles(n3)), (0, ["【待】任務名稱又沒有跑了｜AI-Projects"])))
+
+        # 主題來源的**順序**：檔頭的第一句話要贏過檔尾那一輪。
+        # 原本本輪排第二，實測寫出過「【待】繼續任務」—— 一則跑久了的對話，
+        # 最後一句多半是延續詞，說的是「接著做」不是「在做什麼」。
+        n4 = os.path.join(nd, "newwin4.jsonl")
+        with open(n4, "w", encoding="utf-8", newline="") as fh:
+            for o in [{"type": "user", "message": {"role": "user", "content": "改保管人自動帶入"}},
+                      {"type": "assistant", "message": {"role": "assistant",
+                                                        "content": [{"type": "text", "text": "好"}]}},
+                      {"type": "user", "message": {"role": "user", "content": "再看一下座位"}},
+                      {"type": "assistant", "message": {"role": "assistant",
+                                                        "content": [{"type": "text", "text": "沒有宣告"}]}}]:
+                fh.write(json.dumps(o, ensure_ascii=False) + chr(10))
+        rc = _run_hook(n4, session_id="s-new4", cwd=cwd)
+        results.append(("e2e 主題取檔頭不取檔尾", "檔尾那一輪多半是延續詞或旁支，開頭那句才是這則在講的事",
+                        (rc, _titles(n4)), (0, ["【待】改保管人自動帶入｜AI-Projects"])))
+
+        # 檔頭的窗口用**行數**不用 byte：一則「第一句話帶兩張截圖」的對話，
+        # 前 64KB 全是圖片，一則 user 訊息都掃不到 ⇒ 靜默退回「等待任務」。
+        n5 = os.path.join(nd, "newwin5.jsonl")
+        with open(n5, "w", encoding="utf-8", newline="") as fh:
+            fh.write(json.dumps({"type": "attachment", "blob": "x" * 90000}) + chr(10))
+            for o in [{"type": "user", "message": {"role": "user", "content": "改權限判定"}},
+                      {"type": "assistant", "message": {"role": "assistant",
+                                                        "content": [{"type": "text", "text": "沒有宣告"}]}}]:
+                fh.write(json.dumps(o, ensure_ascii=False) + chr(10))
+        rc = _run_hook(n5, session_id="s-new5", cwd=cwd)
+        results.append(("e2e 附件撐爆檔頭仍取得到主題", "byte 窗口量的是附件大小，不是對話深度",
+                        (rc, _titles(n5)), (0, ["【待】改權限判定｜AI-Projects"])))
+
+        # 端到端的升級路徑：先讓它拿到舊格式佔位名（第一句取不到主題），
+        # 之後對話裡出現了真的第一句話 → 同一則要能升級，不是等下一則新對話。
+        n6 = os.path.join(nd, "newwin6.jsonl")
+        _write_transcript(n6, "沒有宣告",
+                          user_text="<local-command-caveat>Caveat: The messages below</local-command-caveat>")
+        _run_hook(n6, session_id="s-new6", cwd=cwd)
+        before = _titles(n6)
+        with open(n6, "a", encoding="utf-8", newline="") as fh:
+            for o in [{"type": "user", "message": {"role": "user", "content": "改保管人自動帶入"}},
+                      {"type": "assistant", "message": {"role": "assistant",
+                                                        "content": [{"type": "text", "text": "還是沒有宣告"}]}}]:
+                fh.write(json.dumps(o, ensure_ascii=False) + chr(10))
+        rc = _run_hook(n6, session_id="s-new6", cwd=cwd)
+        results.append(("e2e 舊佔位名會升級", "沒有這條，改動只對全新對話生效，眼前掛著「等待任務」的那幾則永遠不變",
+                        (rc, [t.startswith("AI-Projects｜等待任務") for t in before],
+                         _titles(n6)[-1]),
+                        (0, [True], "【待】改保管人自動帶入｜AI-Projects")))
 
         # 守門：命名過的 session 即使標題被推出掃描範圍（existing 讀成空），
         # 也不准寫佔位名 —— 那等於把一則正在做事的對話改名成「等待任務」。
@@ -620,7 +785,7 @@ def run() -> "tuple[int, list]":
     沒接進常規回歸網的測試，等於下次有人改壞了不會有人知道 —— 這支守的是
     三個事件的分工與雲端請求的組法，那些都是實測踩出來、不接就會退化的東西。
     """
-    cases = list(CASES) + e2e() + cloud_memo()
+    cases = list(CASES) + first_user_topic_cases() + e2e() + cloud_memo()
     if not cases:
         return 0, ["零 fixture —— 一律視為失敗，不報全過"]
     passed, failed = 0, []
@@ -633,7 +798,7 @@ def run() -> "tuple[int, list]":
 
 
 def main():
-    cases = list(CASES) + e2e() + cloud_memo()
+    cases = list(CASES) + first_user_topic_cases() + e2e() + cloud_memo()
     if not cases:
         print("FAIL: 零 fixture —— 一律視為失敗，不報全過")
         return 1

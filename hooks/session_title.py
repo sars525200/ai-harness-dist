@@ -1,5 +1,40 @@
 """Stop 事件：把自我宣告的「任務」名寫成這則對話的標題。
 
+## ⚠⚠ 已退役（2026-08-28 user 決定）—— 讀下面任何一段之前先讀這一段
+
+**三個 hook 掛載（`Stop`／`UserPromptSubmit`／`PreToolUse`）已從
+`~/.claude/settings.json` 全部移除**（備份 `settings.json.bak.20260828_retire_title`）。
+Claude 端的對話名稱改用平台自產的標題。下面整份文件描述的是**曾經在跑**的機制，
+保留它是因為那些踩坑記錄有價值，不是因為它還在生效。
+
+退役理由（同日查證，三條都是事實不是判斷）：
+
+1. **官方早就有正式介面**。Agent SDK 的 `rename_session()`，官方文件逐字寫
+   「Renames a session by appending a custom-title entry. Repeated calls are safe;
+   the most recent title wins.」—— 與本檔手寫的 `_append_title()` 完全同構。
+   另有 `hookSpecificOutput.sessionTitle` 可讓 CLI 自己去寫，那樣「跟 client 快取搶」
+   這整層在架構上就不存在。我們自幹了一套沒人維護的複本。
+2. **從未穩定**。三天九個版本，最長活 12.9 小時，其中三次是歸因被推翻
+   （記憶體快取→沒人重讀／欄位所有權→覆蓋時序／格式判準→歸屬判準）。
+   而它做的事是「讓側邊欄的名字好看一點」。
+3. **`PreToolUse` 掛載兩次咬到 Cursor CLI**。8/26 早上全滅一次、8/28 無 matcher
+   重現一次（A/B 三次實測：無 matcher 被擋／不掛 exit 0／有 matcher 恢復）。
+   Cursor 是這台機器唯一跨模型族的審查者，被擋等於對抗式覆核整條斷掉。
+
+**這支檔案沒有刪，也不要刪**：`session_archive.py` 仍 import 它的 `compose_idle()`／
+`project_name()`／`cloud_request()`／`_bridge_session_id()` 等函式，做封存時的雲端
+idle 名（票 02 Q5）。那條路與側邊欄命名無關，仍然在跑。
+
+⚠ **退役的副作用**：`_remember_last_task()` 只在本檔 `main()` 裡被呼叫，掛載拆掉之後
+沒有人再寫 `state/lasttask.*.txt` ⇒ `session_archive._push_idle_title()` 組出來的
+「上一個任務」會**永遠停在最後一次寫入的值**。不影響正確性（那一段本來就可省略），
+但那個值會逐漸過期。
+
+⚠ **要裝回去的話**：`PreToolUse` **一律不可用無 matcher**——掛進 `dispatch.py` 那一組
+（`Bash|PowerShell|Skill|Write|Edit|MultiEdit|NotebookEdit|Agent`）。理由見上面第 3 點。
+
+---
+
 ## 為什麼需要這支（2026-08-26 實測，不是預防性條文）
 
 側邊欄那一列的名稱，真相是 **session transcript 檔裡最後一筆 `custom-title`**
@@ -183,6 +218,43 @@ _MAX_TITLE = 48
 # 刻意不加【】分類標記 —— 那三種標記說的是「這則在做什麼」，等待中的視窗還沒有
 # 那件事，最該一眼看到的是「哪個專案」。
 _IDLE_MARK = "等待任務"
+# **但「等待任務」只在真的還沒開口時才誠實**（user 2026-08-28 定，實機打臉）。
+# 8/28 側邊欄同時掛著兩則叫「等待任務」的對話，各有 259／441 行實質內容 ——
+# 它們只是那幾輪沒做自我宣告。名字的用途是「一眼看出這則在講什麼」，
+# 掛「等待任務」等於騙人，比叫錯名字更糟。
+# 所以沒有宣告時改用**使用者開口的第一句話**當第二段，格式 `【待】主題｜專案名`：
+#   - `【待】` 一眼看出這是猜的、不是宣告來的（`previous_name()` 刻意不認它，
+#     佔位名因此永遠不會被記成「上一個任務」——沿用原本那道自然守門）
+#   - 主題放最前：側欄截尾巴，同一個專案常有好幾則對話，專案名分不出誰是誰
+_IDLE_GUESS_MARK = "【待】"
+# 第一則 user 訊息**十之八九不是真人打的**：8/28 掃 6 則對話，4 則的第一則是
+# `<local-command-caveat>`（slash command 展開留下的）。不剝掉會生出一排
+# `【待】Caveat: The messa…`。標籤區塊整段丟、已知雜訊字樣整行跳過。
+_TOPIC_TAG_RE = re.compile(r"<[^>]{1,120}>")
+# 雜訊分兩類，判斷時機不同 —— 混成一類會漏（2026-08-28 實機打臉）。
+#   標籤類：比對**原文**。`<command-name>/clear</command-name>` 剝完標籤只剩
+#     「/clear clear」，`command-name` 這個字就不在文字裡了 ⇒ 逐行比對永遠不命中，
+#     而 `/clear` 被 slash 守門擋掉之後，`clear` 那一行就大搖大擺變成標題
+#     （實測寫出過 `【待】clear｜IT-department`）。整段是平台插進來的，整段丟。
+#   文字類：剝完標籤後逐行比對。`Caveat: The messages below…` 那段話本身就是文字。
+_TOPIC_NOISE_TAGS = ("<system-reminder", "<local-command", "<command-name",
+                     "<command-message", "<command-args", "<ide_selection")
+_TOPIC_NOISE_TEXT = ("caveat:", "the messages below")
+# 延續詞不是主題（2026-08-28 實機打臉）：實測寫出過 `【待】繼續任務｜IT-department`。
+# 那句話是真人打的沒錯，但它說的是「接著做」，不是「在做什麼」——側欄掛著它
+# 跟掛「等待任務」一樣沒有資訊量。**比對整句、不比前綴**：`_NOT_A_NAME` 那套是
+# 前綴比對，把「繼續」放進去會連「繼續改保管人邏輯」一起擋掉。
+_TOPIC_FILLER = frozenset((
+    "繼續", "繼續任務", "繼續做", "繼續執行", "接著", "然後呢", "下一步", "再來",
+    "好", "好的", "可以", "嗯", "對", "是", "ok", "okay", "go", "go on", "continue",
+))
+# 掃檔頭找第一句話。**上限用行數不用 byte**（2026-08-28 實機訂正）：
+# 原本讀前 64KB，結果一則「第一句話帶兩張截圖」的對話，前 64KB 全是圖片，
+# 一則 user 訊息都掃不到 ⇒ 退回「等待任務」。byte 窗口量的是附件大小，不是對話深度。
+# 前幾則常是 slash command 殘留，所以最多往下試 `_HEAD_USER_TRIES` 則才放棄 ——
+# 「第一句話」不會藏在第 20 則之後。
+_HEAD_MAX_LINES = 400
+_HEAD_USER_TRIES = 20
 # `~/.claude/projects/` 的目錄名長成 `d--AI-Projects`（磁碟機代號＋`--`）。
 _DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]--")
 # 「這個名字是不是我們寫的」。2026-08-26 實測：client（2.1.237）在**每個新 prompt**
@@ -192,7 +264,7 @@ _DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]--")
 # 靠格式辨識就能認出「檔尾這一筆不是我」，據此補回自己的名字。
 # **代價講明**：user 自己 `/rename` 的名字同樣不帶【】，也會被視為 client 快取而蓋掉。
 # 這是 user 2026-08-26 選的取捨（自動命名優先），log 每次都記下被蓋掉的值。
-_OURS_RE = re.compile(r"^【(?:任務|討論|收尾)】")
+_OURS_RE = re.compile(r"^【(?:任務|討論|收尾|待)】")
 
 
 def is_ours(title: str) -> bool:
@@ -202,7 +274,24 @@ def is_ours(title: str) -> bool:
     return bool(_OURS_RE.match(title)) or ("｜" + _IDLE_MARK) in title
 
 
-_TITLE_NAME_RE = re.compile(r"^【[^】]+】([^｜]+)")
+def is_legacy_idle(title: str) -> bool:
+    """這個名字是不是**舊格式**的佔位名（`專案名｜等待任務｜…`）。
+
+    用途只有一個：讓已經掛著「等待任務」的對話能升級成 `【待】第一句話`。
+    沒有這道判斷，那些對話的 memo 已經有值 ⇒ `idle` 一律算成空 ⇒
+    它們永遠停在「等待任務」，改了也只對**新**對話生效。
+
+    ⚠ **刻意不認新格式 `【待】`**：認了就等於每輪都要重掃檔頭找第一句話
+    （實測 78–247ms，10MB 的 transcript 落在上界），而 Stop hook 是同步阻塞的。
+    升級一次就停，是這道判斷收窄到「舊格式」的唯一理由。
+    """
+    return bool(title) and ("｜" + _IDLE_MARK) in title
+
+
+# ⚠ 這一支**刻意只認三種正式標記**，不認 `【待】`：佔位名是猜的，
+# 拿它當「上一個任務」會把一句隨手打的話傳給下一個新視窗。
+# （`_OURS_RE` 認得【待】是另一回事 —— 那問的是「這是不是我寫的」。）
+_TITLE_NAME_RE = re.compile(r"^【(?:任務|討論|收尾)】([^｜]+)")
 
 
 def previous_name(prev_title: str) -> str:
@@ -244,13 +333,101 @@ def compose(kind: str, name: str, stage: str, progress: str) -> str:
     return "｜".join(parts)[:_MAX_TITLE]
 
 
-def compose_idle(project: str, last: str) -> str:
-    """新視窗還沒有任務時的名字：`專案名｜等待任務｜上一個任務`。
+def topic_from_user(text: str) -> str:
+    """把使用者開口的那句話清成佔位名的主題段；不合格回空字串。
 
-    沒有專案名就回空字串 —— 寧可退回平台標題，也不要一個只叫「等待任務」的東西，
-    那說不出是**哪個專案**在等待，側欄一排長得一模一樣。
+    清洗刻意不做語意判斷（這裡是 hook，沒有模型），順序是：
+    先看**原文**帶不帶平台標籤（帶了整段丟，理由見 `_TOPIC_NOISE_TAGS`）→
+    剝掉標籤 → 跳過雜訊行與 slash command → 第一行有字的交給 `_clean()`
+    （長度上限、markdown 符號、`_NOT_A_NAME` 那一套守門全部沿用，不另立第二套）。
+    """
+    if not text:
+        return ""
+    low_all = text.lower()
+    if any(t in low_all for t in _TOPIC_NOISE_TAGS):
+        return ""
+    for raw in _TOPIC_TAG_RE.sub(" ", text).splitlines():
+        line = raw.strip()
+        if not line or line.startswith("/"):
+            continue
+        low = line.lower()
+        if any(n in low for n in _TOPIC_NOISE_TEXT):
+            continue
+        topic = _clean(line)
+        # 清完是空的、或只是一句延續詞 → **往下一行找**，不要就此收工。
+        # 「繼續任務\n改保管人自動帶入」這種寫法，要的是第二行。
+        if topic and topic.lower() not in _TOPIC_FILLER:
+            return topic
+    return ""
+
+
+def first_user_topic(path: str) -> str:
+    """掃檔頭找第一句清得出主題的真人訊息；找不到回空字串。
+
+    ⚠ **這支是實機打臉補上的**（2026-08-28）：先只接 `turn_user_text()`，
+    fixture 測試全綠，拿真的 transcript 一跑就退回「等待任務」——
+    那支讀的是**檔尾**那一輪，而一則做了一陣子的對話，檔尾整片都是工具往返，
+    往回找不到真人訊息就回 None。這正是「fixture 的形狀不等於真檔的形狀」。
+
+    掃**檔頭**是刻意的：要的本來就是「這則對話一開始在講什麼」，那句話在最前面。
+    前幾則常常是 `<local-command-caveat>` 這種 slash command 殘留（8/28 掃 6 則
+    對話中 4 則），所以要逐則往下試到第一個清得出主題的，不是取到第一則就收工。
+
+    逐行讀 ＋ 先做字串快篩再 `json.loads`：transcript 開頭可能夾著幾百 KB 的
+    附件行（截圖），對那些行做 JSON 解析純屬浪費，而 Stop hook 是同步阻塞的。
+    """
+    try:
+        fh = open(path, "rb")
+    except Exception:
+        return ""
+    seen = 0
+    with fh:
+        for i, raw in enumerate(fh):
+            if i >= _HEAD_MAX_LINES:
+                break
+            if b'"user"' not in raw:      # 快篩：不是 user 那一類就別解析
+                continue
+            try:
+                obj = json.loads(raw.decode("utf-8", errors="replace"))
+            except Exception:
+                continue
+            if obj.get("type") != "user" or obj.get("isMeta"):
+                continue
+            content = obj.get("message", {}).get("content")
+            if isinstance(content, str):
+                text = content
+            elif isinstance(content, list):
+                # **不能只看第一個 block**：附了截圖的訊息，第一個 block 是
+                # image，文字在後面。只看第一個會把「帶圖的提問」整則跳過。
+                text = "\n".join(b.get("text", "") for b in content
+                                 if isinstance(b, dict) and b.get("type") == "text")
+                if not text:
+                    continue              # 全是 tool_result／image → 不是真人打字
+            else:
+                continue
+            topic = topic_from_user(text)
+            if topic:
+                return topic
+            seen += 1
+            if seen >= _HEAD_USER_TRIES:
+                break
+    return ""
+
+
+def compose_idle(project: str, last: str, topic: str = "") -> str:
+    """還沒有自我宣告時的名字。有主題就 `【待】主題｜專案名`，沒有才退回
+    `專案名｜等待任務｜上一個任務`。
+
+    有 topic 時**專案名可以缺席**：主題本身就說得出這則在講什麼，
+    比「哪個專案在等待」更能分辨。沒有 topic 時仍守原規矩 —— 沒有專案名就回空
+    字串，寧可退回平台標題，也不要一排長得一模一樣的「等待任務」。
     沒有上一個任務就**省略第三段**、不補空欄，與 `compose()` 對進度的處理一致。
     """
+    if topic:
+        parts = [_IDLE_GUESS_MARK + topic]
+        if project:
+            parts.append(project)
+        return "｜".join(parts)[:_MAX_TITLE]
     if not project:
         return ""
     parts = [project, _IDLE_MARK]
@@ -777,6 +954,11 @@ def decide(declared: str, existing: str, distance: int,
     foreign = bool(existing) and existing != memo
     if declared:
         target = declared
+    elif idle and is_legacy_idle(memo or existing):
+        # 舊格式佔位名（`專案名｜等待任務`）是猜的，讓更好的猜取代它。
+        # 排在 `foreign and memo` **之前**：不然 client 蓋掉之後會先補回舊佔位名，
+        # 那些對話就再也升級不了（見 `is_legacy_idle` 的說明）。
+        target = idle
     elif foreign and memo:
         target = memo                    # 被 client 蓋回去了 → 把自己的名字補回檔尾
     elif foreign and idle:
@@ -834,7 +1016,8 @@ def main() -> int:
                 _log("restored=%s (was %s)" % (remembered, existing or "-"))
             return 0
 
-        from contract import iter_turn_assistant_texts  # 同目錄，走同一套輪次邊界
+        # 同目錄，走同一套輪次邊界
+        from contract import iter_turn_assistant_texts, turn_user_text
 
         # 先吃 payload 的 last_assistant_message，再退回掃 transcript。順序不能顛倒：
         # Stop 觸發時**該輪最終回覆還沒寫進 transcript**（8/26 量到的 offset 差 31KB
@@ -850,9 +1033,21 @@ def main() -> int:
         # 長對話的 custom-title 一旦被推出 _TAIL_SCAN，`existing` 會讀成空 ——
         # 那時若給佔位名，等於把一則正在做事的對話改名成「等待任務」。
         # memo 非空就代表命名過，拿它當守門最便宜（本來就已經讀出來了）。
-        idle = ("" if prev_title else
+        # 主題三個來源。順序是**由開頭往後**，不是由近而遠（2026-08-28 實機訂正）：
+        #   payload 的 `prompt` —— `UserPromptSubmit` 帶著**剛送出**的那句話。
+        #     `idle` 只在「從未命名過」時才算，那通常就是第一輪 ⇒ 這欄就是第一句。
+        #   檔頭的第一句話 —— `Stop` 沒有 prompt 欄位時的主力。
+        #   本輪的真人訊息 —— **最後一位**。原本它排第二，實測寫出過
+        #     `【待】繼續任務`：那支讀的是檔尾那一輪，而一則跑久了的對話，
+        #     最後一句多半是「繼續」這種延續詞，說的是「接著做」不是「在做什麼」。
+        # 守門有一個例外：memo 是**舊格式**佔位名時仍要算 idle，
+        # 否則那些已經掛著「等待任務」的對話永遠升級不了（見 `is_legacy_idle`）。
+        idle = ("" if (prev_title and not is_legacy_idle(prev_title)) else
                 compose_idle(project_name(payload.get("cwd") or "", path),
-                             _recall_last_task(_project_key(path))))
+                             _recall_last_task(_project_key(path)),
+                             topic_from_user(payload.get("prompt") or "")
+                             or first_user_topic(path)
+                             or topic_from_user(turn_user_text(path) or "")))
         title = decide(declared, existing, distance, idle, prev_title)
 
         # 競態守門：這支在同一次 Stop 裡可能被呼叫兩次（2026-08-26 實測）。

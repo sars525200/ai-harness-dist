@@ -118,17 +118,24 @@ def run() -> tuple[int, list]:
     real_u = (HARNESS / "global" / "CURSOR_USER_RULES.md").read_text(encoding="utf-8")
     check("真檔：AskQuestion 句只在 Cursor 產出", "立刻呼叫 AskQuestion" in real_u and "立刻呼叫 AskQuestion" not in real_c)
     check("真檔：CHILD_SESSION 只在 Claude 產出", "CLAUDE_CODE_CHILD_SESSION" in real_c and "CLAUDE_CODE_CHILD_SESSION" not in real_u)
-    # 票 02 拍板「task-naming 搬走」，防的是規則**本文**在兩處各留一份；
-    # 2026-08-27 `5b1dfa6` 補回的是**一行指標**，不是本文 —— 指標拿掉，
-    # .cursor/rules/task-naming.mdc 就成了沒人指得到的孤兒檔（它是對話命名
-    # 判定與踩雷的唯一出處）。原本那條把兩者當同一件事，於是重產當天轉紅。
-    # ⇒ 判準拆成兩條：本文不得進任一份產出；指標只進 Claude 產出
-    #   （Cursor 側靠 .cursor/rules 的 alwaysApply 自己載得到，不需要指標）。
-    _tn_body = ("rename_chat", "cursor-app-control", "判定順序不能換")
-    _tn_leak = [n for n in _tn_body if n in real_c or n in real_u]
-    check("真檔：task-naming 本文不進兩份產出", not _tn_leak, str(_tn_leak))
-    check("真檔：task-naming 指標只在 Claude 產出",
-          "task-naming.mdc" in real_c and "task-naming.mdc" not in real_u)
+    # 2026-08-28：部門專案載不到 harness `.cursor/rules/task-naming.mdc`，
+    # Cursor 執行段改走 User Rules（hub `22-title-cursor.md`）。
+    # Claude 仍只留指標＋hook；rename_chat 本文不得進 Claude 產出。
+    # 票 02「本文不進兩份產出」的前提（Cursor 靠 alwaysApply 自己載到）
+    # 只對 harness 工作區成立，已撤。
+    # （只改本段註解必須保持綠——斷言讀的是產出檔本文，不是註解。）
+    check("真檔：rename_chat 只在 Cursor 產出",
+          "rename_chat" in real_u and "rename_chat" not in real_c)
+    check("真檔：判定順序句只在 Cursor 產出",
+          "判定順序不能換" in real_u and "判定順序不能換" not in real_c)
+    # 2026-08-28 下午改判準：Claude 端的自動改名 hook **整套退役**（理由見
+    # `global/hub/21-title-claude.md` 檔頭）⇒ Claude 產出不該再有指向 Cursor
+    # 命名規則的指路句。原本這條守的是「指標只在 Claude 產出」，那個前提隨退役消失。
+    # 新判準守的是**不要有人把它加回來**：Claude 端不再做這件事，指路句進去
+    # 只會叫模型去讀一份與它無關的規則。Cursor 那側本來就不需要（`.cursor/rules/`
+    # 在 harness 工作區靠 alwaysApply 自己載到）。
+    check("真檔：task-naming 指標兩份產出都不該有",
+          "task-naming.mdc" not in real_c and "task-naming.mdc" not in real_u)
 
     return passed, failed
 
