@@ -136,6 +136,18 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # 同一個槽位，但這支自己不判任何東西——它跑**專案宣告的**檢查腳本並轉述結果。
+        # 補的是最後一哩：專案裡最容易失效的守門是「寫好了但沒人記得跑」那種，
+        # 而 path-scoped 規則只保證「載入到 context」，不保證「會去跑」。
+        # 契約寫在規則檔的 docstring：沒事不輸出／唯讀／要快／讀不到東西要出聲。
+        # 指令形狀被限制成「repo 內的一支 .py ＋ 字串參數」——設定檔是專案維護的，
+        # 接受任意字串等於讓一份 md 擁有每次寫檔執行任意指令的能力。
+        "id": "CHK-1",
+        "module": "chk1_project_checks",
+        "events": {"PostToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         # 同一個槽位、同一條理由：驗的是「寫進去之後長多大」。
         # 掛 Stop 的話得自己算「哪些檔算常駐層」，那會變成 check_bloat.discover_targets()
         # 的第二份實作 —— 兩份判準遲早漂移，而漂移的症狀是「量的不是你以為的那個檔」。

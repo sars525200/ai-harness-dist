@@ -44,6 +44,9 @@
     },
     "WIN-1": {
       "shadow": false
+    },
+    "CHK-1": {
+      "shadow": false
     }
   }
 }
