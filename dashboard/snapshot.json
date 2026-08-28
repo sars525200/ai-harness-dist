@@ -8,7 +8,9 @@
     "DECL-1",
     "DISP-1",
     "ENC-1",
+    "EOL-1",
     "ESC-1",
+    "EXP-1",
     "HTML-1",
     "IDX-1",
     "PR-1",
@@ -27,7 +29,9 @@
     "DECL-1",
     "DISP-1",
     "ENC-1",
+    "EOL-1",
     "ESC-1",
+    "EXP-1",
     "HTML-1",
     "PR-1",
     "R1",
@@ -38,10 +42,11 @@
   ],
   "would_block": {
     "AWC-1": 146,
-    "ENC-1": 66,
-    "IDX-1": 36,
-    "DISP-1": 50,
+    "ENC-1": 69,
+    "IDX-1": 40,
+    "DISP-1": 53,
     "CHK-1": 1,
+    "WIN-1": 12,
     "DB-1": 64,
     "PR-1": 33,
     "HTML-1": 9,
@@ -51,10 +56,11 @@
     "CTX-1": 6,
     "R4": 7,
     "UI-1": 1,
-    "WIN-1": 7,
+    "EOL-1": 1,
+    "EXP-1": 0,
     "R1": 0,
     "R3": 0
   },
   "skill_count": 31,
-  "tool_raw_count": 99
+  "tool_raw_count": 100
 }
