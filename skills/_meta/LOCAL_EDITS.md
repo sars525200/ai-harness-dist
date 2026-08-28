@@ -13,8 +13,8 @@
 | `grilling` | 真 upstream | 1 | 3 | 1 | 1 | 0 | 0 |
 | `prototype` | 匯入 `099f782` | 1 | 3 | 3 | 3 | n/a | n/a |
 | `research` | 匯入 `099f782` | 1 | 4 | 3 | 3 | n/a | n/a |
-| `to-tickets` | 匯入 `099f782` | 1 | 2 | 2 | 2 | n/a | n/a |
-| `wayfinder` | 真 upstream | 1 | 3 | 2 | 2 | 0 | 0 |
+| `to-tickets` | 匯入 `099f782` | 1 | 4 | 4 | 4 | n/a | n/a |
+| `wayfinder` | 真 upstream | 1 | 5 | 4 | 4 | 0 | 0 |
 
 ## `domain-modeling`
 
@@ -48,13 +48,13 @@
 
 - 基準：⚠ **不是 upstream**：upstream 物件不在本地，退回匯入 commit `099f782` 的 subtree。匯入當下已帶在地改動 ⇒ **本列會少算那部分**
 - 基準物件：`b6659e0f3793e246b3b6027d6c135c96dc2ce63e`
-- `SKILL.md`：新檔行 3, 61–62；marker 在 12, 61
+- `SKILL.md`：新檔行 3, 5–8, 17–23, 71–72；marker 在 5, 15, 17, 71
 - marker 對帳：**不適用**。基準不是真 upstream ⇒ 早於基準的改動在 diff 裡看不見，那個檔會顯示「有 marker、零分歧」而被誤判成過期標記。**這是「量不到」，不是「對過了沒問題」。**
 
 ## `wayfinder`
 
 - 基準：真 upstream subtree（物件在本地）
 - 基準物件：`8ec0462658381bd1606d3f9db14ffc67df6a2a43`
-- `SKILL.md`：新檔行 3, 26, 116；marker 在 26, 116
+- `SKILL.md`：新檔行 3, 5–8, 29, 111–117, 126；marker 在 5, 29, 111, 126
 - marker 對帳：逐檔通過（有分歧的檔都有 marker，有 marker 的檔都有分歧）。
 
