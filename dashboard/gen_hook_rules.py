@@ -66,7 +66,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["IDX-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "PR-1", "ENC-1",
+ORDER = ["IDX-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "WIN-1", "PR-1", "ENC-1",
          "HTML-1", "UI-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
@@ -141,6 +141,13 @@ DESC = {
                "回測召回 <b>37/37</b>、誤報 <b>0</b>。"
                "去重刻意<b>等 event log 出現 deliver 才標記已通報</b>——實測 86 筆 Stop 級 WARN 有 "
                "23 筆（27%）從沒到達模型，而「判定了」與「送達了」在 report.py 上分不出來。",
+    },
+    "WIN-1": {
+        "badge": "8/28 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "why": "本回合合計 input 越 140k／160k／180k 出 WARN（掃當則 transcript 最後一則 usage）",
+        "tip": "合計 input ＝ input＋快取讀取＋快取寫入（官方 total input tokens，三欄都計入視窗）。"
+               "140k／160k 同一則各講一次；180k 每換一輪再講，同一 prompt_id 不重複。"
+               "只陳述不擋；Stop exit 2 會綁架當前意圖。8/28 轉正。",
     },
     "BUDGET-1": {
         "badge": "7/31 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",

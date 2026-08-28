@@ -185,6 +185,14 @@ REGISTRY = [
         "tools": None,
     },
     {
+        # 只掛 Stop：要提醒的是主 session 這一則快滿了。Subagent 自己的
+        # transcript 不是使用者看到的視窗；掛 SubagentStop 會對每個角色各算一次。
+        "id": "WIN-1",
+        "module": "win1_total_input",
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         "id": "DISP-1",
         "module": "disp1_dispatch_discipline",
         # 同樣只掛 Stop。這條的理由比前面幾條更硬：規則本身就是「該把工作派出去」，

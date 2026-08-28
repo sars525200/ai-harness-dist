@@ -1,7 +1,7 @@
 ---
 name: chat-handoff
 display_name: 換則交接
-description: 把當則對話寫成交接檔並給出新對話可貼的開場白。當 user 說「交接」「換則」「這則太長」「交接給新對話」「/clear 前先交接」，或 Context Usage 對話歷史已經佔大半時使用。本 skill 不能執行 /clear。收工封存（補規範、待驗、commit）不是這支。
+description: 把當則對話寫成交接檔並給出新對話可貼的開場白。當 user 說「交接」「換則」「這則太長」「交接給新對話」「/clear 前先交接」，或 Context Usage 對話歷史已經佔大半、或本回合合計 input 約 140k／160k／180k、已過 180k、WIN-1 提醒時使用。本 skill 不能執行 /clear。收工封存（補規範、待驗、commit）不是這支。
 type: 流程
 ---
 

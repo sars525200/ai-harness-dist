@@ -41,6 +41,9 @@
     },
     "CTX-1": {
       "shadow": false
+    },
+    "WIN-1": {
+      "shadow": false
     }
   }
 }
