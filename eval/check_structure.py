@@ -48,6 +48,10 @@ SKILL_DIRS = [str(p) for p in _cfg.SKILL_DIRS]
 MEMORY_SOURCES = [str(p) for p in _cfg.MEMORY_SOURCES]
 MEMORY_DIR = str(_cfg.PROJECT_MEMORY_DIR)                        # wikilink 解析用
 BASELINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "baseline.json")
+# 棘輪狀態：**放 state/（gitignored）不放 baseline.json（版控裡）**——
+# 寫進版控的話，每跑一次檢查就弄髒一次工作樹。
+WARNED_STATE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "state", "skill_token_warned.json")
 
 TOKEN_SURGE_RATIO = 1.50   # Q1：較上次量測突增 50% 即警示
 DUP_FRAGMENT_MIN = 25      # 重複偵測：只看 >=25 字的片段，短句是自然撞句
@@ -204,6 +208,7 @@ class Result:
 def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
     r = Result()
     corpus_index = build_corpus_index(corpus)
+    _warned_state = _load_warned()      # 棘輪狀態；讀不到就是空的＝退回「每次都報」
     for sk in skills:
         name, text = sk["name"], sk["text"]
         fm, body = parse_frontmatter(text)
@@ -289,14 +294,30 @@ def check_all(skills: list[dict], corpus: str, baseline: dict) -> Result:
                   "沒有「## 邊界」節——這支 skill 不得做的事沒有寫下來")
 
         # ④ token 趨勢（Q1：不設硬上限）
+        #
+        # **棘輪**：比的是「基準」與「上次為這支報過的值」取大者。
+        # 沒有這一段的話，一旦跨線就每次都報 —— 而 `--update-baseline` 是純手動、
+        # 沒有任何流程會跑它（2026-08-28 查證：只有計畫書提到，收工與 hook 都沒接）
+        # ⇒ 基準必然過期 ⇒ 對**有在維護**的 skill 長期報警，然後整張報表被無視。
+        # 2026-08-28 實測：baseline 停在 08-16，audit +110%／context-health +69%／
+        # suggestion-inbox +145% 三支同時紅。
+        #
+        # ⚠ 這跟計畫書 §記的是**同一個根因的兩種相反失效**：那邊記的是「無基準的 7 支
+        # 只寫 NOT COVERED 不是 WARN ⇒ 對它們等於沒在跑」，這裡是「有基準但過期
+        # ⇒ 對它們永遠在叫」。兩者都源自「沒有人在更新基準」。
+        #
+        # 形狀取自 hooks/rules/ctx1_resident_budget.py 的棘輪（同日用 309 個歷史版本
+        # 回測過：少了棘輪 218 次改動報 215 次，加了之後 15 次）。
         tok = approx_tokens(text)
         sk["tokens"] = tok
         prev = (baseline.get(name) or {}).get("tokens")
         if prev:
-            ratio = tok / prev if prev else 1
+            ref = max(prev, _warned_state.get(name) or 0)
+            ratio = tok / ref if ref else 1
             if ratio >= TOKEN_SURGE_RATIO:
                 r.add(name, "token 趨勢", "WARN",
-                      f"{prev} → {tok}（+{ratio*100-100:.0f}%，超過 {int(TOKEN_SURGE_RATIO*100-100)}% 門檻）")
+                      f"{ref} → {tok}（+{ratio*100-100:.0f}%，超過 {int(TOKEN_SURGE_RATIO*100-100)}% 門檻）")
+                sk["_warned_at"] = tok      # 由 --update-baseline 之外的路徑寫回，見 save_baseline
         else:
             r.not_covered.append(f"{name}：無 baseline，本次僅記錄 {tok} tok，下次才比得出趨勢")
 
@@ -469,8 +490,50 @@ def main() -> int:
         with open(BASELINE, "w", encoding="utf-8") as fh:
             json.dump(newbase, fh, ensure_ascii=False, indent=2)
         print(f"  baseline 已更新（{len(newbase)} 支）→ {BASELINE}")
+    else:
+        _record_warned(skills)
 
     return 1 if r.fails else 0
+
+
+def _load_warned() -> dict:
+    try:
+        with open(WARNED_STATE, encoding="utf-8-sig") as fh:
+            return json.load(fh) or {}
+    except Exception:                                          # noqa: BLE001
+        return {}
+
+
+def _record_warned(skills: list) -> None:
+    """把這次報過警的值記進 `state/`（棘輪的狀態）。
+
+    ⚠ **這是這支唯讀檢查器唯一的副作用**，刻意保留，理由是不寫就沒有棘輪：
+    `--update-baseline` 純手動、沒有任何流程會跑它 ⇒ 基準必然過期 ⇒ 有在維護的
+    skill 長期紅 ⇒ 整張報表被無視（2026-08-28 實測三支同時紅）。
+
+    副作用刻意收窄到最小：
+      - **寫 `state/`（gitignored）不是 `eval/baseline.json`（版控裡）**。
+        第一版寫進 baseline，結果是「每跑一次檢查就產生一筆 git diff」——
+        把一支唯讀工具變成會弄髒工作樹的東西，而那正是別人 commit 時會誤收的形狀。
+      - 基準本身仍然只有 `--update-baseline` 能動——「接受現況」還是人的決定。
+      - **只在真的報警時寫**，沒報警的一支都不碰。
+      - 寫失敗只是退回「每次都報」，不讓檢查掛掉。
+    """
+    warned = {s["name"]: s["_warned_at"] for s in skills if s.get("_warned_at")}
+    if not warned:
+        return
+    try:
+        merged = _load_warned()
+        merged.update(warned)
+        os.makedirs(os.path.dirname(WARNED_STATE), exist_ok=True)
+        tmp = WARNED_STATE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(merged, fh, ensure_ascii=False, indent=2)
+        os.replace(tmp, WARNED_STATE)
+        print(f"  （已記下這 {len(warned)} 支的當前值，要再長 "
+              f"{int(TOKEN_SURGE_RATIO*100-100)}% 才會再報）")
+    except Exception:                                          # noqa: BLE001
+        pass
 
 
 if __name__ == "__main__":
