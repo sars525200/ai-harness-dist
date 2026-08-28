@@ -533,48 +533,49 @@ def main() -> int:
             print(f"  {'PASS' if not ex_failed else 'FAIL'}  {label}"
                   f"（{ex_passed}/{ex_passed + len(ex_failed)}）")
 
-        # 看板結構驗證走真實子進程：它本來就是獨立可執行腳本（變異測試也是這樣呼叫它），
+        # 這幾支走真實子進程：它們本來就是獨立可執行腳本（變異測試也是這樣呼叫），
         # 不為了整合而改造一個已經在用的介面 —— 那種「為測試而改被測對象」的改動
         # 本身就是風險。這裡只收 pass/fail 一個結果。
-        import subprocess  # noqa: PLC0415
-        dash_test = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "test_dashboard_structure.py")
-        if os.path.exists(dash_test):
-            r = subprocess.run([sys.executable, dash_test], capture_output=True,
-                               text=True, encoding="utf-8")
-            if r.returncode == 0:
-                unit_passed += 1
-                print("  PASS  看板結構（頁籤↔面板配對／標籤平衡）")
-            else:
-                detail = "; ".join(
-                    ln.strip()[2:] for ln in (r.stdout or "").splitlines()
-                    if ln.strip().startswith("- ")
-                ) or f"exit {r.returncode}"
-                failed.append(("看板結構", detail))
-                unit_failed.append("看板結構")
-                print("  FAIL  看板結構（頁籤↔面板配對／標籤平衡）")
-
-        # skill 來歷與文件引用。同樣走子進程（獨立可執行腳本），理由同上。
+        #
         # **為什麼接在這裡而不是留在 `/audit` 的清單**：清單只是「要人記得」的
         # 更好版本，而 `HARNESS_PROGRESS.md` 停在 7/28 兩天就是那樣來的。
-        # 這兩件事過期的症狀都是「表還在、看起來完整」—— 缺口長得跟已驗證一樣。
-        prov_test = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "test_skill_provenance.py")
-        if os.path.exists(prov_test):
-            r = subprocess.run([sys.executable, "-X", "utf8", prov_test],
+        # 這幾件事過期的症狀都是「表還在、看起來完整」—— 缺口長得跟已驗證一樣。
+        #
+        # ⚠ **獨立腳本沒接進來就等於沒裝**：2026-08-28 新增的 D19 與 EOL-1 兩支
+        #   上線當天就是這個狀態（寫好了、驗過了、沒有任何流程會跑）。
+        import subprocess  # noqa: PLC0415
+        _HERE = os.path.dirname(os.path.abspath(__file__))
+        _EXTRA_SCRIPTS = [
+            ("看板結構（頁籤↔面板配對／標籤平衡）", "test_dashboard_structure.py"),
+            ("skill 來歷與文件引用", "test_skill_provenance.py"),
+            ("D19 棘輪（讀外部基準比大小的閘門要有抑制）", "test_d19_ratchet.py"),
+            ("EOL-1 純行尾變更", "test_eol1.py"),
+        ]
+        for label, fname in _EXTRA_SCRIPTS:
+            path = os.path.join(_HERE, fname)
+            if not os.path.exists(path):
+                # 檔不在就明講，不要靜靜跳過 —— 那正是「看起來全綠」的來源。
+                failed.append((label, f"找不到 {fname} —— 不當成通過"))
+                unit_failed.append(label)
+                print(f"  FAIL  {label}（腳本不存在）")
+                continue
+            r = subprocess.run([sys.executable, "-X", "utf8", path],
                                capture_output=True, text=True, encoding="utf-8",
                                errors="replace")
             if r.returncode == 0:
                 unit_passed += 1
-                print("  PASS  skill 來歷與文件引用")
+                print(f"  PASS  {label}")
             else:
                 detail = "; ".join(
                     ln.strip()[2:] for ln in (r.stdout or "").splitlines()
                     if ln.strip().startswith("- ")
+                ) or "; ".join(
+                    ln.strip() for ln in (r.stdout or "").splitlines()
+                    if ln.strip().startswith("FAIL")
                 ) or f"exit {r.returncode}"
-                failed.append(("skill 來歷與文件引用", detail))
-                unit_failed.append("skill 來歷與文件引用")
-                print("  FAIL  skill 來歷與文件引用")
+                failed.append((label, detail))
+                unit_failed.append(label)
+                print(f"  FAIL  {label}")
 
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
