@@ -34,6 +34,17 @@ import subprocess
 import sys
 import time
 
+# ⚠ 這支會被 PowerShell 呼叫（`bootstrap.ps1`），而 PowerShell 的 console 是
+#   OEM codepage：不 reconfigure 的話，光是印一個「✓」就 UnicodeEncodeError 整支掛掉。
+#   2026-08-28 實測踩到——`bootstrap.ps1` 檔頭本來就寫著「ASCII-only output on purpose
+#   (avoids cp950/BOM issues)」，把它換成會輸出中文的工具正好踩回同一個坑。
+#   包 try：stdout 被替換成不支援 reconfigure 的物件時（測試攔輸出）不該讓整支掛掉。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:                                          # noqa: BLE001,S110
+        pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 HARNESS = os.path.dirname(HERE)
 MIRROR_NAME = ".aimemory"
