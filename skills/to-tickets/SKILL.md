@@ -5,7 +5,7 @@ description: Break a plan, spec, or the current conversation into a set of trace
 # LOCAL EDIT (2026-08-28): upstream shipped `disable-model-invocation: true`, which hid this
 # skill from the model's tool-visible list entirely. Unlocked by the repo owner alongside
 # `wayfinder`, its counterpart, so a charted map can be sliced without a human relaying the
-# handoff. Self-invocation threshold is in the LOCAL EDIT note below `# To Tickets`.
+# handoff. Self-invocation threshold is in the note below `# To Tickets`.
 ---
 
 # To Tickets

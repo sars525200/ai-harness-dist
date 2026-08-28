@@ -5,7 +5,7 @@ description: Plan a huge chunk of work (more than one agent session can hold) as
 # LOCAL EDIT (2026-08-28): upstream shipped `disable-model-invocation: true`, which hid this
 # skill from the model's tool-visible list entirely. Unlocked by the repo owner so M-scale work
 # no longer depends on a human remembering to type /wayfinder. Self-invocation threshold is in
-# the LOCAL EDIT note under `## Invocation`.
+# the note under `## Invocation`.
 ---
 
 A loose idea has arrived, too big for one agent session, and wrapped in fog: the way from here to the **destination** isn't visible yet. Wayfinding is about finding that way, not charging at the destination. This skill charts the way as a **shared map** on the repo's issue tracker, then works its **decision tickets** (questions whose resolution is a decision, not slices of a build to execute) one at a time until the route is clear.
