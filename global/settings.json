@@ -1,5 +1,5 @@
 {
-  "outputStyle": "PM-Challenger",
+  "cleanupPeriodDays": 180,
   "permissions": {
     "allow": [
       "Bash(ls:*)",
@@ -162,11 +162,6 @@
       "D:\\.ai-harness"
     ]
   },
-  "effortLevel": "xhigh",
-  "theme": "dark",
-  "switchModelsOnFlag": true,
-  "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true,
   "hooks": {
     "SessionEnd": [
       {
@@ -242,5 +237,11 @@
       }
     ]
   },
-  "cleanupPeriodDays": 180
+  "outputStyle": "PM-Challenger",
+  "effortLevel": "high",
+  "theme": "dark",
+  "switchModelsOnFlag": true,
+  "remoteControlAtStartup": true,
+  "agentPushNotifEnabled": true,
+  "model": "sonnet"
 }
