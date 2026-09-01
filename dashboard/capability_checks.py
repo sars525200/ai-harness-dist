@@ -165,9 +165,9 @@ def _p_anti_bloat():
 
 
 def _p_rule_index():
-    md = _read(CLAUDE_MD)
-    has = "§8" in md and "記憶檔" in md
-    return has, "§8 速查表把細節指向 topic 檔" if has else "無規則索引層"
+    hits = _rule_hits(lambda h: "§8" in h and "記憶檔" in h)
+    return bool(hits), (("§8 速查表把細節指向 topic 檔" + _src(hits))
+                         if hits else "無規則索引層")
 
 
 # ── ② Tools ──────────────────────────────────────────────────────────────
@@ -933,10 +933,10 @@ def _p_red_first():
 
 
 def _p_selftest_discipline():
-    md = _read(CLAUDE_MD)
-    has = "首跑" in md and ("預設它自己有問題" in md or "先證明它會叫" in md)
-    return has, ("硬規則：新建 eval 首跑預設它自己有問題，先證明它會叫再信全綠"
-                 if has else "無 self-test 紀律")
+    hits = _rule_hits(lambda h: "首跑" in h
+                      and ("預設它自己有問題" in h or "先證明它會叫" in h))
+    return bool(hits), (("硬規則：新建 eval 首跑預設它自己有問題，先證明它會叫再信全綠"
+                         + _src(hits)) if hits else "無 self-test 紀律")
 
 
 def _p_deploy_verify():
@@ -984,10 +984,9 @@ def _p_dry_run_gate():
 
 
 def _p_plan_first():
-    md = _read(CLAUDE_MD)
-    has = "計畫" in md and "先行" in md
-    return has, ("大型工作計畫先行→逐項用選擇題討論→同意才執行（§2 硬規則）"
-                 if has else "無計畫先行紀律")
+    hits = _rule_hits(lambda h: "計畫先行" in h)
+    return bool(hits), (("大型工作計畫先行→逐項用選擇題討論→同意才執行（§2 硬規則）"
+                         + _src(hits)) if hits else "無計畫先行紀律")
 
 
 def _p_bypass_escape():
