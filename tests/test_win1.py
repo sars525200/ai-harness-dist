@@ -70,7 +70,7 @@ def _write_transcript(path, input_tokens, cache_read=0, cache_create=0,
                 "message": {
                     "model": model,
                     "content": [{"type": "text", "text":
-                                 "階段 Execute | 規模 " + scale + " | 進度 40%"}],
+                                 "階段 Execute ｜ 規模 " + scale + " ｜ 進度 40%"}],
                 },
             }
             fh.write(json.dumps(decl, ensure_ascii=False) + chr(10))
@@ -278,6 +278,33 @@ def _case_scale_latest_wins(fails):
             fails.append("轉成規模 S 之後仍然閉嘴 —— 取的不是最後一次宣告")
 
 
+def _case_prose_is_not_a_declaration(fails):
+    """正文寫「規模 M」不算宣告 —— 2026-09-02 真機第一次觸發就踩到的那個坑。
+
+    整則 assistant 訊息在 transcript 裡是**同一行 JSON**。當時的正則只認
+    `規模 M` 三個字，於是一段討論「規模 M」的正文蓋掉了開頭那句「規模 S」，
+    低兩檔被**靜默**略過。宣告必須挨著分隔號才算數。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "t.jsonl")
+        m = _load(tmp)
+        _write_transcript(path, m.TIER_REMIND + 1_000, scale="S")
+        mixed = {"type": "assistant", "message": {
+            "model": "claude-opus-5",
+            "content": [{"type": "text", "text":
+                         "階段 Review ｜ 規模 S ｜ 進度 100%"
+                         + chr(10) + chr(10)
+                         + "大型計劃略過：最近一次自我宣告是規模 M 就閉嘴。"
+                         + "「規模 M 略過低兩檔」那條轉紅了。"}]}}
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(mixed, ensure_ascii=False) + chr(10))
+        v = m.check(_ctx(path, prompt="p1"))
+        if v.decision != WARN:
+            fails.append("正文提到「規模 M」就被當成宣告 —— 低兩檔被靜默略過")
+        elif "略過" in (v.message or ""):
+            fails.append(f"訊息還在說略過：{(v.message or '')[:80]}")
+
+
 def _case_missing_usage_allow(fails):
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "t.jsonl")
@@ -335,6 +362,7 @@ def run():
         ("規模 M 略過低兩檔、最高檔照送", _case_large_plan_skips_low_tiers),
         ("規模 S／L 不受影響", _case_scale_s_still_warns),
         ("取最後一次宣告的規模", _case_scale_latest_wins),
+        ("正文提到規模 M 不算宣告", _case_prose_is_not_a_declaration),
         ("提醒線沒投遞成功就每輪再講", _case_140_repeats_until_delivered),
         ("提醒線投遞成功後才閉嘴", _case_140_silent_after_delivery),
         ("便箋契約：狀態型＋鍵是檔位", _case_note_contract),

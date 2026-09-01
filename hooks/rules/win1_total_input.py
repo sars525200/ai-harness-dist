@@ -118,7 +118,11 @@ def _key(threshold: int) -> str:
     return str(threshold // 1000)
 
 
-_SCALE_RE = re.compile(r"規模\s*([LSM])")
+# 宣告的形狀是「階段 X ｜ 規模 X ｜ 進度 X%」——**必須挨著全形分隔號**。
+# 只認 `規模 M` 三個字會把正文誤判成宣告：整則 assistant 訊息在 transcript 裡
+# 是同一行 JSON，一段討論「規模 M」的正文會蓋掉開頭那句「規模 S」的宣告
+# （2026-09-02 真機第一次觸發就踩到，而且是**靜默**降級成只剩最高檔）。
+_SCALE_RE = re.compile(r"[｜|]\s*規模\s*([LSM])|規模\s*([LSM])\s*[｜|]")
 
 
 def _is_large_plan(path: str) -> bool:
@@ -135,7 +139,7 @@ def _is_large_plan(path: str) -> bool:
     for raw in reversed(lines):
         if "規模" not in raw:
             continue
-        hits = _SCALE_RE.findall(raw)
+        hits = [g for pair in _SCALE_RE.findall(raw) for g in pair if g]
         if hits:
             return hits[-1] == "M"
     return False
