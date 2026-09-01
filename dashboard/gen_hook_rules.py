@@ -67,7 +67,7 @@ BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
 ORDER = ["IDX-1", "EOL-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "WIN-1",
-         "PR-1", "ENC-1", "HTML-1", "UI-1", "CHK-1", "CTX-1"]
+         "PR-1", "ENC-1", "HTML-1", "EXP-1", "UI-1", "CHK-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -178,6 +178,13 @@ DESC = {
         "why": "寫入後讀磁碟實際位元組：NUL byte／BOM／行尾（結果而非意圖當判準）",
         "tip": "寫入之後讀磁碟實際位元組：NUL byte（BLOCK）／BOM 方向／平台三大資產的行尾。"
                "整套第一條用「結果」而非「意圖」當判準的規則——這些東西 tool_input 的字串裡根本不存在",
+    },
+    "EXP-1": {
+        "badge": "8/28 新·enforce", "on": "<b>PreToolUse</b> Write/Edit 新建 .html",
+        "why": "新建且長得像說明頁（有 explainer 的 --canvas:），這則還沒點「需要／確認」·BLOCK",
+        "tip": "預設不做說明頁。人點「需要」或「確認」、或明文要圖解才寫。"
+               "既有檔與沒有 explainer 色票的新頁不 applies，避免誤擋產品頁。"
+               "讀不到 transcript 放行。攔不住 Bash／Python 寫檔，也攔不住非 Write 的 Artifact 工具。",
     },
     "HTML-1": {
         "badge": "8/16 新·enforce", "on": "<b>PostToolUse</b> Write/Edit/MultiEdit",

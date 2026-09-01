@@ -118,6 +118,14 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # EXP-1：擋「還沒問就產說明頁」。必須 Pre + BLOCK——Post 時檔已落地，
+        # WARN 下一輪才到。既有 html／沒有 explainer 色票的新頁不 applies。
+        "id": "EXP-1",
+        "module": "exp1_explainer_consent",
+        "events": {"PreToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
+    },
+    {
         # ENC-1 是目前唯一掛 PostToolUse 的規則。理由：它驗的是「寫進去之後
         # 磁碟上實際長什麼樣」（NUL／BOM／行尾），那些東西 PreToolUse 拿到的
         # 字串裡根本不存在。這也是整套 harness 第一次用「結果」而非「意圖」當判準。

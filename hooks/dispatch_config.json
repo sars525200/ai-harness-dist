@@ -50,6 +50,9 @@
     },
     "EOL-1": {
       "shadow": false
+    },
+    "EXP-1": {
+      "shadow": false
     }
   }
 }

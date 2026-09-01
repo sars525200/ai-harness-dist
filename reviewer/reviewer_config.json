@@ -2,5 +2,5 @@
   "tool": "cursor-cli",
   "model": "cursor-grok-4.6-high",
   "effort": "high",
-  "note": "由 D:\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；/adversarial-review 每次執行時讀這個檔。手改也可以，改完存檔即生效（skill 是每次重讀，不快取）。"
+  "note": "2026-08-26 user：改回 Grok 4.6 High（跨模型族）。額度滿的是 Cursor 的 **Opus**，Grok 那條路同日實測跑過五輪都正常，不受影響。同模型族互審（claude-code/opus 對 Opus 作者）在 SQL 子查詢、非同步競態、事件順序這類問題上最容易一起漏掉。"
 }
