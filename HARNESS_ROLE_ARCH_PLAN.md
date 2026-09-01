@@ -78,7 +78,7 @@
 | 2a | 建查詢員（`tools: Read, Grep, Glob`） | ✅ **完成並實測上線 2026-07-29** |
 | 2b | 建雙改檢核員（給 Bash，用 agent-scoped `hooks:` ＋專屬唯讀閘門收窄） | ✅ **完成並實測上線 2026-07-29** |
 | 2c | 接 `SubagentStop`（PR-1 `applies()` 改讀 `agent_transcript_path`） | ✅ **完成並實測收到事件 2026-07-29** |
-| 2e | 存放位置改 project 層＋修 hook 輸出編碼（開場驗證衍生） | ✅ **完成 2026-07-29 晚**（見 §4.3） |
+| 2e | 存放位置改 project 層＋修 hook 輸出編碼（開場驗證衍生） | ✅ **完成 2026-07-29 晚**（見 §4.3）。**⚠ 現況已反轉**：後續操作把存放位置改回全域層＋junction，本行敘述的「project 層」已跟現況脫鉤，實況見 `HARNESS_PROGRESS.md` §「always-loaded」表（`~\.claude\agents` junction 回 `<harness>\agents\`）——角色本身仍正常接線、能派工，只是位置敘述過期 |
 | 2d | 收斂 `settings.local.json` 的 allow 白名單（187 條），改由角色 `tools:` 承擔 | ✅ **完成 2026-07-29 晚 — 187 → 115**（方案 A，見 §4.4） |
 
 > **✅ Phase 2 的四項開場驗證已全數通過**（清單見 §4.2 末，結果見 §4.3）。
@@ -467,6 +467,13 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
 `git clone` 就有）。harness repo 的 `agents/` 與 `scripts/bootstrap-agents.ps1` 一併撤除
 ——junction 這條路不再需要，多一支 bootstrap 就多一個會漂移的地方。
 gate 腳本仍留 harness repo（它與 `dispatch.py` 同屬共用層），角色檔以絕對路徑引用它。
+
+> **⚠ 2026-09-01 稽核發現：這個處置後來被反向操作覆蓋。** 現況角色檔實體回到
+> `<harness>\agents\`，`~\.claude\agents`（全域家目錄層）用 junction 接過去
+> （`HARNESS_PROGRESS.md` 的 always-loaded 表有記，但沒有回頭更新這裡或說明
+> 為什麼又改回去）。角色仍正常載入、能 spawn，不是接線斷了，是這段敘述的
+> 「最終狀態」已經跟現況不符——之後要再動存放位置，先以 `HARNESS_PROGRESS.md`
+> 現況為準，不要照這段的舊結論去改。
 
 > **推翻 §4.2 的存放決策**：那裡寫「user 定案全域層……角色與 gate 是一個單位，
 > 只版控一半會靜默漂移」。顧慮成立，但前提錯了——全域層在實際工作環境根本不會被載入，
