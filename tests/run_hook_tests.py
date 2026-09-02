@@ -368,6 +368,18 @@ def main() -> int:
         print(f"  {'PASS' if not tv_failed else 'FAIL'}  待辦解析可見性"
               f"（{tv_passed}/{tv_passed + len(tv_failed)}）")
 
+        # 常駐層預算的門檻與棘輪（2026-09-03）。守的是**產生器那條寫入路徑**：
+        # CTX-1 只掛改檔工具，而全域 CLAUDE.md 是 tools/gen_rule_hub.py 寫的，
+        # 實測 8/28→9/03 長了 2,488 bytes 沒有任何東西叫過。
+        import test_resident_budget
+        rbg_passed, rbg_failed = test_resident_budget.run()
+        unit_passed += rbg_passed
+        for detail in rbg_failed:
+            failed.append(("常駐層預算", detail))
+        unit_failed.extend(rbg_failed)
+        print(f"  {'PASS' if not rbg_failed else 'FAIL'}  常駐層預算"
+              f"（{rbg_passed}/{rbg_passed + len(rbg_failed)}）")
+
         # marker 的扣除範圍與「驗證方式必須在 hash 內」（覆核 Round 6-H1／M6）。
         # 這兩條守的是**我自己在票 11 §一引入的回歸**：HISTORY 併進 content_hash 時
         # 扣的是整行，於是「行尾掛 marker」變成零成本的改內容不重簽路徑。

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -252,7 +253,62 @@ def cmd_check() -> int:
     return 0
 
 
-def cmd_generate() -> int:
+BUDGET_PY = HARNESS / "rulefile" / "resident_budget.py"
+BUDGET_STATE = HARNESS / "rulefile" / "state" / "genhub_budget_state.json"
+
+
+def _load_budget():
+    """載入常駐層預算判準。用檔案位置載入、不進 `sys.path`（同本檔載 gen_layers 的做法）。"""
+    if not BUDGET_PY.exists():
+        return None
+    spec = importlib.util.spec_from_file_location("_resident_budget", str(BUDGET_PY))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _budget_state() -> dict:
+    try:
+        return json.loads(BUDGET_STATE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _remember_budget(key: str, size: int) -> None:
+    """棘輪：記下叫過的大小，同一個大小不會叫第二次。寫失敗就算了——
+    最壞情況是下次再叫一次，不是漏叫。"""
+    st = _budget_state()
+    st[key] = size
+    try:
+        BUDGET_STATE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = BUDGET_STATE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(st, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, BUDGET_STATE)
+    except OSError:
+        pass
+
+
+def check_budget(out_c: str) -> tuple[list[str], bool]:
+    """回 (訊息 list, 是否超標)。
+
+    **「判不出來」要出聲但不算超標** —— 兩者分開回，是因為把它們混在一起會
+    同時犯兩個錯：靜默通過（不知道當成沒事），或在沒有 harness 的沙箱裡
+    無條件失敗（`tests/run_hook_tests.py` 的產生器測試就是這樣被咬的）。
+    """
+    rb = _load_budget()
+    if rb is None:
+        return (["⚠ 常駐層預算：找不到 rulefile/resident_budget.py，這次沒有量到。"], False)
+    size = len(out_c.encode("utf-8"))
+    v = rb.assess(size, rb.baseline_bytes(), _budget_state().get(rb.GLOBAL_KEY, 0))
+    if not v["known"]:
+        return (["⚠ 常駐層預算：快照裡沒有全域 CLAUDE.md 那一筆，這次判不出來。"], False)
+    if not v["over"]:
+        return ([], False)
+    _remember_budget(rb.GLOBAL_KEY, size)
+    return ([rb.message(v, "global/CLAUDE.md")], True)
+
+
+def cmd_generate(allow_growth: bool = False) -> int:
     before = collect_unauth()
     modules = load_modules()
     out_c = render(CLAUDE_KEEP, modules)
@@ -278,16 +334,26 @@ def cmd_generate() -> int:
     print(f"已寫 {OUT_CLAUDE}")
     print(f"已寫 {OUT_CURSOR}")
     print(f"正規化雜湊 CLAUDE {sha256_norm(out_c)[:12]} CURSOR {sha256_norm(out_u)[:12]}")
+    budget, over = check_budget(out_c)
+    for m in budget:
+        print(m)
+    if over:
+        if not allow_growth:
+            # 大聲失敗但**檔已經寫了**：擋掉會逼人改用手動寫檔繞過去，那條路更沒人看得到。
+            print("（這次成長是必要的就加 --allow-growth；理由要寫進 commit 訊息。）")
+            return 1
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="規則中繼產生器")
     ap.add_argument("--check", action="store_true", help="只比對不寫")
+    ap.add_argument("--allow-growth", action="store_true",
+                    help="常駐層超出預算時仍回 0（檔本來就會寫；這個旗標只關掉 exit 1）")
     a = ap.parse_args()
     if a.check:
         return cmd_check()
-    return cmd_generate()
+    return cmd_generate(allow_growth=a.allow_growth)
 
 
 if __name__ == "__main__":
