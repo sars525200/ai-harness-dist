@@ -154,14 +154,18 @@
       "C:\\Users\\<USER>\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup",
       "C:\\itportal-redirect",
       "C:\\Users\\<USER>\\.claude\\projects\\d--IT-department\\memory",
-      "D:\\IT-department\\.aimemory",
-      "D:\\.ai-harness\\dashboard",
-      "D:\\.ai-harness\\hooks\\rules",
-      "D:\\.ai-harness\\tests",
-      "D:\\AI-Projects\\codebase-health-dashboard",
-      "D:\\.ai-harness"
+      "C:\\Users\\<USER>\\.claude\\projects\\D--Patrick-AI-IT-department\\memory",
+      "C:\\Users\\<USER>\\.claude\\projects\\D--Patrick-AI-MIS-install\\memory",
+      "C:\\Users\\<USER>\\.claude\\projects\\D--Patrick-AI--ai-harness\\memory",
+      "D:\\Patrick-AI\\IT-department\\.aimemory",
+      "D:\\Patrick-AI\\.ai-harness\\dashboard",
+      "D:\\Patrick-AI\\.ai-harness\\hooks\\rules",
+      "D:\\Patrick-AI\\.ai-harness\\tests",
+      "D:\\Patrick-AI\\MIS-install\\codebase-health-dashboard",
+      "D:\\Patrick-AI\\.ai-harness"
     ]
   },
+  "model": "opus[1m]",
   "hooks": {
     "SessionEnd": [
       {
@@ -242,6 +246,5 @@
   "theme": "dark",
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
-  "agentPushNotifEnabled": true,
-  "model": "opus"
+  "agentPushNotifEnabled": true
 }
