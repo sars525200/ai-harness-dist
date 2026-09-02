@@ -17,7 +17,8 @@ audience: claude
 #      而 Cursor 是這台機器唯一跨模型族的審查者。
 #
 # ⚠ 程式碼 `hooks/session_title.py` **沒有刪**：`session_archive.py` 仍 import 它的
-#   `compose_idle`／`project_name`／`cloud_request` 等函式做封存時的雲端 idle 名。
+#   `compose_closed`／`compose_idle`／`project_name`／`cloud_request` 等函式，
+#   做 `/clear` 之後的雲端閒置名。
 #   退役的是**三個 hook 掛載**，不是那支檔案。細節見它自己的檔頭。
 # ⚠ Cursor 端（`22-title-cursor.md`）**不退役**：那邊是模型主動呼叫 `rename_chat`，
 #   沒有 hook 對抗問題，而且 Cursor 平台端不提供程式化改名，那是唯一的路。
@@ -30,3 +31,4 @@ audience: claude
 - **判定順序不能換**：收工／封存／交接／收尾／handoff →【收尾】；ASK／VERIFY 且修改檔案為無或待定 →【討論】；其餘 →【任務】。進度寫得出來才加。
 - **自我宣告不會改標題**：`任務 舊名→新名` 那條只餵成本歸因看板（`WORKFLOW_5STAGE_PLAN.md` §12.3），2026-08-28 起與側邊欄無關。
 - **收尾用原名**：抽不到原名才退回宣告字面，不要寫成「收工封存」。
+- **【閒置】不是給你用的**：`/clear` 之後封存程式會把雲端那一列改成`【閒置】原任務名`（2026-09-03 起）。名字取那則對話自己的檔尾，抽不到才退回 `專案名｜等待任務`。**模型只寫【任務】【討論】【收尾】三種**；看到【閒置】表示那則已經結束，不要以為是平台快取名而去蓋掉它。

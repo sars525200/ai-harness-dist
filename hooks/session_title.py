@@ -227,6 +227,12 @@ _IDLE_MARK = "等待任務"
 #     佔位名因此永遠不會被記成「上一個任務」——沿用原本那道自然守門）
 #   - 主題放最前：側欄截尾巴，同一個專案常有好幾則對話，專案名分不出誰是誰
 _IDLE_GUESS_MARK = "【待】"
+# 對話**已經結束**（`/clear` 之後封存時）的標記（user 2026-09-03 定）。
+# 與「等待任務」分開，是因為兩者的處境相反而不只是格式不同：新視窗**還沒有**
+# 名字，已結束的對話**名字就在手邊**（它自己的最後一筆 custom-title）。
+# 標記放最前面、任務名接在後面 —— 側欄截尾巴，名字是回頭找對話的唯一線索，
+# 排在第三段等於截掉（那正是 `專案名｜等待任務｜上一個任務` 被否決的理由）。
+_CLOSED_MARK = "【閒置】"
 # 第一則 user 訊息**十之八九不是真人打的**：8/28 掃 6 則對話，4 則的第一則是
 # `<local-command-caveat>`（slash command 展開留下的）。不剝掉會生出一排
 # `【待】Caveat: The messa…`。標籤區塊整段丟、已知雜訊字樣整行跳過。
@@ -264,7 +270,7 @@ _DRIVE_PREFIX_RE = re.compile(r"^[A-Za-z]--")
 # 靠格式辨識就能認出「檔尾這一筆不是我」，據此補回自己的名字。
 # **代價講明**：user 自己 `/rename` 的名字同樣不帶【】，也會被視為 client 快取而蓋掉。
 # 這是 user 2026-08-26 選的取捨（自動命名優先），log 每次都記下被蓋掉的值。
-_OURS_RE = re.compile(r"^【(?:任務|討論|收尾|待)】")
+_OURS_RE = re.compile(r"^【(?:任務|討論|收尾|待|閒置)】")
 
 
 def is_ours(title: str) -> bool:
@@ -434,6 +440,26 @@ def compose_idle(project: str, last: str, topic: str = "") -> str:
     if last:
         parts.append(last)
     return "｜".join(parts)[:_MAX_TITLE]
+
+
+def compose_closed(last: str) -> str:
+    """對話已經結束（`/clear` 之後）時的名字：`【閒置】任務名`。
+
+    **刻意與 `compose_idle()` 分家**：合成一支的話，`last` 這個參數要同時
+    表達「上一個視窗做過什麼」與「我自己做過什麼」兩種意思，而它們的取值
+    來源完全不同（前者靠跨對話的側寫檔，後者就在自己的檔尾）。2026-09-03
+    之前正是混在一起，封存那條路才會去讀一個沒人再寫的側寫檔、永遠拿到空值。
+
+    抽不出任務名就回空字串，讓呼叫端退回 `compose_idle()`。落在這裡的有三種：
+    猜來的 `【待】…`（`previous_name()` 刻意不認）、平台快取名、從未命名過。
+    **不硬升格**：把一句隨手打的話變成側邊欄唯一的線索，比沒有線索更誤導。
+    """
+    if (last or "").startswith(_CLOSED_MARK):
+        return last[:_MAX_TITLE]     # 已經是閒置名 ⇒ 原樣回，重跑不會降級
+    name = previous_name(last)
+    if not name:
+        return ""
+    return (_CLOSED_MARK + name)[:_MAX_TITLE]
 
 
 def _repo_root(start: str) -> str:

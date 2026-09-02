@@ -153,6 +153,10 @@ def run():
 #   3. 反過來排太多 → 使用者已經在新殼裡開工，卻被改名成「等待任務」。
 #   4. 成功不留痕 → 票 01 卡兩小時的原因就是「推了沒有？沒有證據」。
 CSE = "cse_TESTONLY000000000000"
+# 檔尾那一筆 custom-title —— 封存改名的**唯一**名字來源（2026-09-03 起）。
+# 少了這一行，測的就只剩退路那條，`compose_closed()` 整條路不會被碰到。
+TITLED = ('{"type":"custom-title","customTitle":"【收尾】SG-093 流程說明稿｜交接",'
+          '"sessionId":"x"}') + chr(10)
 BRIDGE = ('{"type":"bridge-session","sessionId":"x","bridgeSessionId":"%s"}' % CSE) + chr(10)
 
 
@@ -239,8 +243,10 @@ def run_idle_title():
             # 崩掉的測試在變異測試裡會被誤讀成「沒紅」（2026-08-27 當場踩到）。
             url = sent[0][0] if sent else ""
             body = (sent[0][1] or b"").decode("utf-8") if sent else ""
-            case("推的是佔位名", "推錯字串等於把側邊欄改成別的東西",
-                 "Demo｜等待任務｜上一個任務" in body, True)
+            case("檔尾沒有名字就退回佔位名", "抽不到任務名時硬造一個，比沒有線索更誤導",
+                 "Demo｜等待任務" in body, True)
+            case("退路不再帶第三段", "寫那個側寫檔的 hook 掛載已退役，傳它只是假裝有值",
+                 "上一個任務" in body, False)
             case("推的是這個面板的 cse", "cse 錯＝改到別人那一列（票 06 備援踩的坑）",
                  CSE in url, True)
             case("成功也留痕", "只在失敗留痕＝票 01 卡兩小時的『推了沒有？沒有證據』",
@@ -250,7 +256,42 @@ def run_idle_title():
             # 把這裡剛設好的佔位名換成它手上的值。兩條路要嘛都寫、要嘛都不寫。
             case("這條路推完也要寫去重記錄",
                  "只有收尾那條寫的話，它下次會讀到空記錄、必推，把佔位名蓋掉",
-                 T.recall_cloud(CSE), "Demo｜等待任務｜上一個任務")
+                 T.recall_cloud(CSE), "Demo｜等待任務")
+
+            # ③c 檔尾有名字 ⇒ 推 `【閒置】任務名`（user 2026-09-03 選的格式）。
+            # 這條是這次修的本體：舊版去讀跨對話的側寫檔，於是名字**永遠**取不到，
+            # 側邊欄只剩「等待任務」把真名蓋掉。名字就在自己的檔尾。
+            _write(dest, BRIDGE + REAL + TITLED)
+            sent[:] = []
+            M._push_idle_title(path, dest)
+            tbody = (sent[0][1] or b"").decode("utf-8") if sent else ""
+            case("檔尾有名字就推【閒置】任務名", "真名被蓋成『等待任務』＝回頭找對話時沒有線索",
+                 "【閒置】SG-093 流程說明稿" in tbody, True)
+            case("任務名排在標記後面而不是第三段", "側欄截尾巴，排第三段等於截掉（user 已否決舊格式）",
+                 "等待任務" in tbody, False)
+
+            # ③d 檔尾是**猜來的**佔位名 ⇒ 不升格，退回舊格式。
+            # 硬升格會把一句隨手打的話變成側邊欄唯一的線索。
+            _write(dest, BRIDGE + REAL +
+                   ('{"type":"custom-title","customTitle":"【待】改權限判定｜Demo",'
+                    '"sessionId":"x"}') + chr(10))
+            sent[:] = []
+            M._push_idle_title(path, dest)
+            gbody = (sent[0][1] or b"").decode("utf-8") if sent else ""
+            case("猜來的【待】不升格成任務名", "那是猜的不是宣告來的，當『這則做過什麼』會騙人",
+                 ("【閒置】" in gbody, "Demo｜等待任務" in gbody), (False, True))
+
+            # ③e 檔尾是平台快取名（不是我方格式）⇒ 同樣不升格
+            _write(dest, BRIDGE + REAL +
+                   ('{"type":"custom-title","customTitle":"UI / 排版設計 (S)",'
+                    '"sessionId":"x"}') + chr(10))
+            sent[:] = []
+            M._push_idle_title(path, dest)
+            cbody = (sent[0][1] or b"").decode("utf-8") if sent else ""
+            case("平台快取名不升格成任務名", "那是 client 記憶體裡的舊值，不是這則的任務名",
+                 ("【閒置】" in cbody, "Demo｜等待任務" in cbody), (False, True))
+
+            _write(dest, BRIDGE + REAL)     # 還原給後面的 case 用
 
             # ③b 同 cse、有真實訊息，但**是這次 clear 之前的舊對話** ⇒ 不算在用
             # 真機驗收打臉出來的（2026-08-27）：cse 每個面板固定不變，所以面板任何

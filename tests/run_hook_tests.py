@@ -560,6 +560,13 @@ def main() -> int:
             ("skill 來歷與文件引用", "test_skill_provenance.py"),
             ("D19 棘輪（讀外部基準比大小的閘門要有抑制）", "test_d19_ratchet.py"),
             ("EOL-1 純行尾變更", "test_eol1.py"),
+            # 2026-09-03 補接：這支從 2026-08-26 建起就沒進過全套 runner，
+            # 於是「封存 39 條全綠」與「全套通過」是兩件互不相干的事 ——
+            # 上面那句「獨立腳本沒接進來就等於沒裝」講的正是它自己。
+            # **走 subprocess 不走 import**：它的 `_load()` 會設
+            # `CLAUDE_PROJECTS_DIR`／`CLAUDE_SESSION_TITLE_STATE_DIR` 且不還原，
+            # import 進來會把後面每一支讀那兩個變數的測試指到已刪的暫存夾。
+            ("封存與 /clear 後改名（sweep／閒置名／reason 閘門）", "test_session_archive.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)

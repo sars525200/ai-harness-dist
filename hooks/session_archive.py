@@ -336,7 +336,8 @@ def _panel_in_use(projects_dir: str, cse: str, exclude: str, since: float) -> st
 
 
 def _push_idle_title(path: str, dest: str) -> None:
-    """把 `專案名｜等待任務｜上一個任務` 推到這個面板的雲端那一列。
+    """把 `【閒置】任務名` 推到這個面板的雲端那一列（抽不出名字才退回
+    `專案名｜等待任務`）。
 
     **這裡刻意不呼叫 `session_title._push_cloud()`**，而是自己組請求：那一支
     **成功不留任何痕跡**（只在非 200／例外時 log），而票 01 卡了兩小時的正是
@@ -365,10 +366,21 @@ def _push_idle_title(path: str, dest: str) -> None:
         cse = T._bridge_session_id(src)
         if not cse:
             return                        # 純本機對話，沒有雲端那一份
-        title = T.compose_idle(T.project_name("", path),
-                               T._recall_last_task(T._project_key(path)))
+        # 名字取**這則對話自己的檔尾**，不是跨對話的側寫檔（2026-09-03 訂正）。
+        # 舊版讀 `_recall_last_task()`，而寫那個側寫檔的唯一入口是
+        # `session_title.main()` —— 那三個 hook 掛載退役之後沒人再寫，
+        # 於是第三段永遠是空的（實測：出事的專案連 `lasttask.*.txt` 都沒有）。
+        # 就算掛載裝得回去也不對：那個檔存的是「這個專案最後一則寫過的名字」，
+        # 同專案兩則對話交錯時會拿到**別則**的任務名 —— 比空白更誤導。
+        last = T._last_custom_title(src)[0]
+        title = T.compose_closed(last)
         if not title:
-            _log("idle-title 跳過：專案名取不到 %s" % os.path.basename(path)[:8])
+            # 抽不出任務名（猜來的【待】／平台快取名／從未命名）⇒ 退回舊格式。
+            # 這裡不再傳「上一個任務」：那個來源已經死了，傳它只是假裝有值。
+            title = T.compose_idle(T.project_name("", path), "")
+        if not title:
+            _log("idle-title 跳過：抽不到任務名且專案名取不到 %s (檔尾=%s)"
+                 % (os.path.basename(path)[:8], last or "-"))
             return
         # 時間基準取封存那份的 mtime（copy2 保留原檔時間）＝這個面板上一則對話的
         # 最後一次寫入。比它新的活動才算「clear 之後又開工」。留 5 秒餘裕擋時鐘誤差。
