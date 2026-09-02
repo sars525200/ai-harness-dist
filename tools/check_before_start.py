@@ -27,6 +27,13 @@ mangle 規則算出來、正式站的位置從**專案層**設定檔讀。全檔
 | 目標檔 | **我要動的那幾個檔**乾不乾淨 | 拿整個 repo 的髒污當理由不開工，或反過來完全沒看 |
 | 熱／殘留 | 髒檔是「有人正在改」還是「躺著的殘留」 | 把三天前的殘留當成有人在改而空等 |
 | 正式站 | served 版本 vs 本機 | 做完才發現本機落後，這次改動蓋掉別人推上去的 |
+| 備份鏡像 | 每個 remote 的 tip vs 本機 HEAD | **備份靜默過期**——見下 |
+
+⚠ **第五塊是 2026-09-02 被實地咬到才加的**：harness 的 `post-commit` 鏡像推送刻意
+fail-open（推不動不擋 commit），原本的補償是「收工時順手用 `git log backup/main` 看一眼」。
+實際結果是 **73 個 commit ／ 6 天完全沒備份，沒有任何訊號**——8/27 之後本機改寫過歷史，
+鏡像那顆變成孤兒，之後每次推送都被 non-fast-forward 拒絕然後被 `|| true` 吞掉。
+**靠人「順手看一眼」的檢查等於沒有檢查**，所以搬進這支必跑的工具裡。
 
 ## 判定與 exit code
 
@@ -314,6 +321,94 @@ def block_served(repo: Path, skip: bool) -> None:
         out("    => **本機落後**：有人推過了，現在動這個檔會蓋掉線上的版本")
 
 
+# ── 區塊 5：備份鏡像有沒有跟上 ──────────────────────────────────────────────
+#: 本機路徑型 remote（`C:\...`、`/srv/...`、`../x.git`）不必連網，`--no-vm` 也照查。
+_LOCAL_URL_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]|\.{1,2}[\\/])")
+
+
+def _rev(repo: Path, *args) -> str:
+    rc, txt = run(["git", "-C", str(repo)] + list(args))
+    return txt if rc == 0 else ""
+
+
+def _tip_age(repo: Path, sha: str) -> str:
+    """鏡像 tip 的 commit 時間；物件不在本機就回空字串（不要猜）。"""
+    rc, txt = run(["git", "-C", str(repo), "log", "-1", "--format=%ad", "--date=iso", sha])
+    return txt if rc == 0 else ""
+
+
+def block_mirror(repo: Path, skip_net: bool) -> bool:
+    """回「有沒有任何 remote 沒跟上」。只報告，不改變 exit code 的既有契約。"""
+    out("[4] 備份鏡像新鮮度")
+    rc, names_txt = run(["git", "-C", str(repo), "remote"])
+    names = [n for n in names_txt.splitlines() if n.strip()] if rc == 0 else []
+    if not names:
+        out("    [!!] 這個 repo 沒有任何 remote —— **完全沒有備份**")
+        return True
+
+    branch = _rev(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    head = _rev(repo, "rev-parse", "HEAD")
+    if not branch or branch == "HEAD" or not head:
+        out("    [!] 現在不在具名分支上（detached？）→ 比不了，跳過")
+        return False
+
+    #: post-commit 的失敗標記只有「下一次 commit 推成功」才會被刪掉 ⇒ **手動 push 修好之後
+    #: 它會繼續躺在那裡說謊**（2026-09-02 當場踩到）。所以真相一律以下面逐 remote 的實查為準，
+    #: 標記檔只當歷史紀錄，並在兩者不一致時明講該刪。
+    mark = repo / "state" / "mirror_sync_failed.txt"
+
+    stale = False
+    for name in names:
+        _, url = run(["git", "-C", str(repo), "remote", "get-url", name])
+        is_local = bool(_LOCAL_URL_RE.match(url))
+        if skip_net and not is_local:
+            out("    -- %-8s --no-vm → 跳過（%s）" % (name, url))
+            continue
+        rc, ls = run(["git", "-C", str(repo), "ls-remote", "--heads", name, branch],
+                     timeout=SSH_TIMEOUT)
+        if rc != 0:
+            out("    [!] %-8s 連不上或讀不到 —— **這一塊沒有答案，不要當成『已備份』**"
+                % name)
+            stale = True
+            continue
+        sha = ls.split()[0] if ls.split() else ""
+        if not sha:
+            out("    [!!] %-8s 上面沒有 %s 這個分支 —— 這個 remote 沒有備份到你現在的工作"
+                % (name, branch))
+            stale = True
+            continue
+        if sha == head:
+            out("    [OK] %-8s %s 與本機 HEAD 相同" % (name, sha[:8]))
+            continue
+
+        stale = True
+        have_obj = run(["git", "-C", str(repo), "cat-file", "-e", sha + "^{commit}"])[0] == 0
+        if not have_obj:
+            out("    [!!] %-8s tip %s **本機根本沒有這顆** —— 鏡像領先或來自別台機器，"
+                "先 fetch 再判斷，不要直接覆蓋" % (name, sha[:8]))
+            continue
+        behind = run(["git", "-C", str(repo), "rev-list", "--count", sha + "..HEAD"])[1]
+        ahead = run(["git", "-C", str(repo), "rev-list", "--count", "HEAD.." + sha])[1]
+        age = _tip_age(repo, sha)
+        is_anc = run(["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, "HEAD"])[0] == 0
+        if is_anc:
+            out("    [!!] %-8s 落後 %s 個 commit（tip %s，%s）" % (name, behind, sha[:8], age))
+            out("         推得動，只是沒推：git push %s %s" % (name, branch))
+        else:
+            out("    [!!] %-8s **已分叉**：本機領先 %s、鏡像獨有 %s（tip %s，%s）"
+                % (name, behind, ahead, sha[:8], age))
+            out("         post-commit 的自動推送**會被 non-fast-forward 拒絕然後靜默吞掉**。")
+            out("         先確認鏡像獨有那幾顆的內容在本機還在，再決定要不要 --force。")
+
+    if mark.is_file():
+        if stale:
+            out("    -- post-commit 留有失敗標記：%s（與上面一致）" % mark.name)
+        else:
+            out("    [!] 現況已同步，但 post-commit 的失敗標記還在 —— **那是手動 push 修好後的殘留**")
+            out("        （標記只有下一次 commit 推成功才會自刪）刪掉它：del state\\%s" % mark.name)
+    return stale
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="開工前檢查：能不能動這幾個檔")
     ap.add_argument("files", nargs="*", help="你這次要動的檔（強烈建議指定）")
@@ -336,7 +431,14 @@ def main() -> int:
     blocked = block_files(repo, args.files, args.hot)
     out("")
     block_served(repo, args.no_vm)
+    out("")
+    stale_mirror = block_mirror(repo, args.no_vm)
     out("=" * 78)
+
+    #: 鏡像過期**不擋開工**（那是備份問題不是併發問題），但一定要在判定行旁邊講一次——
+    #: 上一次它靜默了六天，正是因為訊息只存在於一條沒人跑的指令裡。
+    if stale_mirror:
+        out("備份：**有 remote 沒跟上**（見 [4]）。這不擋你開工，但現在的工作沒有備份。")
 
     if not args.files:
         out("判定：只看了全景。**要判定能不能開工，把你要動的檔當參數傳進來。**")

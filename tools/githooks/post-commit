@@ -1,0 +1,49 @@
+#!/bin/sh
+# harness 備份鏡像：每次 commit 後自動同步到 C 槽 NVMe 的 bare repo。
+#   來源 D:\.ai-harness（Disk 0, SATA HDD）
+#   鏡像 C:\Users\<USER>\git-mirrors\JEFF-Harness.git（Disk 1, NVMe SSD）
+#
+# ⚠ 這是**版控中的正本**。`.git/hooks/` 不進版控，換機器或重新 clone 都不會有它。
+#   安裝：cp tools/githooks/post-commit .git/hooks/post-commit
+#
+# ── 為什麼要有這一版 ───────────────────────────────────────────────────────
+# 舊版是 `git push -q backup --all 2>/dev/null || true`：刻意 fail-open（備份推不動
+# 不該擋 commit），代價寫成註解「靠收工時順手看一眼」。
+#
+# 2026-09-02 量到那個代價實際是多少：**73 個 commit ／ 6 天完全沒備份**。
+# 8/27 之後本機改寫過歷史 ⇒ 鏡像那顆變孤兒 ⇒ 之後每一次推送都被 non-fast-forward
+# 拒絕，然後被 `2>/dev/null || true` 吃掉。沒有人「順手看一眼」，因為沒有東西提醒他要看。
+#
+# 這一版仍然 fail-open（不擋 commit），但把失敗**留下兩個痕跡**：
+#   1. stderr 印一行警告 —— commit 當下就看得到
+#   2. state/mirror_sync_failed.txt —— 給 tools/check_before_start.py [4] 之外的後手用
+# 成功則刪掉標記，所以「檔案存在」＝「最後一次推送是失敗的」。
+
+set -u
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+MARK="$ROOT/state/mirror_sync_failed.txt"
+
+git remote | grep -qx backup || exit 0
+
+ERR=$(git push -q backup --all 2>&1)
+if [ $? -eq 0 ]; then
+    rm -f "$MARK"
+    exit 0
+fi
+
+mkdir -p "$ROOT/state" 2>/dev/null
+{
+    echo "最後一次鏡像推送失敗"
+    echo "時間: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "commit: $(git rev-parse HEAD)"
+    echo "原因:"
+    echo "$ERR"
+    echo
+    echo "查現況: py -3 tools/check_before_start.py --no-vm"
+} > "$MARK" 2>/dev/null
+
+echo "!! 備份鏡像推送失敗，這顆 commit 沒有備份 —— 詳情 state/mirror_sync_failed.txt" >&2
+echo "$ERR" | head -3 >&2
+
+# fail-open：備份的問題不該讓 commit 看起來像失敗。
+exit 0
