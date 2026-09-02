@@ -542,6 +542,45 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     ok(mut2.gap_hits("## 沒找到的") == ["沒找到的"],
        "變異版只鬆綁能力、沒改別的（標準寫法仍命中，排除「變異把函式整支弄壞」）")
 
+    # ---- 三行宣告：三個欄位分屬三行，必須都讀得到（2026-09-03）----
+    # 這條擋的是一個**已經發生過而且沒人發現的**漂移：2026-08-27 宣告改成固定
+    # 三行，守門 `hooks/rules/decl1_stage_files.py` 當天把判定改成「連續行先併成
+    # 一段」，這一側卻仍逐行掃 ⇒ 只看得到含「階段」的第二行。後果是對**合規的**
+    # 宣告叫「缺修改檔案欄」（實測 33 段裡 21 段假違規），任務欄涵蓋率 28.1%。
+    #
+    # ⚠ 既有的 parity 測試擋不住它：那條只斷言三條 pattern 字串兩邊相同，
+    #   而漂掉的不是 pattern，是「要不要併行」這個行為。所以這裡驗的是**行為**：
+    #   餵一段真的三行宣告進去，三個分屬不同行的欄位都要有值。
+    m3 = _load()
+    _decl3 = ("模式 DEV ｜ 任務 三行探針 ｜ 任務分類 [test]\n"
+              "階段 Execute ｜ 規模 S ｜ 進度 60%\n"
+              "修改檔案 a.py、b.py ｜ 修改摘要 補一條斷言\n")
+    _blocks = m3._decl_blocks(_decl3)
+    ok(len(_blocks) == 1,
+       "三行宣告併成一段（實得 %d 段）" % len(_blocks))
+    _got = {k: (r.search(_blocks[0]).group(1).strip() if _blocks and r.search(_blocks[0]) else None)
+            for k, r in m3.FIELD.items()} if _blocks else {}
+    ok(_got.get("stage") == "Execute",
+       "三行宣告：階段欄（第二行）讀得到 —— 實得 %r" % _got.get("stage"))
+    ok(bool(_got.get("files")) and "a.py" in _got["files"],
+       "三行宣告：修改檔案欄（第三行）讀得到 —— 實得 %r（讀不到就會對合規宣告叫假違規）"
+       % _got.get("files"))
+    ok(_got.get("task") == "三行探針",
+       "三行宣告：任務欄（第一行）讀得到 —— 實得 %r（讀不到任務維度會靜默走空）"
+       % _got.get("task"))
+    ok(_got.get("cls") is not None and "test" in _got["cls"],
+       "三行宣告：任務分類欄（第一行）讀得到 —— 實得 %r" % _got.get("cls"))
+    # 變異證明：退回逐行掃（就是 2026-08-27 到 09-03 的實際行為）→ 上面三條必須紅
+    _line_only = [ln.strip() for ln in _decl3.splitlines()
+                  if ln.strip() and "階段" in ln]
+    _mut = {k: (r.search(_line_only[0]).group(1).strip()
+                if _line_only and r.search(_line_only[0]) else None)
+            for k, r in m3.FIELD.items()}
+    ok(_mut.get("stage") == "Execute" and _mut.get("files") is None
+       and _mut.get("task") is None,
+       "變異版（退回逐行掃）確實只讀得到階段、讀不到修改檔案與任務"
+       " —— 證明上面那三條真的在測併行，不是恰好會過")
+
     return passed, failed
 
 

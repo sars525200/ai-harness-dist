@@ -95,6 +95,40 @@ TMP_HINTS = ("scratchpad", "temp\\claude", "temp/claude", "\\tmp\\", "/tmp/")
 # 讀成「沒有宣告」。三個條件一起才算宣告，少了任一個就會把「談論規則的句子」
 # （例如「階段欄五選一＝Research／…」）算進來。
 DECL_LINE = re.compile(r"^.{0,40}(?:模式|階段)[^\n]{0,400}$", re.M)
+
+# 2026-09-03：宣告自 2026-08-27 起是**連續三行**（8 個欄位擠一行讀不動）。
+# 守門 `hooks/rules/decl1_stage_files.py` 當天就改成「連續行先併成一段再判」，
+# **這一側沒有跟上**，仍逐行 finditer ⇒ 只看得到含「階段」的第二行：
+#   · 修改檔案欄（第三行）取不到 → 對合規的宣告叫「缺修改檔案欄」＝假違規。
+#     實測 33 段裡 21 段中這一槍，而原文明明寫了。
+#   · 任務欄與任務分類欄（第一行）取不到 → 兩個維度隨時間走空，且不會報錯。
+#
+# 兩邊的 parity 測試擋不住這件事：它只斷言三條 pattern 字串相同，
+# 而漂掉的不是 pattern，是「要不要併行」這個行為。所以修法**不是再抄一份**
+# 併行邏輯過來（那會製造第四份副本），是直接用守門那一份，讓它只有一個真相。
+_GATE_DECL = None
+
+
+def _decl_blocks(text):
+    """回這段文字裡的宣告段落（連續行已併成一段），與守門逐字同一份實作。"""
+    global _GATE_DECL
+    if _GATE_DECL is None:
+        import importlib.util
+        hooks = HARNESS / "hooks"
+        gate = hooks / "rules" / "decl1_stage_files.py"
+        if not gate.is_file():
+            raise SystemExit(
+                "找不到守門 %s —— 拒跑，不退回逐行掃描。"
+                "退回去會靜默產生假違規，那正是這支要修的病。" % gate)
+        if str(hooks) not in sys.path:
+            sys.path.insert(0, str(hooks))
+        spec = importlib.util.spec_from_file_location("_decl1_gate", gate)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _GATE_DECL = mod._decl_lines
+    return _GATE_DECL(text or "")
+
+
 FIELD = {
     "mode": re.compile(r"模式\s*[:：]?\s*\**\s*([A-Z_]+)"),
     # 任務名（票 01・2026-08-23 新增·第二欄）。**兩個坑寫在這裡，不要拆開讀：**
@@ -552,8 +586,8 @@ def collect() -> dict:
                 if not isinstance(blk, dict):
                     continue
                 if blk.get("type") == "text":
-                    for m in DECL_LINE.finditer(blk.get("text") or ""):
-                        raw = m.group(0).strip()
+                    for raw in _decl_blocks(blk.get("text")):
+                        raw = raw.strip()
                         if "階段" not in raw:
                             continue
                         got = {k: (r.search(raw).group(1).strip()
