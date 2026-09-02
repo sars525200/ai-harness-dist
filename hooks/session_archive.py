@@ -392,10 +392,21 @@ def _push_idle_title(path: str, dest: str) -> None:
         if busy:
             _log("idle-title 跳過：面板已有人在用 %s (證據 %s)" % (cse[:16], busy))
             return
-        token = T._access_token()
+        # 憑證過期就叫官方 CLI 換發一次（2026-09-03 補；沿用 `push_cloud_title.py`
+        # 2026-09-02 起就在用的那一份實作，不再寫第二套）。
+        # ⚠ 換發會真的發一次 API 請求、最多等 `_RENEW_TIMEOUT` 秒。**只有 sweep
+        #   已經 detached 才敢這樣做** —— 它擋不到使用者的 /clear，但會把後面
+        #   那幾次刪檔巡邏往後推，所以只叫一次、不重試。
+        token, renewed = T._token_or_renew()
+        if renewed and token:
+            _log("idle-title token 過期，已叫官方 CLI 換發成功 %s" % cse[:16])
         if not token:
             T.forget_cloud(cse)           # 沒推成 ⇒ 記錄不能留（見下方說明）
-            _log("idle-title 跳過：token 沒有或已過期 %s" % cse[:16])
+            # **措辭要說「沒改到」而不是「跳過」**：user 回報的症狀是
+            # 「Clear 等待任務有時候都沒有觸發」，而舊訊息寫「跳過」讀起來像
+            # 一個正常的判定 ⇒ 查的人分不出是守門擋的還是憑證死掉。
+            _log("idle-title 失敗：憑證過期且換發不成，這一列的名字沒有改到 %s"
+                 % cse[:16])
             return
         url, headers, body = T.cloud_request(cse, title, token)
         import urllib.request

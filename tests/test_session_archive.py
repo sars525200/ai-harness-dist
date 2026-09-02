@@ -311,13 +311,31 @@ def run_idle_title():
             case("使用者已開工就不改名", "票 02 Q5 自己問的：會不會把在做事的對話改成『等待任務』",
                  (len(sent), "面板已有人在用" in log_text()), (0, True))
 
-            # ⑤ token 沒有／過期 ⇒ 不推，而且要看得見（Q2：現況是靜默 return）
+            # ⑤ token 過期且換發不成 ⇒ 不推，而且訊息要說「沒有改到」
+            #
+            # ⚠ **`_renew_token` 一定要 stub**：不 stub 的話 `_token_or_renew()`
+            #    會真的去 `shutil.which("claude")` 找到 CLI 並 `subprocess.run`
+            #    一次 `claude -p hi` —— 那是真的 API 請求，跑在回歸網裡等於每次
+            #    全套都花一次錢、等最多 120 秒。
             os.remove(os.path.join(proj, "new.jsonl"))
+            real_renew = T._renew_token
             T._access_token = lambda: ""
+            T._renew_token = lambda: ""
             sent[:] = []
             M._push_idle_title(path, dest)
-            case("token 過期不推且留痕", "靜默 return＝那條路徑在 log 上完全看不見（Q2）",
-                 (len(sent), "token 沒有或已過期" in log_text()), (0, True))
+            case("憑證死掉時訊息要說『沒有改到』而不是『跳過』",
+                 "user 的症狀是「有時候都沒有觸發」，寫『跳過』讀起來像正常判定、分不出成因",
+                 (len(sent), "名字沒有改到" in log_text()), (0, True))
+
+            # ⑥ token 過期但換發成功 ⇒ 照常推，且換發這件事要留痕
+            T._renew_token = lambda: "renewedtoken"
+            sent[:] = []
+            M._push_idle_title(path, dest)
+            case("換發成功就照常改名", "換得到卻不推＝白換一次，而且症狀與換不到一模一樣",
+                 len(sent), 1)
+            case("換發成功要留痕", "不留痕的話「這次有沒有續過命」事後查不出來",
+                 "換發成功" in log_text(), True)
+            T._renew_token = real_renew
         finally:
             T._access_token = real_token
             os.environ["CLAUDE_PROJECTS_DIR"] = os.path.join(tmp, "projects")

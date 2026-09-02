@@ -45,13 +45,13 @@ def run() -> "tuple[int, list]":
     m = _load()
     T = m.T
     orig_access = T._access_token
-    orig_run = m.subprocess.run
-    orig_which = m.shutil.which
+    orig_run = T.subprocess.run
+    orig_which = T.shutil.which
 
     try:
         # 1 沒過期就不要多叫一次 CLI（每次推標題都花四秒是不能接受的）
         T._access_token = lambda: "LIVE"
-        m.subprocess.run = lambda *a, **k: (_ for _ in ()).throw(
+        T.subprocess.run = lambda *a, **k: (_ for _ in ()).throw(
             AssertionError("未過期不該叫子行程"))
         tok, renewed = m._token_or_renew()
         check("未過期時不觸發續命", tok == "LIVE" and renewed is False, (tok, renewed))
@@ -71,8 +71,8 @@ def run() -> "tuple[int, list]":
             return None
 
         T._access_token = two_phase
-        m.subprocess.run = fake_run
-        m.shutil.which = lambda n: r"C:\fake\claude.cmd"
+        T.subprocess.run = fake_run
+        T.shutil.which = lambda n: r"C:\fake\claude.cmd"
         tok, renewed = m._token_or_renew()
         check("過期→續命→重讀拿到新 token",
               tok == "RENEWED" and renewed is True, (tok, renewed))
@@ -85,8 +85,8 @@ def run() -> "tuple[int, list]":
         #    例外會被它吞掉，於是拿掉旗標這條檢查照樣是綠的。2026-09-02 變異驗證時
         #    真的踩到過。
         seen2 = {"ran": 0, "which": 0}
-        m.subprocess.run = lambda *a, **k: seen2.__setitem__("ran", seen2["ran"] + 1)
-        m.shutil.which = lambda n: (seen2.__setitem__("which", seen2["which"] + 1)
+        T.subprocess.run = lambda *a, **k: seen2.__setitem__("ran", seen2["ran"] + 1)
+        T.shutil.which = lambda n: (seen2.__setitem__("which", seen2["which"] + 1)
                                     or "FAKE_CLAUDE_PATH")
         T._access_token = lambda: ""
         os.environ[m._RENEW_GUARD] = "1"
@@ -97,13 +97,13 @@ def run() -> "tuple[int, list]":
               seen2["ran"] == 0 and seen2["which"] == 0, seen2)
 
         # 4 CLI 不在 PATH：回空字串交給呼叫端大聲失敗，不是丟例外炸掉改名
-        m.shutil.which = lambda n: None
+        T.shutil.which = lambda n: None
         T._access_token = lambda: ""
         check("CLI 不在 PATH 時回空而非例外", m._renew_token() == "")
     finally:
         T._access_token = orig_access
-        m.subprocess.run = orig_run
-        m.shutil.which = orig_which
+        T.subprocess.run = orig_run
+        T.shutil.which = orig_which
         os.environ.pop(m._RENEW_GUARD, None)
 
     return passed, failed

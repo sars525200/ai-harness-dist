@@ -135,6 +135,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 
@@ -876,8 +878,8 @@ def cloud_fail_reset(bridge: str) -> None:
 def _access_token() -> str:
     """讀 OAuth access token；沒有或已過期回空字串。
 
-    **刻意不做 refresh**：那要寫 `.credentials.json`，寫壞會讓整個 CLI 登出。
-    為了一個標題不值得 —— 過期就這輪不推，CLI 自己刷新後下次就好了。
+    **這一支刻意不做 refresh**：那要寫 `.credentials.json`，寫壞會讓整個 CLI 登出。
+    要續命走 `_token_or_renew()` —— 它把寫檔那一步交給官方 CLI，我們不碰那個檔。
     """
     try:
         cred = json.load(open(_CRED_PATH, encoding="utf-8")) or {}
@@ -891,6 +893,52 @@ def _access_token() -> str:
     if expires and expires <= time.time() * 1000:
         return ""
     return token
+
+
+# 換發用的環境旗標與逾時。**旗標名沿用 `push_cloud_title.py` 原本那個**：
+# 兩條路徑（推雲端、封存改名）共用同一把防遞迴鎖，換名字等於各鎖各的、鎖不住。
+_RENEW_GUARD = "PUSH_CLOUD_TITLE_RENEWING"
+_RENEW_TIMEOUT = 120
+
+
+def _renew_token() -> str:
+    """access token 過期時，叫一次官方 CLI 讓它自己換發，再重讀。
+
+    **刻意不自己打換發介面**：那要把換來的值寫回 `.credentials.json`，而
+    「平台的 refresh token 換發後會不會作廢舊的那一把」沒辦法在不承擔風險的
+    前提下驗證 —— 唯一的驗法就是去呼叫它。換發成功卻沒正確寫回去，官方 CLI
+    下次拿舊的去換就會失敗，結果是**整台登出**。所以寫檔一律交給官方 CLI，
+    我們只負責把它叫起來。
+
+    **為什麼放在這支**：`_access_token()` 在這裡，續命是它的另一半；原本住在
+    `tools/push_cloud_title.py`，2026-09-03 搬過來讓封存那條路也用得到同一份
+    （兩份實作遲早會分岔，而分岔的症狀是「某一條路的改名安靜地不會續命」）。
+
+    ⚠ **這會真的發一次 API 請求**（`claude -p hi`），有成本也有延遲，
+    所以只在 token 確實過期時叫、且只叫一次，不做重試迴圈。
+
+    回空字串＝換不到（CLI 不在、跑失敗、或跑完仍過期）。呼叫端要照常大聲失敗。
+    """
+    if os.environ.get(_RENEW_GUARD):     # 防遞迴：子行程裡不再往下叫
+        return ""
+    exe = shutil.which("claude")
+    if not exe:
+        return ""
+    env = dict(os.environ, **{_RENEW_GUARD: "1"})
+    try:
+        subprocess.run([exe, "-p", "hi"], env=env, timeout=_RENEW_TIMEOUT,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        return ""
+    return _access_token()
+
+
+def _token_or_renew() -> "tuple[str, bool]":
+    """回 (token, 有沒有續過命)。續命只試一次，不重試迴圈。"""
+    token = _access_token()
+    if token:
+        return token, False
+    return _renew_token(), True
 
 
 def _push_cloud(bridge: str, title: str) -> bool:
