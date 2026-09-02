@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """Skill Eval 統一入口 —— 一次跑完可自動化的層，並誠實標示不可自動化的那層。
 
-    py -3 D:\\.ai-harness\\eval\\run_all.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\eval\\run_all.py
 
 四層對應 SKILL_EVAL_PLAN.md §4：
     L1 結構檢查   全自動   塞爆＋執行①

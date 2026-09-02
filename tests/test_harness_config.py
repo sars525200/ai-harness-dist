@@ -150,7 +150,7 @@ def _hardcoded_path_exprs(source: str) -> list:
 
     2026-08-13 首跑用後者，抓到三類**都不是違規**的東西：
     ①錯誤訊息裡的設定範本（`_CONFIG_TEMPLATE` 的 `"D:\\\\"`）
-    ②看板要顯示給人看的 HTML 說明（正文就在講「`D:\\.ai-harness` 不是第三層」）
+    ②看板要顯示給人看的 HTML 說明（正文就在講「`D:\\Patrick-AI\\.ai-harness` 不是第三層」）
     ③harness 自己的元件路徑。
 
     當時有兩條修法，**選錯的那條會讓這個檢查慢慢死掉**：

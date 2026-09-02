@@ -6,7 +6,7 @@
 重載 —— **沒有「發布」這個步驟**。本檔曾經一路寫著「重新編輯發布」「用 Artifact 工具
 帶 url 重新發布」，而照著做的人會去產生一個不該存在的對外頁面。
 
-    py -3 D:\\.ai-harness\\dashboard\\check_freshness.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\check_freshness.py
 
 exit code：0 = 無需更新　1 = 建議更新（stdout 印出具體差異，供編輯看板時參考）
 
@@ -230,26 +230,26 @@ def main() -> None:
     print("下一步：")
     if any("would-block" in r or "規則" in r for r in reasons):
         print("  ① 規則計數差異 → 跑產生器，**不要手動改表格**：")
-        print("     py -3 D:\\.ai-harness\\dashboard\\gen_hook_rules.py")
+        print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_hook_rules.py")
         # 任務動線畫的是同一批東西（規則掛哪個事件、哪幾條會擋）＋派工次數，
         # 上游同樣是 event log。少列這一行的話，規則表更新了而動線圖沒有，
         # 同一頁看板上兩個數字會互相打臉。
-        print("     py -3 D:\\.ai-harness\\dashboard\\gen_task_flow.py")
+        print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_task_flow.py")
     # 2026-08-23：這一項從「手動編輯」改成「跑產生器」。在那之前看板「維運腳本 N 支」
     # 是手寫的，這支每次收工都報一次差異卻只能報不能改，於是數字一路漂到 40 vs 85。
     _tool = [r for r in reasons if "tool 原始檔案數" in r]
     _skill = [r for r in reasons if "skill 原始檔案數" in r]
     if _tool:
         print("  ② 維運腳本數 → 跑產生器，**不要手動改 HTML**：")
-        print("     py -3 D:\\.ai-harness\\dashboard\\gen_layers.py")
+        print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_layers.py")
     if _skill:
         print("  ② skill 原始檔案數 → 跑清冊產生器（徽章仍走 gen_roles_topology）：")
-        print("     py -3 D:\\.ai-harness\\dashboard\\gen_skill_roster.py")
-        print("     py -3 D:\\.ai-harness\\dashboard\\gen_roles_topology.py")
+        print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_skill_roster.py")
+        print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_roles_topology.py")
     if not _tool and not _skill and not any("would-block" in r or "規則" in r for r in reasons):
         print("  ② 其餘差異 → 讀 dashboard/harness-dashboard.html，確認是哪個區塊在講這件事。")
     print("  ③ 確認本機服務已重載（http://127.0.0.1:8099/ 會自動重讀），然後跑：")
-    print("     py -3 D:\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
+    print("     py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\check_freshness.py --write-snapshot")
     print("     把這次的數字寫回 snapshot.json（別忘了 commit）。")
     sys.exit(1)
 

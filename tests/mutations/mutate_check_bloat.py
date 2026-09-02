@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`check_bloat.py` 的變異測試：逐一把修好的東西弄回壞掉，確認回歸網真的會紅。
 
-    py -3 -X utf8 D:\\.ai-harness\\tests\\mutations\\mutate_check_bloat.py
+    py -3 -X utf8 D:\\Patrick-AI\\.ai-harness\\tests\\mutations\\mutate_check_bloat.py
 
 **為什麼需要這支**：`tests/test_check_bloat.py` 全綠只證明「現在的實作通過了斷言」，
 不證明「斷言真的在測那件事」。每一條修法都要有一個變異守著，否則下次有人「順手簡化」

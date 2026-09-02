@@ -591,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         # 這一列會被讀到的時候，寫它的 session 早就結束了 —— 所以要自己帶路，
         # 而不是靠常駐層（CLAUDE.md／MEMORY.md）多一行索引去養每一輪的 token。
         nxt = ("逐支判斷是否與現有全域技能重疊（可合併／可取代）。"
-               "機制與判準見 D:\\.ai-harness\\SKILL_WATCH_PLAN.md（§4 分岔決定、§11 覆核紀錄）。"
+               "機制與判準見 D:\\Patrick-AI\\.ai-harness\\SKILL_WATCH_PLAN.md（§4 分岔決定、§11 覆核紀錄）。"
                "判定完把這一列刪掉；要保留判斷結果就搬進該計畫書。")
 
         if args.dry_run:

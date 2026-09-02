@@ -236,7 +236,7 @@ def _hook_commands(root: Path, names: list) -> list:
 def count_ops(proj: Path) -> int:
     """該專案的維運腳本數。掃 `**/ops/` 底下的 .py／.sh／.js。
 
-    刻意**不含**共用層 `D:\\.ai-harness\\hooks\\` —— 那 6 支是 harness 本體，
+    刻意**不含**共用層 `D:\\Patrick-AI\\.ai-harness\\hooks\\` —— 那 6 支是 harness 本體，
     每個專案共用同一份，把它算進「這個專案的維運腳本」會讓每個專案都虛胖 6 支。
     """
     n = 0
@@ -362,12 +362,12 @@ def build_html(s: dict) -> str:
         <h2>兩層對照</h2>
         <span class="sub">由 <code>gen_layers.py</code> 實掃兩個目錄產生</span>
       </div>
-      <p class="lead">Claude 會自動載入<b>兩層</b>設定：全域 <code>~\\.claude\\</code>（跨所有專案）與專案 <code>&lt;repo&gt;\\.claude\\</code>。<button type="button" class="cv-info" data-note="note-layers" aria-expanded="false" aria-controls="note-layers" aria-label="這張表在講什麼、D:\\.ai-harness 是不是第三層">!</button></p>
+      <p class="lead">Claude 會自動載入<b>兩層</b>設定：全域 <code>~\\.claude\\</code>（跨所有專案）與專案 <code>&lt;repo&gt;\\.claude\\</code>。<button type="button" class="cv-info" data-note="note-layers" aria-expanded="false" aria-controls="note-layers" aria-label="這張表在講什麼、D:\\Patrick-AI\\.ai-harness 是不是第三層">!</button></p>
       <div class="criteria cv-note" id="note-layers" hidden>
         <h4>兩層對照怎麼讀</h4>
         <p>右上角可切換視角——<b>切到全域層，你會看到它幾乎是空的</b>，那正是這張表要講的話。</p>
         <p><b>看板原本只講了一半。</b>Hook 分頁寫「allow 115 條（7/29 由 187 收斂）」——那是專案層；全域層還有 <b>{g["allow"]} 條</b>從沒收斂過、deny <b>{g["deny"]}</b>。真實曝險面比看板顯示的大，這是「片面數字誤導」的第六次發作。</p>
-        <p><b><code>D:\\.ai-harness\\</code> 不是第三層</b>：Claude 不會自動載入它，它是被專案層 <code>settings.local.json</code> 用絕對路徑引用的共用元件。所以它不做成可切換的層——但這也意味著<b>換專案要重新接線</b>，不是複製一個資料夾就有 harness。</p>
+        <p><b><code>D:\\Patrick-AI\\.ai-harness\\</code> 不是第三層</b>：Claude 不會自動載入它，它是被專案層 <code>settings.local.json</code> 用絕對路徑引用的共用元件。所以它不做成可切換的層——但這也意味著<b>換專案要重新接線</b>，不是複製一個資料夾就有 harness。</p>
       </div>
       <div class="twrap">
         <table class="roster">

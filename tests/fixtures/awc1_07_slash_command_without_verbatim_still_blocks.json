@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-07",
     "last_assistant_message": "版號要升 minor 還是 patch？",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_no_verbatim.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_no_verbatim.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

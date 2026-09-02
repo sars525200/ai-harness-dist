@@ -4,7 +4,7 @@
       {
         "matcher": "Write|Edit|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "py -3 \"D:\\.ai-harness\\tests\\r4_e2e\\e2e_hook.py\"" }
+          { "type": "command", "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\tests\\r4_e2e\\e2e_hook.py\"" }
         ]
       }
     ]

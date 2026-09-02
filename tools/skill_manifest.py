@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """全域層 skill 的內容基準（manifest）—— 偵測「被換掉而沒有人發現」。
 
-    py -3 D:\\.ai-harness\\tools\\skill_manifest.py            # 檢查（預設）
-    py -3 D:\\.ai-harness\\tools\\skill_manifest.py --accept    # 更新基準（會先印差異）
+    py -3 D:\\Patrick-AI\\.ai-harness\\tools\\skill_manifest.py            # 檢查（預設）
+    py -3 D:\\Patrick-AI\\.ai-harness\\tools\\skill_manifest.py --accept    # 更新基準（會先印差異）
 
 ## 為什麼需要它
 

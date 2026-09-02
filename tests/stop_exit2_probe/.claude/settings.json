@@ -1,7 +1,7 @@
 {
   "hooks": {
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "py -3 \"D:\\.ai-harness\\tests\\stop_exit2_probe\\probe_hook.py\"" } ] }
+      { "hooks": [ { "type": "command", "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\tests\\stop_exit2_probe\\probe_hook.py\"" } ] }
     ]
   }
 }

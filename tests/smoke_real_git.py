@@ -1,6 +1,6 @@
 """RealGitContext 對真 repo 的 smoke test。
 
-    py -3 D:\\.ai-harness\\tests\\smoke_real_git.py [repo路徑]
+    py -3 D:\\Patrick-AI\\.ai-harness\\tests\\smoke_real_git.py [repo路徑]
 
 為什麼需要這支：fixture 全部跑在 FakeGitContext 上。**Fake 全綠不代表 Real 行為一致** ——
 若真 git 回的路徑格式、型別、邊界行為與 fixture 假設不同，閘門會在生產環境失效而測試不知情。

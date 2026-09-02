@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """L2 契約回歸 —— skill 引用的東西還在不在（迴歸失敗，SKILL_EVAL_PLAN §3.4）。
 
-    py -3 D:\\.ai-harness\\eval\\check_contracts.py
-    py -3 D:\\.ai-harness\\eval\\check_contracts.py --json    # 給 L4 台帳吃的機器可讀輸出
+    py -3 D:\\Patrick-AI\\.ai-harness\\eval\\check_contracts.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\eval\\check_contracts.py --json    # 給 L4 台帳吃的機器可讀輸出
 
 【為什麼 skill 的 fixture 不是輸入→輸出斷言】
 skill 是 prose 不是函式，沒有回傳值可斷言。它最常見的靜默失效是**依賴被改名或移除**：

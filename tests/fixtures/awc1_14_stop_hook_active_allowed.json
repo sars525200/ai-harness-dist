@@ -7,7 +7,7 @@
     "session_id": "fixture-awc1-14",
     "stop_hook_active": true,
     "last_assistant_message": "已經改好了，兩個 repo 都 commit 完成。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "ALLOW"

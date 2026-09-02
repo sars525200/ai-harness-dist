@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-06",
     "last_assistant_message": "I analyzed your recent sessions. Want to dig into any section or try one of the suggestions?",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_verbatim_output.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\slash_command_verbatim_output.jsonl"
   },
   "expect": {
     "decision": "ALLOW"

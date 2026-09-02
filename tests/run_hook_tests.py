@@ -1,7 +1,7 @@
 """閘門自己的 eval —— 每條規則的觸發／不觸發樣本。
 
-    py -3 D:\\.ai-harness\\tests\\run_hook_tests.py            # 全跑
-    py -3 D:\\.ai-harness\\tests\\run_hook_tests.py db1        # 只跑名稱含 db1 的
+    py -3 D:\\Patrick-AI\\.ai-harness\\tests\\run_hook_tests.py            # 全跑
+    py -3 D:\\Patrick-AI\\.ai-harness\\tests\\run_hook_tests.py db1        # 只跑名稱含 db1 的
 
 為什麼要有這支：
   * §4 原本寫「負面測試」是一次性手動重演 —— 改一次規則就得重演一次，

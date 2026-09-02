@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-11",
     "last_assistant_message": "## 待辦機制的設計原則\n\n這一節說明待辦機制的設計理念，內容全部是敘述，不是交辦。第一，收尾標題的用途是讓讀的人快速找到重點，而不是把工作丟出去。第二，把待辦寫進獨立檔案的好處是它不會隨著對話消失，下次開場六十秒就能清掉。第三，每一項都要附逐字的驗證指令，否則下次還得重新調查一遍，那等於沒記。第四，空白代表沒驗過，不等於沒問題，這是這份檔案最重要的一條規則。第五，驗完就把該列刪掉，不留已驗歷史，那是版本控制的職責不是清單的職責。第六，長度本身不是問題，讀不讀得完才是，所以每列都壓在一句話能講完的範圍。\n\n以上是設計理念的整理，已經寫進文件並且 commit 完成，兩個倉庫都是乾淨的。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

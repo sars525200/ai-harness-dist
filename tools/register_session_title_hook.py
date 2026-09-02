@@ -36,7 +36,7 @@ except Exception:
     pass
 
 SETTINGS = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
-COMMAND = 'py -3 "D:\\.ai-harness\\hooks\\session_title.py"'
+COMMAND = 'py -3 "D:\\Patrick-AI\\.ai-harness\\hooks\\session_title.py"'
 EVENT = "PreToolUse"
 
 

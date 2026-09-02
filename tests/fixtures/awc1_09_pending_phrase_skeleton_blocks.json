@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-09",
     "last_assistant_message": "浮層裁切已修好，61 項測試全綠。另外三個小微調待你確認，屬 UI 細節。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

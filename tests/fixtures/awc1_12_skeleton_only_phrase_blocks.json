@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-12",
     "last_assistant_message": "三支腳本都改好了，兩端同步完成。VS Code 那包等你給別台機器名稱。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

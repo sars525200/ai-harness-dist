@@ -1,6 +1,6 @@
 """讀回 state/ 底下所有 session 的事件記錄，彙總成 would-block 清單。
 
-    py -3 D:\\.ai-harness\\hooks\\report.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\hooks\\report.py
 
 用途對應計畫書步驟 5／7：shadow mode 跑 3–5 天後，用這支看：
     * 心跳（dispatch/applies 計數）——證明 hook 真的有被觸發、規則真的有被命中，

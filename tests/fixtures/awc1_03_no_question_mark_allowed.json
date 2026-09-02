@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-03",
     "last_assistant_message": "已經改好了，commit 是 abc1234。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\does_not_exist.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\does_not_exist.jsonl"
   },
   "expect": {
     "decision": "ALLOW"

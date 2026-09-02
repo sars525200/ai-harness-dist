@@ -4,7 +4,7 @@
   "skills": [
     {
       "name": "adversarial-review",
-      "description": "對抗式方案覆核。找一個不共用推理脈絡的獨立審查者針對計畫書逐輪挑錯，直到收斂。審查者由 D:\\.ai-harness\\reviewer\\reviewer_config.json 決定（預設 Claude Code + Opus 5 + high，可改 Codex CLI），設定改法見 skill 步驟 1。當 user 說「跟另一個 AI 討論」「adversarial review」「互審」「找人挑錯」，或任務屬 [DB｜邏輯] 類大型計畫（CLAUDE.md §2）需要逐項討論時使用。",
+      "description": "對抗式方案覆核。找一個不共用推理脈絡的獨立審查者針對計畫書逐輪挑錯，直到收斂。審查者由 D:\\Patrick-AI\\.ai-harness\\reviewer\\reviewer_config.json 決定（預設 Claude Code + Opus 5 + high，可改 Codex CLI），設定改法見 skill 步驟 1。當 user 說「跟另一個 AI 討論」「adversarial review」「互審」「找人挑錯」，或任務屬 [DB｜邏輯] 類大型計畫（CLAUDE.md §2）需要逐項討論時使用。",
       "origin": "project",
       "userOnly": false,
       "category": "專案自建",

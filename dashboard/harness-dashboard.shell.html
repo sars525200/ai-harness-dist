@@ -3573,7 +3573,7 @@
         title: '全域層沒有維運腳本',
         brief: '**全域層 0 支維運腳本** —— 維運腳本本來就屬各專案，全域層不會有。',
         p: '維運腳本是**每個專案自己的**（跑在該專案的伺服器上），不是跨專案共用的東西'
-           + ' —— 全域層本來就不會有。共用層 D:\\.ai-harness\\hooks\\ 那 6 支是 harness 本體，'
+           + ' —— 全域層本來就不會有。共用層 D:\\Patrick-AI\\.ai-harness\\hooks\\ 那 6 支是 harness 本體，'
            + '每個專案共用同一份，另一回事。',
         extra: null
       },
@@ -3674,7 +3674,7 @@
           lines: p.ops
             ? ['維運腳本是每個專案自己的，跑在該專案的伺服器上。',
                '這裡只算該專案 ops/ 底下的 .py／.sh／.js —— 不含共用層 '
-               + 'D:\\.ai-harness\\hooks\\ 那 6 支（每個專案共用同一份）。',
+               + 'D:\\Patrick-AI\\.ai-harness\\hooks\\ 那 6 支（每個專案共用同一份）。',
                '路徑 ' + p.path]
             : ['這個專案沒有 ops/ 目錄 —— 沒有任何維運腳本。', '路徑 ' + p.path]
         };
@@ -4671,7 +4671,7 @@
         z1.appendChild(flag('no', '沒有角色檔。', 'tools 與 model 由平台決定，改不了。'));
       } else {
         z1.appendChild(flag('ok', '角色檔正文 ' + r.bodyLines + ' 行。',
-          'D:\\.ai-harness\\agents\\' + r.agentType + '.md'));
+          'D:\\Patrick-AI\\.ai-harness\\agents\\' + r.agentType + '.md'));
         z1.appendChild(r.boundaryReport
           ? flag('ok', '會回報「需要但沒有」。', '碰到能力邊界時它會講，配置才有機會被修正。')
           : flag('warn', '不會回報「需要但沒有」。',
@@ -4738,7 +4738,7 @@
       /* ── 原始設定 ── */
       var z6 = zone('原始設定',
         '看板改不了設定（artifact 寫不回本機檔）。要改角色開本機設定頁：'
-        + 'D:\\.ai-harness\\reviewer\\Launch-AgentsConfig.bat');
+        + 'D:\\Patrick-AI\\.ai-harness\\reviewer\\Launch-AgentsConfig.bat');
       var dl = el('dl', 'rt-cfg');
       [['顯示名', r.name],
        ['subagent_type', r.agentType],
@@ -4749,7 +4749,7 @@
        ['hooks', r.gate || '（無）'],
        ['來源', r.external ? '外部／插件提供，無角色檔'
               : (r.builtin ? '平台內建，無角色檔'
-                           : 'D:\\.ai-harness\\agents\\' + r.agentType + '.md')]
+                           : 'D:\\Patrick-AI\\.ai-harness\\agents\\' + r.agentType + '.md')]
       ].forEach(function (kv) {
         dl.appendChild(el('dt', null, kv[0]));
         dl.appendChild(el('dd', null, kv[1]));
@@ -4835,7 +4835,7 @@
     var status = document.getElementById('rv-status');
     var dlBtn = document.getElementById('rv-dl');
     var copyBtn = document.getElementById('rv-copy');
-    var NOTE = '由 D:\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；'
+    var NOTE = '由 D:\\Patrick-AI\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；'
       + '/adversarial-review 每次執行時讀這個檔。手改也可以，改完存檔即生效（skill 是每次重讀，不快取）。';
 
     function pick(name) {
@@ -4917,7 +4917,7 @@
       setStatus('等待你確認下載…');
       window.claude.downloads.save({ filename: 'reviewer_config.json', data: text() })
         .then(function () {
-          setStatus('已下載——放到 D:\\.ai-harness\\reviewer\\ 覆蓋同名檔即生效', 'ok');
+          setStatus('已下載——放到 D:\\Patrick-AI\\.ai-harness\\reviewer\\ 覆蓋同名檔即生效', 'ok');
         })
         .catch(function (err) {
           var code = (err && err.code) || 'unavailable';

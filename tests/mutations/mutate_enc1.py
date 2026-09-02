@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """對 ENC-1 做變異，確認 test_enc1_encoding.py 真的會叫。
 
-    py -3 D:\\.ai-harness\\tests\\mutations\\mutate_enc1.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\tests\\mutations\\mutate_enc1.py
 """
 import hashlib
 import io

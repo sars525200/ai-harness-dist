@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-15",
     "last_assistant_message": "改好了。",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\user_waived.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\user_waived.jsonl"
   },
   "expect": {
     "decision": "ALLOW"

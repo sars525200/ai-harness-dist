@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-04",
     "last_assistant_message": "這個要接著做嗎？",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\earlier_turn_ask_not_this_turn.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\earlier_turn_ask_not_this_turn.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

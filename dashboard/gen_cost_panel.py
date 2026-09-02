@@ -464,7 +464,7 @@ def roster() -> "tuple[list, list]":
     """全部 skill 清冊與角色清冊，＋ skill 的中文名對照。用來算「建好沒人用」的分母。
 
     ⚠ **兩個目錄都要掃**（2026-08-22 修）：原本只掃 `SKILLS_DIR`（專案層 16 支），
-    全域層 `D:\\.ai-harness\\skills\\` 的 8 支（`context-health`／`visual-check`／
+    全域層 `D:\\Patrick-AI\\.ai-harness\\skills\\` 的 8 支（`context-health`／`visual-check`／
     `research` 等）**完全不在分母裡** —— 而 event log 明明記得到它們的使用次數
     （`visual-check` 18 次）。分子有、分母沒有 ⇒「建好沒人用」這個數字算的是
     一個對不齊的集合，而且看不出來。
@@ -883,7 +883,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
       </div>"""
     else:
         cost_block = """      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
-        <code>py -3 D:\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
+        <code>py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
         取得（會呼叫 ccusage，需要網路）。<b>沒有金額不影響 mix</b>——mix 是自建聚合算的。</span></div>"""
 
     # 使用率

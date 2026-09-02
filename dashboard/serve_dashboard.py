@@ -494,7 +494,7 @@ STALE_BANNER = """
 <div style="position:fixed;left:0;right:0;top:0;z-index:9999;padding:9px 16px;
             background:#A9762E;color:#fff;font:13px/1.5 -apple-system,'Segoe UI',sans-serif">
   ⚠ 這一份可能不是最新的：重生看板時失敗了（結構驗證沒過或產生器拒跑）。
-  跑 <code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:3px">py -3 D:\\.ai-harness\\dashboard\\refresh_dashboard.py</code> 看原因。
+  跑 <code style="background:rgba(0,0,0,.2);padding:1px 5px;border-radius:3px">py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\refresh_dashboard.py</code> 看原因。
 </div>
 """
 

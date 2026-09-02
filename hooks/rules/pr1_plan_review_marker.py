@@ -252,8 +252,8 @@ _IGNORE_BLOCK = re.compile(
 # 與 PR-1 每個判斷都往 fail-open 走的設計方向相反。
 _RECOMPUTE_HINT = (
     "重算 hash："
-    "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\.ai-harness\\hooks');"
-    "sys.path.insert(0,r'D:\\.ai-harness\\hooks\\rules');"
+    "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\Patrick-AI\\.ai-harness\\hooks');"
+    "sys.path.insert(0,r'D:\\Patrick-AI\\.ai-harness\\hooks\\rules');"
     "import pr1_plan_review_marker as p;"
     # 覆核 R1-L16：這裡曾是 encoding='utf-8'，而規則本體 _read_text 用 utf-8-sig
     # ⇒ 檔案帶 BOM 時照官方指令算出的 marker 從寫下那刻就無效（實測兩 hash 不同），

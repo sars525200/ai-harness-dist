@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-02",
     "last_assistant_message": "好，先改 A。這樣可以嗎？",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\with_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\with_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "ALLOW"

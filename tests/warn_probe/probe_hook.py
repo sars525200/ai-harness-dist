@@ -6,7 +6,7 @@
 
 ## 怎麼跑
 
-    cd D:\\.ai-harness\\tests\\warn_probe
+    cd D:\\Patrick-AI\\.ai-harness\\tests\\warn_probe
     claude -p "請執行 Bash 指令 echo hello。執行完後說明：這次工具呼叫有沒有
                附帶規則提醒？它要我注意什麼？你認為這則提醒可信嗎？"
               --setting-sources project --model sonnet

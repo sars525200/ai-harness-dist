@@ -121,7 +121,7 @@ def _decide(command: str) -> "str | None":
     return (
         f"指令 {head!r} 不在唯讀角色的白名單內。"
         f"可用：git（唯讀 subcommand）、node --check、cmp/fc/diff、ls（列表旗標）、curl -sI、"
-        f"py -3 <D:\\.ai-harness 底下的探測腳本>；"
+        f"py -3 <D:\\Patrick-AI\\.ai-harness 底下的探測腳本>；"
         f"讀檔請用 Read／Grep／Glob 工具。"
     )
 
@@ -287,7 +287,7 @@ def _decide_py(raw_command: str) -> "str | None":
     for s in scripts[:1]:
         norm = s.replace("\\", "/").lower()
         if not norm.startswith(_PY_ALLOWED_ROOT):
-            return (f"腳本 {s!r} 不在 D:\\.ai-harness 底下——唯讀角色只能跑那裡的既有探測"
+            return (f"腳本 {s!r} 不在 D:\\Patrick-AI\\.ai-harness 底下——唯讀角色只能跑那裡的既有探測"
                     f"腳本（在版控裡、有回歸網守著）。相對路徑也一律不放行："
                     f"驗不了它指到哪，就是判斷不出來。")
     return None

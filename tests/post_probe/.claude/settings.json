@@ -12,7 +12,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\tests\\post_probe\\probe_hook.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\tests\\post_probe\\probe_hook.py\""
           }
         ]
       }

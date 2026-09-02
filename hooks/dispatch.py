@@ -1,6 +1,6 @@
 """單一 entry point —— 把 hook 事件路由到 rules/ 底下的規則。
 
-settings.json 只需要指這一支（`py -3 D:\\.ai-harness\\hooks\\dispatch.py`），
+settings.json 只需要指這一支（`py -3 D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py`），
 省維護與 boilerplate（§3.6）；**不省啟動延遲**——每次仍是獨立 Python 進程。
 
 事件來源以 payload 的 `hook_event_name` 為準（Step 0 實測確認每個事件都帶這個

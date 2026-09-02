@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`rulefile/check_bloat.py` 的回歸網（CONTEXT_HEALTH_PLAN §5 的 V-1～V-4、V-9、V-10）。
 
-跑法：`py -3 -X utf8 D:\\.ai-harness\\tests\\test_check_bloat.py`
+跑法：`py -3 -X utf8 D:\\Patrick-AI\\.ai-harness\\tests\\test_check_bloat.py`
 
 **判準紀律**（計畫書 §5 的兩條，寫在這裡免得日後被稀釋）：
 1. 不得用「兩支自己寫的實作互相比對」——共享同一個誤解時會一起錯。

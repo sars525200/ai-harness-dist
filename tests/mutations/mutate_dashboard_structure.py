@@ -3,7 +3,7 @@
 
 沒紅過的驗證器不能當證據——這正是 harness 自己踩過的「假綠燈」教訓。
 
-    py -3 D:\\.ai-harness\\tests\\mutations\\mutate_dashboard_structure.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\tests\\mutations\\mutate_dashboard_structure.py
 
 變異測試刻意不進 run_hook_tests.py 的日常回歸：它會暫時弄壞真實檔案，
 只該在「改了被測對象或改了驗證器」時手動跑一次。日常跑的是驗證器本身。

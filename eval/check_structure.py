@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """L1 結構檢查 —— skill 的機械層 eval（塞爆＋執行①）。
 
-    py -3 D:\\.ai-harness\\eval\\check_structure.py
-    py -3 D:\\.ai-harness\\eval\\check_structure.py --update-baseline   # 量測後更新基準
+    py -3 D:\\Patrick-AI\\.ai-harness\\eval\\check_structure.py
+    py -3 D:\\Patrick-AI\\.ai-harness\\eval\\check_structure.py --update-baseline   # 量測後更新基準
 
 規格見 SKILL_EVAL_PLAN.md §3.2／§3.3／§4。這一層完全不需要模型，秒級可重跑。
 

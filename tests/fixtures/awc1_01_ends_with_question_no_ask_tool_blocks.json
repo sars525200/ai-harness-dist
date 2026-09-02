@@ -6,7 +6,7 @@
     "hook_event_name": "Stop",
     "session_id": "fixture-awc1-01",
     "last_assistant_message": "要先改 A 還是 B？",
-    "transcript_path": "D:\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
+    "transcript_path": "D:\\Patrick-AI\\.ai-harness\\tests\\fixtures\\transcripts\\no_askuserquestion.jsonl"
   },
   "expect": {
     "decision": "BLOCK",

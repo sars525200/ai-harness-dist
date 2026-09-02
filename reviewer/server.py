@@ -357,7 +357,7 @@ def save_config(cfg: dict) -> list:
         "tool": cfg.get("tool") if cfg.get("tool") in valid_tools else DEFAULTS["tool"],
         "model": _model_out(),
         "effort": cfg.get("effort") if cfg.get("effort") in valid_efforts else DEFAULTS["effort"],
-        "note": ("由 D:\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；"
+        "note": ("由 D:\\Patrick-AI\\.ai-harness\\reviewer\\Launch-Reviewer.bat 開啟網頁修改；"
                  "/adversarial-review 每次執行時讀這個檔。手改也可以，改完存檔即生效"
                  "（skill 是每次重讀，不快取）。"),
     }

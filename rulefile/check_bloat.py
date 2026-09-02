@@ -1,10 +1,10 @@
 """常駐層（always-loaded）膨脹偵測：**所有專案**的 CLAUDE.md / MEMORY.md。
 
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py                      # 手動 /context-health 時跑
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list               # 列出全部超標條目（回頭壓的時候用）
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --history            # 看時序：壓下去了／沒動／反彈
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --write-snapshot --project <名稱>
-    py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --append-history     # 寫一筆時序（/context-health 人點頭後）
+    py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py                      # 手動 /context-health 時跑
+    py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py --list               # 列出全部超標條目（回頭壓的時候用）
+    py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py --history            # 看時序：壓下去了／沒動／反彈
+    py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py --write-snapshot --project <名稱>
+    py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py --append-history     # 寫一筆時序（/context-health 人點頭後）
 
 exit code：0 = **該掃的都掃了**且沒有新增膨脹　1 = **cwd 所屬專案**有新增膨脹
 　　　　　 2 = **說不出答案**，四種來源：
@@ -1388,9 +1388,9 @@ def main() -> None:
         for r in reasons:
             print(f"  - {r}")
         print("\n處置：把超出的細節搬進對應 topic 檔／skill，常駐層只留「精髓＋去處」。")
-        print("看候選與切分點：py -3 D:\\.ai-harness\\rulefile\\check_bloat.py --list")
+        print("看候選與切分點：py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py --list")
         print("壓完後看 `/context-health` 步驟 5。人明示接受現況當新基準才："
-              "py -3 D:\\.ai-harness\\rulefile\\check_bloat.py "
+              "py -3 D:\\Patrick-AI\\.ai-harness\\rulefile\\check_bloat.py "
               "--write-snapshot --project <名稱>（不是預設）")
 
     if blind:

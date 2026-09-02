@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """六大類能力的檢查項清單 —— 看板「六大類進度」與監察員共用的單一真相。
 
-    py -3 D:\\.ai-harness\\dashboard\\capability_checks.py          # 印出全部檢查結果
-    py -3 D:\\.ai-harness\\dashboard\\capability_checks.py --json   # 給程式讀
+    py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\capability_checks.py          # 印出全部檢查結果
+    py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\capability_checks.py --json   # 給程式讀
 
 ## 為什麼不打分數
 

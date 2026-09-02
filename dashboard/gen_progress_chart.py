@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """從 HARNESS_ROLE_ARCH_PLAN.md §3 產生看板總覽頁的計畫進度圖。
 
-    py -3 D:\\.ai-harness\\dashboard\\gen_progress_chart.py           # 解析並注入 HTML
-    py -3 D:\\.ai-harness\\dashboard\\gen_progress_chart.py --check   # 只印解析結果，不寫檔
+    py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_progress_chart.py           # 解析並注入 HTML
+    py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_progress_chart.py --check   # 只印解析結果，不寫檔
 
 ## 為什麼是產生器而不是手寫
 

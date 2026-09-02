@@ -169,7 +169,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\session_archive.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\session_archive.py\""
           }
         ]
       }
@@ -179,7 +179,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\state\\sessionstart_probe.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\state\\sessionstart_probe.py\""
           }
         ]
       }
@@ -190,7 +190,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
@@ -201,7 +201,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
@@ -211,7 +211,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
@@ -221,7 +221,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }
@@ -231,7 +231,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py -3 \"D:\\.ai-harness\\hooks\\dispatch.py\""
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
           }
         ]
       }

@@ -106,7 +106,7 @@ def _c8():
 def _c9():
     v = _check("dashboard/app.js", b"var a = 1;\nvar b = 2;\n")
     assert v.decision == ALLOW, (
-        "只憑檔名就套 CRLF 規則會誤報 —— D:\\.ai-harness\\dashboard 的檔案是純 LF"
+        "只憑檔名就套 CRLF 規則會誤報 —— D:\\Patrick-AI\\.ai-harness\\dashboard 的檔案是純 LF"
     )
 
 

@@ -9,7 +9,7 @@
    * **stdout 保持全空** —— hook 的 stdout 可能被解析成控制指令或注入模型 context，
      這裡只寫檔案，不輸出任何東西。
    * **一律 exit 0** —— 任何例外都吞掉（fail-open，§6）。
-   * 只寫入 D:\\.ai-harness\\state\\spike\\，不碰任何專案檔。
+   * 只寫入 D:\\Patrick-AI\\.ai-harness\\state\\spike\\，不碰任何專案檔。
 
 【核心層】探測平台的 hook 契約，跟被服務的是哪個專案無關。
 """

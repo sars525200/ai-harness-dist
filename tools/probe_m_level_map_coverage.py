@@ -170,7 +170,7 @@ def _project_roots() -> list:
 
     ⚠ **harness 自己也要掃**：`discover_projects()` 只回被服務的專案
     （實測 `D:\\AI-Projects`、`D:\\IT-department`），不含 harness repo——但 harness 領域
-    的 effort 實際上就開在 `D:\\.ai-harness\\.scratch\\`（實測有 `room-gate-cleanup`、
+    的 effort 實際上就開在 `D:\\Patrick-AI\\.ai-harness\\.scratch\\`（實測有 `room-gate-cleanup`、
     `task-identity-cost-attribution` 兩個）。第一版漏掉它，於是 session `cb1eb811`
     在 18:22 宣告 M 級、map 明明建好了，探針卻報「檔案不存在」＝**假紅**。
     **一個報「判準未達」的工具自己有盲區，比沒有工具更糟**：它會叫人去修沒有壞的東西。
