@@ -253,6 +253,15 @@ REGISTRY = [
         "events": {"Stop", "SubagentStop"},
         "tools": None,
     },
+    {
+        # 交接檔還開著幾份、哪幾份講的東西已經不存在（2026-09-03）。
+        # **只掛 Stop**：subagent 有自己的 transcript，而「這個 repo 的交接檔
+        # 該不該結案」是主 session 的事；掛上去只會對每個角色各報一次。
+        "id": "HND-1",
+        "module": "hnd1_handoff_lifecycle",
+        "events": {"Stop"},
+        "tools": None,
+    },
 ]
 
 _RULE_CACHE: dict = {}
