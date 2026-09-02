@@ -362,19 +362,37 @@ check("--wfc-pnc" in html,
 # 存的是一對值 → 換主題要重挑一邊，靠這個事件通知
 check("harness-theme-change" in html and html.count("harness-theme-change") >= 2,
       "換主題會廣播並被配色那支接住（發與收各一）")
+# 判準兩張表**共用一條**（2026-09-02 統一）：
+#   有宣告 → 顏色必須等於宣告值
+#   沒宣告 → 必須是中性灰 `pn`
+# 為什麼不是「沒宣告就判紅」：`project_colors.classes(extra_names)` 明訂
+# 「這一頁看到、但不在探索清單裡的名字一律中性灰」（例如已改名或已移除的舊工作區，
+# 名字還留在歷史紀錄裡）。舊寫法把待辦列的未宣告名字直接判紅，等於跟設計相反 ——
+# 而拆掉舊名 junction 時那些名字**必然**出現，安全網會在最需要的那一刻變成假紅。
+# 反過來，遵循度表舊寫法是 `if _n in _declared` 直接略過，未宣告卻不是灰的會漏掉。
+NEUTRAL_CLS = "pn"
+
+
+def _check_proj_color(where, name, cls):
+    if name in _declared:
+        check(_declared[name] == cls,
+              "%s的 %s 用 %s，與 #lay-data 宣告的 %s 一致" % (where, name, cls, _declared[name]))
+    else:
+        check(cls == NEUTRAL_CLS,
+              "%s的 %s 不在 #lay-data 裡（已改名／已移除的工作區），必須是中性灰，實際 %s"
+              % (where, name, cls))
+
+
 _todo_cls = dict((n, c) for c, n in
                  re.findall(r'class="wfc-pn (\w+) todo-proj">([^<]+)</span>', _todo))
 for _n, _c in _todo_cls.items():
     if _n == "全域":
         continue
-    check(_declared.get(_n) == _c,
-          "待辦列的 %s 用 %s，與 #lay-data 宣告的 %s 一致" % (_n, _c, _declared.get(_n)))
+    _check_proj_color("待辦列", _n, _c)
 _wfc = panel_slice("panel-workflow")
 _wfc_cls = dict((n, c) for c, n in re.findall(r'wfc-pn (\w+)">([\w.-]+)</b>', _wfc))
 for _n, _c in _wfc_cls.items():
-    if _n in _declared:
-        check(_declared[_n] == _c,
-              "遵循度表的 %s 用 %s，與 #lay-data 宣告的 %s 一致" % (_n, _c, _declared[_n]))
+    _check_proj_color("遵循度表", _n, _c)
 
 # ---- 3c. 外觀切換（2026-08-06 改本機服務後補：不能只靠系統設定）----
 print("\n外觀切換")

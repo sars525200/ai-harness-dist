@@ -260,11 +260,27 @@ def projects() -> list:
 
     out = []
     for r in rows:
-        key = _encode_project_dir(r.get("path") or "").casefold()
-        d = have.get(key)
-        if d is None:
+        # **一個專案可能有多個 transcript 目錄**：目錄名是按當時的路徑寫法存的，
+        # 而同一個目錄可以有好幾種寫法（舊名連結／實體路徑）。只認一種的話，
+        # 搬過家的專案會安靜地少掉搬家前的全部歷史（`gen_layers.path_aliases()`）。
+        dirs = []
+        for alias in (r.get("pathAliases") or [r.get("path") or ""]):
+            d = have.get(_encode_project_dir(alias).casefold())
+            if d is not None and d not in dirs:
+                dirs.append(d)
+        # 設定裡明寫的舊目錄名（`harness.config.json` 的 `transcriptDirs`）。
+        # 連結拆掉之後，搬家前的歷史**只剩這一條路**接得上。
+        # 一律在 `have`（＝`PROJECTS_ROOT` 底下）查，不直接用絕對路徑 ——
+        # 否則「對不上任何目錄就拒跑」那道守門會被繞過去。
+        for name in (r.get("transcriptDirs") or []):
+            d = have.get(str(name).casefold())
+            if d is not None and d not in dirs:
+                dirs.append(d)
+        if not dirs:
             continue          # 這個專案還沒有任何對話紀錄，不是錯誤
-        out.append({"name": r.get("name") or d.name, "dir": d,
+        out.append({"name": r.get("name") or dirs[0].name,
+                    "dir": dirs[0],      # 既有呼叫端仍拿得到單一目錄
+                    "dirs": dirs,
                     "isCurrent": bool(r.get("isCurrent")),
                     "wired": bool(r.get("dispatchWired"))})
     if not out:
@@ -450,7 +466,8 @@ def collect() -> dict:
     per_proj: dict = {p["name"]: {"n": 0, "wired": p["wired"],
                                   "current": p["isCurrent"]} for p in projs}
 
-    files = [(p, fp) for p in projs for fp in sorted(p["dir"].glob("*.jsonl"))]
+    files = [(p, fp) for p in projs
+             for fp in sorted(f for d in p["dirs"] for f in d.glob("*.jsonl"))]
     for proj, fp in files:
         sess = fp.stem[:8]
         try:

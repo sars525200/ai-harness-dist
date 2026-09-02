@@ -166,22 +166,103 @@ def _proj_color_classes() -> dict:
         return {}
 
 
+def canon(p: Path) -> Path:
+    r"""路徑正規化：解開 junction／symlink，回實體路徑（2026-09-02）。
+
+    ## 為什麼需要
+
+    D 槽重組後，同一個資料夾同時有**舊名連結**與**實體路徑**兩種寫法：
+
+        D:\AI-Projects            ─┐
+        D:\MIS-install             ├─ 都是 D:\Patrick-AI\MIS-install
+        D:\Patrick-AI\MIS-install ─┘
+
+    原本的 `child not in found` 比的是**字面**，於是同一個目錄被當成三個專案：
+    待辦數 20 變成 20＋20（同名合併）＋20（另一個名字）＝ 60，看板顯示 388 而真值 348。
+    症狀是**數字變大而不是報錯**，所以放著不會有人發現。
+
+    正規化之後，設定裡填舊字面或新字面跑出來的結果會完全一樣 ——
+    那正是「拆掉 junction 安不安全」的判準：兩份產物一致＝已經沒有人依賴那些連結。
+
+    解不開（磁碟不在／權限不足）就回原值，讓那個專案至少還看得到，
+    而不是整支探索因為一個壞路徑就少一列。
+    """
+    try:
+        return p.resolve()
+    except Exception:
+        return p
+
+
+def current_project() -> Path:
+    r"""本專案的**實體**路徑。`PROJECT_DIR` 是設定字面，可能是舊名連結；
+    要拿來跟 `discover_projects()` 的結果比對「是不是同一個」時一律用這支。
+    （`project_colors.py` 判「本專案排第一」就是靠它，比錯的話配色會整組位移。）"""
+    return canon(PROJECT_DIR.parent)
+
+
+def _transcript_dirs(real: Path) -> list:
+    """該專案的對話紀錄**目錄名**清單。規則本體在 harness 根的 `config.py`（單一真相）；
+    問不到就回空清單，讓呼叫端只用推導得到的那一半，而不是整支炸掉。"""
+    try:
+        import importlib.util  # noqa: PLC0415
+        spec = importlib.util.spec_from_file_location(
+            "_cfg_from_layers", HARNESS_ROOT / "config.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.transcript_dir_names(real)
+    except Exception:
+        return []
+
+
+def path_aliases(real: Path) -> list:
+    r"""同一個目錄的所有**寫法**：實體路徑 ＋ 每一種指得到它的連結名（2026-09-02）。
+
+    去重（`discover_projects()`）解決的是「同一個目錄被算兩次」，但**歷史資料是按
+    當時的寫法存的**，只認實體路徑會讓它們一起消失：
+
+        ~/.claude/projects/d--IT-department            舊寫法，累積數百則對話
+        ~/.claude/projects/D--Patrick-AI-IT-department 新寫法，搬完之後才有
+
+    工作流程遵循度與任務動線是按目錄名去撈 transcript 的。只給實體路徑，
+    它們會安靜地少掉整段歷史 —— **數字變小不會報錯**，看起來像「最近比較少工作」。
+
+    ⚠ 這份別名是**現況推導**：來源是設定字面與掃得到的連結名。連結一旦拆掉，
+    舊寫法就再也推不出來，那段歷史會變孤兒。拆連結前要先決定歷史怎麼接。
+    """
+    out = [real]
+    cands = list(EXTRA_PROJECTS) + [PROJECT_DIR.parent]
+    for root in SCAN_ROOTS:
+        try:
+            cands += [c for c in root.iterdir() if c.is_dir()]
+        except Exception:
+            continue
+    for c in cands:
+        if c not in out and canon(c) == real:
+            out.append(c)
+    return out
+
+
 def discover_projects() -> list:
-    """回候選專案路徑清單（含沒有 .claude 的點名項）。"""
+    """回候選專案路徑清單（含沒有 .claude 的點名項）。
+
+    清單裡一律是**實體路徑**（`canon()`），去重也以實體路徑為準 ——
+    同一個目錄的多種寫法只會出現一次，顯示名稱取實體名（舊名連結自然不再列出）。"""
     found = []
     for root in SCAN_ROOTS:
         try:
             for child in sorted(root.iterdir()):
-                if child.is_dir() and (child / ".claude").is_dir() and child not in found:
-                    found.append(child)
+                real = canon(child)
+                if child.is_dir() and (child / ".claude").is_dir() and real not in found:
+                    found.append(real)
         except Exception:
             # 單一根目錄掃不動（磁碟不存在／權限）不該讓其餘根目錄一起消失
             continue
     for extra in EXTRA_PROJECTS:
-        if extra.exists() and extra not in found:
-            found.append(extra)
+        real = canon(extra)
+        if extra.exists() and real not in found:
+            found.append(real)
     # 本專案一定要在（它是看板既有內容的來源）
-    here = PROJECT_DIR.parent
+    here = current_project()
     if here not in found:
         found.insert(0, here)
     return found
@@ -259,7 +340,15 @@ def survey_projects() -> list:
                        proj / "CLAUDE.md")
         d["name"] = proj.name
         d["path"] = str(proj)
-        d["isCurrent"] = (proj == PROJECT_DIR.parent)
+        # 同一個目錄的其他寫法。按目錄名撈 transcript 的產生器要靠它接上歷史。
+        d["pathAliases"] = [str(a) for a in path_aliases(proj)]
+        # 搬家前的對話紀錄目錄（設定裡明寫，見 `config.transcript_dirs()`）。
+        # 連結推導不出來的那一半在這裡 —— 拆連結之後只剩它。
+        d["transcriptDirs"] = [str(x) for x in _transcript_dirs(proj)]
+        # 比實體路徑，不比設定字面 —— `discover_projects()` 回的已經是 `canon()` 過的，
+        # 設定裡若填舊名連結，字面比對會永遠不相等 ⇒ 沒有任何一個專案被標成本專案，
+        # 而下拉、待辦徽章、配色順序全都靠這一欄（2026-09-02）。
+        d["isCurrent"] = (proj == current_project())
         d["ops"] = count_ops(proj)
         # harness 的規則（DB-1／R1／…）只在該專案的 hook **指向 dispatch.py** 時才生效。
         # 光看「有沒有掛 hook」會誤判：IT-deploy-tmp 掛了 Stop，但它指向的是
@@ -270,11 +359,16 @@ def survey_projects() -> list:
         # ⚠ 路徑比對一律轉小寫：Windows 路徑大小寫不敏感，而設定檔裡寫的是
         #   `d:\IT-department\...`、Path 給的是 `D:\IT-department` —— 直接比對抓到 0，
         #   看起來像「沒有外部 hook」而其實有（2026-08-04 當場踩到）。
-        here_lc = str(PROJECT_DIR.parent).lower()
+        # ⚠ 兩種寫法都要收：設定字面（可能是舊名連結）與實體路徑。只認一種的話，
+        #   hook 指令裡寫舊路徑、設定填新路徑（或反過來）就抓不到 ——
+        #   而抓不到長得跟「沒有外部 hook」一模一樣（2026-09-02）。
+        here_lcs = {str(current_project()).lower(), str(PROJECT_DIR.parent).lower()}
         d["foreignHooks"] = [c for c in cmds
                              if "dispatch.py" not in c.lower()
-                             and here_lc in c.lower()
-                             and proj != PROJECT_DIR.parent]
+                             and any(h in c.lower() for h in here_lcs)
+                             # 比實體路徑：`proj` 已 canon 過，拿設定字面比會把本專案
+                             # 自己的 hook 誤報成「別的專案指過來」
+                             and proj != current_project()]
         out.append(d)
     return out
 

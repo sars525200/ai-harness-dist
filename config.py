@@ -35,6 +35,7 @@ r"""harness 層設定的共用 loader —— 回答「harness 在哪、專案在
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -100,6 +101,79 @@ SKILL_DIRS = [GLOBAL_SKILLS_DIR, PROJECT_SKILLS_DIR]
 PROJECT_CLAUDE_MD = PROJECT_ROOT / "CLAUDE.md"
 PROJECT_MEMORY_DIR = PROJECT_ROOT / ".aimemory"
 MEMORY_SOURCES = [PROJECT_CLAUDE_MD, PROJECT_MEMORY_DIR]
+
+#: 平台存放對話紀錄的根目錄。目錄名是**當時的專案路徑**編碼出來的。
+TRANSCRIPTS_ROOT = Path.home() / ".claude" / "projects"
+
+
+def encode_project_dir(path) -> str:
+    r"""專案路徑 → transcript 目錄名：`:`／`\`／`/`／`.` 一律換成 `-`。
+
+    **正向產生、不反向解析**：`-` 在目錄名裡是多義的（`D---ai-harness` 同時來自
+    `:`、`\` 與 `.`），反解一定會猜錯。比對一律 casefold —— 目錄名是
+    `d--IT-department` 而 `Path` 給的是 `D:\IT-department`，直接比會抓到 0 個，
+    看起來像「這個專案沒有任何對話紀錄」。
+    """
+    return re.sub(r"[:\\/.]", "-", str(path))
+
+
+def transcript_dir_names(project_root=None) -> list:
+    r"""一個專案的所有紀錄**目錄名**（現在的寫法 ＋ 設定裡明寫的舊寫法）。
+
+    只回名字、**不檢查存在與否** —— 存在性要在呼叫端自己的根目錄底下判。
+    回絕對路徑的話，測試把根目錄換成別處時這一批會繞過去，
+    於是「對不上任何目錄就拒跑」那道守門靜默失效。
+    """
+    root = Path(project_root) if project_root else PROJECT_ROOT
+    try:
+        real = root.resolve()
+    except Exception:
+        real = root
+    names = [encode_project_dir(real), encode_project_dir(root)]
+    for key, extra in (_CFG.get("transcriptDirs") or {}).items():
+        try:
+            same = Path(key).resolve() == real
+        except Exception:
+            same = False
+        if same:
+            names += [str(x) for x in (extra or [])]
+    out = []
+    for n in names:
+        if n not in out:
+            out.append(n)
+    return out
+
+
+def transcript_dirs(project_root=None) -> list:
+    r"""一個專案的**所有**對話紀錄目錄，只回實際存在的（2026-09-02）。
+
+    ## 為什麼是複數
+
+    目錄名是按**當時的路徑寫法**存的。專案改名或搬家之後，同一個專案會有兩份：
+
+        ~/.claude/projects/d--IT-department              搬家前，數百則
+        ~/.claude/projects/D--Patrick-AI-IT-department   搬家後
+
+    只認現在的寫法 ⇒ 舊的那一份整段消失。**數字變小不會報錯**，
+    成本、派工、遵循度三個面板都會顯示成「最近比較少工作」。
+
+    ## 舊寫法從哪來
+
+    1. 現在的路徑本身（實體路徑與設定字面各編一次，兩者可能不同）
+    2. `harness.config.json` 的 `transcriptDirs`：`{專案根: [舊目錄名, ...]}`。
+       **這一份要明寫**，不能靠連結推導 —— 連結一拆，推導就再也得不到舊寫法，
+       而那正是最需要它的時候。鍵用 `resolve()` 比對，新舊路徑寫法都對得上。
+    """
+    names = transcript_dir_names(project_root)
+    have = {}
+    if TRANSCRIPTS_ROOT.is_dir():
+        have = {d.name.casefold(): d for d in TRANSCRIPTS_ROOT.iterdir() if d.is_dir()}
+    out = []
+    for n in names:
+        d = have.get(str(n).casefold())
+        if d is not None and d not in out:
+            out.append(d)
+    return out
 
 
 def iter_skill_paths() -> tuple[list[tuple[str, Path]], list[str]]:

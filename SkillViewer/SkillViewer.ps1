@@ -12,10 +12,10 @@
       （baselines 區塊）由 tools\skill_watch_run.py 每日維護。
 
   用法：雙擊 Launch-SkillViewer.bat（雙擊 .ps1 只會用記事本開啟）。
-  可選參數：-ProjectPath 指到別的專案（預設 D:\IT-department）。
+  可選參數：-ProjectPath 指到別的專案（預設 D:\Patrick-AI\IT-department）。
 #>
 param(
-  [string]$ProjectPath = "D:\IT-department"
+  [string]$ProjectPath = "D:\Patrick-AI\IT-department"
 )
 
 Add-Type -AssemblyName System.Windows.Forms

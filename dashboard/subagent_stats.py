@@ -27,7 +27,8 @@ r"""解析平台自己的 subagent 逐筆紀錄（2026-08-05）。
 上游每回合都在變 → Stop hook 的內容雜湊比對會每次判定「有變」，109ms 秒退失效）。
 走離線批次：`/shougong` 步驟 3.5 ＋ 隨時手動跑。冪等只能在快照上驗。
 
-【核心層】解析平台自己的 subagent 紀錄格式；「讀哪個專案」該是設定，現況寫死是已登記的債務（UNIVERSAL_HARNESS_PLAN §1）。
+【核心層】解析平台自己的 subagent 紀錄格式。「讀哪個專案」2026-09-02 改成走設定
+（`config.transcript_dirs()`），原本寫死 `d--IT-department` 的那筆債已清。
 """
 from __future__ import annotations
 
@@ -42,7 +43,26 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 # 角色只在這個專案定義，所以只讀這個專案的 subagent 紀錄。
-PROJECT_DIR = Path.home() / ".claude" / "projects" / "d--IT-department"
+# **紀錄目錄可能不只一個**：目錄名是按當時的專案路徑寫法存的，改名／搬家會多出一份。
+# 只認新的那一份，搬家前的派工紀錄整段消失而且不報錯（`config.transcript_dirs()`）。
+_HARNESS_ROOT = Path(__file__).resolve().parent.parent
+if str(_HARNESS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_HARNESS_ROOT))
+import config  # noqa: E402
+
+_ALL_PROJECT_DIRS = config.transcript_dirs()
+PROJECT_DIR = (_ALL_PROJECT_DIRS[0] if _ALL_PROJECT_DIRS
+               else Path.home() / ".claude" / "projects"
+               / config.encode_project_dir(config.PROJECT_ROOT))
+_DEFAULT_PROJECT_DIR = PROJECT_DIR
+
+
+def scan_dirs() -> list:
+    """要掃的紀錄目錄。`PROJECT_DIR` 是既有介面（`gen_task_flow` 靠它定位根目錄），
+    被換掉時只掃它；沒被換才連舊寫法的目錄一起掃。"""
+    if PROJECT_DIR != _DEFAULT_PROJECT_DIR:
+        return [PROJECT_DIR]
+    return [PROJECT_DIR] + [d for d in _ALL_PROJECT_DIRS if d != PROJECT_DIR]
 
 # 手寫規律 UUID ＝ 測試餵料（同 gen_roles_topology 的判準，兩邊要一致）
 # ── 測試餵料的過濾規則：**單一真相就在這裡** ──
@@ -137,9 +157,10 @@ def _iter_runs(project_dir: Path):
 
 def collect(project_dir: Path | None = None) -> dict:
     """回 {角色: {...}}。找不到目錄或零筆紀錄一律拒跑 —— 空統計跟「真的沒派過」同形。"""
-    project_dir = project_dir or PROJECT_DIR
-    if not project_dir.exists():
-        raise SystemExit(f"找不到 subagent 紀錄目錄 {project_dir} —— 拒絕產出空統計。")
+    dirs = [project_dir] if project_dir else scan_dirs()
+    if not any(d.exists() for d in dirs):
+        raise SystemExit(
+            f"找不到 subagent 紀錄目錄 {'、'.join(str(d) for d in dirs)} —— 拒絕產出空統計。")
 
     out: dict = {}
 
@@ -149,7 +170,8 @@ def collect(project_dir: Path | None = None) -> dict:
             "days": {}, "last": "", "tasks": [], "depths": {}, "toolCalls": 0,
         })
 
-    for meta, jsonl, started, ended in _iter_runs(project_dir):
+    for meta, jsonl, started, ended in (r for d in dirs if d.exists()
+                                        for r in _iter_runs(d)):
         role = (meta.get("agentType") or "?").strip() or "?"
         if role in PROBE_AGENTS:
             continue
@@ -218,7 +240,7 @@ def daily(stats: dict, days: int = 14) -> dict:
 
 def main() -> None:
     stats = collect()
-    print(f"來源：{PROJECT_DIR}")
+    print("來源：" + "、".join(str(d) for d in scan_dirs()))
     total = sum(v["runs"] for v in stats.values())
     print(f"角色 {len(stats)} 個 · 派工 {total} 次 · "
           f"工具調用 {sum(v['toolCalls'] for v in stats.values())} 次\n")

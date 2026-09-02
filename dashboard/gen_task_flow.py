@@ -323,7 +323,8 @@ def quadrant() -> dict:
 
     # ── 主 session：宣告段 ──────────────────────────────
     for proj in wfc.projects():
-        for fp in sorted(proj["dir"].glob("*.jsonl")):
+        # 多個 transcript 目錄＝同一個專案的舊寫法與新寫法（見 `wfc.projects()`）
+        for fp in sorted(f for d in proj["dirs"] for f in d.glob("*.jsonl")):
             if test_sess.match(fp.stem):
                 continue
             try:

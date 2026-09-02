@@ -75,8 +75,26 @@ SKILLS_DIR = IT_DEPT / ".claude" / "skills"
 GLOBAL_SKILLS_DIR = DASHBOARD_DIR.parent / "skills"
 # 角色 2026-08-05 搬到 harness repo（見 gen_roles_topology.AGENTS_DIR 的說明）。
 AGENTS_DIR = HARNESS_ROOT / "agents"
-# 平台把專案路徑轉成目錄名的規則：非字母數字一律換 `-`（`d:\IT-department` → `d--IT-department`）
-PROJECT_DIR = Path.home() / ".claude" / "projects" / "d--IT-department"
+# 平台把專案路徑轉成目錄名的規則：非字母數字一律換 `-`（`d:\IT-department` → `d--IT-department`）。
+# **可能不只一個**：專案改名／搬家後舊紀錄留在舊目錄名底下，只認新的會讓歷史成本
+# 整段消失（規則與舊目錄名的來源都在 `config.transcript_dirs()`）。
+_ALL_PROJECT_DIRS = config.transcript_dirs()
+PROJECT_DIR = (_ALL_PROJECT_DIRS[0] if _ALL_PROJECT_DIRS
+               else Path.home() / ".claude" / "projects"
+               / config.encode_project_dir(config.PROJECT_ROOT))
+_DEFAULT_PROJECT_DIR = PROJECT_DIR
+
+
+def scan_dirs() -> list:
+    """要掃的紀錄目錄。
+
+    ⚠ **`PROJECT_DIR` 這個名字不可改**：`test_cost_panel.py` 有 17 處
+    monkeypatch 它來換資料源。被覆寫時**只掃它**（否則真實機器上的舊紀錄
+    會漏進臨時目錄的測試，斷言全部失準）；沒被覆寫才連舊目錄一起掃。
+    """
+    if PROJECT_DIR != _DEFAULT_PROJECT_DIR:
+        return [PROJECT_DIR]
+    return [PROJECT_DIR] + [d for d in _ALL_PROJECT_DIRS if d != PROJECT_DIR]
 
 MARK_START = "<!-- COST_PANEL_START"
 MARK_END = "<!-- COST_PANEL_END -->"
@@ -133,7 +151,8 @@ def _token_corpus() -> list:
     「跑得動、數字紋風不動、沒有紅燈」。單一真相在 `subagent_stats`（它的 `:119`
     就是用 `*/subagents/*.meta.json`），這裡沿用同一個層數。
     """
-    return sorted(PROJECT_DIR.glob("*.jsonl")) + sorted(PROJECT_DIR.glob("*/subagents/*.jsonl"))
+    return (sorted(f for d in scan_dirs() for f in d.glob("*.jsonl"))
+            + sorted(f for d in scan_dirs() for f in d.glob("*/subagents/*.jsonl")))
 
 
 def aggregate_tokens() -> "tuple[dict, set]":
@@ -142,7 +161,7 @@ def aggregate_tokens() -> "tuple[dict, set]":
     只認 `message.usage` 且 model 非 `<synthetic>` 的訊息 —— synthetic 是平台自己補的
     佔位訊息，usage 全 0，算進去會稀釋 mix。
     """
-    if not PROJECT_DIR.exists():
+    if not any(d.exists() for d in scan_dirs()):
         raise SystemExit(f"找不到 transcript 目錄 {PROJECT_DIR} —— 零目標拒跑，不產空表。")
     by_day: dict = {}
     sessions: set = set()
@@ -259,14 +278,14 @@ def stage_attribution(since: str = STAGE_RULE_SINCE) -> "tuple[dict, dict]":
     宣告行自己的 usage 歸入**新**階段（那一則就是新任務的開場白）。
     宣告之前的紀錄歸「未標記」——未標記佔比就是宣告紀律的量測，照實顯示。
     """
-    if not PROJECT_DIR.exists():
+    if not any(d.exists() for d in scan_dirs()):
         raise SystemExit(f"找不到 transcript 目錄 {PROJECT_DIR} —— 零目標拒跑，不產空表。")
     stages: dict = {}
     cutoff = _utc_cutoff(since)
     meta = {"first_decl": "", "decl_n": 0, "dup_skipped": 0,
             "since": since, "cutoff": cutoff}
     seen: set = set()
-    for fp in sorted(PROJECT_DIR.glob("*.jsonl")):
+    for fp in sorted(f for d in scan_dirs() for f in d.glob("*.jsonl")):
         try:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except Exception:
@@ -523,9 +542,9 @@ def daily_by_model() -> dict:
     用 family 對應會把兩個不同單價的模型混在一起算比例。
     """
     out: dict = {}
-    if not PROJECT_DIR.exists():
+    if not any(d.exists() for d in scan_dirs()):
         return out
-    for fp in PROJECT_DIR.glob("*.jsonl"):
+    for fp in (f for d in scan_dirs() for f in d.glob("*.jsonl")):
         try:
             text = fp.read_text(encoding="utf-8", errors="replace")
         except Exception:
@@ -942,7 +961,7 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <h4>讀這張表之前先知道三件事</h4>
         <ul>
           <li><span class="chip warn">判讀</span><span><b>偏離目標 ≠ 違規。</b>§7 明列「碰硬規則區／多檔協調／根因診斷／架構規劃 → 切 Opus」，所以做 harness 的那幾天 100:0 是<b>規則允許的</b>。這一頁的定位是<b>讓偏離可見且可解釋</b>，不是叫——只比比例就發警報會變成假警報製造機，三次之後就被無視。</span></li>
-          <li><span class="chip pass">口徑</span><span>mix 用 <b>output token</b>（生成成本主體、最接近付費結構），則數列為輔助。範圍<b>只含本專案</b>（<code>{_esc(PROJECT_DIR.name)}</code>）——§7 是本專案的規則，混進別的專案會讓數字看起來比實際健康。</span></li>
+          <li><span class="chip pass">口徑</span><span>mix 用 <b>output token</b>（生成成本主體、最接近付費結構），則數列為輔助。範圍<b>只含本專案</b>（<code>{_esc("、".join(d.name for d in scan_dirs()))}</code>）——§7 是本專案的規則，混進別的專案會讓數字看起來比實際健康。</span></li>
           <li><span class="chip block">精度</span><span>走勢圖的<b>金額有兩條線</b>：實線是 ccusage 的<b>全機器每日實付</b>（帳單口徑、準）；虛線是<b>本專案分攤估算</b>——同一天同一模型按 token 佔比切。之所以只能估，是 ccusage 把 <code>ephemeral_1h</code> 與 <code>ephemeral_5m</code> 兩種不同價的 cache 合併成一欄，反解單價實測殘差最大 36%。<b>看趨勢用虛線，對帳一律用實線與下方累計值。</b></span></li>
         </ul>
       </div>

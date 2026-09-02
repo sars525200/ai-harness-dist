@@ -28,7 +28,7 @@ sys.path.insert(0, HOOKS_DIR)
 
 from _lib import RealGitContext  # noqa: E402
 
-REPO = sys.argv[1] if len(sys.argv) > 1 else r"D:\IT-department"
+REPO = sys.argv[1] if len(sys.argv) > 1 else r"D:\Patrick-AI\IT-department"
 
 PROD = "SOP_PROD/05_UI_Demo/"
 results: list[tuple[bool, str, str]] = []

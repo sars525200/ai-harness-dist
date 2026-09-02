@@ -642,3 +642,436 @@ git reset && git apply --cached out.patch && git commit -m "chore(paths): ..."
 ②apply 前先 `git reset`、apply 後**立刻** commit（外部程序可能 `git add -A` 污染 index）。
 
 對帳：`git diff --cached | grep -c "<對方改動的特徵字>"` 應為 0。
+
+---
+
+### 2026-09-02 第十三段（第三棒接手：現況核對 ＋ P3 盤點）
+
+**核對結果：`.ai-harness` 沒搬。** `finish_d_move.log` 最後一筆停在 11:35「已安裝到開機啟動項」，
+之後沒有任何執行紀錄；`FinishDMove.vbs` 仍在啟動資料夾；`D:\Patrick-AI\` 底下只有三個 repo。
+⇒ 還沒登出過，開機啟動項在等下次登入。log 前四筆都寫「還有 11 個 claude 行程」——**佔用者是 Claude Code 自己**。
+
+`clash_check.py` 重跑（傳現址 `D:\.ai-harness`）：`135 檔 / 未提交 17 / 重疊 7`，
+與第十二段一致 ⇒ 那 7 個檔還沒被別的 session 提交，裁示的做法仍然成立。
+（17 = 16 個別人的 ＋ 本計畫書自己，未追蹤。）
+
+#### 交接檔的順序有個依賴沒寫出來
+
+`20260902-d-drive-p4-done.md` 把 harness P4 排第 1。但 P4 是把 135 個檔裡的
+`D:\.ai-harness` 改寫成 `D:\Patrick-AI\.ai-harness`——**那個目錄現在不存在**。
+在搬移前跑 `--apply`，從改完到登出前的這段時間，所有讀設定的東西都指向空位置，
+而且不會報錯。**硬順序是「先搬、再改寫」，不能顛倒。**
+
+#### P3 盤點的結論：六項不是同一批
+
+落檔 `.scratch\d-drive-reorg\p3-inventory.md`（含實測值、待決分岔、四欄待驗清單）。
+關鍵是原計畫把 P3 當一批，實測後它有兩個不同的觸發時機：
+
+| 批 | 觸發時機 | 內容 | 提早做的後果 |
+|---|---|---|---|
+| A | harness 搬完、重新登入後 | agents/skills 兩個 junction、`settings.json` 8 處 `.ai-harness`、看板 vbs 重生 | — |
+| B | 拆 junction 前 | `settings.json` 第 157 行、記憶目錄兩個 junction、`harness.config.json` 的 currentProject／scanRoots | **等於自己拆掉一半安全網**，且不報錯 |
+
+兩個新的未決分岔（都需要人裁示，不自行決定）：
+
+1. **`harness.config.json` 的 `scanRoots`（已查證，不再是分岔）**：
+   `dashboard\gen_layers.py:174` 的 `discover_projects()` 用 `root.iterdir()`，**只掃第一層**。
+   junction 還在時照樣掃得到；**拆掉 junction 後 `D:\` 第一層只剩 `Patrick-AI\`，
+   而它底下沒有 `.claude` ⇒ `IT-department` 會從看板消失且不報錯**
+   （不會全空：`extraProjects` 與 `here` 無條件插入是兜底）。⇒ 改成掃 `D:\Patrick-AI\`，歸批 B。
+2. **`.claude.json` 的 11 種路徑字面**含已改名的 `AI-Projects`。P3-3 說要改，
+   但第八段立過「紀錄類的東西改了是竄改」。這兩條在這一項上打架。
+
+#### 這一段沒做的
+
+- 沒動任何檔（本段唯讀，只新增這份紀錄與盤點檔）。
+- harness P4／看板重跑／九項驗證／拆 junction —— **全部阻塞在「還沒登出」**。
+
+#### 使用者裁示（2026-09-02 12:50）
+
+**全部關閉 Claude Code 視窗並登出重登**，讓開機啟動項完成搬移。
+盤點期間查到另一則 session 在 12:45 提交了 `a3a87da`，機器上有 14 個 claude 行程
+——那是 11:11 那四次搬移失敗的同一個原因，登出前必須全部關掉。
+
+重登後的第一件事：看 `C:\Users\<USER>\finish_d_move.log`，
+再讀 `.scratch\d-drive-reorg\p3-inventory.md`（批 A 就是重登後要立刻做的四項）。
+
+#### 搬移完成（2026-09-02 12:58，實測）
+
+`finish_d_move.log` 12:58:21–12:58:40 全程成功：
+
+| 步驟 | 結果 |
+|---|---|
+| 1/5 佔用檢查 | 「沒有行程的工作目錄在目標底下」——**判準已被改過**，不再看 claude 行程總數 |
+| 2/5 停服務 | stopped 4 個（cmd 12432、python 12548／17684、pythonw 15536） |
+| 3/5 搬移 | `MOVED + LINK .ai-harness`（第 1 次就成功）；IT-department 已在容器底下，略過 |
+| 4/5 重啟 | 轉址 8080、看板 8099 都起來 |
+| 5/5 驗證 | 兩個埠都監聽中；兩條舊路徑都可達 |
+
+`FinishDMove.vbs` 已自刪。搬移後核對：新路徑 git HEAD 仍是 `a3a87da`、
+未提交檔仍是 17 個、第十三段與 `p3-inventory.md` 都完好。
+
+**沒有登出**——搬移發生時機器上仍有 12 個 claude 行程（含寫這段的這一則）。
+腳本的佔用判準已經不看 claude 行程總數，改成「有沒有行程的工作目錄在目標底下」，
+這則對話的工作目錄是 `D:\` 不在目標底下 ⇒ 沒被擋。
+
+**更正**：本段一度推論「另有一則 session 在同時推進同一件事」，那是錯的。
+用 `tools\peek_sessions.py` 查證後：上一棒 session `4584629f` 在 12:53 收工，
+之後沒有任何動作；判準的修改屬於它交接檔裡寫的「開機啟動項三個缺陷」那批（11:35 那版）。
+12:58 的搬移是使用者自己觸發的。**現在只有一則活躍 session，沒有並行衝突。**
+
+#### 硬限制更新：junction 是四個不是三個
+
+`D:\` 根目錄現在有四個連結：`.ai-harness`（新增，12:58）、
+`AI-Projects`、`IT-department`、`MIS-install`。
+交接檔寫的「三個 junction 不准拆」要讀成**四個**。
+
+`.ai-harness` 這一個是 P4 路徑改寫期間的唯一保護：135 個檔還沒改，
+全部靠它才走得通。**它比另外三個更不能提早拆。**
+
+---
+
+### 2026-09-02 第十四段（P3 批 A ＋ harness P4 落地）
+
+#### 批 A 四項全做完
+
+| 項目 | 結果 |
+|---|---|
+| `~\.claude\agents` | junction 重接新路徑，6 個角色都在（先 `rmdir` 拆連結再 `mklink /J`，不做遞迴刪除） |
+| `~\.claude\skills` | 同上，16 項（15 技能 ＋ `_meta`） |
+| `~\.claude\settings.json` | **11 處**（原盤點寫 8 處是錯的），改前備份；第 157 行的 `IT-department` 屬批 B，保留 |
+| 看板開機項 | 重跑 installer 重生，`script` 行已指新路徑；舊檔留 `.bak_dmove_*` |
+
+#### harness P4：兩個 commit，中間抓到兩個真缺陷
+
+`6d57f0b` 134 檔 / 358 行 ＋ `dc5aace` 56 檔 / 96 行。
+
+**缺陷一：取代正則漏掉 JSON／JS 的逸出寫法。**
+原正則只認單一分隔字元，`"D:\\.ai-harness"` 這種雙反斜線寫法整批漏掉——
+實測 **60 檔 / 128 處**，含 hooks、eval、看板產生器與 15 個 hook 測試 fixture。
+漏掉不報錯：那些路徑要到執行期才解析。
+修法是把分隔符改成「兩個反斜線／一個反斜線／一個斜線」三選一，
+並把 `.ndjson` 加進跳過清單（e2e 與探針的執行紀錄，刻意留 3 檔 27 處）。
+
+**缺陷二：`tests/test_build_review_sandbox.py` 被改到語意反轉。**
+那一行是「repo 直接躺在磁碟根層」的合成情境，改成容器路徑後斷言必紅（實測通過 16 失敗 1）。
+已還原並加進 repath 的逐行豁免清單。**這是靠實跑測試抓到的，不是靠腳本自報成功。**
+
+#### 衝突檔的分離做法比計畫書那版嚴格
+
+計畫書寫用 `filter_hunks.py --keep "Patrick-AI"`。實測**會夾帶別人的改動 49 行**：
+`--keep` 是「hunk 含關鍵字就整段收」，而 git diff 預設 3 行 context 會把別人的改動
+黏進同一個 hunk。改成**零 context diff 逐 hunk 驗證「每一行變更都是路徑替換」才收**。
+
+對帳結果：兩個 commit 的 `+` 行 100% 含新路徑、`-` 行 100% 含舊路徑、逐檔加減對稱。
+工作區前後都是 17 個未提交檔，**別人的改動一個都沒被吃掉**。
+
+#### 驗證
+
+`tests/run_hook_tests.py` 1517/1518、`eval/run_all.py` L1–L4 全綠，**與遷移前逐項相同**。
+那 1 項失敗（規則中繼產生器）在遷移前就存在，屬另一則 session 未提交的規則改動，記票不修。
+
+#### 沒做的
+
+1. **`dashboard/subagent_stats.py` 的 1 處**：與別人未提交的正則改動在零 context 下同屬一個 hunk，
+   分不開。改動留在工作區，等對方提交時一起帶走。
+2. **看板產物仍有 102 處舊路徑**。殼檔已乾淨（0 處），產生器也重跑過（`--force`），
+   但那些字串是**從資料源注入的**——上游是 `IT-department\PENDING_VERIFY.md`
+   與 `IT-department\.claude\skills\shougong\SKILL.md`。
+   ⇒ 要先改完 IT-department 才會消失，不是看板的問題。
+3. **另外三個 repo 引用 harness 的路徑還沒改**（上一棒刻意延後，因為當時 harness 還沒搬）：
+
+   | repo | 待改 | 工作區 |
+   |---|---|---|
+   | `IT-department` | 26 檔 / 141 處（`PENDING_VERIFY.md` 佔 80 處） | 乾淨 |
+   | `MIS-install` | 3 檔 / 3 處 | 1 檔 `.gitignore` |
+   | `IT-department\SOP` | 1 檔 / 1 處 | 418 檔（全是上一棒重建 venv 的 pyc） |
+
+   **被本 session 的權限閘門擋下**：對 `D:\Patrick-AI\IT-department` 寫檔的指令被
+   auto mode classifier 拒絕。沒有繞過，停下來請示。
+
+### 2026-09-02 第十五段（三個 repo 的 harness 引用 ＋ 九項驗證跑了六項）
+
+#### 三個 repo 都改完並各自 commit
+
+| repo | commit | 內容 |
+|---|---|---|
+| `IT-department` | `4f2567ee` | 26 檔 / 141 處，對稱 116/116（`PENDING_VERIFY.md` 佔 80 處） |
+| `MIS-install` | `09a79fe` | 3 檔 / 3 處，逐檔 1/1；`.gitignore` 是別人的改動，沒 stage |
+| `IT-department\SOP` | `f36dae22` | 1 檔 / 1 處；PROD 鏡像那份在父 repo 一起改，兩邊同步。commit hook 自動 bump 到 v2.20.469-dev |
+
+#### 看板產物：102 處 → 2 處
+
+重跑 `refresh_dashboard.py --force`。剩下的 2 行是**歷史 transcript 的工具呼叫紀錄**
+（成本／工具統計面板的 `declaredTools.targets`，來自 `~/.claude/projects/*/*.jsonl`），
+當時真的是那個路徑 ⇒ **刻意保留，改了是竄改**。
+
+#### 九項驗證：六項過、三項待人在場
+
+| # | 項目 | 結果 |
+|---|---|---|
+| 1 | 技能還在 | **待驗**——要開新對話才看得到 |
+| 2 | 角色還在 | **待驗**——同上 |
+| 3 | 閘門還活著 | ✔ `run_hook_tests.py` 1517/1518（那 1 項遷移前就紅） |
+| 4 | 契約與結構 | ✔ `eval/run_all.py` L1–L4 全綠 |
+| 5 | 看板 | ✔ 8099 回 HTTP 200／1.99 MB，四個區塊都有資料 |
+| 6 | 記憶沒斷 | **待驗**——要三個專案各開一則新對話 |
+| 7 | 沒有漏網路徑 | ✔ 四個 repo 活檔全部 `0 檔 / 0 處`（harness 另有 2 行刻意豁免） |
+| 8 | 暫存不回根目錄 | ✔ 實跑 `build_review_sandbox.py`，沙箱落在 `D:\Patrick-AI\.rev-sandbox`，D 槽根目錄沒有新資料夾 |
+| 9 | 安全網可拆 | **未做**——1／2／6 沒過之前不准拆 |
+
+轉址服務另外實測：`http://10.0.0.1:8080/` 與 `/itportal` 都回 302。
+**注意它綁的是 LAN IP 不是 127.0.0.1**，用 localhost 測會得到「連不上」的假陰性。
+
+#### 記票不修
+
+1. **console cp950 印不出 `✔`／`❌`**：`build_review_sandbox.py`、
+   `test_build_review_sandbox.py` 在這台機器上會在印結果那一行 `UnicodeEncodeError` 中止。
+   功能本身是好的（沙箱有建出來、測試 17/17 過），但**結束碼會變成 2，看起來像失敗**。
+   不修的後果：任何用結束碼判定的自動化會把它當紅燈。
+   分支指令：`py -3 -X utf8 tools/build_review_sandbox.py ...`（或在腳本頂端 reconfigure stdout）。
+2. **`dashboard/subagent_stats.py` 的 1 處路徑**：與別人未提交的正則改動同屬一個零 context hunk，
+   分不開，留在工作區等對方提交。
+
+#### 這一段沒做的
+
+- 拆 junction（第 9 項）——要等 1／2／6 三項在新對話裡驗過。
+- `D:\Patrick-AI\.rev-sandbox\dmove-verify` 是本段驗證建出來的沙箱，沒有刪除（刪除要人點頭）。
+- P3 批 B 全部未動（那是拆 junction 前才做的）。
+
+### 2026-09-02 第十六段（P3 批 B：兩項做完，一項退回）
+
+| 項目 | 結果 |
+|---|---|
+| `settings.json` 第 157 行 | ✔ `IT-department\.aimemory` 改到容器底下；全檔 13 處路徑都確認過 |
+| 記憶目錄兩個 junction | ✔ `D--AI-Projects\memory` → `MIS-install\.aimemory`（17 檔）、`d--IT-department\memory` → `IT-department\.aimemory`（203 檔），都經連結讀得到 |
+| `harness.config.json` | ✘ **改了又退回**，理由見下 |
+
+#### 為什麼退回：改 config 會讓看板壞掉，兩種不同的壞法
+
+第十三段查證「`scanRoots` 只掃第一層、必須改」是對的，但改了之後出現回歸。三種組合實測：
+
+| currentProject | scanRoots | 待辦統計 | 結構驗證 |
+|---|---|---|---|
+| 舊 | 舊 | 388（AI-Projects 20、IT 268、MIS 40、全域 60） | ✔ 通過 |
+| 新 | 新 | 348（AI-Projects 整個消失） | ✘ 待辦列的 AI-Projects 用 pn，與 #lay-data 宣告的 None 不一致 |
+| 新 | 舊 | 656（**IT-department 268 → 536，剛好兩倍**） | ✘ 遵循度表的 IT-department 用 p0，與 #lay-data 宣告的 pn 不一致 |
+
+兩個獨立缺陷，**都是拆 junction 前的阻塞項**：
+
+1. **`discover_projects()` 不對「同一目錄的兩種路徑字面」去重。**
+   `child not in found` 比的是字面，`D:\IT-department`（junction）與
+   `D:\Patrick-AI\IT-department`（實體）同一個目錄卻算成兩個專案，待辦翻倍。
+   ⇒ `currentProject` 與 `scanRoots` 的字面必須同一套，不能一新一舊。
+2. **`AI-Projects` 從專案清單消失時結構驗證會紅。**
+   產物還留著那一列，資料層已經沒有它。而 `AI-Projects` 只是 `D:\` 根目錄的舊名 junction
+   ——**拆 junction 那一刻它必然消失**。照原計畫「驗證全過就拆」，會在安全網已經沒有時才發現。
+
+已退回原值並重跑產生器確認：388 項、結構驗證通過、`git status` 對該檔為空。
+
+#### 這一段沒做的
+
+- `harness.config.json` 的 `currentProject` 與 `scanRoots`（退回，等看板修好）。
+- `.claude.json` 的 11 種舊路徑字面——仍待裁示（P3-3 說要改 vs「紀錄改了是竄改」）。
+- `settings.json` 第 156 行 `projects\d--IT-department\memory` 是 project 鍵路徑，
+  **拆 junction 後鍵名會變**，屆時要一起改。記票。
+
+### 2026-09-02 第十七段（第四棒：看板兩個缺陷修好，但 config 仍不能改——查到第三個阻塞項）
+
+#### 先更正第十六段的口徑：388 本來就是錯的，348 才是真值
+
+第十六段那張三組合對照表把「新／新 → 348、AI-Projects 整個消失」判成回歸。**判反了。**
+實測 `discover_projects()` 在舊設定下列出四筆，其中**三筆是同一個實體目錄**：
+
+| 列出來的路徑 | `resolve()` 之後 | 顯示名 |
+|---|---|---|
+| `D:\AI-Projects` | `D:\Patrick-AI\MIS-install` | AI-Projects |
+| `D:\IT-department` | `D:\Patrick-AI\IT-department` | IT-department |
+| `D:\MIS-install` | `D:\Patrick-AI\MIS-install` | MIS-install |
+| `D:\Patrick-AI\MIS-install` | `D:\Patrick-AI\MIS-install` | MIS-install |
+
+`gen_todos.collect()` 用 `buckets[name] += got` 累加 ⇒ 後兩筆同名合併成 40（20×2），
+第一筆另立門戶 20。**同一批 20 項待辦被算了三遍**，看板長期顯示 388 而真值 348。
+症狀是數字變大不是報錯，所以放著不會有人發現。
+
+#### 缺陷一：去重改成比實體路徑，不比字面
+
+`gen_layers.canon()`（新增）＝ `Path.resolve()`，解開 junction；`discover_projects()`
+回的一律是實體路徑，去重也以實體路徑為準。顯示名取實體名 ⇒ 舊名連結自然不再列出。
+
+同一支檔案裡**另外三處**也在拿設定字面比對，一起改掉（都是「比錯就靜默失效」）：
+
+| 位置 | 原本 | 壞法 |
+|---|---|---|
+| `isCurrent` | `proj == PROJECT_DIR.parent` | 沒有任何專案被標成本專案，下拉／待辦徽章／配色順序全失準 |
+| `foreignHooks` | `here_lc = str(PROJECT_DIR.parent)` | 本專案自己的 hook 被誤報成「別的專案指過來」；反過來也會漏抓 |
+| `project_colors._discovered()` | `here = mod.PROJECT_DIR.parent` | 「本專案排第一」永遠不成立，配色整組位移 |
+
+新增 `current_project()` 當這類比對的單一入口。
+
+#### 缺陷二：結構驗證兩張表判準統一
+
+`test_dashboard_structure.py` 對待辦列是「名字沒在 `#lay-data` 就判紅」，
+對遵循度表卻是「不在就略過」。兩邊都不對：
+
+- `project_colors.classes(extra_names)` **明訂**「這一頁看到、但不在探索清單裡的名字一律中性灰」
+  （已改名／已移除的舊工作區）。舊寫法跟設計相反 —— 而拆舊名 junction 那一刻
+  那些名字必然出現，安全網會在最需要的那一刻變成假紅。
+- 遵循度表那邊直接略過，未宣告卻不是灰的就漏掉。
+
+改成共用一條：**有宣告 → 必須等於宣告值；沒宣告 → 必須是中性灰**。
+
+#### 缺陷三（本段新查到，取代原本「修好就能拆」的判斷）：transcript 歷史會變孤兒
+
+改完去重之後 hook 測試從 1517 掉到 **1516**，多紅的那條是
+`test_workflow_compliance.py:401`「真實語料裡確實有任務分類可拆（實得 0 個標籤）」。
+不是誤報 —— `gen_workflow_compliance.projects()` 是拿 `r["path"]` 編碼成
+`~/.claude/projects/` 底下的目錄名去撈 transcript 的，而**目錄名是按當時的路徑寫法存的**：
+
+```
+~/.claude/projects/d--IT-department              舊寫法，數百則對話
+~/.claude/projects/D--Patrick-AI-IT-department   新寫法，搬完之後才有
+~/.claude/projects/D--AI-Projects                MIS-install 的全部歷史
+```
+
+只認實體路徑 ⇒ 舊目錄整段消失，遵循度從 12 段掉到 2 段、MIS-install 直接不見。
+**數字變小不報錯**，看起來像「最近比較少工作」。
+
+本段的處理：`gen_layers.path_aliases()`（新增）回「同一個目錄的所有寫法」，
+`projects()` 改成一個專案可對到**多個** transcript 目錄（`dirs`，`dir` 保留給既有呼叫端）。
+實測回到 13 段、8/13 對得上、5 個 session 軌跡，比修之前還多（原本 MIS-install 沒接上）。
+
+**但這只是撐住現況，不是解法。** 別名是從**現有的 junction 推導**出來的：
+
+| 設定 | IT-department 對到的 transcript 目錄 | 遵循度段數 |
+|---|---|---|
+| 舊字面（`D:\`／`D:\IT-department`） | `d--IT-department` ＋ `D--Patrick-AI-IT-department` | 13 |
+| 新字面（`D:\Patrick-AI`） | 只有 `D--Patrick-AI-IT-department` | 2（MIS-install 整個不見） |
+
+⇒ **`harness.config.json` 改成新字面的那一刻，歷史就斷了；拆 junction 之後永久斷。**
+`gen_cost_panel.py:79` 與 `subagent_stats.py:45` 還各自寫死 `d--IT-department`，同一個問題。
+
+**這一項沒有修，因為它要人裁示歷史怎麼接**（三個選項：合併舊目錄到新目錄／
+在設定裡明列 transcript 目錄別名／接受歷史斷點並在看板標出來）。
+
+#### 又一個阻塞項：P4 的「0 漏網」不含這幾類，而其中有活的
+
+用**不分大小寫**、且包含未被原掃描涵蓋的檔類重掃，抓到仍指向舊路徑的**活設定**：
+
+| 位置 | 內容 | 拆 junction 後 |
+|---|---|---|
+| `IT-department\.claude\settings.json:128` | Stop hook 指向 `d:\IT-department\SOP\scripts\auto_commit.ps1` | 每次 session 結束 hook 找不到腳本 |
+| `IT-department\.claude\settings.local.json:6` | 權限 `D:\IT-department\.aimemory` | 記憶目錄授權失效 |
+| `.ai-harness\SkillViewer\SkillViewer.ps1:18` | 參數預設值 `D:\IT-department` | 工具預設指向不存在的路徑 |
+| `MIS-install\codebase-health-dashboard\server.py:26` | `REPO_DIR = r"D:\IT-department"` | 那支儀表板盯空目錄 |
+| `.ai-harness\tests\smoke_real_git.py:31` | 預設 repo `D:\IT-department` | 測試預設值失準 |
+
+其餘命中都是**紀錄類**（`.aimemory`、`.scratch`、`_archive`、註解與 docstring），照第八段不動。
+`tests/r4_e2e/_gen_*.py` 是 e2e 固定樣本，同樣不動。
+
+⇒ 這五項是拆 junction 前必須處理的，**本段沒有修**（不在本輪範圍，且跨三個 repo）。
+
+#### 驗證（本段實跑）
+
+| 項目 | 結果 |
+|---|---|
+| `tests/run_hook_tests.py` | 1517/1518 —— 與遷移前逐項相同（那 1 項是別人未提交的規則改動） |
+| `eval/run_all.py` | L1–L4 全綠 |
+| `tests/test_dashboard_structure.py` | 全部通過（13 個頁籤） |
+| `tests/test_layers.py` | 8 通過 0 失敗 |
+| `refresh_dashboard.py --force` | 結構驗證通過；待辦 **348**（IT 268、MIS-install 20、全域 60） |
+| 看板服務 | `http://127.0.0.1:8099/` HTTP 200／1.88 MB |
+| 舊字面 vs 新字面產物比對 | 差異只有時間戳、即時 session 面板、下拉排序；`colorClass` 兩邊都一致 |
+
+`harness.config.json` **維持舊值**（改過又還原，`git diff` 對該檔為空）。
+
+#### 這一段沒做的
+
+- `harness.config.json` 的 `currentProject`／`scanRoots` —— 卡在缺陷三，等人裁示歷史怎麼接。
+- 上表五項活設定的舊路徑 —— 跨三個 repo，等排程。
+- `.claude.json` 的 11 種舊路徑字面 —— 仍待裁示（P3-3 說要改 vs「紀錄改了是竄改」）。
+- 拆 junction —— 缺陷三與五項活設定都沒處理之前不准拆。
+- `dashboard/subagent_stats.py` 的 1 處 —— 仍與別人未提交的改動同屬一個零 context hunk。
+
+### 2026-09-02 第十八段（歷史折舊新兩份 ＋ 設定改完 ＋ 五處活設定）
+
+第十七段結尾列的「沒做的」有三項在本段做掉了，**以本段為準**。
+
+#### 使用者裁示（2026-09-02）
+
+- 歷史怎麼接 → **讓看板自己折舊新兩份**（不動 `~\.claude\projects\` 底下的紀錄）
+- 五處活設定 → **接著就修**
+
+#### 一個專案可以有多個對話紀錄目錄
+
+`harness.config.json` 新增 **`transcriptDirs`**：`{專案根: [舊目錄名, ...]}`。
+規則本體在 `config.py` 的 `transcript_dir_names()`／`transcript_dirs()`（單一真相），
+`encode_project_dir()` 也一併搬過來（原本只長在遵循度產生器裡）。
+
+| 檔 | 改了什麼 |
+|---|---|
+| `config.py` | 新增目錄名編碼與 `transcriptDirs` 解讀；鍵用 `resolve()` 比對，新舊路徑寫法都對得上 |
+| `gen_layers.py` | 每個專案多帶 `pathAliases`（連結推導）與 `transcriptDirs`（設定明寫） |
+| `gen_workflow_compliance.py` | `projects()` 回 `dirs`（複數），舊 `dir` 保留給既有呼叫端 |
+| `gen_task_flow.py` | 跟著改成掃多個目錄 |
+| `gen_cost_panel.py`／`subagent_stats.py` | 拿掉寫死的 `d--IT-department`，改走設定 |
+
+**兩個踩到的坑，都是「介面不可改」那條**：
+
+1. `test_cost_panel.py` 有 **17 處** monkeypatch `PROJECT_DIR`。改成 `PROJECT_DIRS`
+   當場讓 7 條測試紅。改法是留 `PROJECT_DIR` 當介面，另開 `scan_dirs()`：
+   **被覆寫時只掃它**，沒被覆寫才連舊目錄一起掃。否則真實機器上的舊紀錄會漏進
+   臨時目錄的測試裡，斷言全部失準。
+2. 設定裡的舊目錄若回**絕對路徑**，遵循度那條「對不上任何 transcript 目錄就拒跑」
+   會被繞過去（它換的是 `PROJECTS_ROOT`）。所以 `transcript_dir_names()` 只回**名字**，
+   存在性由呼叫端在自己的根目錄底下判。
+
+#### `harness.config.json` 改完了
+
+`currentProject` → `D:\Patrick-AI\IT-department`、`scanRoots` → `["D:\\Patrick-AI"]`，
+並補上 `transcriptDirs`（`d--IT-department`、`D--AI-Projects`）。
+
+實測新設定下：遵循度 **17 段宣告**、派工 79 次、成本 9 天，
+三個面板都同時吃到搬家前後兩份紀錄 —— 這正是第十七段擋下改設定的那個理由，現在不成立了。
+
+#### 五處活設定的舊路徑
+
+| 位置 | 改法 |
+|---|---|
+| `IT-department\.claude\settings.json:128` | Stop hook 的 `auto_commit.ps1` 指到容器底下（已確認該腳本存在） |
+| `IT-department\.claude\settings.local.json:6` | 權限目錄 `.aimemory` 指到容器底下 |
+| `.ai-harness\SkillViewer\SkillViewer.ps1:15,18` | 參數預設值與用法說明各一處 |
+| `.ai-harness\tests\smoke_real_git.py:31` | 預設 repo |
+| `MIS-install\codebase-health-dashboard\server.py:26` | 盯的 repo |
+
+兩份 JSON 改完都通過解析驗證。重掃活檔（不分大小寫）剩下的命中**全是註解、docstring、
+e2e 固定樣本、`.scratch\` 與測試用的字串常數**（`test_agent_gate.py` 那些是餵給判定器的
+指令字串，路徑存不存在無關）——照第八段不動。
+
+#### 驗證（本段實跑，全在新設定下）
+
+| 項目 | 結果 |
+|---|---|
+| `tests/run_hook_tests.py` | **1517/1518**（那 1 項遷移前就紅，屬別人未提交的規則改動） |
+| `eval/run_all.py` | L1–L4 全綠 |
+| `tests/test_dashboard_structure.py` | 全部通過（13 個頁籤） |
+| `tests/test_layers.py` | 8 通過 0 失敗 |
+| `refresh_dashboard.py --force` | 結構驗證通過 |
+| 看板服務 | HTTP 200 |
+| 遵循度／派工／成本 | 17 段／79 次／9 天，新舊兩份紀錄都吃到 |
+
+#### 待辦數的變動不是本段造成的
+
+第十七段量到 348（IT 268），本段量到 341（IT 261）。差的 7 項是**另一則 session
+正在改 `IT-department\PENDING_VERIFY.md`**（行號整體位移、`.scratch` 有刪檔）。
+與本段的改動無關，不追。
+
+#### 這一段沒做的
+
+- **拆 junction —— 仍然沒拆，四個都在。** 阻塞項已清掉三個，但拆之前還要：
+  三項待人驗（技能／角色／記憶要開新對話才看得到）、
+  `settings.json` 第 156 行的 project 鍵路徑（拆完鍵名會變）。
+- `.claude.json` 的 11 種舊路徑字面 —— 仍待裁示（P3-3 說要改 vs「紀錄改了是竄改」）。
+- `dashboard/subagent_stats.py` 那 1 處 —— 別人的正則改動仍在工作區；本段動的是
+  另外兩個 hunk（寫死目錄名與掃描邏輯），沒有碰到它。
+- 本段的改動**都沒有 commit**（跨三個 repo，等指示）。

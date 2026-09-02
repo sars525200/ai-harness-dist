@@ -48,7 +48,10 @@ def _discovered() -> list:
         spec = importlib.util.spec_from_file_location("_pc_layers", DASHBOARD / "gen_layers.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        here = mod.PROJECT_DIR.parent
+        # 用 `current_project()` 而不是 `PROJECT_DIR.parent`：設定裡填的可能是舊名
+        # 連結，而 `discover_projects()` 回的是實體路徑，字面比對會**永遠不相等**
+        # ⇒「本專案排第一」靜默失效、配色整組位移（2026-09-02）。
+        here = mod.current_project()
         # **本專案永遠排第一** —— 不是為了偏心，是為了不動到既有配色：
         # 純字母排序會讓 `AI-Projects` 擠到 slot 0，於是遵循度表裡的
         # `IT-department` 從藍變洋紅。顏色跟著實體走、不跟著排名走，
