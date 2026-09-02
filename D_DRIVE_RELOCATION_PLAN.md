@@ -1074,4 +1074,14 @@ e2e 固定樣本、`.scratch\` 與測試用的字串常數**（`test_agent_gate.
 - `.claude.json` 的 11 種舊路徑字面 —— 仍待裁示（P3-3 說要改 vs「紀錄改了是竄改」）。
 - `dashboard/subagent_stats.py` 那 1 處 —— 別人的正則改動仍在工作區；本段動的是
   另外兩個 hunk（寫死目錄名與掃描邏輯），沒有碰到它。
-- 本段的改動**都沒有 commit**（跨三個 repo，等指示）。
+- ~~本段的改動都沒有 commit~~ → **三個 repo 都收了**（使用者裁示，2026-09-02）：
+
+  | repo | commit | 內容 |
+  |---|---|---|
+  | `.ai-harness` | `43fd28d` | 11 檔（含本計畫書）。混在一起的那一檔用零 context 逐 hunk 篩，只收本段的三個 hunk |
+  | `IT-department` | `67b3829a` | 2 檔：Stop hook 與權限目錄 |
+  | `MIS-install` | `3511204` | 1 檔：健康度儀表板盯的 repo |
+
+  收完各 repo 剩下的未提交檔**全是別人的**：harness 16 個（與交接檔記的數字一致）、
+  IT-department 28 個（另一則 session 正在改待驗清單與 `.scratch`）、MIS-install 1 個。
+  另外實測產生器**冪等**：同一份輸入重跑兩次，看板產物雜湊相同。
