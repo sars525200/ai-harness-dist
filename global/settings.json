@@ -243,5 +243,5 @@
   "switchModelsOnFlag": true,
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true,
-  "model": "sonnet"
+  "model": "opus"
 }
