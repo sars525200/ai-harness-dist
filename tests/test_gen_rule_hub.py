@@ -126,8 +126,13 @@ def run() -> tuple[int, list]:
     # （只改本段註解必須保持綠——斷言讀的是產出檔本文，不是註解。）
     check("真檔：rename_chat 只在 Cursor 產出",
           "rename_chat" in real_u and "rename_chat" not in real_c)
-    check("真檔：判定順序句只在 Cursor 產出",
-          "判定順序不能換" in real_u and "判定順序不能換" not in real_c)
+    # 2026-09-02 改判準：原本斷言「判定順序句只在 Cursor 產出」，前提是 Claude 端
+    # 不做命名（8/28 hook 退役後一度成立）。9/01 決定改成**模型自己呼叫官方介面**
+    # 命名 ⇒ Claude 端也要照同一套判定順序，那句本來就該進兩份產出。
+    # 舊斷言守的是一個已經不存在的前提，改成守「兩份都要有」——少一份就是有人
+    # 在某一邊漏掉命名規則。
+    check("真檔：判定順序句兩份產出都要有",
+          "判定順序不能換" in real_u and "判定順序不能換" in real_c)
     # 2026-08-28 下午改判準：Claude 端的自動改名 hook **整套退役**（理由見
     # `global/hub/21-title-claude.md` 檔頭）⇒ Claude 產出不該再有指向 Cursor
     # 命名規則的指路句。原本這條守的是「指標只在 Claude 產出」，那個前提隨退役消失。
