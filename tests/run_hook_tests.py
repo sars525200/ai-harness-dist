@@ -460,6 +460,7 @@ def main() -> int:
         import test_backup_global_config
         import test_gen_rule_hub
         import test_session_title
+        import test_push_cloud_title
         import test_index_health
         import test_log_error_slim
         for run_fn, label in (
@@ -485,6 +486,7 @@ def main() -> int:
             (test_backup_global_config.run, "全域設定備份方向（無旗標不寫／兩方向）"),
             (test_gen_rule_hub.run, "規則中繼產生器（audience／針標／冪等）"),
             (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
+            (test_push_cloud_title.run, "推雲端標題的憑證續命（過期自動換發／防遞迴）"),
             (test_index_health.run, "常駐層指向與容量（撞上限／死索引／glob 寫錯）"),
             (test_log_error_slim.run, "錯誤 log 瘦身（解析類不印 traceback／豁免不擴大）"),
             (test_warn_channel.run, "WARN 輸出通道"),
