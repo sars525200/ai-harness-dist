@@ -1310,3 +1310,61 @@ HKCU／HKLM 的 `Run` 鍵無命中；轉址服務跑在 `C:\itportal-redirect`�
 - 本段的改動**都還沒 commit**：`tools\check_commit_refs.py`、`dashboard\gen_todos.py`、
   本計畫書；`harness.config.json` 不進版控（已就地備份）。
   工作區另有別的 session 的未提交檔，commit 時要逐 hunk 篩。
+
+### 2026-09-03 第二十二段（兩條待裁示結案：`.claude.json` 不動、殘留不清）
+
+#### `.claude.json` 的舊路徑字面 —— **裁示：不動，結案**
+
+從 P3-3 卡到現在的分歧（P3-3 說要改 vs 第八段「紀錄改了是竄改」），**兩邊的前提都是錯的**。
+派唯讀盤點實查（Python 遞迴走訪 JSON 樹 ＋ 獨立數原始文字，兩路對帳一致）：
+
+| 事實 | 值 |
+|---|---|
+| 舊路徑出現處 | **9 處**（不是交接檔記的 11 種） |
+| 其中是 `projects` 底下的**鍵**本身 | 9 處（全部） |
+| 其中是字串**值** | **0 處** |
+| 判定為歷史紀錄 | **0 處** |
+| 判定為活設定 | 9 處 |
+
+- **第八段的反對理由不成立**：這 9 處一處歷史紀錄都不是。而且這個版本的 Claude Code
+  **根本不把提示歷史存在這個檔裡**（17 個 project 物件全都沒有 `history`／`pastedContents`）。
+- **P3-3 的贊成理由也不成立**：這 9 把鍵是**用路徑定址的設定槽**，而那些路徑已經不存在
+  ⇒ 永遠不會再被查到。留著不壞事，刪掉也修不好任何東西。
+- 真要刪還有代價：9 把裡有 5 把各帶 13 個 `last*` 統計欄（`d:/AI-Projects` 的
+  `lastCost` = 59.37、`D:/AI-Projects` = 27.91），刪鍵會連帶刪掉搬家前的成本紀錄。
+- ⚠ 已知副作用（接受）：以後任何「掃舊路徑」的檢查都會一直命中這 9 處。
+  **它們是預期中的殘留，不是漏改。**
+
+三把並存的寫法（`d:/IT-department`、`D:/IT-department`、`D:\IT-department`）看起來是原字面存放；
+**Claude Code 查鍵時有沒有做大小寫／斜線正規化，沒有查證**（邏輯在程式碼裡不在這個檔）。
+
+**本段只查了 `.claude.json` 一個檔。** `~\.claude\settings.json`、各專案的 `.claude\`、
+transcript 內容都沒查 —— 舊路徑很可能也在那些位置，屬另一件事。
+
+#### 可刪但沒刪的殘留 —— **裁示：先不清**
+
+盤點結果與交接檔記的 17 樣有出入：
+
+| 項目 | 交接檔記的 | 實際 |
+|---|---|---|
+| `~\.claude\settings.json.bak*` | 14 份 | 14 份，**全部是合法 JSON**（PowerShell 判其中 5 份「JSON 壞」是讀法的編碼問題，Python 重驗全部合法） |
+| `_empty_before_junction_20260902` 空資料夾 | 2 個（記憶接線的還原點） | **已經不存在**，`projects\` 底下搜不到 |
+| `D:\Patrick-AI\.rev-sandbox\dmove-verify` | 1 個 | 在，2 個檔／44KB（舊計畫書副本 ＋ `cli.json`） |
+
+⚠ **那兩個還原點是誰刪的、什麼時候刪的查不到紀錄**。交接檔明寫「驗過之前不要刪」，
+而它們在被驗過之前就沒了 ⇒ **有另一則 session 在動同一批目錄且沒留痕跡**。
+現在無所謂（記憶已實測讀得到），但下次動 `~\.claude\projects\` 要先假設有別人在動。
+
+本則另外產生 7 樣備份（不在上表內，**不要跟其他備份一起清**）：
+`.claude.json.bak_trust_*` 一份、`harness.config.json.bak_*` 一份、
+`.scratch\schtask-backup-20260903\` 五份排程 XML —— **最後那五份是唯一能還原排程設定的東西**。
+
+#### D 槽重組：待裁示清空
+
+第十七～二十二段之後，這條線**沒有未決事項**。剩下的都是觀察與人工動作：
+
+1. 四個 `_junction_retired_20260903` reparse point 還在 D 槽根目錄，等安全網期滿由人在檔案總管刪。
+2. 明天 04:00（`ClaudeCode-CleanFileHistory`）與 23:00（`ITAssetPlatform_NightlySemverBump`）
+   各觀察一次，確認改過路徑的排程真的跑得起來。
+3. 桌面版在新路徑會不會跳信任對話框 —— 仍未驗（CLI 這邊已經不跳）。
+4. `tests\r4_e2e\measure_shape_b.py:33` 的 `ROOTS` 仍寫死舊路徑（記票不修，不在測試套件執行路徑上）。
