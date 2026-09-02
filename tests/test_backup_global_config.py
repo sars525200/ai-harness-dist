@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""backup_global_config.py 方向契約（票 04／TODOS：無旗標不得 live→repo 蓋檔）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_backup_global_config.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_backup_global_config.py
 
 兩個方向都要驗：repo 較新 → 報告指向 --restore 且不寫檔；
 live 較新 → 報告指向 --backup 且不寫檔。寫入只在明示旗標發生。

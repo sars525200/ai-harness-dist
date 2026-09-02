@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""`/context-health` skill 的可用性驗證（CONTEXT_HEALTH_PLAN **V-14**·覆核 F-15）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_context_health_skill.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_context_health_skill.py
 
 ## 為什麼要有這一支
 

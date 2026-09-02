@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板 Skill 清冊：目錄有幾支、表就有幾列。
 
-    py -3 D:\.ai-harness\dashboard\gen_skill_roster.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_skill_roster.py --check   # 只印，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_skill_roster.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_skill_roster.py --check   # 只印，不寫檔
 
 ## 為什麼要有這一支
 

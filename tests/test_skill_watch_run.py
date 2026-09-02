@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""`skill_watch_run` 注入縫的回歸網（票 07·SKILL_WATCH_PLAN §14 未完成 A）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_skill_watch_run.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_skill_watch_run.py
 
 ## 這份在守什麼
 

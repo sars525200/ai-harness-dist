@@ -11,8 +11,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\enc1_file_encoding.py"
-TEST = r"D:\.ai-harness\tests\test_enc1_encoding.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\enc1_file_encoding.py"
+TEST = r"D:\Patrick-AI\.ai-harness\tests\test_enc1_encoding.py"
 
 
 def read():

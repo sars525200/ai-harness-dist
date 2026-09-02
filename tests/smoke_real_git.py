@@ -23,7 +23,7 @@ try:
 except Exception:
     pass
 
-HOOKS_DIR = r"D:\.ai-harness\hooks"
+HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
 sys.path.insert(0, HOOKS_DIR)
 
 from _lib import RealGitContext  # noqa: E402

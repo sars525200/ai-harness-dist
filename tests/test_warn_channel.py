@@ -190,7 +190,7 @@ def _c4():
     import glob
     import os
     sid = "warnchan-stop-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
     rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False, session_id=sid)
@@ -226,7 +226,7 @@ def _c4e():
     import glob
     import os
     sid = "warnchan-accum-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
 
@@ -252,7 +252,7 @@ def _c4f():
     import glob
     import os
     sid = "warnchan-dedup-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
 
@@ -277,7 +277,7 @@ def _c4g():
     import json as _json
     import os
     sid = "warnchan-legacy-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     os.makedirs(os.path.dirname(note), exist_ok=True)
     with open(note, "w", encoding="utf-8") as fh:
         _json.dump({"ts": dispatch._now(), "message": "舊格式的訊息"}, fh, ensure_ascii=False)
@@ -298,7 +298,7 @@ def _c4h():
     import json as _json
     import os
     sid = "warnchan-expire-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     os.makedirs(os.path.dirname(note), exist_ok=True)
     old_ts = dispatch._minutes_ago(dispatch._PENDING_TTL_MIN + 30)
     with open(note, "w", encoding="utf-8") as fh:
@@ -322,7 +322,7 @@ def _c4c():
     import json as _json
     import os
     sid = "warnchan-ups-0001"
-    note = os.path.join(r"D:\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
     _run("Stop", [warn("AWC-1 便箋內容")], shadow=False, session_id=sid)
     assert os.path.exists(note), "前置沒成立：Stop 該落便箋"
 
@@ -359,7 +359,7 @@ def _c4d():
     import json as _json
     import os
     sid = "warnchan-spawn-0001"
-    state = r"D:\.ai-harness\state"
+    state = r"D:\Patrick-AI\.ai-harness\state"
     for stale in glob.glob(os.path.join(state, f"events.{sid}*.ndjson")):
         os.remove(stale)
 

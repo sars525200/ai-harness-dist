@@ -44,7 +44,7 @@ user 的原話：**「定期檢查使用的平台最新更新的 Skill，通知�
 
 ### 1.3 已經有的：一份手動的平台 skill 清單，而且已經漂移
 
-`D:\.ai-harness\SkillViewer\platform_skills.json`
+`D:\Patrick-AI\.ai-harness\SkillViewer\platform_skills.json`
 - `updatedAt: 2026-07-28`（距今近一個月），21 筆，欄位 `name`／`category`／`description`
 - 自述是「某個 session 看到的快照」，維護方式是**人工編輯此檔**
 - 內容混了兩種東西：本專案自建（`shougong`／`deploy-prod`／`diagnose-bug`／`dry-run-migrate`／`codebase-health`／`suggestion-inbox`）與平台內建（其餘 15 筆）
@@ -285,7 +285,7 @@ $out = @($data.skills | ForEach-Object { ... $_.name; $_.description; $_.categor
 
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| 排程「自動」觸發（非手動） | 今天手動 `Start-ScheduledTask` 已驗成功（`LastTaskResult=0`），但排程器在 23:17 自行喚起是另一條路徑 | `Get-ScheduledTaskInfo -TaskName HarnessSkillWatch_Daily`，看 `LastRunTime` 是否為 23:17、`LastTaskResult` 是否 0；再看 `D:\.ai-harness\state\skill_watch.log` 尾段 | 2026-08-23 開工時自己看 |
+| 排程「自動」觸發（非手動） | 今天手動 `Start-ScheduledTask` 已驗成功（`LastTaskResult=0`），但排程器在 23:17 自行喚起是另一條路徑 | `Get-ScheduledTaskInfo -TaskName HarnessSkillWatch_Daily`，看 `LastRunTime` 是否為 23:17、`LastTaskResult` 是否 0；再看 `D:\Patrick-AI\.ai-harness\state\skill_watch.log` 尾段 | 2026-08-23 開工時自己看 |
 | 向外抓失敗的路徑 | 需要斷網才測得到 | 暫時把 `DOCS_URL` 改成不存在的網域跑一次，**必須印「官方文件抓取失敗」且明講「不是完整檢查」**，不得靜默略過 | 下次動這支時 |
 | `-p` 靜默忽略壞設定的防護 | 需要故意放壞 `settings.json`，會影響其他 session | 備份後塞一段壞 JSON 進 `.claude/settings.local.json`，跑 `skill_watch_run.py`，**必須 exit 2 並指名哪個檔壞了**；跑完立刻還原 | 下次動這支時 |
 | 真實變動的端到端 | 平台今天沒有真的變動；紅燈是用假 skill 製造的 | 等平台下次真的增減 skill 時看 `TODOS.md` 有沒有自動長出一列 | 自然發生時 |
@@ -858,7 +858,7 @@ v1 的清單漏了 `old_by_name`（`:137`／`:174`）——它保留那 49 筆�
 |---|---|---|
 | 資料遷移／DELETE | **命中** | 進版控、會出貨的檔做不可逆結構改寫，下游四個獨立消費者。14.4③ 自己都寫了「遷移沒改對 `sanity_check` 等於把 F-3 整條拿掉」 |
 | 預估跨 session | **命中** | Execute 8 個工作項、新開 1 支模組、2 份設定檔、改 3 支工具＋看板探針＋`SkillViewer.ps1`＋`SKILL.md`，17 條驗證且每條要先造變異；其中 5 條還得先做注入縫（#5）。光規劃就跨了兩輪覆核 |
-| 跨 repo | 未命中 | 全在 `D:\.ai-harness` 內 |
+| 跨 repo | 未命中 | 全在 `D:\Patrick-AI\.ai-harness` 內 |
 | 動角色·規則·hook | 未命中 | 不碰 `hooks/rules`；`capability_checks.py` 是探針不是閘門 |
 
 **兩條命中 ⇒ 明確 M 級**，不是「規模待定」，所以 `CLAUDE.md` §2 那條安全預設

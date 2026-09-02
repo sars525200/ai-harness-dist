@@ -2,7 +2,7 @@
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
 > 成立才放這裡；只在某個專案成立的規則放該專案自己的 `CLAUDE.md`。
-> （分層原則的完整版見 `D:\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
+> （分層原則的完整版見 `D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
 
 <!-- rules-section: all -->
 <!-- 這份檔每一節都是規則本文（沒有「速查表」與「敘述段」之分），所以整份都受
@@ -37,7 +37,7 @@ Step 5 否則                         → DEV（可改開發環境檔）
 - **階段欄五選一**＝Research／Design／Execute／Review／Fix，寫法固定「`階段 Execute`」；
   **換階段重宣告一行，至少帶「階段＋修改檔案」兩欄**（漏第二欄→階段成本歸因失真）。
 - **規模欄三選一**＝L／S／M（判準見 §3，動工前可答的**事實**）；判斷不出來寫「待定」、別猜一個。
-- 任務／階段／規模三欄「為什麼是這個形狀」＋實測踩雷 → `D:\.ai-harness\WORKFLOW_5STAGE_PLAN.md` §12。
+- 任務／階段／規模三欄「為什麼是這個形狀」＋實測踩雷 → `D:\Patrick-AI\.ai-harness\WORKFLOW_5STAGE_PLAN.md` §12。
 - **「修改檔案」欄寫實際會動的檔**：不改任何檔就寫「無」，還沒決定就寫「待定」。
   **scratchpad／暫存檔不必列**（對帳時也不算專案改動）。這一欄是規模分級（§3）的事後對帳依據。
 
@@ -128,8 +128,8 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - **主 session 只留判斷與統合**：收 subagent 的結論、下決定、動需要全局脈絡的刀。
   高 effort 留在這裡；粗活派低 effort 角色（`model`／`effort` 由角色 frontmatter 承載）。
 - **為什麼**：慢在模型推理不在跑指令；不派工還會讓原始資料堆在主 session **每輪重送**。
-- 上兩條的實測數字（11.6 倍／2.9 倍）與環境細節 → `D:\.ai-harness\MODEL_ROUTING_PLAN.md` §7。
-- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
+- 上兩條的實測數字（11.6 倍／2.9 倍）與環境細節 → `D:\Patrick-AI\.ai-harness\MODEL_ROUTING_PLAN.md` §7。
+- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\Patrick-AI\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
 
 ## 5. 交付
 
@@ -138,7 +138,7 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
   四欄缺一不可：**項目／為何沒驗／驗證指令逐字／誰跑**。**空白＝沒驗過**。
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
-  hunk 並對帳＝0 → `D:\.ai-harness\tools\peek_sessions.py`
+  hunk 並對帳＝0 → `D:\Patrick-AI\.ai-harness\tools\peek_sessions.py`
 
 ## 6. 動共用層（harness）
 

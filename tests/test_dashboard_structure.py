@@ -13,8 +13,8 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-_SHELL = Path(r"D:\.ai-harness\dashboard\harness-dashboard.shell.html")
-_PRODUCT = Path(r"D:\.ai-harness\dashboard\harness-dashboard.html")
+_SHELL = Path(r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.shell.html")
+_PRODUCT = Path(r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.html")
 if len(sys.argv) > 1:
     PATH = sys.argv[1]
 elif _PRODUCT.is_file():
@@ -189,7 +189,7 @@ check(_badge is not None and int(_badge.group(1)) == len(rows),
 # （六大類卡片 → 角色表 → nav 角色徽章 → Skill 徽章）。2026-08-25 清冊表格也接進產生器，
 # 列數必須跟徽章同一口徑（全域層 + 專案層、junction 去重）。
 # 只數專案 `.claude/skills` 會把 harness 層 skill 從分母拿掉，徽章看起來像「寫錯了」。
-HARNESS = Path(r"D:\.ai-harness")
+HARNESS = Path(r"D:\Patrick-AI\.ai-harness")
 if str(HARNESS) not in sys.path:
     sys.path.insert(0, str(HARNESS))
 import config as _harness_cfg  # noqa: E402

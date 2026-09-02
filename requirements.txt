@@ -1,4 +1,4 @@
-# D:\.ai-harness 的 Python 依賴（2026-08-15 Round 7 起）
+# D:\Patrick-AI\.ai-harness 的 Python 依賴（2026-08-15 Round 7 起）
 #
 # ══════════════════════════════════════════════════════════════════════════
 # ⚠ 先讀這一段：**「pip install」在這台機器上是有歧義的**
@@ -19,7 +19,7 @@
 #
 # 正確安裝（**認明 `py -3`**）：
 #
-#     py -3 -m pip install -r D:\.ai-harness\requirements.txt
+#     py -3 -m pip install -r D:\Patrick-AI\.ai-harness\requirements.txt
 #
 # 裝完驗一句（印得出版本才算裝好，沒有輸出就是還沒好）：
 #
@@ -27,7 +27,7 @@
 #
 # 兩支直譯器都要用到時（本機目前是這種狀態）就各跑一次：
 #
-#     python -m pip install -r D:\.ai-harness\requirements.txt
+#     python -m pip install -r D:\Patrick-AI\.ai-harness\requirements.txt
 #
 # ── 依賴 ──────────────────────────────────────────────────────────────────
 #
@@ -38,7 +38,7 @@
 #
 # 版號釘死不是保守：**量測單位一變，bloat 快照的條目身分就會位移**，
 # 升版要當成一次基準重寫來處理（§8.2）。要升版先跑
-# `py -3 D:\.ai-harness\tests\run_hook_tests.py` 確認七種寫法契約仍成立。
+# `py -3 D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py` 確認七種寫法契約仍成立。
 #
 # 表格規則（GFM table）是 markdown-it-py 內建的，**不必另外裝 mdit-py-plugins**；
 # 但預設 preset 沒開，要 `MarkdownIt("gfm-like")` 或 `.enable("table")`。

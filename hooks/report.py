@@ -33,7 +33,7 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-STATE_DIR = r"D:\.ai-harness\state"
+STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
 
 
 def _split_stem(stem: str) -> tuple[str, str]:

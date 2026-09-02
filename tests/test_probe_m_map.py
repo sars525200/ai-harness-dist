@@ -14,8 +14,8 @@ import io
 import sys
 from contextlib import redirect_stdout
 
-_TOOLS = r"D:\.ai-harness\tools"
-_DASH = r"D:\.ai-harness\dashboard"
+_TOOLS = r"D:\Patrick-AI\.ai-harness\tools"
+_DASH = r"D:\Patrick-AI\.ai-harness\dashboard"
 for _p in (_TOOLS, _DASH):
     if _p not in sys.path:
         sys.path.insert(0, _p)

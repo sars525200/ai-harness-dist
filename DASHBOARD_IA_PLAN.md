@@ -220,7 +220,7 @@ user 要三件事：①待辦從總覽子分頁拉出來變**主頁籤** ②**�
 
 | 類型 | 來源 | 量到幾項 | 可信度 |
 |---|---|---|---|
-| 登記 | `D:\.ai-harness\TODOS.md`（本次新建） | 10（原本手寫在 HTML 裡的那批搬進來） | 權威 |
+| 登記 | `D:\Patrick-AI\.ai-harness\TODOS.md`（本次新建） | 10（原本手寫在 HTML 裡的那批搬進來） | 權威 |
 | 待驗 | 各專案 `PENDING_VERIFY.md` 主表 | 46 · 四欄齊全 | 權威 |
 | 計畫 | `*_PLAN.md` 表格中狀態在**格首**的未結案列 | 8 | 粗抓 |
 | 粗抓 | `.aimemory\project-*todos*.md` 的 bullet | 15 | 粗抓 |

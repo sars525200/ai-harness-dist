@@ -664,7 +664,7 @@ user 定案：**只擋「缺修改檔案欄」，WARN 級不擋動作**。理由
 | **W-7** | 編排器 | ✅ **新建薄 skill `/session-workflow`**（組合既有零件，不重寫規則） |
 | **W-8** | Cursor 強制力 | ✅ **全域常駐＋adapter 最短路由**；wayfinder／to-tickets 維持 slash-only |
 | **W-9** | 階段順序閘門 | ✅ **這次不做**（先量測；Design 宣告 9%，現在擋誤擋大） |
-| **W-10** | `/design-spec` 位置 | ✅ **搬進 `D:\.ai-harness\skills`**，專案層刪副本（兩份會漂） |
+| **W-10** | `/design-spec` 位置 | ✅ **搬進 `D:\Patrick-AI\.ai-harness\skills`**，專案層刪副本（兩份會漂） |
 
 ### 14.4 做法（一次補齊清單）
 
@@ -679,8 +679,8 @@ user 定案：**只擋「缺修改檔案欄」，WARN 級不擋動作**。理由
 
 | 驗什麼 | 怎麼驗 | 會紅的條件 |
 |---|---|---|
-| provenance | `py -3 D:\.ai-harness\dashboard\capability_checks.py` 含 `_p_skill_provenance` | 新 skill 目錄沒進 PROVENANCE 表 |
-| eval 結構 | `py -3 D:\.ai-harness\eval\run_all.py` | 新 skill 缺 frontmatter／完成判準；design-spec 雙份撞名 |
+| provenance | `py -3 D:\Patrick-AI\.ai-harness\dashboard\capability_checks.py` 含 `_p_skill_provenance` | 新 skill 目錄沒進 PROVENANCE 表 |
+| eval 結構 | `py -3 D:\Patrick-AI\.ai-harness\eval\run_all.py` | 新 skill 缺 frontmatter／完成判準；design-spec 雙份撞名 |
 | 專案不再有副本 | `Test-Path D:\IT-department\.claude\skills\design-spec` | 仍存在＝兩份會漂 |
 | 常駐句子 | grep 全域 §3「開場必派」「回 Design」 | 零命中＝沒寫進去 |
 | adapter | grep `session-workflow` in `.cursor/rules/cursor-adapter.mdc` | 零命中＝Cursor 仍無路由 |

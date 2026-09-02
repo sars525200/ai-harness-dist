@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 r"""全域層設定的版控副本 —— `~\.claude\` 底下那幾個實體檔進 harness repo。
 
-    py -3 D:\.ai-harness\tools\backup_global_config.py              # 只印，不寫
-    py -3 D:\.ai-harness\tools\backup_global_config.py --check     # 同上（CI）
-    py -3 D:\.ai-harness\tools\backup_global_config.py --restore   # repo → live
-    py -3 D:\.ai-harness\tools\backup_global_config.py --backup    # live → repo
+    py -3 D:\Patrick-AI\.ai-harness\tools\backup_global_config.py              # 只印，不寫
+    py -3 D:\Patrick-AI\.ai-harness\tools\backup_global_config.py --check     # 同上（CI）
+    py -3 D:\Patrick-AI\.ai-harness\tools\backup_global_config.py --restore   # repo → live
+    py -3 D:\Patrick-AI\.ai-harness\tools\backup_global_config.py --backup    # live → repo
 
 無旗標**不寫檔**。有差異時 exit 1，並同時列出兩個方向；依 mtime 指向建議，
 不猜、不准再叫人「不帶旗標就把 live 寫進 repo」。

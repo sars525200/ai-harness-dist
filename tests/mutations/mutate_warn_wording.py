@@ -16,8 +16,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\esc1_unmet_need_logged.py"
-TEST = r"D:\.ai-harness\tests\test_warn_wording.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\esc1_unmet_need_logged.py"
+TEST = r"D:\Patrick-AI\.ai-harness\tests\test_warn_wording.py"
 
 
 def read():

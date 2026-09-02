@@ -462,7 +462,7 @@ def project_name(cwd: str, path: str = "") -> str:
 
     ⚠ **不能直接取 `cwd` 的 leaf**（2026-08-27 實機打臉）：session 開得起來的
     目錄不一定是專案根，log 出現過 `tests｜等待任務｜…` —— 那個 session 的 cwd
-    是 `D:\.ai-harness\tests`。`_lib.py` 的 `RealGitContext` 早就寫過同一句提醒
+    是 `D:\Patrick-AI\.ai-harness\tests`。`_lib.py` 的 `RealGitContext` 早就寫過同一句提醒
     （「cwd 可能是子目錄」），我第一版沒看到。
     ⚠ **退回 transcript 的父目錄救不了這件事**：平台的專案目錄名是同一套算法，
     實際存在 `D---ai-harness-tests-warn-probe` 這種目錄。它只是「cwd 拿不到」時

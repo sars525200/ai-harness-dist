@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""覆核進行中便箋 —— 讓 PR-1 在多輪覆核期間從 BLOCK 降成 WARN。
 
-    py -3 D:\.ai-harness\tools\review_inflight.py --set <計畫檔> --round 2
-    py -3 D:\.ai-harness\tools\review_inflight.py --clear <計畫檔>
-    py -3 D:\.ai-harness\tools\review_inflight.py --list
+    py -3 D:\Patrick-AI\.ai-harness\tools\review_inflight.py --set <計畫檔> --round 2
+    py -3 D:\Patrick-AI\.ai-harness\tools\review_inflight.py --clear <計畫檔>
+    py -3 D:\Patrick-AI\.ai-harness\tools\review_inflight.py --list
 
 ## 為什麼有這支
 

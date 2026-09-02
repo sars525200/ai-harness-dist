@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""抓「誰在生主控台黑窗」。本身必須用 pythonw 跑，禁止再起 cmd／powershell。
 
-    pyw -3 D:\.ai-harness\tools\console_flash_probe.py
-    pyw -3 D:\.ai-harness\tools\console_flash_probe.py --seconds 60
+    pyw -3 D:\Patrick-AI\.ai-harness\tools\console_flash_probe.py
+    pyw -3 D:\Patrick-AI\.ai-harness\tools\console_flash_probe.py --seconds 60
 
 每 250ms 掃一次行程，新出現的 python／git／node／conhost／cmd／py 寫進
 `state/console_flash_probe.ndjson`（pid、父行程、映像路徑、命令列）。

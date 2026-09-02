@@ -169,7 +169,7 @@ git 原生機制三個維度全勝 hook：
 ## §2 目標架構
 
 ```
-D:\.ai-harness\              ← 共用層，自成 git repo
+D:\Patrick-AI\.ai-harness\              ← 共用層，自成 git repo
  ├ HARNESS_PLAN.md
  ├ RULE_COVERAGE.md          §2.5 反向對帳（時間盒）
  ├ hooks\
@@ -249,7 +249,7 @@ settings.json 的 hook command 寫絕對路徑，兩工作區共用同一份 cod
 
 ### 3.2.2 dispatch.py 架構（2026-07-28・已實作＋隔離測試驗證）
 
-單一 entry point，settings.json 只需指 `py -3 D:\.ai-harness\hooks\dispatch.py`（省維護，見 §3.6，**不省延遲**）。事件來源用 payload 的 `hook_event_name`，不用 argv——payload 自帶，少一個要在每個 matcher 條目手動填對的配置點。
+單一 entry point，settings.json 只需指 `py -3 D:\Patrick-AI\.ai-harness\hooks\dispatch.py`（省維護，見 §3.6，**不省延遲**）。事件來源用 payload 的 `hook_event_name`，不用 argv——payload 自帶，少一個要在每個 matcher 條目手動填對的配置點。
 
 **流程**：precheck（`HookContext(payload, None, None)`，只讀 `ctx.command`，不建 GitContext）先過濾掉不相干的 Bash/PowerShell 呼叫 → 只有 `applies()` 為真才建 `RealGitContext(cwd)` + 探測手足 `SOP/` 目錄建 `dev_git` → 逐條規則跑 `check()` → 依 per-rule shadow 設定決定要不要真的影響 exit code。
 
@@ -395,7 +395,7 @@ state：append-only、session-scoped、24 小時過期清理。
 | I1/I2／DB-2/DB-4/DB-5 + S1 去重／A2 | ⬜ |
 | Phase 1.5–4 | ⬜ |
 
-> ⚠ `D:\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。
+> ⚠ `D:\Patrick-AI\.ai-harness\SkillViewer\` 是**另一個 session 的產出**（session `a202da3f`），刻意保持未追蹤，未納入本 repo 版控。
 
 ---
 

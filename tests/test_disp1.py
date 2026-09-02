@@ -10,7 +10,7 @@ r"""DISP-1 的回歸網（2026-08-07）。
   3. **一個 session 只講一次** —— 超標是持續狀態不是瞬間事件（同 BUDGET-1）。
   4. **subagent 豁免** —— 對 subagent 講等於要求它再派下一層。
 
-測試一律改模組層常數並把 state 導到暫存區，不動真實 `D:\.ai-harness\state`。
+測試一律改模組層常數並把 state 導到暫存區，不動真實 `D:\Patrick-AI\.ai-harness\state`。
 """
 from __future__ import annotations
 

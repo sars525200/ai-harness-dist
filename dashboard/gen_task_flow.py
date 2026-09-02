@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板「任務動線」：一則任務進來之後穿過哪幾層、誰接手、閘門掛在哪。
 
-    py -3 D:\.ai-harness\dashboard\gen_task_flow.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_task_flow.py --check   # 只印，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_task_flow.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_task_flow.py --check   # 只印，不寫檔
 
 ## 為什麼要有這一支
 

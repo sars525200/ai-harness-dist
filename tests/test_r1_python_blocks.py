@@ -35,8 +35,8 @@ from __future__ import annotations
 
 import sys
 
-HOOKS_DIR = r"D:\.ai-harness\hooks"
-RULES_DIR = r"D:\.ai-harness\hooks\rules"
+HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
+RULES_DIR = r"D:\Patrick-AI\.ai-harness\hooks\rules"
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")

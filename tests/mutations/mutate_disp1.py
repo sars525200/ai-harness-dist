@@ -10,7 +10,7 @@ r"""對 DISP-1 做變異，確認 test_disp1 真的會叫。
   · 變噪音（門檻歸零、一個 session 講很多次）
   · 判錯對象（把 subagent 的工具呼叫算進主 session、對 subagent 也唸）
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_disp1.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_disp1.py
 """
 import hashlib
 import io
@@ -20,8 +20,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\disp1_dispatch_discipline.py"
-RUNNER = r"D:\.ai-harness\tests\test_disp1.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\disp1_dispatch_discipline.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_disp1.py"
 
 
 def read():

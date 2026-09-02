@@ -59,7 +59,7 @@
 | Event | 設定在 | 內容 | 狀態 |
 |---|---|---|---|
 | `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 每回合結束跑，本機自動 commit |
-| `PreToolUse`（matcher `Bash\|PowerShell`） | **`.claude/settings.local.json`** | `py -3 D:\.ai-harness\hooks\dispatch.py` | **已生效**，但 DB-1 規則為 **shadow 模式**（`hooks/dispatch_config.json` 的 `{"DB-1":{"shadow":true}}`）→ 判定 BLOCK 只寫 log、**不真的擋** |
+| `PreToolUse`（matcher `Bash\|PowerShell`） | **`.claude/settings.local.json`** | `py -3 D:\Patrick-AI\.ai-harness\hooks\dispatch.py` | **已生效**，但 DB-1 規則為 **shadow 模式**（`hooks/dispatch_config.json` 的 `{"DB-1":{"shadow":true}}`）→ 判定 BLOCK 只寫 log、**不真的擋** |
 
 **⚠ 這節在 7/28 04:47 前的版本寫「目前沒有 PreToolUse hook」，已過時。** 另一個 session（`HARNESS_PLAN.md` 的施工者）已把 dispatch 掛上專案層設定；因 hook 是專案層級，**所有並行 session 都會被攔截並記錄到 `state/events.<session_id>.ndjson`**。
 
@@ -112,7 +112,7 @@ session 逐字相同**。→ 角色檔一律放 **project 層 `<repo>/.claude/ag
 ]
 ```
 
-這 5 條是目前唯一的「真強制」——其餘全部（CLAUDE.md 的硬規則、rules、skill 內文）都是軟性提示，模型可能疏漏。PROD 硬刪目前靠 **server 端 403**（不是 CLI 層 permission）擋，見 `D:\.ai-harness\IT-DEPARTMENT_CLAUDEMD_PLAN.md` §4 說明為什麼沒加對應 deny。
+這 5 條是目前唯一的「真強制」——其餘全部（CLAUDE.md 的硬規則、rules、skill 內文）都是軟性提示，模型可能疏漏。PROD 硬刪目前靠 **server 端 403**（不是 CLI 層 permission）擋，見 `D:\Patrick-AI\.ai-harness\IT-DEPARTMENT_CLAUDEMD_PLAN.md` §4 說明為什麼沒加對應 deny。
 
 ---
 
@@ -134,4 +134,4 @@ CLAUDE.md §8（always-loaded，2 行）
 
 ## 4. 跟 `HARNESS_PLAN.md`（規劃中）的差異
 
-`D:\.ai-harness\HARNESS_PLAN.md` 在做的事，是把上面 §2.4/§2.5 現在只有 5 條 deny＋1 個 Stop hook 的「真強制」層，擴充成完整的 `PreToolUse`/`PostToolUse`/發布邊界對帳（`I1`–`I6`、`DB-1`–`DB-5`）。**Phase 1 尚未掛上 `d:\IT-department` 的 settings**（該計畫書 §7 狀態表明寫「⬜ 需協調」）——所以本檔 §2.4 記錄的「目前沒有 PreToolUse/PostToolUse hook」在那個工程完成前都會是事實。
+`D:\Patrick-AI\.ai-harness\HARNESS_PLAN.md` 在做的事，是把上面 §2.4/§2.5 現在只有 5 條 deny＋1 個 Stop hook 的「真強制」層，擴充成完整的 `PreToolUse`/`PostToolUse`/發布邊界對帳（`I1`–`I6`、`DB-1`–`DB-5`）。**Phase 1 尚未掛上 `d:\IT-department` 的 settings**（該計畫書 §7 狀態表明寫「⬜ 需協調」）——所以本檔 §2.4 記錄的「目前沒有 PreToolUse/PostToolUse hook」在那個工程完成前都會是事實。

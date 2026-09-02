@@ -7,7 +7,7 @@ type: 流程
 
 # Design 階段執行器（/design-spec）
 
-> 本 skill 是全域 `CLAUDE.md` §3 Design 節與 `D:\.ai-harness\WORKFLOW_5STAGE_PLAN.md`
+> 本 skill 是全域 `CLAUDE.md` §3 Design 節與 `D:\Patrick-AI\.ai-harness\WORKFLOW_5STAGE_PLAN.md`
 > §7（規模判準）／§8（交付物格式）的**步驟執行器**——規則本體在那兩處，不一致時以那兩處為準。
 > 核心：**Design 的交付物是「別人能接手的規格」，不是「我心裡有數」。**
 >
@@ -76,7 +76,7 @@ type: 流程
 ```
 
 **這一行是 PR-1 的握手暗號**：之後只要這輪動過這份檔，Stop hook 沒看到 hash 對得上的
-`ADVERSARIAL_REVIEW_PASSED` marker 就擋下對話結束——不靠誰記得問。機制本體見 `STOP_HOOK_MARKER_PLAN.md`（絕對路徑 `D:\.ai-harness\STOP_HOOK_MARKER_PLAN.md`）。
+`ADVERSARIAL_REVIEW_PASSED` marker 就擋下對話結束——不靠誰記得問。機制本體見 `STOP_HOOK_MARKER_PLAN.md`（絕對路徑 `D:\Patrick-AI\.ai-harness\STOP_HOOK_MARKER_PLAN.md`）。
 
 四件事講清楚：
 

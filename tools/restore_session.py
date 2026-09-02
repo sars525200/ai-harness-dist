@@ -3,10 +3,10 @@ r"""把 `hooks/session_archive.py` 封存起來的對話搬回側邊欄列表。
 
 封存是 `/clear` 當下自動發生的，這支是它的反向操作 —— 「我想把那則叫回來」。
 
-    py -3 D:\.ai-harness\tools\restore_session.py --list          # 看封存了哪些
-    py -3 D:\.ai-harness\tools\restore_session.py --list -n 50    # 多列幾筆
-    py -3 D:\.ai-harness\tools\restore_session.py 20260826-0636   # 還原（吃檔名前綴）
-    py -3 D:\.ai-harness\tools\restore_session.py aabbccdd        # 也吃 session uuid 前綴
+    py -3 D:\Patrick-AI\.ai-harness\tools\restore_session.py --list          # 看封存了哪些
+    py -3 D:\Patrick-AI\.ai-harness\tools\restore_session.py --list -n 50    # 多列幾筆
+    py -3 D:\Patrick-AI\.ai-harness\tools\restore_session.py 20260826-0636   # 還原（吃檔名前綴）
+    py -3 D:\Patrick-AI\.ai-harness\tools\restore_session.py aabbccdd        # 也吃 session uuid 前綴
 
 還原＝把檔案搬回 `~/.claude/projects/<專案>/<uuid>.jsonl`。**搬回去之後要
 Reload Window 列表才看得到**（extension 沒有對 session 檔掛 watcher）。

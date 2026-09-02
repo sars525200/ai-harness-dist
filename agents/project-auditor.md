@@ -11,11 +11,11 @@ hooks:
     - matcher: 'Skill'
       hooks:
         - type: command
-          command: 'py -3 "D:\.ai-harness\hooks\agent_hitl_gate.py"'
+          command: 'py -3 "D:\Patrick-AI\.ai-harness\hooks\agent_hitl_gate.py"'
     - matcher: 'Bash|PowerShell'
       hooks:
         - type: command
-          command: 'py -3 "D:\.ai-harness\hooks\agent_readonly_gate.py"'
+          command: 'py -3 "D:\Patrick-AI\.ai-harness\hooks\agent_readonly_gate.py"'
 ---
 
 # 專案稽核員

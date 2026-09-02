@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""對抗式覆核審查者設定頁 —— 本機小服務（零外部依賴）。
 
-    py -3 D:\.ai-harness\reviewer\server.py          # 啟動並自動開瀏覽器
-    py -3 D:\.ai-harness\reviewer\server.py --check  # 只印目前設定與可用性，不起服務
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\server.py          # 啟動並自動開瀏覽器
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\server.py --check  # 只印目前設定與可用性，不起服務
 
 ## 這是什麼
 
@@ -102,7 +102,7 @@ TOOLS = [
     #   4. **審查者不一定照格式輸出 hash 行**：Grok 連兩輪都寫成 ``ask-sha256=`<hash>` ``
     #      （markdown code 標記），即使 prompt 明寫「不要用反引號包起來」。
     #      守門的正則已放寬到容許標記字元，**值本身仍逐字比對**。
-    #   5. **沙箱的父目錄也要乾淨**：`D:\AI-Projects` 與 `D:\.ai-harness` 底下都有
+    #   5. **沙箱的父目錄也要乾淨**：`D:\AI-Projects` 與 `D:\Patrick-AI\.ai-harness` 底下都有
     #      `CLAUDE.md`，把沙箱開在它們底下等於白做。實際落點 `D:\reviewer-sandbox`。
     #   6. **沙箱不是存取邊界，只是「不主動餵脈絡」**（2026-08-27 三組實測推翻舊敘述）：
     #      `--workspace` 官方語意就只是工作目錄、`--trust` 只是跳過確認提示。審查者

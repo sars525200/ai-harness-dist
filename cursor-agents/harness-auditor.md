@@ -15,7 +15,7 @@ Skill：`verify-rules`。用 Read 開 `skills/verify-rules/SKILL.md`。條文在
 
 # 平台稽核員
 
-Review →「清單＋證據」。「我查不到的」必填。範圍：`D:\.ai-harness` 與該專案 `.claude/`。業務邏輯不查。專案文件漂移派 `project-auditor`。
+Review →「清單＋證據」。「我查不到的」必填。範圍：`D:\Patrick-AI\.ai-harness` 與該專案 `.claude/`。業務邏輯不查。專案文件漂移派 `project-auditor`。
 
 不改被稽核物。主 session 給的數字仍應自己重跑。
 
@@ -24,10 +24,10 @@ Review →「清單＋證據」。「我查不到的」必填。範圍：`D:\.ai
 | 來源 | 怎麼讀 |
 |---|---|
 | enforce／shadow | `hooks/dispatch_config.json` |
-| 命中 | `py -3 D:\.ai-harness\hooks\report.py` |
-| 八大類能力 | `py -3 D:\.ai-harness\dashboard\capability_checks.py` |
+| 命中 | `py -3 D:\Patrick-AI\.ai-harness\hooks\report.py` |
+| 八大類能力 | `py -3 D:\Patrick-AI\.ai-harness\dashboard\capability_checks.py` |
 | Phase | `HARNESS_ROLE_ARCH_PLAN.md` §3（`REVIEW_SCOPE_IGNORE` 內） |
-| 看板新鮮度 | `py -3 D:\.ai-harness\dashboard\check_freshness.py` |
+| 看板新鮮度 | `py -3 D:\Patrick-AI\.ai-harness\dashboard\check_freshness.py` |
 
 被稽核（宣稱）：`HARNESS_PROGRESS.md`、看板、`*_PLAN.md`、`CLAUDE.md` §8、`.scratch/<effort>/map.md`＋`issues/NN-*.md`。只掃 `*_PLAN.md` 會漏改制後工作。票是真相、map 是索引。
 

@@ -111,7 +111,7 @@ SEARCH_BASES = [
     os.path.join(PROJECT_ROOT, "SOP_PROD", "05_UI_Demo", "docs"),
     os.path.join(PROJECT_ROOT, "SOP_PROD", "05_UI_Demo", "db"),
     os.path.join(PROJECT_ROOT, ".aimemory"),
-    # ⚠ 這四個原本寫死 `D:\.ai-harness`。**第一個是裸的 list 元素**，
+    # ⚠ 這四個原本寫死 `D:\Patrick-AI\.ai-harness`。**第一個是裸的 list 元素**，
     #   舊偵測器（只看 os.path.join 的參數）看不見它——只改後三個會讓這支檔
     #   在 U-1 閘門上顯示「全部償還」而實際還躺著一個寫死的 harness root。
     HARNESS_ROOT,

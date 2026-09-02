@@ -34,9 +34,9 @@ type: 流程
 ### 1. 量現況（**兩支**唯讀工具，都不改檔；第三行是同一支的 JSON 輸出）
 
 ```
-py -3 -X utf8 D:\.ai-harness\rulefile\check_bloat.py            # 條目層：>120 字的條目、快照比對、趨勢
-py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py        # 結構層：散文塊、手抄清單、成本估算
-py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --json # 給後續步驟吃
+py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py            # 條目層：>120 字的條目、快照比對、趨勢
+py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py        # 結構層：散文塊、手抄清單、成本估算
+py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py --json # 給後續步驟吃
 ```
 
 **兩支要一起跑，因為它們的盲區互補**：`check_bloat` 只看得見 `- [` 索引列與 `|` 表格列；
@@ -141,7 +141,7 @@ py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --json # 給後續�
 人點頭「本次量測作實」之後、看趨勢之前，先寫一筆（步驟 1 仍唯讀、此時才寫）：
 
 ```
-py -3 -X utf8 D:\.ai-harness\rulefile\check_bloat.py --append-history
+py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py --append-history
 ```
 
 沒點頭＝不寫。沒寫＝沒有真實量測＝下面 🔑 列紅。
@@ -171,9 +171,9 @@ py -3 -X utf8 D:\.ai-harness\rulefile\check_bloat.py --append-history
 - **不碰 `.claude/PROJECT_CONTEXT.md`。** 它不是 always-loaded（角色開工才讀），
   砍它的內容等於砍掉角色的作用對象設定，而那個失效沒有任何人會收到通知。
 - **不改 harness 自己的計畫書**，只讀它們當作「內容的去處」。
-- 判準、分岔與踩雷史在 `D:\.ai-harness\CONTEXT_HEALTH_PLAN.md`；
+- 判準、分岔與踩雷史在 `D:\Patrick-AI\.ai-harness\CONTEXT_HEALTH_PLAN.md`；
   這份 skill 只編排步驟，**規則本體不在這裡**。
-- **量測結果寫 `D:\.ai-harness\CONTEXT_HEALTH_MEASUREMENTS.md`，不要寫進計畫書。**
+- **量測結果寫 `D:\Patrick-AI\.ai-harness\CONTEXT_HEALTH_MEASUREMENTS.md`，不要寫進計畫書。**
   計畫書受 PR-1 覆核閘門管轄，每量一次就改它一次會讓「重算 hash」變成反射動作，
   而那正是偽造憑證的唯一動作（`hooks/rules/pr1_plan_review_marker.py` 檔頭）。
   **實際踩過**：append 一節量測紀錄就把 Stop 閘門觸發了。

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""P-12 去專案化的回歸網（CONTEXT_HEALTH_PLAN v5·V-15）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_harness_config.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_harness_config.py
 
 **V-15 要求兩個方向都驗，缺一不算**：
   ① AST 驗 `gen_layers.py` 執行期字串常數沒有專案字面值（U-1）
@@ -438,7 +438,7 @@ _KNOWN_U1_DEBT = {
     "dashboard/subagent_stats.py": {"d--IT-department": 1},
     "hooks/rules/budget1_daily_usage.py": {
         r"~\.claude\projects\d--IT-department": 1,
-        r"D:\.ai-harness\state\budget_state.json": 1},        # v7 新見（④分支）
+        r"D:\Patrick-AI\.ai-harness\state\budget_state.json": 1},        # v7 新見（④分支）
 
     # ── v7 凍結（`SKILL_EVAL_PLAN` §9・A-8-前）───────────────────────────
     # `eval/` 四支曾在這裡有 **13 處**（`eval` 移出 `_DEBT_SCAN_SKIP` 後才看得見），
@@ -451,10 +451,10 @@ _KNOWN_U1_DEBT = {
     # 以下 `hooks/` 四支的 harness root 是第④類新抓到的，**不在案 A 範圍**：
     # 它們指的是 harness 自己的 `state/`，換部門時會跟著 harness 走，
     # 優先度低於專案路徑；先凍結留痕，另案處理。
-    "hooks/dispatch.py": {r"D:\.ai-harness\state": 1},
-    "hooks/report.py": {r"D:\.ai-harness\state": 1},
-    "hooks/spike.py": {r"D:\.ai-harness\state\spike": 1},
-    "hooks/rules/disp1_dispatch_discipline.py": {r"D:\.ai-harness\state": 1},
+    "hooks/dispatch.py": {r"D:\Patrick-AI\.ai-harness\state": 1},
+    "hooks/report.py": {r"D:\Patrick-AI\.ai-harness\state": 1},
+    "hooks/spike.py": {r"D:\Patrick-AI\.ai-harness\state\spike": 1},
+    "hooks/rules/disp1_dispatch_discipline.py": {r"D:\Patrick-AI\.ai-harness\state": 1},
 }
 
 # 掃描範圍＝**全 harness 扣掉這些**，不是白名單三個目錄。

@@ -6,7 +6,7 @@ audience: all
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
 > 成立才放這裡；只在某個專案成立的規則放該專案自己的 `CLAUDE.md`。
-> （分層原則的完整版見 `D:\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
+> （分層原則的完整版見 `D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
 
 <!-- rules-section: all -->
 <!-- 這份檔每一節都是規則本文（沒有「速查表」與「敘述段」之分），所以整份都受

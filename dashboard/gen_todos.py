@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板「待辦」頁籤：把散在各處的未完成事項收成一張可篩選、可複製的清單。
 
-    py -3 D:\.ai-harness\dashboard\gen_todos.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_todos.py --check   # 只印摘要與樣本，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_todos.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_todos.py --check   # 只印摘要與樣本，不寫檔
 
 ## 為什麼要有這一支
 

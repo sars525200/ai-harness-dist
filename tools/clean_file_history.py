@@ -27,9 +27,9 @@
 
 刪檔是不可逆的。不帶 `--apply` 只印會刪什麼，什麼都不動。
 
-    py -3 D:/.ai-harness/tools/clean_file_history.py             # 看看會刪什麼
-    py -3 D:/.ai-harness/tools/clean_file_history.py --days 14   # 換保留期
-    py -3 D:/.ai-harness/tools/clean_file_history.py --apply     # 真的刪
+    py -3 D:/Patrick-AI/.ai-harness/tools/clean_file_history.py             # 看看會刪什麼
+    py -3 D:/Patrick-AI/.ai-harness/tools/clean_file_history.py --days 14   # 換保留期
+    py -3 D:/Patrick-AI/.ai-harness/tools/clean_file_history.py --apply     # 真的刪
 """
 from __future__ import annotations
 

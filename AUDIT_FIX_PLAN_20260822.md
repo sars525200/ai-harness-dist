@@ -391,9 +391,9 @@ temp clone 仍在同一台機器、同一個 `%USERPROFILE%`，`Path.home()` 相
 |---|---|---|---|
 | **全域 `~\.claude\settings.json` 新增的 3 條 PowerShell deny 沒有在真實情境下被觸發過**（2026-08-22 · H1 的一半） | 只驗了「probe 判定對稱」與「JSON 合法」，**沒有真的在 PowerShell 側打一次 `git filter-branch` 看它擋不擋**。deny 規則的比對語意（前綴／萬用字元）是 Claude Code 內部行為，靜態讀設定檔證不出來 | 在 PowerShell 工具打 `git filter-branch --help`，預期被權限層擋下並顯示 deny 命中；同樣試 `rm -Recurse -Force C:\`（**只到出現拒絕訊息為止，不要按同意**） | user |
 | **`/to-tickets`、`/wayfinder` 從未實跑**（承接 `SKILL_IMPORT_WAYFINDER_PLAN.md` §7） | 兩支帶 `disable-model-invocation: true`，模型被工具層明文禁止呼叫，連繞路模擬都被擋 | user 自己打 `/to-tickets`、`/wayfinder` 各一次，觀察是否讀到 `docs/agents/*`、是否踩 K13（`.scratch` 不在 `TMP_HINTS`） | user |
-| **`grilling` 從未實跑** | 需 user 實際答一輪才驗得到；會推高 AWC-1 的 WARN 率 | 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | user |
+| **`grilling` 從未實跑** | 需 user 實際答一輪才驗得到；會推高 AWC-1 的 WARN 率 | 觸發一次 grilling 問答，事後跑 `py -3 D:\Patrick-AI\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | user |
 | **`prototype` 從未實跑（刻意）** | 已加 `LOCAL EDIT` 禁它自行 commit／建分支，但**約束本身未實測** | 真的用它做一次原型，前後比對 `git -C d:/IT-department branch --list` 一致 | 我或 user |
-| **群 C 看板 4 處手寫矛盾未修** | 目標檔 `dashboard/harness-dashboard.html` 被另一 session 持有（diff 4576 行），疊上去無法只 commit 自己的 hunk | ①`git -C D:/.ai-harness status --porcelain` 確認該檔不再有別人的 `M` ②改成 marker 注入或直接更新四處 ③`py -3 D:\.ai-harness\dashboard\check_freshness.py --write-snapshot` | 我（需先確認另一 session 收手） |
+| **群 C 看板 4 處手寫矛盾未修** | 目標檔 `dashboard/harness-dashboard.html` 被另一 session 持有（diff 4576 行），疊上去無法只 commit 自己的 hunk | ①`git -C D:/Patrick-AI/.ai-harness status --porcelain` 確認該檔不再有別人的 `M` ②改成 marker 注入或直接更新四處 ③`py -3 D:\Patrick-AI\.ai-harness\dashboard\check_freshness.py --write-snapshot` | 我（需先確認另一 session 收手） |
 | **`dashboard/snapshot.json` 已過期 8 天（停在 2026-08-13 20:48）** | 與群 C 同一個前置條件——寫回 snapshot 前要先讓看板數字正確，否則會把錯的現況固化成基準 | 同上第 ③ 步，且要在四處手寫修好之後才跑 | 我 |
 | **群 D 的行號一個都沒有被獨立複驗**（v3 新增·覆核 §9.1） | 覆核者本輪時間全用在 harness 側與新檢查項判準上，明說「**D 群的行號很可能有和 F-1 同一類的漂移**」。而 F-1 已證實 harness 側整批行號取自過期快照——同一個作者、同一輪、同一種寫法，**沒有理由假設 `SOP_PROD` 側就是對的** | 派 `locator` 角色專跑一輪：對 D1（`styles.css:4517-4525`／`25715-25760`）、D2（`index.html:5090`）、D3（`app.js:6375`／`36253`／`server.py:2343`）、D4（`CONTEXT.md:66`）、D6（`app.js:6867`／`7095-7106`）、D8（`app.js:13222,13231`）、D9（`styles.css:25745`）逐一 grep 現址，**DEV／PROD 兩端都要**，回報「文件寫的 vs 實際」對照表 | 我（批 4 開工前） |
 
@@ -745,7 +745,7 @@ N3   ：待分岔 ⑧ 定案後才排（不預留批次）
 
 `hooks/report.py` **沒有** `sys.stdout.reconfigure(encoding="utf-8")`（`capability_checks.py` 有）。
 在 cp950 console 下會在印出第一個含 `⚠` 的列時 `UnicodeEncodeError` 中斷——**而 §7 正把
-`py -3 D:\.ai-harness\hooks\report.py` 當成交給 user 的驗證指令**（本 session 實際踩過一次，
+`py -3 D:\Patrick-AI\.ai-harness\hooks\report.py` 當成交給 user 的驗證指令**（本 session 實際踩過一次，
 當時是靠 `PYTHONIOENCODING=utf-8` 繞過）。順手補一行，列入批 1b。
 
 ---
@@ -758,7 +758,7 @@ N3   ：待分岔 ⑧ 定案後才排（不預留批次）
 
 | # | 發現 | 我的複驗 | 影響 |
 |---|---|---|---|
-| **F3-1** | N3 步驟④「在 clone 上跑 `run_hook_tests.py`」**會 `os.rename` 本尊 repo 的版控檔** | ✅ `tests/run_hook_tests.py:35` 寫死 `HOOKS_DIR = r"D:\.ai-harness\hooks"` ＋ `sys.path.insert`；`test_context_health_skill.py:222-223` `os.rename(target, backup)`，target 來自 `skills/context-health/SKILL.md:35` 的**絕對路徑** `D:\.ai-harness\rulefile\check_bloat.py` | ①clone 裡的 `hooks/` 整個刪掉那支照樣全綠 ⇒ **步驟④ 根本沒在驗 clone** ②改名打到本尊。且 `serve_dashboard.py` 背景每 10 秒跑 `refresh_dashboard` → `gen_progress_chart:257` → `capability_checks.evaluate()` ⇒ N3 一進 `CATEGORIES` 就會被每 10 秒帶著跑。（該測試有還原與中斷收拾邏輯，故非災難性，但併發撞上會留孤兒；而 `check_bloat.py` 一消失 `_p_anti_bloat` 靜默翻 False） |
+| **F3-1** | N3 步驟④「在 clone 上跑 `run_hook_tests.py`」**會 `os.rename` 本尊 repo 的版控檔** | ✅ `tests/run_hook_tests.py:35` 寫死 `HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"` ＋ `sys.path.insert`；`test_context_health_skill.py:222-223` `os.rename(target, backup)`，target 來自 `skills/context-health/SKILL.md:35` 的**絕對路徑** `D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py` | ①clone 裡的 `hooks/` 整個刪掉那支照樣全綠 ⇒ **步驟④ 根本沒在驗 clone** ②改名打到本尊。且 `serve_dashboard.py` 背景每 10 秒跑 `refresh_dashboard` → `gen_progress_chart:257` → `capability_checks.evaluate()` ⇒ N3 一進 `CATEGORIES` 就會被每 10 秒帶著跑。（該測試有還原與中斷收拾邏輯，故非災難性，但併發撞上會留孤兒；而 `check_bloat.py` 一消失 `_p_anti_bloat` 靜默翻 False） |
 | **F3-2** | N3 步驟③「能不能出結果」在構造上恆綠 | ✅ `capability_checks.py` 只 import `json/os/sys/pathlib`，**不讀 `harness.config.json`**；`evaluate()` 全域 `try/except` 把 probe 例外轉成 `ok=False` ⇒ `--json` 在任何缺檔狀態下都印合法 JSON 並 exit 0 | 步驟③ 的判準實際 ＝ **「`capability_checks.py` 這個檔在不在」**＝「檔案存在即綠」的**第六例**，而 §3 才剛宣告本輪要修其中兩例。另：步驟②「放 `harness.config.json` 範本」對步驟③ **完全沒作用**（不讀），對步驟④ 則是**讓它拒跑**（範本的 `currentProject` 是 `D:\你的專案`，`config.py:81` 對不存在目錄 `SystemExit`） |
 
 ⇒ **N3 進入「已定案但不得動工」狀態**，解法二選一（需 user 再拍板）：

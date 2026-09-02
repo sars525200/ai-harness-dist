@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板的「全域層」區塊，並同步各分頁的層別標記（2026-08-04）。
 
-    py -3 D:\.ai-harness\dashboard\gen_layers.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_layers.py --check   # 只印盤點結果
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_layers.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_layers.py --check   # 只印盤點結果
 
 ## 為什麼要分層
 
@@ -18,7 +18,7 @@ Claude 的設定有兩層會被自動載入：
 第二件只有分層才看得見的事：**全域層零 hook、零 skill、零角色**。
 換一個專案工作，整套 harness 等於不存在 —— 所有閘門都綁在 `d:\IT-department`。
 
-## `D:\.ai-harness\` 不是第三層
+## `D:\Patrick-AI\.ai-harness\` 不是第三層
 
 它是 hooks／dashboard／tests 的實體所在，但 **Claude 不會自動載入它** ——
 它是被專案層 `settings.local.json` 用絕對路徑引用的**共用元件**。
@@ -435,7 +435,7 @@ def sync_layer_counts(html: str, s: dict) -> str:
         "projectAllow": s["project"]["allow"], "projectDeny": s["project"]["deny"],
         # 規則總數讀 dispatch_config（單一真相），不寫死 —— 加一條規則徽章要自己跟上。
         # ⚠ 路徑本身以前也是寫死的（2026-08-13 被 V-15 抓到）：那行註解說「不寫死」
-        # 指的是規則數，但它自己的路徑釘在 `D:\.ai-harness\` —— harness 換個碟就讀不到，
+        # 指的是規則數，但它自己的路徑釘在 `D:\Patrick-AI\.ai-harness\` —— harness 換個碟就讀不到，
         # 而 `_json()` 讀不到回 None → ruleCount 靜默變 0，看板顯示「0 條規則」。
         "ruleCount": len((_json(HARNESS_ROOT / "hooks" / "dispatch_config.json")
                           or {}).get("rules") or {}),

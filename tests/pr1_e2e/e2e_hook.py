@@ -13,7 +13,7 @@ import json
 import pathlib
 import sys
 
-sys.path.insert(0, r"D:\.ai-harness\hooks")
+sys.path.insert(0, r"D:\Patrick-AI\.ai-harness\hooks")
 
 from contract import HookContext  # noqa: E402
 from rules import pr1_plan_review_marker as pr1  # noqa: E402

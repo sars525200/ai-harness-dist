@@ -11,7 +11,7 @@ r"""對 AWC-1 做變異，確認 awc1_* fixtures 真的會叫。
 舊變異的錨點全部漂掉（守門當場抓到 5 條無效變異）。新表覆蓋四個放行條件
 各自的兩個方向，外加「BLOCK 被降級回 WARN」。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_awc1.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_awc1.py
 """
 import hashlib
 import io
@@ -21,8 +21,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\awc1_choices_check.py"
-RUNNER = r"D:\.ai-harness\tests\run_hook_tests.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\awc1_choices_check.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
 
 
 def read():

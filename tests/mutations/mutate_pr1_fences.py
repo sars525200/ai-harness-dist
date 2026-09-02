@@ -9,7 +9,7 @@ r"""對 PR-1 的「程式碼區塊不算宣告」邏輯做變異，確認 pr1_14
   · **誤放行方向** —— 一份真的待審核的計畫書，只要在圍欄裡引用了 SKIP／PASSED
     marker 的寫法就自動通關（pr1_15）。這個方向沒有人會發現，因為它安靜。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_pr1_fences.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_pr1_fences.py
 """
 import hashlib
 import io
@@ -19,8 +19,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\pr1_plan_review_marker.py"
-RUNNER = r"D:\.ai-harness\tests\run_hook_tests.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\pr1_plan_review_marker.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
 
 
 def read():

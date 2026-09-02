@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""看板的本機服務：把 `harness-dashboard.html` 開成一個只有這台機器連得到的網站。
 
-    py -3 D:\.ai-harness\dashboard\serve_dashboard.py            # 前景跑（除錯用，看得到 log）
-    py -3 D:\.ai-harness\dashboard\serve_dashboard.py --port 9099
-    py -3 D:\.ai-harness\dashboard\serve_dashboard.py --once     # 只驗能不能綁上埠，馬上退（測試用）
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\serve_dashboard.py            # 前景跑（除錯用，看得到 log）
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\serve_dashboard.py --port 9099
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\serve_dashboard.py --once     # 只驗能不能綁上埠，馬上退（測試用）
 
     網址：http://127.0.0.1:8099/
 

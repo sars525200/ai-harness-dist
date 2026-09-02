@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 r"""跨檔重複偵測：always-loaded 檔裡有哪幾句「別的檔已經寫過了」。
 
-    py -3 -X utf8 D:\.ai-harness\rulefile\find_duplicates.py
-    py -3 -X utf8 D:\.ai-harness\rulefile\find_duplicates.py --project IT-department
-    py -3 -X utf8 D:\.ai-harness\rulefile\find_duplicates.py --file <path>   # 指定檔（fixture 用）
-    py -3 -X utf8 D:\.ai-harness\rulefile\find_duplicates.py --json          # 給 skill 吃
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\find_duplicates.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\find_duplicates.py --project IT-department
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\find_duplicates.py --file <path>   # 指定檔（fixture 用）
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\find_duplicates.py --json          # 給 skill 吃
 
 exit code：0 = 掃完（有沒有重複都是 0）　2 = 環境不對／零目標拒跑
 

@@ -16,7 +16,7 @@ r"""驗證「宣稱改了什麼」真的落在檔案裡（2026-08-26 建）。
 
 ## 用法
 
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_claims.py <claims.json>
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_claims.py <claims.json>
 
 claims.json 是一個陣列，每筆：
 

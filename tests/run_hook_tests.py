@@ -32,7 +32,7 @@ try:
 except Exception:
     pass
 
-HOOKS_DIR = r"D:\.ai-harness\hooks"
+HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 # fixture 的 expect 支援的鍵。多一個打錯的鍵會被靜默忽略 → 那條斷言等於沒寫，

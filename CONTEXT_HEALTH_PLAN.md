@@ -61,7 +61,7 @@ skill）。同一個病，只是沒有機制幫別的專案做。
 
 ### 1.3 現有機制為什麼沒擋住
 
-`D:\.ai-harness\rulefile\check_bloat.py` 已經存在且設計得不錯（比對快照、只報「這次新增的
+`D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py` 已經存在且設計得不錯（比對快照、只報「這次新增的
 膨脹」、拒絕自動壓縮），但有三個結構性限制：
 
 | # | 限制 | 證據 |
@@ -396,7 +396,7 @@ B-1／B-2 讓 AI-Projects 從來不在雷達上；B-3 讓「疊代」這件事�
     而價格會改，改的時候沒有人會記得有兩份。
   - 換算要標明前提（cache write 1h ×2／cache read ×0.1／每天幾則），**不給裸數字**。
 
-- **P-11 全域層 skill（user 需求 3·放 `D:\.ai-harness\skills\`）**：
+- **P-11 全域層 skill（user 需求 3·放 `D:\Patrick-AI\.ai-harness\skills\`）**：
   把今天手動走完的流程固化成可重跑的編排器。**它不含任何規則本體**——規則在
   `check_bloat.py` 與本計畫書，skill 只編排步驟（沿用既有的 15 支專案 skill 的形狀）。
   - **步驟**：①跑 `check_bloat` 拿現況 ②跑 P-8／P-9 拿重複與抄本候選
@@ -515,7 +515,7 @@ user 要求「健檢做成工具／編排優化做成工具／包成 skill／通
 | **P-8b** 結構異常偵測 | ✅ **替代 P-8**（判準改過三版） | **`rulefile/check_prose_blocks.py`**（v8 由 `check_structure.py` 改名·避開 `eval/` 同名）。判準演化：v5 逐行 → **硬斷行整段逃逸**（F-1 致命）；v7 段落累積＋兩段門檻 → **120–239 開了一條縫，折行就能讓 29% 的字消失**（R4-A）；**v8 單一門檻＋報告帶 `lines`／`max_line`**——假陽性不靠門檻解、靠報告讓人分辨；v10 段落邊界改呼叫 `check_bloat.is_entry_line()`；**v12 整份行分類共用 `check_bloat.classify_lines()`**——`entry` 與它的 `continuation` 一起歸條目層（R5-F1／F2：行對齊了但**量測單位**沒有），順帶 `_is_table_row` 要兩根柱子（F-8）、`_rules_scope` 起點改從節標題算（F-7）。現況（2026-08-14 實測）：IT-dept CLAUDE.md §8 錨內 **8 塊 1,965 字**、全域 CLAUDE.md **2 塊 267 字**、合計 **3,610 字**；**折行不變性由回歸網守住，且已延伸到條目層**（折行的條目長度不得改變） |
 | **P-9** 手抄注入清單偵測 | ❌ **2026-08-14 v12 整支移除** | 三版判準全部被實測推翻（絕對數→比例→名字距離），事後量的兩個替代訊號也不成立：**檔案層級名字數無解**（合法索引句命中 10 個 vs 4 支部門全抄 4 個 ⇒ `K>5` 且 `K<=4`）、**與 `description` 的字面重疊在真實資料上是反的**（索引句 184 vs 真手抄 110——真手抄抄的是*當時*的描述、**它已經漂了**，而「會漂」正是要抓它的理由 ⇒ **訊號與偵測目標互斥**）。**壞判準比沒有判準更貴**：它會叫人刪掉唯一還指得到路的導航句。`test_p9_is_gone` 擋「有人把它加回來」。完整資料見 §7 v12 |
 | **P-10** 成本換算 | ✅ | 單價一律來自 `gen_cost_panel.PRICE_IN`。⚠ 三次才守住：①`except Exception` 把 `ModuleNotFoundError` 吞成「讀不到」②`.get(model, 5.0)` 的 fallback 就是第二份表 ③AST 只掃 float、行為驗證 patch 掉整支 → **「藏進 `_price_in` 且用 int」兩道防線同時失效**（R4-B）。現有三道：行為驗證＋`ast.Dict` 掃描＋**不 patch 的恆等式** |
-| **P-11** 全域層 skill | ✅ | `D:\.ai-harness\skills\context-health\`。**`~/.claude/skills` 整個目錄是 junction 到 harness**，所以新建即生效——同一輪系統注入清單已出現它（不是「檔案存在」而是「真的進了可用清單」） |
+| **P-11** 全域層 skill | ✅ | `D:\Patrick-AI\.ai-harness\skills\context-health\`。**`~/.claude/skills` 整個目錄是 junction 到 harness**，所以新建即生效——同一輪系統注入清單已出現它（不是「檔案存在」而是「真的進了可用清單」） |
 | **V-11b** | ✅ | **`test_check_prose_blocks.py` 54 項**（v8：折行不變性・多行塊形狀・列表符號對齊；v10：條目形狀由 check_bloat 真的收得到・fence／comment 邊界；**v12 新增**：懸掛續行歸條目層＋**續行自己就超過門檻**的 case・條目折行不變性・單一 `\|` 行不遺失・錨之前的散文照掃・行分類單一來源・`test_p9_is_gone`）。主套件 **691/691** |
 | ~~V-12~~ | ❌ **隨 P-9 作廢** | 它驗的是「P-9 真的在比對系統注入的清單」。P-9 已移除（見上），這個驗證項沒有對象了。**移除能力時它的驗證項要一起標掉**——留著會變成下一筆「文件說有、實際沒有」 |
 | **V-13** | ✅（v8 補到三道） | 首版 `is not None`＝紀律 2 禁的形狀；v7 加 AST 但只掃 float；**v8 補不 patch 的恆等式** `_price_in() == gen_cost_panel.PRICE_IN`——前兩道都對「藏進 `_price_in` 且用 int」失效（R4-B 實測 7 條斷言全綠） |
@@ -814,7 +814,7 @@ exit code 從「所有專案都算」變成「只算 `__global__`」。依 R8-8 
 | **F-1** | 高 | **序位尾碼把身分綁在序位上** ⇒ 刪掉撞號組第 1 條，第 2 條遞補並**繼承前者的基準值**。合成 fixture 實跑：B 從 526 一路長到 626 字（+19%）而 `reasons=[] blind=[]`、exit 0。**R8-4 要消滅的「過期高基準＝靜默成長額度」被修法自己重新製造出來**，且條目數不變時 R8-3 也不會叫。原註解只承認「歷史斷一次」——**低估了一個量級** | **接受·已修**：改成**前綴延長到唯一**（見下） |
 | **F-2** | 高 | **`run_guarded()` 的例外處理器自己會拋例外**：它印的 `⚠`(U+26A0) 在 cp950 編不出來 ⇒ `UnicodeEncodeError` 從 except 區塊裡拋出 ⇒ 沒人接 ⇒ **exit 1**。它的 docstring 寫「保證沒有任何路徑走得到 exit 1」——**它自己就是那條路徑**。實測兩個入口：`--write-snapshot` 漏帶 `--project`、`_load_layers()` 的拒跑守門，兩個 fail-closed 都變成 fail-open | **接受·已修**：工具本體補 `reconfigure` |
 | **F-3** | 中 | **R8-7／R8-8 的「接線」零覆蓋**：`spec_from_file_location("_cb_test", …)` 讓 `__name__` 不是 `__main__` ⇒ 那一塊永遠不執行。實測把 `run_guarded(_cli)` 改成 `_cli()`、`only = resolve_cwd_project(…)` 改成 `only = None`，**101 條斷言全綠、27 條變異的錨點一條都沒蓋到** | **接受·已修**：補 subprocess 層 CLI 測試 ＋ 兩條接線變異 |
-| **F-4** | 中 | **R8-8 第 3 項把別的專案的「失明」從 exit 2 變成 exit 0**：`only_project` 的過濾放在 `measure()` 之前 ⇒ 被過濾掉的檔連量都不量 ⇒ 失明不進 `blind`。而 `D:\.ai-harness`（工具與測試自己所在的目錄）正是「不屬於任何專案」的目錄 | **接受·已修**：`only_project` **只收斂膨脹、不收斂失明**（user 拍板選這條，而非回退） |
+| **F-4** | 中 | **R8-8 第 3 項把別的專案的「失明」從 exit 2 變成 exit 0**：`only_project` 的過濾放在 `measure()` 之前 ⇒ 被過濾掉的檔連量都不量 ⇒ 失明不進 `blind`。而 `D:\Patrick-AI\.ai-harness`（工具與測試自己所在的目錄）正是「不屬於任何專案」的目錄 | **接受·已修**：`only_project` **只收斂膨脹、不收斂失明**（user 拍板選這條，而非回退） |
 | **F-5** | 低 | 我上一輪的訂正**自己也錯了**：`discover_targets()` 對每個專案無條件產 3 個 target（缺檔只是 `missing: True`），所以「沒有 CLAUDE.md」不是它不在清單裡的原因。真正的閘門是 `gen_layers.discover_projects()` 要 `.claude/` 目錄，且 `SCAN_ROOTS` **非遞迴** ⇒ 巢狀目錄**加了 CLAUDE.md 也不會被發現**，唯一入口是 `harness.config.json` 的 `extraProjects` | **接受·已訂正**（見 R8-8 列） |
 | **F-6** | 低 | ①**變異腳本分不出「斷言抓到」與「測試中途炸掉」**：變異 6 讓測試在 `IndexError` 中斷，後面約 70 條（含這幾輪新增的全部）一條都沒跑，而只讀 `rc != 0` 會記成「紅了 ✔」。②兩條新斷言不是它們自稱的東西（R8-9 的「對照組」沿用 R8-4 算過的變數＝重述） | **接受·已修**：`verdict()` 判收尾摘要行 ＋ 兩個炸點補守門 ＋ 對照組重跑 |
 
@@ -946,7 +946,7 @@ exit code 從「所有專案都算」變成「只算 `__global__`」。依 R8-8 
 | **R6-4** | 中 | `DEAD_OUTPUT` 只涵蓋一種「偵測已死」：**無錨狀態**兩支都是 exit 0＋非空 stdout 而條目層根本沒掃（`check_bloat` 預設路徑對無錨檔一個字都不印）；且 `check_bloat` docstring 宣告的 `2 = …找不到錨` **是不存在的路徑**（8 處 `sys.exit(2)` 沒有一處是它），而 `EXIT_OK` 正是照那份 docstring 抄的第二份真相 | 未逐項複核（程式碼事實） | **接受·未修** |
 | **R6-5** | 中 | `diff()` 對「這個檔沒有基準」**完全靜默**（`if prev_file is None: continue`）⇒ 新專案的 CLAUDE.md 可以無限長大而永遠印「沒有新增膨脹」。**這不是假想**：v12 已記錄 `AI-Projects` 的快照沒能重寫，它的基準仍是舊量法 | 未逐項複核 | **接受·未修** |
 | **R6-6** | 中 | 「總量真的降了」是**單檔**判準 ⇒ 把 500 字從 CLAUDE.md 搬到同樣 always-loaded 的 MEMORY.md（或全域那份，**每個專案各付一次**）照樣全綠。工具端沒有合計可比（`report_history` 逐檔一行、唯一的合計是 `report_overview` 的 bytes 且 §5 沒指向它） | 未逐項複核 | **接受·未修** |
-| **R6-7** | 中 | cwd 不在任何專案裡時 `only=None` ⇒ **所有專案都算進 exit code**，而訊息仍印「cwd 所屬專案」。實測 `cwd=D:\.ai-harness` → exit 1（被 AI-Projects 的舊基準卡住）——那正是註解說「被否決掉的『擋收工』從後門進來」 | 未逐項複核 | **接受·未修** |
+| **R6-7** | 中 | cwd 不在任何專案裡時 `only=None` ⇒ **所有專案都算進 exit code**，而訊息仍印「cwd 所屬專案」。實測 `cwd=D:\Patrick-AI\.ai-harness` → exit 1（被 AI-Projects 的舊基準卡住）——那正是註解說「被否決掉的『擋收工』從後門進來」 | 未逐項複核 | **接受·未修** |
 | **R6-8** | 低中 | **4 個變異 0 紅**：`_SECTION_HEAD_LINE` 的 `#{2,6}`→`#{1,6}`、`entry_scope` 的 `cur is None` 退路、`classify_lines` 的 `_HEADING_ANY`、`_flush()` 的 `>= LIMIT`→`> LIMIT`。⚠ 其中 `#{2,6}` 那個字面值**是 v12 特別加註解說「刻意不同」的**，而它沒有任何測試釘住 | 未逐項複核 | **接受·未修** |
 | R6-9／10／11 | 低 | `snap_key` 註解說「key 用第一行開頭」但 v12 後 `vis` 是 lead＋續行 join（lead <24 字時身分會吃進續行·live 影響 0）／P-9 殘骸三處（SKILL.md 指令列註解、docstring 的假 exit 2、`TODOS.md:25` 仍掛 ⏳）／SKILL.md §5「條目數不得下降」與硬規則 1、2 明文允許的「合併同源條目」**直接衝突** | 未逐項複核 | **接受·未修** |
 
@@ -1593,7 +1593,7 @@ IT-department **30,731 tokens**／AI-Projects **21,869 tokens**（含 system pro
 | # | 審查意見 | 處置 |
 |---|---|---|
 | A-1 | `pending_warn` 綁 session_id＋TTL 90 分＋靠下一次 `UserPromptSubmit`；離線腳本拿不到 session_id，收工又是 session 最後一件事 → 便箋 100% 投不到 | **接受**。P-6 換成寫 `PENDING_VERIFY.md`（session 無關）＋完成判準要求貼數字。V-5 連帶改寫 |
-| A-2 | 掛步驟 3.5 錯——它的標題是「只有動過 `D:\.ai-harness` 才跑」 | **接受**。改掛無條件執行的步驟 3。「只改專案檔沒碰 harness」正是最該跑的那天 |
+| A-2 | 掛步驟 3.5 錯——它的標題是「只有動過 `D:\Patrick-AI\.ai-harness` 才跑」 | **接受**。改掛無條件執行的步驟 3。「只改專案檔沒碰 harness」正是最該跑的那天 |
 | A-3 | `/shougong` 與 dispatch hook 只存在 IT-department，AI-Projects `dispatchWired: False` | **接受**。新增 P-6b 明寫觸發點邊界——這是刻意接受的限制，但必須寫在畫面上 |
 | A-4 | SKILL.md 步驟 3 完成判準實質是閘門，與 C-2 否決的 (c) 打架 | **接受**。exit 1 收窄成「只對 cwd 所屬專案」，SKILL.md 同批改 |
 | B-1 | MEMORY.md 路徑假設兩專案都錯；junction 方向是**由外指向內**；AI-Projects 那份根本不在專案磁碟區 | **接受**。§1.1 整表重寫，P-2 改從 `~\.claude\projects\d--<mangled>\memory\` 推導 |
@@ -1650,7 +1650,7 @@ IT-department **30,731 tokens**／AI-Projects **21,869 tokens**（含 system pro
 1. **W-3／W-4 的測試必須先在「未改的實作」上跑成紅**——七種寫法的契約測試現在應該紅
    （C/D/E/F/G 五種會失敗），若一開始就綠代表測試沒測到東西。**這一步是驗收前提，不可略過。**
 2. W-1／W-2 落地後同一批測試轉綠。
-3. 主套件 `py -3 D:\.ai-harness\tests\run_hook_tests.py` 維持全綠。
+3. 主套件 `py -3 D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py` 維持全綠。
    **基準＝691/691，2026-08-15 實跑確認**（先前只有文件記載、未實跑）。
 4. 變異測試 `mutate_check_bloat.py` 對新判準的字面值要能變紅；錨點守衛 `test_mutation_anchors.py` 不得漂掉。
 5. **對帳型判準一律先跑「正常情境」確認是 0 或已知常數**，再看異常情境（§7 兩次自我否證的教訓）。

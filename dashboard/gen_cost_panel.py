@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""產生看板「成本與 mix」分頁：模型 mix 對照 §7 目標、金額量級、skill／角色實際使用率。
 
-    py -3 D:\.ai-harness\dashboard\gen_cost_panel.py                # 注入 HTML（用金額快取）
-    py -3 D:\.ai-harness\dashboard\gen_cost_panel.py --check        # 只印解析結果，不寫檔
-    py -3 D:\.ai-harness\dashboard\gen_cost_panel.py --with-cost    # 先跑 ccusage 更新金額快取再注入
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_cost_panel.py                # 注入 HTML（用金額快取）
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_cost_panel.py --check        # 只印解析結果，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_cost_panel.py --with-cost    # 先跑 ccusage 更新金額快取再注入
 
 ## 為什麼要有這一頁
 

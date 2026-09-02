@@ -7,9 +7,9 @@ r"""把 session_title.py 掛到全域 settings.json 的 PreToolUse（2026-08-26�
 那個事件看得到**所有**工具呼叫的內容，而且有能力擋下它們 —— 是最敏感的一種掛載。
 模型不該自己給自己裝上去。所以由你執行、你看得到它改什麼。
 
-    py -3 D:\.ai-harness\tools\register_session_title_hook.py            # 掛上去
-    py -3 D:\.ai-harness\tools\register_session_title_hook.py --remove   # 拆掉
-    py -3 D:\.ai-harness\tools\register_session_title_hook.py --check    # 只看現況，不改
+    py -3 D:\Patrick-AI\.ai-harness\tools\register_session_title_hook.py            # 掛上去
+    py -3 D:\Patrick-AI\.ai-harness\tools\register_session_title_hook.py --remove   # 拆掉
+    py -3 D:\Patrick-AI\.ai-harness\tools\register_session_title_hook.py --check    # 只看現況，不改
 
 ## 這支 hook 在 PreToolUse 做什麼（範圍很窄，刻意的）
 

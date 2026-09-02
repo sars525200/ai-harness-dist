@@ -26,7 +26,7 @@ import types
 # 在模組層設，直接跑與經由 runner 跑都涵蓋得到（不是靠個別測試自律）。
 os.environ.setdefault("HARNESS_UNDER_TEST", "1")
 
-_HOOKS = r"D:\.ai-harness\hooks"
+_HOOKS = r"D:\Patrick-AI\.ai-harness\hooks"
 for _p in (_HOOKS, _HOOKS + r"\rules"):
     if _p not in sys.path:
         sys.path.insert(0, _p)

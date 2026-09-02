@@ -15,8 +15,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-DISPATCH = r"D:\.ai-harness\hooks\dispatch.py"
-TEST = r"D:\.ai-harness\tests\test_warn_channel.py"
+DISPATCH = r"D:\Patrick-AI\.ai-harness\hooks\dispatch.py"
+TEST = r"D:\Patrick-AI\.ai-harness\tests\test_warn_channel.py"
 
 
 def read():

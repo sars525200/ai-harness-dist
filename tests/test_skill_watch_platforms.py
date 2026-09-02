@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""平台定義與開關的回歸網（票 08·票 06 定案的五種初次體驗）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_skill_watch_platforms.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_skill_watch_platforms.py
 
 守三件事：
   ① **缺就是關，不是拒跑**——缺開關檔／缺某平台 key 都視為關，且不寫任何檔

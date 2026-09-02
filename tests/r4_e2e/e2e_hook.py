@@ -34,7 +34,7 @@ import json
 import pathlib
 import sys
 
-sys.path.insert(0, r"D:\.ai-harness\hooks")
+sys.path.insert(0, r"D:\Patrick-AI\.ai-harness\hooks")
 
 from contract import HookContext  # noqa: E402
 from rules import r4_server_dbpath as r4  # noqa: E402

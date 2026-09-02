@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""gen_rule_hub.py 第一版契約（票 03／04）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_gen_rule_hub.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_gen_rule_hub.py
 """
 from __future__ import annotations
 

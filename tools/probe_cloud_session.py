@@ -10,8 +10,8 @@ r"""探測「雲端 session 改名 API」在這台機器上通不通（2026-08-2
 
 ## 它做什麼
 
-    py -3 D:\.ai-harness\tools\probe_cloud_session.py                 # 唯讀：GET 現在的標題
-    py -3 D:\.ai-harness\tools\probe_cloud_session.py --set "新名字"   # 先 GET、再 PUT 改名
+    py -3 D:\Patrick-AI\.ai-harness\tools\probe_cloud_session.py                 # 唯讀：GET 現在的標題
+    py -3 D:\Patrick-AI\.ai-harness\tools\probe_cloud_session.py --set "新名字"   # 先 GET、再 PUT 改名
 
 - 端點：`{ANTHROPIC_BASE_URL 或 https://api.anthropic.com}/v1/code/sessions/{cse_…}`
 - 標頭：`Authorization: Bearer …`、`anthropic-version: 2023-06-01`、

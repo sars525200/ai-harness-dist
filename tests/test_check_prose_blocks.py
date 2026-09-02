@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""結構異常偵測的回歸網（CONTEXT_HEALTH_PLAN P-8b·V-11 改版）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_check_prose_blocks.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_check_prose_blocks.py
 
 ## 為什麼用合成 fixture 而不是 live 檔（V-3 的教訓）
 

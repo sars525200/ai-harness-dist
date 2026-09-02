@@ -23,7 +23,7 @@ import subprocess
 import sys
 import tempfile
 
-HOOKS_DIR = r"D:\.ai-harness\hooks"
+HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
 
 # 兩支 hook 的訊息裡都真實存在的字串，用來確認「中文有被寫出來」。
 _GATE_MARK = "唯讀角色"

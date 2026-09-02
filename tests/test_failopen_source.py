@@ -16,7 +16,7 @@ import sys
 import tempfile
 from contextlib import redirect_stdout
 
-_HOOKS = r"D:\.ai-harness\hooks"
+_HOOKS = r"D:\Patrick-AI\.ai-harness\hooks"
 for _p in (_HOOKS, os.path.join(_HOOKS, "rules")):
     if _p not in sys.path:
         sys.path.insert(0, _p)

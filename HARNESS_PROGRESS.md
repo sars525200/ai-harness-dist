@@ -1,6 +1,6 @@
 # Harness 進度報表（6 大歸類）
 
-> 快照時間：**2026-07-30 約 11:00**。涵蓋 `d:\IT-department`（IT 資產平台）＋ `D:\.ai-harness`（共用層）。
+> 快照時間：**2026-07-30 約 11:00**。涵蓋 `d:\IT-department`（IT 資產平台）＋ `D:\Patrick-AI\.ai-harness`（共用層）。
 > **各章的 7/28 敘事段落刻意保留為歷史紀錄**（首次真陽性、接線缺口那些過程有複用價值），
 > 只有「現況陳述」被更新——判斷方式：總覽表與各章的表格是現況，`### 本 session 完成`／
 > `### 🔴 …` 這類敘事小節是當時的紀錄。**架構現況以 `HARNESS_ROLE_ARCH_PLAN.md` 為權威**，
@@ -32,7 +32,7 @@
 | `SKILL_WATCH_PLAN.md` | 平台能力偵測（`/skill-watch`）·§18 是最新交接文 |
 
 ⚠ **改看板結構前先讀 `d:\IT-department\.claude\rules\dashboard-generators.md`**
-——它的 `paths` 對 `D:\.ai-harness` **不生效**，所以碰 harness 看板時要手動整份讀。
+——它的 `paths` 對 `D:\Patrick-AI\.ai-harness` **不生效**，所以碰 harness 看板時要手動整份讀。
 
 ---
 
@@ -151,7 +151,7 @@
 
 | Event | 設定位置 | 內容 | 模式 |
 |---|---|---|---|
-| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·**R4 = enforce（BLOCK，8/07）** |
+| `PreToolUse`（`Bash\|PowerShell\|Skill\|Write\|Edit\|MultiEdit\|NotebookEdit\|Agent`） | `.claude/settings.local.json` | `py -3 D:\Patrick-AI\.ai-harness\hooks\dispatch.py` | **DB-1 = enforce（BLOCK 真擋）**·**R1／R3 = enforce（WARN，7/30 解 shadow）**·**R4 = enforce（BLOCK，8/07）** |
 | `Stop`（無 matcher，全事件） | `.claude/settings.local.json` | 同一支 `dispatch.py` | DECL-1 = enforce（WARN）·**AWC-1 = enforce（BLOCK，8/28）**·**PR-1 = enforce（BLOCK，8/07）** |
 | `SubagentStop`（無 matcher） | `.claude/settings.local.json` | 同一支 `dispatch.py` | 2c 新掛，PR-1 改讀 `agent_transcript_path`。**新增一個 event key 必須重啟 session**（啟動時快照）；既有 key 的 matcher／command 才是熱生效 |
 | `Stop` | `.claude/settings.json` | `SOP\scripts\auto_commit.ps1` | 生效（本機自動 commit，與上面那個 Stop hook 各自獨立、都會跑）·**7/30 補進 `styles.css`**（見章末） |
@@ -174,7 +174,7 @@
 
 fixture／回歸網總計 **492**（`py -3 tests\run_hook_tests.py`，8/07 實跑）。
 
-### 已建置的骨架（`D:\.ai-harness\hooks\`）
+### 已建置的骨架（`D:\Patrick-AI\.ai-harness\hooks\`）
 
 `dispatch.py`（單一入口＋per-rule shadow 開關）／`contract.py`（規則介面＋git 抽象＋`is_push_to_remote` shlex 斷詞）／`_lib.py`（RealGitContext）／`report.py`／`rules/{db1_deploy,r1_default_migration,r3_ops_backup_scp,r4_server_dbpath,awc1_choices_check}.py`
 測試：`tests/run_hook_tests.py`（35 fixture 全過）＋`smoke_real_git.py`（31 項）。`RULE_COVERAGE.md` 反向對帳（grep「已N犯」逐條盤點，非憑印象挑）已完成，R1/R3/R4 就是這輪對帳的產出。
@@ -319,7 +319,7 @@ WARN 路徑寫錯時會全綠。5 個變異（平鋪／退回 stderr／`ensure_a
 3. 🔄 `d:\IT-department` 未 commit 項隨時在變（多 session 併發常態）——本輪 shougong 收工前會清一次，之後仍會再累積，屬正常現象非待辦。
 4. ⬜ 跑 `/doctor` 與 `/usage`（我叫不動互動式 slash command）
 5. ⬜ 兩個 MCP 授權（`claude.ai`、Google Drive）
-6. ✅ ~~`D:\.ai-harness` 沒有 `.markdownlint.json`~~ ——**7/30 已加**（一次編輯就噴 16.7KB 噪音進 context，成本遠高於加一個 9 行設定檔）。
+6. ✅ ~~`D:\Patrick-AI\.ai-harness` 沒有 `.markdownlint.json`~~ ——**7/30 已加**（一次編輯就噴 16.7KB 噪音進 context，成本遠高於加一個 9 行設定檔）。
 7. ✅ ~~R4/AWC-1 接線缺口修好後尚未觀察到真實命中~~ ——**AWC-1 已有 3 次 applies／2 次真陽性**；
    R4 仍 0 次，但已確認是情境未發生（分母有值：Write／Edit 進得了 dispatch）。
 8. ⬜ **Stop／SubagentStop 事件的 WARN 通道實測**——AWC-1 解 shadow 的唯一前置。

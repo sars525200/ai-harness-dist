@@ -57,7 +57,7 @@ from contract import allow, warn
 
 RULE_ID = "DISP-1"
 
-_STATE_DIR = r"D:\.ai-harness\state"
+_STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
 _STATE_PATH = os.path.join(_STATE_DIR, "dispatch_discipline_state.json")
 
 # 見 docstring：41 個真實 session 量出來的雙峰之間。

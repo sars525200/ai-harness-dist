@@ -54,7 +54,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 
 | | 全域層 | 核心層 | 專案層 |
 |---|---|---|---|
-| 放哪 | `~\.claude\`（Claude **自動載入**，跨所有專案） | `D:\.ai-harness\`（共用元件，被專案層用絕對路徑引用） | `<repo>\.claude\` |
+| 放哪 | `~\.claude\`（Claude **自動載入**，跨所有專案） | `D:\Patrick-AI\.ai-harness\`（共用元件，被專案層用絕對路徑引用） | `<repo>\.claude\` |
 | 內容 | **角色**（能力＋工作方法）＋ **通用 skill**（2026-08-21 起實裝，原欄位寫「未來的」） | hook 分派機制、event log、看板產生器、eval、通用規則（AWC-1／ENC-1／PR-1／BUDGET-1） | 業務規則（DB-1／R1／R3／R4）、**`PROJECT_CONTEXT.md`**（角色的作用對象）、該專案的 settings |
 | 誰維護 | 我（跨部門共用） | 我（改動要想相容性） | 該部門自己 |
 | 現況 | 角色 ＋ 通用 skill | hook／產生器／eval 等元件 | 規則 ＋ `PROJECT_CONTEXT.md` |
@@ -62,7 +62,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 > **這一列刻意不寫數字**（2026-08-22 改）。原本寫「5 支（角色）／28 支／4 支（規則）」，
 > 到 8/22 實測已經是 **6 角色 ＋ 8 skill ／ ── ／ 9 個規則**——三格全錯，而且**沒有任何守門會叫**。
 > 架構表要傳達的是「每一層放什麼形狀的東西」，數量是查得到的，寫進來只會爛掉。
-> **怎麼重數**（在 `D:\.ai-harness`）：
+> **怎麼重數**（在 `D:\Patrick-AI\.ai-harness`）：
 > `ls agents/*.md | wc -l`（全域角色）／`ls -d skills/*/ | grep -v _meta | wc -l`（全域 skill）／
 > `ls <repo>/.claude/rules/*.md | wc -l`（專案規則）。
 >
@@ -117,7 +117,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 
 | 層 | 檔案 | 回答什麼 | 進版控？ |
 |---|---|---|---|
-| harness 層 | `D:\.ai-harness\harness.config.json` | **有哪些專案**（`currentProject`／`scanRoots`／`extraProjects`） | ❌ 內容是這台機器的路徑，跨機無意義。`--init` 產範本 |
+| harness 層 | `D:\Patrick-AI\.ai-harness\harness.config.json` | **有哪些專案**（`currentProject`／`scanRoots`／`extraProjects`） | ❌ 內容是這台機器的路徑，跨機無意義。`--init` 產範本 |
 | 專案層 | `<repo>\.claude\PROJECT_CONTEXT.md` | 這個專案自己的設定（雙目錄、待辦來源、角色作用對象） | ✅ **不新發明**——它已經是「新部門導入唯一必填檔」 |
 
 **為什麼不能只有專案根那一份**：`gen_layers.discover_projects()` 要回答的是
@@ -194,7 +194,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 
 ### 已完成：角色搬到全域層（2026-08-05・user 選 junction 方案）
 
-實體 `D:\.ai-harness\agents\`（跟著 harness 版控）→ `~/.claude/agents` 用 **junction** 接過去
+實體 `D:\Patrick-AI\.ai-harness\agents\`（跟著 harness 版控）→ `~/.claude/agents` 用 **junction** 接過去
 → **既是全域層（Claude 每個專案自動載入）又有 git 歷史**。專案層 `<repo>/.claude/agents/` 已清空。
 
 - **搬法刻意分三步**：先複製、再建 junction 並驗內容一致（`cmp` 五支全 byte-identical）、

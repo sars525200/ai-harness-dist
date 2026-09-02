@@ -11,7 +11,7 @@ R3 守三條部署路徑，而 2026-08-20 之前**只守了其中一條**：
 **live 設定一個字都沒變而且不會報錯**。而清單漏掉的那兩支（復原腳本與
 RUNBOOK）更糟——它們只有在真的要災難復原那天才會被執行，平時零症狀。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_r3.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_r3.py
 """
 import hashlib
 import io
@@ -21,8 +21,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\r3_ops_backup_scp.py"
-RUNNER = r"D:\.ai-harness\tests\run_hook_tests.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\r3_ops_backup_scp.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
 FILTER = "r3"
 
 

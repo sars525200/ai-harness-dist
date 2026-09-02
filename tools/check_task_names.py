@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 r"""任務名格式檢查 —— **只報不擋**（2026-08-25 建）。
 
-    py -3 D:\.ai-harness\tools\check_task_names.py              # 掃語料，報覆蓋率與違規
-    py -3 D:\.ai-harness\tools\check_task_names.py --name 看板篩選列收成一列   # 單一名字試打
-    py -3 D:\.ai-harness\tools\check_task_names.py --strict     # 有違規就 exit 1（給未來接閘門用）
+    py -3 D:\Patrick-AI\.ai-harness\tools\check_task_names.py              # 掃語料，報覆蓋率與違規
+    py -3 D:\Patrick-AI\.ai-harness\tools\check_task_names.py --name 看板篩選列收成一列   # 單一名字試打
+    py -3 D:\Patrick-AI\.ai-harness\tools\check_task_names.py --strict     # 有違規就 exit 1（給未來接閘門用）
 
 ## 它檢查什麼
 

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""從 `global/hub/` 模組產出 `global/CLAUDE.md` 與 `global/CURSOR_USER_RULES.md`。
 
-    py -3 D:\.ai-harness\tools\gen_rule_hub.py            # 寫兩份產出
-    py -3 D:\.ai-harness\tools\gen_rule_hub.py --check    # 不寫；不一致 exit 1
+    py -3 D:\Patrick-AI\.ai-harness\tools\gen_rule_hub.py            # 寫兩份產出
+    py -3 D:\Patrick-AI\.ai-harness\tools\gen_rule_hub.py --check    # 不寫；不一致 exit 1
 
 契約：票 03／04。產生器不准寫 mcp／skills／hooks／雲端 User Rules。
 無時間戳。檔頭原文鎖在 GENERATED_HEADER。

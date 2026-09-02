@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""解析平台自己的 subagent 逐筆紀錄（2026-08-05）。
 
-    py -3 D:\.ai-harness\dashboard\subagent_stats.py          # 印出每個角色的實況
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\subagent_stats.py          # 印出每個角色的實況
 
 ## 為什麼不用 hook 的 event log
 

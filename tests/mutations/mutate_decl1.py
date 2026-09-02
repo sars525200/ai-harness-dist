@@ -9,7 +9,7 @@ r"""對 DECL-1 做變異，確認 test_decl1 真的會叫（2026-08-08 建）。
 所以這支的重點不是「規則對不對」，是**測試有沒有站在能看見失效的位置**：
 變異 1 就是把它改回原本那個壞掉的形狀，如果沒紅，代表整輪掃描這件事仍然沒被測到。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_decl1.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_decl1.py
 """
 import hashlib
 import io
@@ -19,8 +19,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\decl1_stage_files.py"
-RUNNER = r"D:\.ai-harness\tests\test_decl1.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\decl1_stage_files.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_decl1.py"
 
 
 def read():

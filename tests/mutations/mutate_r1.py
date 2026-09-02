@@ -11,7 +11,7 @@ r"""對 R1 做變異，確認 r1_* fixture 真的會叫。
 
 所以第一條變異是把「只比對宣告行」放回去，它必須讓 r1_07 紅。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_r1.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_r1.py
 """
 import hashlib
 import io
@@ -21,8 +21,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\r1_default_migration.py"
-RUNNER = r"D:\.ai-harness\tests\run_hook_tests.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\r1_default_migration.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
 FILTER = "r1"
 
 

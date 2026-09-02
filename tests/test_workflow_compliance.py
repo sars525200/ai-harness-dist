@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""`gen_workflow_compliance.py` 的回歸網：拒跑條件、判定層、變異證明。
 
-    py -3 D:\.ai-harness\tests\test_workflow_compliance.py     # 單獨跑
+    py -3 D:\Patrick-AI\.ai-harness\tests\test_workflow_compliance.py     # 單獨跑
     （也被 run_hook_tests.py 收進整合網，介面是 run() → (passed, failed)）
 
 ## 這支在守什麼
@@ -237,7 +237,7 @@ def run(verbose: bool = False) -> "tuple[int, list]":
     ok(m._is_tmp(r"C:\Users\x\AppData\Local\Temp\claude\d--IT\scratchpad\probe.py"),
        "scratchpad 路徑要被認成暫存")
     ok(m._is_tmp("/tmp/foo.py"), "/tmp 要被認成暫存")
-    ok(not m._is_tmp(r"D:\.ai-harness\dashboard\gen_x.py"),
+    ok(not m._is_tmp(r"D:\Patrick-AI\.ai-harness\dashboard\gen_x.py"),
        "專案檔不可被誤認成暫存")
     mut = _load()
     mut._is_tmp = lambda p: False

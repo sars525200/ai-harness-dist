@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""判準③的量法：改制後的 M 級任務有沒有開 wayfinder map。
 
-    py -3 D:\.ai-harness\tools\probe_m_level_map_coverage.py
-    py -3 D:\.ai-harness\tools\probe_m_level_map_coverage.py --self-test
+    py -3 D:\Patrick-AI\.ai-harness\tools\probe_m_level_map_coverage.py
+    py -3 D:\Patrick-AI\.ai-harness\tools\probe_m_level_map_coverage.py --self-test
 
 ## 為什麼要有這一支
 
@@ -118,7 +118,7 @@ def blind_spots() -> list:
 # —— 而在 regex 的字元類裡 `\/` 只是「跳脫的斜線」，**反斜線根本不在類裡**，
 # 於是 Windows 路徑一個都比不到。錯得很安靜：pattern 合法、compile 得過、
 # 只是永遠不命中。是這支自己的 `--self-test` 當場抓到的（假紅）。
-# 同一個母題在 `D:\.ai-harness\TODOS.md` 已記到第 6 例，這是第 7 例。
+# 同一個母題在 `D:\Patrick-AI\.ai-harness\TODOS.md` 已記到第 6 例，這是第 7 例。
 #
 # ⚠ **認的是 `.scratch/<effort>/` 而不只是 `<effort>/map.md`**（實跑抓到的假紅）：
 # 一段真實宣告寫「修改檔案 `.scratch/skill-watch-multiplatform/issues/02-….md`、

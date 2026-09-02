@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""角色細節設定頁 —— 本機服務，**真的能寫** `.claude/agents/*.md`（零外部依賴）。
 
-    py -3 D:\.ai-harness\reviewer\agents_config.py          # 啟動並自動開瀏覽器
-    py -3 D:\.ai-harness\reviewer\agents_config.py --check  # 只印目前設定，不起服務
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\agents_config.py          # 啟動並自動開瀏覽器
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\agents_config.py --check  # 只印目前設定，不起服務
 
 ## 為什麼不做在看板裡
 

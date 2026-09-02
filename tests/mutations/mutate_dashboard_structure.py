@@ -16,7 +16,7 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-SRC = r"D:\.ai-harness\dashboard\harness-dashboard.html"
+SRC = r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.html"
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERIFY = os.path.join(os.path.dirname(HERE), "test_dashboard_structure.py")
 

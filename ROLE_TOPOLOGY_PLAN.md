@@ -154,7 +154,7 @@ user 提出角色由四層組成：**規範（人腦記憶）／技能（專業�
 
 ### ② ★ 看板現在顯示的派工次數是錯的（低估），且有零成本的正確來源
 
-看板的 `activity()` 讀 `D:\.ai-harness\state\events.*.ndjson`（hook 記的），而 **`agent_spawn` 是 2026-07-31
+看板的 `activity()` 讀 `D:\Patrick-AI\.ai-harness\state\events.*.ndjson`（hook 記的），而 **`agent_spawn` 是 2026-07-31
 才開始記**、`SubagentStop` 也只在 hook 掛上之後才有。平台自己的
 `~/.claude/projects/d--IT-department/<session>/subagents/agent-*.jsonl` ＋ `.meta.json`
 **從一開始就有完整紀錄**，且含逐筆 `tool_use`（**Read／Grep／Glob 全都有**）。

@@ -12,8 +12,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\dashboard\gen_hook_rules.py"
-TEST = r"D:\.ai-harness\tests\test_hook_rules.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\gen_hook_rules.py"
+TEST = r"D:\Patrick-AI\.ai-harness\tests\test_hook_rules.py"
 
 
 def read():

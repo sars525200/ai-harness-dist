@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 r"""結構異常偵測：always-loaded 檔裡有沒有「不該長這個形狀」的東西。
 
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --project IT-department
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --file <path> --kind index
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_prose_blocks.py --json
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py --project IT-department
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py --file <path> --kind index
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py --json
 
 exit code：0 = 跑完　2 = 環境不對／零目標拒跑
 ⚠ **0 不等於「每一份都掃到」**：規則型檔沒有 `<!-- rules-section -->` 錨時該檔

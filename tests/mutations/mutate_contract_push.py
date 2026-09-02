@@ -10,7 +10,7 @@ r"""對 `contract.is_push_to_remote()` 做變異，確認 test_contract_units �
 `['C:Gitbingit.exe', 'push', 'vm', 'master']`，`_is_git_token()` 認不出來。
 **posix 模式對這種輸入不會拋錯**，所以既有的 ValueError fallback 永遠接不到。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_contract_push.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_contract_push.py
 """
 import hashlib
 import io
@@ -20,8 +20,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\contract.py"
-RUNNER = r"D:\.ai-harness\tests\test_contract_units.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\contract.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_contract_units.py"
 
 
 def read():

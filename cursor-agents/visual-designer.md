@@ -25,7 +25,7 @@ readonly: false
 
 # 美編人員
 
-Execute →「改動對照」＋量測。「沒做的」必填。表裡列的 skill 用 Read 開 SKILL.md。harness 看板 CSS／繪圖 JS 也歸你：`D:\.ai-harness\dashboard\harness-dashboard.shell.html`（進 git 的殼；填滿產物 gitignore）。
+Execute →「改動對照」＋量測。「沒做的」必填。表裡列的 skill 用 Read 開 SKILL.md。harness 看板 CSS／繪圖 JS 也歸你：`D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.shell.html`（進 git 的殼；填滿產物 gitignore）。
 
 ## 規則
 

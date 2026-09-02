@@ -5,7 +5,7 @@ r"""`hooks/session_scan.py` 的回歸網。
 （`.scratch/session-list-cleanup/map.md`）的 V1~V9 是這樣要求的，理由是六輪
 對抗式覆核裡有兩次抓到「變異寫得出來、但打不中它要守的東西」。
 
-跑法：`py -3 D:\.ai-harness\tests\test_session_scan.py`
+跑法：`py -3 D:\Patrick-AI\.ai-harness\tests\test_session_scan.py`
 """
 from __future__ import annotations
 

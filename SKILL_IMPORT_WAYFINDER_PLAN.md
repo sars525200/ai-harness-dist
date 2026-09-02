@@ -47,8 +47,8 @@
 
 | 層 | 位置 | 數量 |
 |---|---|---|
-| harness | `D:\.ai-harness\skills\` | 2（`context-health`、`visual-check`，junction 到 `~/.claude/skills`） |
-| harness 角色 | `D:\.ai-harness\agents\` | 6（executor／locator／sync-checker／harness-auditor／project-auditor／visual-designer） |
+| harness | `D:\Patrick-AI\.ai-harness\skills\` | 2（`context-health`、`visual-check`，junction 到 `~/.claude/skills`） |
+| harness 角色 | `D:\Patrick-AI\.ai-harness\agents\` | 6（executor／locator／sync-checker／harness-auditor／project-auditor／visual-designer） |
 | 專案 | `d:\IT-department\.claude\skills\` | 16 |
 | plugin | `~/.claude/plugins/` | 0（**未安裝任何 plugin**） |
 
@@ -259,7 +259,7 @@ L 級維持現狀；S 與 M 都走 wayfinder 決策票。
 
 v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore」**技術上做不到**：
 兩者都在 `.scratch/<feature>/issues/<NN>-<slug>.md`，`.gitignore` 是 path pattern，分不出 NN 的語意。
-另外 **`D:\.ai-harness\.gitignore` 實查沒有 `.scratch/` 條目**——D6 只講了 IT-department 那一份。
+另外 **`D:\Patrick-AI\.ai-harness\.gitignore` 實查沒有 `.scratch/` 條目**——D6 只講了 IT-department 那一份。
 
 **⚠ Round 2 F22 兩點更正：**
 
@@ -325,7 +325,7 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 | V1 | 4 支 skill 可叫用 | `/verify-skill` 三層 | 改壞一支 frontmatter `name`，必須報錯 |
 | V2 | CLAUDE.md 結構沒被動 | `git diff -- d:/IT-department/CLAUDE.md` 只有 §8 一行；`check_bloat.py` exit 0 且找得到 `rules-section` 錨 | 刪掉錨跑一次必須報錯。**（覆核已驗此格成立**：`check_bloat.py:1061-1074` 的 `only_project` 只收斂膨脹判定、不收斂 blind，`:1369-1384` 走 exit 2） |
 | **V3** | **K1 握手真的接上** | 產生一份**未經人工加工的** wayfinder map（走分岔 1 選定的機制），Stop 事件必須 BLOCK | **紅燈條件＝在施作前跑同一個流程，必須 ALLOW**。v1 的「新 fixture 標了狀態行、無 marker → BLOCK」**今天就已經是綠的**（`pr1_11` 已證明任意 `.md` ＋ 狀態行 ＝ BLOCK），測的是別的東西 |
-| **V4** | 舊 **15** 組 pr1 fixture 沒被打壞 | `py -3 D:\.ai-harness\tests\run_hook_tests.py` | **改壞我實際動的那個函式**（分岔 1 選 A/B → `_STATUS_PENDING` 的來源端；選 C → `_touched_plan_files`），必須有 fixture 變紅。v1 寫「8 組」是 2026-08-07 的舊數字，且指定改壞的零件與要改的零件無耦合 |
+| **V4** | 舊 **15** 組 pr1 fixture 沒被打壞 | `py -3 D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py` | **改壞我實際動的那個函式**（分岔 1 選 A/B → `_STATUS_PENDING` 的來源端；選 C → `_touched_plan_files`），必須有 fixture 變紅。v1 寫「8 組」是 2026-08-07 的舊數字，且指定改壞的零件與要改的零件無耦合 |
 | V5 | 詞彙表涵蓋 §1.5 四組 | 逐條對 | 刻意漏一組，檢查清單必須指出缺哪組 |
 | V6 | K2–K6 各項處置生效 | 依分岔 2 選項各自定 | 每項都要答得出紅燈條件，答不出的退回分岔 2 |
 | **V7** | to-tickets／wayfinder 起步 | 各實跑一次 | **兩項都要驗**：①移走 `docs/agents/issue-tracker.md` 必須報缺檔 ②**移走 triage 標籤來源必須報缺檔**（v1 只驗①，而 `to-tickets.md:11` 是 AND，②的缺失在 v1 的綠燈裡是預設狀態） |
@@ -344,7 +344,7 @@ v1 的選項 A「只有 wayfinder map 與決策票進版控、執行票 ignore�
 |---|---|---|---|
 | ✅ **`eval` L2 剩 1 項紅 —— 已修（2026-08-22）** | ~~single-context 下永遠不存在~~ | 建 `eval/contract_allowlist.json`（`(skill, 引用值)` **二元組**＋`reason`），`check_contracts` 把命中者降級成 **WAIVED**、報表獨立列出、不計入缺失。實測 `run_all.py` **exit 0，六層全 PASS**（L2 從 FAIL 變 PASS）。細節見 §7.3 | 已完成 |
 | ✅ **`/to-tickets`、`/wayfinder` 已實跑（2026-08-22·user 親自打）** | ~~兩支帶 `disable-model-invocation: true`，模型叫不動~~ | **兩支都綠**：各自照 LOCAL EDIT 讀到 `docs/agents/*`，**沒有出現指向已移除的 `/setup-matt-pocock-skills` 的死循環**（V-1 的修有效）。細節見 §7.2 | 已完成 |
-| **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
+| **`grilling` 從未實跑** | 需 user 實際回答一輪才驗得到；會推高 AWC-1 的 WARN 率（K8） | user 觸發一次 grilling 問答，事後跑 `py -3 D:\Patrick-AI\.ai-harness\hooks\report.py` 看 AWC-1 的 WARN 率變化 | **user**（未做） |
 | ✅ **`prototype` 已實跑（2026-08-22）** | ~~刻意不跑：約束本身未實測~~ | **約束成立**：兩個 repo 的分支／HEAD／stash 前後**完全一致**，只多一個未追蹤目錄。細節見 §7.4 | 已完成 |
 | ✅ **`/audit` 已跑（2026-08-22）** | ~~明著跳過~~ | 已跑 `harness` ＋ `project` 兩側。**產出 28 處不一致**（高 3／中 13／低 12），另排除 3 項假發現 | 已完成 |
 
@@ -425,7 +425,7 @@ provided to you」，沒被 provide 就會叫人跑**已被移除的** `/setup-m
 
 | repo | 結果 |
 |---|---|
-| `D:\.ai-harness` | **四項完全一致** ✓ |
+| `D:\Patrick-AI\.ai-harness` | **四項完全一致** ✓ |
 | `d:\IT-department` | 分支／HEAD／stash **完全一致**；status 行數 17→19 |
 
 那 +2 逐一對過：**只有 1 個是我的**（`?? .scratch/PROTOTYPE-ticket-namespacing/`），
@@ -655,9 +655,9 @@ user 決定**拆開**：
 | # | 項目 | 結果 |
 |---|---|---|
 | 1 | 安裝 | `npx skills@latest add mattpocock/skills -g --copy -y -a claude-code -s <單支>`，**7 支**逐支裝 |
-| 2 | 落點 | canonical store `~/.agents/skills/` → copy 進 `~/.claude/skills/` → 走 junction 進 **`D:\.ai-harness\skills\`（有版控、跨機器）** |
+| 2 | 落點 | canonical store `~/.agents/skills/` → copy 進 `~/.claude/skills/` → 走 junction 進 **`D:\Patrick-AI\.ai-harness\skills\`（有版控、跨機器）** |
 | 3 | 兄弟檔 | **全部到位**（Round 2 F23 的風險未發生）：`domain-modeling` 帶 `ADR-FORMAT.md`＋`CONTEXT-FORMAT.md`；`prototype` 帶 `LOGIC.md`＋`UI.md`；`setup` 帶 5 個種子模板 |
-| 4 | 移除 `setup-matt-pocock-skills` | 模板先備份到 scratchpad，再刪 `D:\.ai-harness\skills\setup-matt-pocock-skills\`。**解掉 K15 的 7/9** |
+| 4 | 移除 `setup-matt-pocock-skills` | 模板先備份到 scratchpad，再刪 `D:\Patrick-AI\.ai-harness\skills\setup-matt-pocock-skills\`。**解掉 K15 的 7/9** |
 | 5 | `wayfinder` 重裝 | 第一次沒帶 `-a` 被 copy 進 18 個 agent 目錄；已 remove 後帶 `-a claude-code` 重裝 |
 | 6 | 手工補 setup 產出（D3） | `docs/agents/issue-tracker.md`／`domain.md`／`triage-labels.md`。**CLAUDE.md 一字未動**（不加 `## Agent skills` 區塊） |
 | 7 | `triage-labels.md` 照樣寫 | v2 原訂不寫；Round 2 F7 證明 `to-tickets.md:11` 是 **AND**，不寫會讓 `/to-tickets` 卡在第一步 |
@@ -770,7 +770,7 @@ skill 自行起的 commit 會蓋在別人 staged 的東西上。
 報告全文：`d:\IT-department\.scratch
 esearch\skills-cli-update-semantics.md`
 （子代理在沙箱裡實裝、實改、實跑 update，並竄改 lock 雜湊模擬上游變動；
-事後對帳 `D:\.ai-harness\skills` 全樹 sha256 前後相同，未污染正式安裝。）
+事後對帳 `D:\Patrick-AI\.ai-harness\skills` 全樹 sha256 前後相同，未污染正式安裝。）
 
 **兩個發現，第二個比第一個嚴重：**
 

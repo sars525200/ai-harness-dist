@@ -401,7 +401,7 @@ R4 的 `tools` 同步擴成 `{Write, Edit, MultiEdit, NotebookEdit}`，並程式
 | **為什麼 `tools:` 收窄不了 Bash** | §5.3 坑 1：`Bash(git diff:*)` 的括號限定**只對 `Agent` 工具生效**，其他工具靜默拿到整支。要嘛不給，要嘛給了用 hook 真的擋 |
 | gate 方向 | **fail-CLOSED**，與 `dispatch.py` 的 fail-open 刻意相反：那支誤擋會卡住使用者本人，這支誤擋只是一個 subagent 少跑一條指令 |
 | gate 測試 | `tests/test_agent_gate.py` **48 case**（ALLOW/BLOCK 兩側都有樣本），已掛進 `run_hook_tests.py` 總入口 —— 孤兒測試等於沒有測試 |
-| **存放（user 定案）** | 本體 `D:\.ai-harness\agents\`，`~/.claude/agents` 以 **junction** 接過去（與記憶檔同模式，CLAUDE.md §3）。理由：角色檔的 agent-scoped hook 指向 `hooks/agent_readonly_gate.py`，**角色與 gate 是一個單位**，只版控一半會靜默漂移 |
+| **存放（user 定案）** | 本體 `D:\Patrick-AI\.ai-harness\agents\`，`~/.claude/agents` 以 **junction** 接過去（與記憶檔同模式，CLAUDE.md §3）。理由：角色檔的 agent-scoped hook 指向 `hooks/agent_readonly_gate.py`，**角色與 gate 是一個單位**，只版控一半會靜默漂移 |
 | 新機器 | `scripts/bootstrap-agents.ps1`（冪等、免管理員、ASCII-only）。三條分支都用 `-LiveDir` 指到暫存路徑實測過 —— 備份分支含 `Remove-Item -Recurse -Force`，寫錯會刪真實角色檔 |
 
 **gate 的兩個設計缺陷是變異測試抓出來的，不是想出來的**：
@@ -985,7 +985,7 @@ sync 的 flush 時序未知已結案；ESC-1 與 AWC-1 **不重疊**（50 個觸
   → ~~⑧`escalate` skill~~ ✅（`skills/escalate/SKILL.md`，顯示名「請示」，流程型 6 步＋邊界節，L1 0 FAIL；清冊 24→25 支）。
 
   **線 B 的 Execute 全部完成。** 剩下的是 §9.5 標為「已知驗不到」的兩項：①ESC-1 的 WARN 在真實 `additionalContext` 裡模型會不會因 tool_result 那句「never quote… agentId」而拒絕引用 ②2 MB tail 對長 session 的漏失率（實測正樣本母體 22%）——兩者都已進 `TODOS.md`「全域·需求」。
-  **回測原型與母體萃取器已落檔**：`D:\.ai-harness\tools\esc1_corpus.py`／`esc1_backtest.py`（唯讀，可重跑）。
+  **回測原型與母體萃取器已落檔**：`D:\Patrick-AI\.ai-harness\tools\esc1_corpus.py`／`esc1_backtest.py`（唯讀，可重跑）。
   ⚠ **第 4 輪覆核沒跑完**——`monthly spend limit`。v4 是**唯一沒有被獨立審查者看過**的版本，但它是**唯一有實跑回測數字**的版本。前三版都是被回測數字推翻的，不是被論證推翻的。
 <!-- REVIEW_SCOPE_IGNORE_END -->
 

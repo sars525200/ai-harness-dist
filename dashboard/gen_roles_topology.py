@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""從角色檔＋event log 產生看板「角色」分頁的**拓樸圖**（2026-07-31）。
 
-    py -3 D:\.ai-harness\dashboard\gen_roles_topology.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_roles_topology.py --check   # 只印解析結果
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_roles_topology.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_roles_topology.py --check   # 只印解析結果
 
 ## 為什麼從表格改成圖
 
@@ -126,7 +126,7 @@ BUILTIN = [
      # `subagent_type: "Plan"`，而 reviewer_config.json 決定用哪個工具／模型／強度跑它。
      # 設定屬於「誰去做這件事」，所以入口放在那個人身上，不另開一個分頁區塊。
      "skillConfig": {"skill": "adversarial-review", "label": "對抗式覆核 · 審查者",
-                     "file": r"D:\.ai-harness\reviewer\reviewer_config.json",
+                     "file": r"D:\Patrick-AI\.ai-harness\reviewer\reviewer_config.json",
                      "modal": "rv-modal"}},
     {"name": "Explore", "tools": "全部工具，除 Agent／Edit／Write／NotebookEdit",
      "desc": "唯讀廣度搜尋，讀片段而非整檔。定位程式碼用，不做審查或稽核。",

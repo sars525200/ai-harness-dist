@@ -2,7 +2,7 @@
 r"""對看板**內嵌 JS／CSS** 做變異，確認 test_layers 與 test_cost_panel 的
 「JS 那一半」斷言真的會叫。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_dashboard_js.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_dashboard_js.py
 
 為什麼要跟 mutate_dashboard_structure.py 分開：那支把變異寫成**另一個檔**再餵給
 驗證器（驗證器吃 argv 路徑）。但這裡要驗的斷言是直接讀殼檔
@@ -20,9 +20,9 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\dashboard\harness-dashboard.shell.html"
-TESTS = [r"D:\.ai-harness\tests\test_layers.py",
-         r"D:\.ai-harness\tests\test_cost_panel.py"]
+TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.shell.html"
+TESTS = [r"D:\Patrick-AI\.ai-harness\tests\test_layers.py",
+         r"D:\Patrick-AI\.ai-harness\tests\test_cost_panel.py"]
 
 
 def read():

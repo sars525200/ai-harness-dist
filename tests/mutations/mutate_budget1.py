@@ -13,8 +13,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\budget1_daily_usage.py"
-TEST = r"D:\.ai-harness\tests\test_budget1.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\budget1_daily_usage.py"
+TEST = r"D:\Patrick-AI\.ai-harness\tests\test_budget1.py"
 
 
 def read():

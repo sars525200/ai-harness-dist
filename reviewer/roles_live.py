@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""角色即時狀態頁 —— 誰在工作、誰在空閒（本機服務，零外部依賴）。
 
-    py -3 D:\.ai-harness\reviewer\roles_live.py          # 啟動並自動開瀏覽器
-    py -3 D:\.ai-harness\reviewer\roles_live.py --check  # 只印一次現況，不起服務
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\roles_live.py          # 啟動並自動開瀏覽器
+    py -3 D:\Patrick-AI\.ai-harness\reviewer\roles_live.py --check  # 只印一次現況，不起服務
 
 ## ⚠ 2026-08-05 起：預設不啟動（user 要求所有內容收進同一個網頁）
 

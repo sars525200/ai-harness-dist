@@ -12,7 +12,7 @@ r"""對 UI-1 做變異，確認 test_ui1_parity 真的會叫。
 
 所以第一條變異就是把那個 off-by-one 放回去 —— 它必須讓測試紅。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_ui1.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_ui1.py
 """
 import hashlib
 import io
@@ -22,8 +22,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\ui1_variant_parity.py"
-RUNNER = r"D:\.ai-harness\tests\test_ui1_parity.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\ui1_variant_parity.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_ui1_parity.py"
 
 
 def read():

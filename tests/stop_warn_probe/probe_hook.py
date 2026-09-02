@@ -12,7 +12,7 @@ STOP_HOOK_MARKER_PLAN.md §4.1 的「仍未驗」寫的是 **exit 0 + stderr** �
 `hookSpecificOutput.additionalContext` 會不會被帶進**下一輪**的 context。
 所以要跑兩輪，用 `--resume` 接續：
 
-    cd D:\.ai-harness\tests\stop_warn_probe
+    cd D:\Patrick-AI\.ai-harness\tests\stop_warn_probe
     claude -p "說 hello 就好" --model sonnet --output-format json
     claude -p --resume <上一輪的 session_id> --model sonnet --output-format json
       "你這一輪的 context 裡有沒有任何 hook 或系統注入的規則提醒？有的話把識別碼原文列出來。"

@@ -35,7 +35,7 @@ from contract import allow, warn
 RULE_ID = "BUDGET-1"
 
 _PROJECT_DIR = os.path.expanduser(r"~\.claude\projects\d--IT-department")
-_STATE_PATH = r"D:\.ai-harness\state\budget_state.json"
+_STATE_PATH = r"D:\Patrick-AI\.ai-harness\state\budget_state.json"
 
 # 近 14 個工作日的日均 output 約 2.96M（2026-07-31 量）。設在 1.35 倍：
 # 高到不會在正常工作日亂叫，低到真的失控時當天就講得出來。

@@ -54,7 +54,7 @@ Phase 3 的立論是「有一批寫入者不經過 tool-call，閘門看不到�
 | 3 | **沒有 bypass 檔位，且唯一替代品未被 deny**：`has_bypass()` 掃 `ctx.command`，git hook 無 command → 恆 False。而 `git push --no-verify` **不在 deny 清單**（現有 10 條是 commit 的 no-verify ＋ push 的 force 系列）→ 可白繞且不留痕 | 高 |
 | 4 | **`GIT_DIR` 汙染會靜默降級**：`RealGitContext._run` 不清 env；hook 環境帶 `GIT_DIR` 時 `dev_git` 的 `--show-toplevel` 仍正確但 `--git-dir` 指向主 repo → blob 判準永遠失敗、退化成只比 worktree（D13 被繞掉）、DEV 側語法檢查變 no-op。而 D15 的 wiring 斷言**抓不到**（兩者分岔） | 高 |
 | 5 | **判準③依賴 SessionStart，但它被歸類為「3a 前置、本輪不做」**：`REGISTRY` 六條無 `SessionStart`，dispatch 從未產生 stdout JSON，且 hook **event key 是啟動時快照**（要重開 session）。F8 的歸類是錯的，它同時是 3b 的前置 | 高 |
-| 6 | **新機器會被鎖死**：`bootstrap.ps1` 裝的 pre-push 指向 `D:\.ai-harness\hooks\git_gate.py`，而 harness repo **沒有 remote**、新機器拿不到 → `exec py -3` 非零 → **每次 push 都被擋**，錯誤訊息還跟雙改無關。另 `bootstrap.ps1` junction 分支 `exit 0` 提早結束，改成續跑會讓 `mklink /J` 對既有 junction 失敗卻印出假成功訊息 | 高 |
+| 6 | **新機器會被鎖死**：`bootstrap.ps1` 裝的 pre-push 指向 `D:\Patrick-AI\.ai-harness\hooks\git_gate.py`，而 harness repo **沒有 remote**、新機器拿不到 → `exec py -3` 非零 → **每次 push 都被擋**，錯誤訊息還跟雙改無關。另 `bootstrap.ps1` junction 分支 `exit 0` 提早結束，改成續跑會讓 `mklink /J` 對既有 junction 失敗卻印出假成功訊息 | 高 |
 | 7 | 回報鏈「讀完不刪改記 `reported_at`」＝ ndjson 整檔 rewrite，Windows 非原子；多 session 同啟會重複回報或截斷。且 `state/` 已 34 檔、無保留策略 | 中 |
 | 8 | 驗收②未指定「同時 bump `?v=`」→ 會停在 `check()` 的 step 5（`?v=` 未升）而從未走進 step 6 雙改比對，讓④判成假紅 | 中 |
 | 9 | `check()` 硬寫 `resolve_remote_ref("vm","master")` 與 `{ref}..HEAD`；push 非 master 分支（如既存的 `backup-20260517-…`）或 tag 時會拿 HEAD 亂判。核心介面也沒留放 ref 的參數位 | 中 |
@@ -90,7 +90,7 @@ Phase 3 的立論是「有一批寫入者不經過 tool-call，閘門看不到�
    重新成為真洞，屆時再處理。**注意**：修它要讓純字串函式去讀 git config，而它被用在
    `dispatch.py` 的 precheck（每次 Bash/PowerShell 呼叫都跑），會給三條規則同時加上
    subprocess 成本。
-2. ~~`D:\.ai-harness` **無 remote**~~ —— ✅ **已解決 2026-07-30**。
+2. ~~`D:\Patrick-AI\.ai-harness` **無 remote**~~ —— ✅ **已解決 2026-07-30**。
    鏡像位置 `C:\Users\<USER>\git-mirrors\JEFF-Harness.git`（remote 名 `backup`）。
    **刻意跨實體磁碟**：來源在 Disk 0（ST1000DM010 SATA HDD），鏡像在 Disk 1
    （KINGSTON SNV2S500G NVMe）—— 同一顆磁碟上放兩份不算備份。

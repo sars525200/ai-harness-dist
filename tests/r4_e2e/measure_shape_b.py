@@ -30,7 +30,7 @@ import os
 import re
 import sys
 
-ROOTS = [r"d:\IT-department", r"D:\.ai-harness"]
+ROOTS = [r"d:\IT-department", r"D:\Patrick-AI\.ai-harness"]
 # r4_e2e 排除自己：這個目錄裡的 _gen_*.py 是 e2e 產物（headless session 依指示寫的
 # 危險腳本），算進命中會讓「真實 codebase 有幾支這種東西」這個量測失真。
 SKIP_DIRS = {".venv", "node_modules", ".git", "__pycache__", "site-packages",

@@ -18,7 +18,7 @@ import subprocess
 import sys
 from contextlib import redirect_stdout
 
-_DASH = r"D:\.ai-harness\dashboard"
+_DASH = r"D:\Patrick-AI\.ai-harness\dashboard"
 if _DASH not in sys.path:
     sys.path.insert(0, _DASH)
 

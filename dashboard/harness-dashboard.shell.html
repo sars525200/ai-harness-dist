@@ -1408,7 +1408,7 @@
   <div class="masthead">
     <div>
       <h1>Harness 全景</h1>
-      <div class="scope">涵蓋 <code>d:\IT-department</code>（IT 資產平台）與共用層 <code>D:\.ai-harness</code>。多個 session 目前並行施工，本頁為單一時間點快照。</div>
+      <div class="scope">涵蓋 <code>d:\IT-department</code>（IT 資產平台）與共用層 <code>D:\Patrick-AI\.ai-harness</code>。多個 session 目前並行施工，本頁為單一時間點快照。</div>
     </div>
     <div class="snapshot">
       <div class="live"><span class="dot"></span>快照 · 非即時</div>
@@ -1497,7 +1497,7 @@
     <p class="lead">清單由 <code>gen_todos.py</code> 掃四個來源產生，<b>看板不手寫待辦</b>。<button type="button" class="cv-info" data-note="note-todo-lead" aria-expanded="false" aria-controls="note-todo-lead" aria-label="四個來源分別是什麼、優先程度與時間怎麼來的">!</button></p>
     <div class="criteria cv-note" id="note-todo-lead" hidden>
       <h4>四個來源與它們的可信度</h4>
-      <p><b>登記</b>＝<code>D:\.ai-harness\TODOS.md</code>（跨專案／harness 本體的事）。<b>待驗</b>＝各專案 <code>PENDING_VERIFY.md</code> 的四欄表——改了但沒當場驗到的尾巴。這兩類是<b>權威</b>：格式固定、逐字驗證指令都在。</p>
+      <p><b>登記</b>＝<code>D:\Patrick-AI\.ai-harness\TODOS.md</code>（跨專案／harness 本體的事）。<b>待驗</b>＝各專案 <code>PENDING_VERIFY.md</code> 的四欄表——改了但沒當場驗到的尾巴。這兩類是<b>權威</b>：格式固定、逐字驗證指令都在。</p>
       <p><b>計畫</b>＝計畫書表格裡狀態標在格首的未結案列；<b>粗抓</b>＝散文型待辦檔的 bullet。這兩類<b>只當指路用</b>——判準是量出來的（放寬版抓 20 列、一半是方案比較表與文件清單，收緊成「狀態必須在某一格開頭」才降到 8 列），仍可能抓到不精準的東西，所以每項都附來源檔與行號，動工前先開來源檔確認。</p>
       <p><b>要新增一個專案的待辦</b>：在該專案 <code>.claude\PROJECT_CONTEXT.md</code> 補「待辦來源」表。沒填就是沒有——產生器不會去猜哪個檔像待辦清單。</p>
       <p><b>優先程度：手填優先，沒填才推導</b>。來源表加一欄「優先」（填 高／中／低）就以它為準；沒填的由「誰跑」推導——<b>高</b>＝本 session／下一輪／下次開場這種馬上要動的，<b>中</b>＝有明確觸發條件但在等（等真機、等排程、等人），<b>低</b>＝沒有觸發條件（未排程／待決定），粗抓兩類預設低。畫面上推導出來的會標「（推導）」，不假裝是人定的。</p>
@@ -1688,7 +1688,7 @@
               <td class="when">在 VM 上人工執行</td>
             </tr>
 
-            <tr class="group-row"><td colspan="3">Harness 閘門層 — <code>D:\.ai-harness\hooks\</code>（跨專案共用）</td></tr>
+            <tr class="group-row"><td colspan="3">Harness 閘門層 — <code>D:\Patrick-AI\.ai-harness\hooks\</code>（跨專案共用）</td></tr>
             <tr>
               <td><span class="toolname">dispatch.py</span></td>
               <td><span class="cell-brief" tabindex="0" data-tip="規則延遲 import 後啟動成本 34.5→20.3ms">唯一 hook 入口：接 stdin 的事件、按需 import 規則模組、決定 allow／block。</span></td>
@@ -2528,7 +2528,7 @@
           <span class="rv-status" id="rv-status" role="status" aria-live="polite"></span>
         </div>
       </div>
-      <div class="copy-note"><span>※</span><span><b>這一頁存不了設定——它是 artifact，讀寫不了你本機的檔。</b>可用的 runtime capability 只有 <code>downloads</code> 與 <code>mcp</code>，沒有任何狀態保存能力（7/31 查證）。所以這裡只負責讓你選，選完把檔案下載到 <code>D:\.ai-harness\reviewer\reviewer_config.json</code> 覆蓋，或按「複製設定」把那段貼給我。<b>真相永遠是本機那份檔</b>，skill 每次執行時重讀、不快取。<br>本機另有一個真的能存的設定頁：<code>D:\.ai-harness\reviewer\Launch-Reviewer.bat</code>（同樣的選單，直接寫檔，並會實際偵測 codex 裝了沒）。</span></div>
+      <div class="copy-note"><span>※</span><span><b>這一頁存不了設定——它是 artifact，讀寫不了你本機的檔。</b>可用的 runtime capability 只有 <code>downloads</code> 與 <code>mcp</code>，沒有任何狀態保存能力（7/31 查證）。所以這裡只負責讓你選，選完把檔案下載到 <code>D:\Patrick-AI\.ai-harness\reviewer\reviewer_config.json</code> 覆蓋，或按「複製設定」把那段貼給我。<b>真相永遠是本機那份檔</b>，skill 每次執行時重讀、不快取。<br>本機另有一個真的能存的設定頁：<code>D:\Patrick-AI\.ai-harness\reviewer\Launch-Reviewer.bat</code>（同樣的選單，直接寫檔，並會實際偵測 codex 裝了沒）。</span></div>
     
     </div>
   </div>

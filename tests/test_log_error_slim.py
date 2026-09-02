@@ -20,7 +20,7 @@ import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, r"D:\.ai-harness\hooks")
+sys.path.insert(0, r"D:\Patrick-AI\.ai-harness\hooks")
 
 
 def run():
@@ -80,7 +80,7 @@ def run():
         ck("輪替後新檔已縮小", os.path.getsize(path) < 900, str(os.path.getsize(path)))
 
         # ── 端到端：壞 JSON 仍 fail-open ──────────────────────────────
-        r = subprocess.run([sys.executable, r"D:\.ai-harness\hooks\dispatch.py"],
+        r = subprocess.run([sys.executable, r"D:\Patrick-AI\.ai-harness\hooks\dispatch.py"],
                            input=raw_bad.encode(), capture_output=True)
         ck("壞 JSON 仍 exit 0（fail-open）", r.returncode == 0, f"rc={r.returncode}")
     finally:

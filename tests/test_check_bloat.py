@@ -777,7 +777,7 @@ def run() -> "tuple[int, list]":
     #
     # 舊寫法把過濾放在 `measure()` 之前 ⇒ 被過濾掉的檔**連量都不量** ⇒ 它的失明
     # 不會進 blind ⇒ exit 2 變 exit 0。而「不屬於任何專案的目錄」不是假想情境：
-    # `D:\.ai-harness`（這支工具與測試自己所在的目錄）就是其中之一。
+    # `D:\Patrick-AI\.ai-harness`（這支工具與測試自己所在的目錄）就是其中之一。
     print("\n[F-4] 失明不受專案過濾")
     EMPTY_SNAP = {"schema": m.SCHEMA, "files": {}}
     tgt_blind_other = {"project": "PZ", "label": "blind.md", "kind": "rules",

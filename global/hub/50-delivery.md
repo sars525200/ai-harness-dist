@@ -9,4 +9,4 @@ audience: all
   四欄缺一不可：**項目／為何沒驗／驗證指令逐字／誰跑**。**空白＝沒驗過**。
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
-  hunk 並對帳＝0 → `D:\.ai-harness\tools\peek_sessions.py`
+  hunk 並對帳＝0 → `D:\Patrick-AI\.ai-harness\tools\peek_sessions.py`

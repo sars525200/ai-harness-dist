@@ -1,6 +1,6 @@
 # 交接：Claude ↔ Cursor 協作（harness 核心層）
 
-> 給**另一個平台上的新對話**讀。工作區必須是 `D:\.ai-harness`。
+> 給**另一個平台上的新對話**讀。工作區必須是 `D:\Patrick-AI\.ai-harness`。
 > 短契約（always-on）是根目錄 `CLAUDE.md`。本檔是交接：現況、禁做、怎麼一起改。
 
 **本檔不存放會變的值，只存放「去哪裡問」**——改本檔前先讀下一節。
@@ -37,7 +37,7 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 ## 新對話第一句（可直接貼）
 
 ```
-接 Claude↔Cursor 協作。工作區 D:\.ai-harness。先讀 COLLAB_HANDOFF.md 與根目錄 CLAUDE.md。
+接 Claude↔Cursor 協作。工作區 D:\Patrick-AI\.ai-harness。先讀 COLLAB_HANDOFF.md 與根目錄 CLAUDE.md。
 不要建 .claude/，不要拷 skills 到 .cursor/skills/，不要把 global/CLAUDE.md 貼成 AGENTS.md。
 不要 move_agent_to_root，不要加 origin，不要建 master。
 改共用檔前跑 tools/check_before_start.py <要動的檔...>；commit 只 stage 自己的 hunk。
@@ -80,7 +80,7 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 
 - 根 `CLAUDE.md` 裡「Claude：本檔」那節
 - `~\.claude\settings.json`（全域 permissions／hooks；副本在 `global/settings.json`）
-- **禁止**在 `D:\.ai-harness` 建 `.claude/`——`discover_projects()` 靠 `.claude\` 認部門專案，建了會把地基誤認成一號專案
+- **禁止**在 `D:\Patrick-AI\.ai-harness` 建 `.claude/`——`discover_projects()` 靠 `.claude\` 認部門專案，建了會把地基誤認成一號專案
 
 **Cursor 專屬**
 

@@ -1,8 +1,8 @@
 r"""看板一鍵重生：來源變了就重跑所有產生器，沒變就秒退。
 
-    py -3 D:\.ai-harness\dashboard\refresh_dashboard.py            # 有變才重生
-    py -3 D:\.ai-harness\dashboard\refresh_dashboard.py --force    # 不管有沒有變都重生
-    py -3 D:\.ai-harness\dashboard\refresh_dashboard.py --quiet    # 只在真的做了事時輸出
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\refresh_dashboard.py            # 有變才重生
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\refresh_dashboard.py --force    # 不管有沒有變都重生
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\refresh_dashboard.py --quiet    # 只在真的做了事時輸出
 
 ## 為什麼要「先判斷來源有沒有變」
 

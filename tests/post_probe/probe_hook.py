@@ -12,7 +12,7 @@ ENC-1 是第一條掛 PostToolUse 的規則，所以這條通道必須先驗。
 
 ## 怎麼跑
 
-    cd D:\.ai-harness\tests\post_probe
+    cd D:\Patrick-AI\.ai-harness\tests\post_probe
     claude -p "請用 Write 工具建立 sample.ps1，內容是一行 Write-Output '中文測試'。
                建完後說明：這次工具呼叫之後有沒有收到任何提醒？它說了什麼？"
           --setting-sources project --model sonnet

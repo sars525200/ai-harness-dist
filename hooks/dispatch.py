@@ -68,7 +68,7 @@ sys.dont_write_bytecode = True
 from contract import ALLOW, BLOCK, HookContext, record_delivered
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
-STATE_DIR = r"D:\.ai-harness\state"
+STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
 CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
 _ERR_LOG_MAX = 256 * 1024   # 單一錯誤 log 上限；超過就輪替成 `.1`
 

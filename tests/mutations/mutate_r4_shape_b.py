@@ -11,7 +11,7 @@ connect() 括號裡」而全 codebase 0/177 命中），所以最大的風險不
   · 放太寬 —— 不檢查那個變數是否真的進 connect（會誤擋 /dry-run-migrate
     「先複製到暫存再改副本」的正確做法，fixture 09 守這一格）
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_r4_shape_b.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_r4_shape_b.py
 """
 import hashlib
 import io
@@ -21,8 +21,8 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\.ai-harness\hooks\rules\r4_server_dbpath.py"
-RUNNER = r"D:\.ai-harness\tests\run_hook_tests.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\r4_server_dbpath.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
 
 
 def read():

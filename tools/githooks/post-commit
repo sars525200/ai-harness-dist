@@ -1,6 +1,6 @@
 #!/bin/sh
 # harness 備份鏡像：每次 commit 後自動同步到 C 槽 NVMe 的 bare repo。
-#   來源 D:\.ai-harness（Disk 0, SATA HDD）
+#   來源 D:\Patrick-AI\.ai-harness（Disk 0, SATA HDD）
 #   鏡像 C:\Users\<USER>\git-mirrors\JEFF-Harness.git（Disk 1, NVMe SSD）
 #
 # ⚠ 這是**版控中的正本**。`.git/hooks/` 不進版控，換機器或重新 clone 都不會有它。

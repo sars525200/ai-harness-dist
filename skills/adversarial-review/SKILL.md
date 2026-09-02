@@ -29,7 +29,7 @@ effort: high
 先跑：
 
 ```text
-py -3 D:\.ai-harness\reviewer\server.py --check
+py -3 D:\Patrick-AI\.ai-harness\reviewer\server.py --check
 ```
 
 記錄輸出與原始 exit code。看「作者平台」那一行。
@@ -73,8 +73,8 @@ py -3 D:\.ai-harness\reviewer\server.py --check
 派出前凍結：
 
 ```text
-py -3 D:\.ai-harness\tools\adversarial_exchange_gate.py --stamp-ask <round-N-ask.md>
-py -3 D:\.ai-harness\tools\review_inflight.py --set <計畫檔或 map> --round N
+py -3 D:\Patrick-AI\.ai-harness\tools\adversarial_exchange_gate.py --stamp-ask <round-N-ask.md>
+py -3 D:\Patrick-AI\.ai-harness\tools\review_inflight.py --set <計畫檔或 map> --round N
 ```
 
 同時用 PR-1 BLOCK 訊息提供的重算指令保存**完整** content hash，作為本輪 `reviewed=`；
@@ -100,7 +100,7 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
    就是 permissions，所以它只影響這一次審查）。**用工具建，不要手打**：
 
    ```text
-   py -3 D:\.ai-harness\tools\build_review_sandbox.py <沙箱名> --file <要審的檔> [--deny <額外要擋的>]
+   py -3 D:\Patrick-AI\.ai-harness\tools\build_review_sandbox.py <沙箱名> --file <要審的檔> [--deny <額外要擋的>]
    ```
 
    它把下面三個坑一次寫對、檢查父鏈乾不乾淨、印出可直接貼的 agent 命令。
@@ -116,8 +116,8 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
    ```
 
    ⚠ **Windows 上 deny 的路徑一定要用反斜線**。2026-08-27 同題對照實測：
-   `Read(D:/.ai-harness/**)`（**官方範例的寫法**）→ 檔案照樣讀得到、**不報錯**；
-   `Read(D:\.ai-harness\**)` → 回 `Permission denied`。照抄官方範例會得到一份
+   `Read(D:/Patrick-AI/.ai-harness/**)`（**官方範例的寫法**）→ 檔案照樣讀得到、**不報錯**；
+   `Read(D:\Patrick-AI\.ai-harness\**)` → 回 `Permission denied`。照抄官方範例會得到一份
    **看起來設好、實際沒擋**的設定 —— 這是最難發現的失敗形狀。
    ⚠ JSON 裡反斜線要寫**兩個**（上面範例已是正確寫法）：單反斜線是非法跳脫，
    CLI 會回 `Bad escaped character in JSON` 並 `exit 1`。
@@ -142,7 +142,7 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
 ## 3b. `claude-code` 執行規則（Cursor 作者）
 
 ```text
-py -3 D:\.ai-harness\tools\run_claude_reviewer.py --ask <round-N-ask.md> --add-dir <跨 repo 時的對方路徑>
+py -3 D:\Patrick-AI\.ai-harness\tools\run_claude_reviewer.py --ask <round-N-ask.md> --add-dir <跨 repo 時的對方路徑>
 ```
 
 預設把 reply 寫到同目錄 `round-N-reply.md`、命令與 exit 寫 `_rN_raw.txt`。
@@ -158,7 +158,7 @@ py -3 D:\.ai-harness\tools\run_claude_reviewer.py --ask <round-N-ask.md> --add-d
 每輪完成後、蓋 marker 前都跑：
 
 ```text
-py -3 D:\.ai-harness\tools\adversarial_exchange_gate.py --check <effort 目錄>
+py -3 D:\Patrick-AI\.ai-harness\tools\adversarial_exchange_gate.py --check <effort 目錄>
 ```
 
 守門會檢查所有輪次的連續性、ask stamp、reply hash 與發現區。保留輸出與原始 exit code；
@@ -212,7 +212,7 @@ marker 放在被審文件檔尾並獨佔一行：
 蓋章後清除便箋：
 
 ```text
-py -3 D:\.ai-harness\tools\review_inflight.py --clear <計畫檔或 map>
+py -3 D:\Patrick-AI\.ai-harness\tools\review_inflight.py --clear <計畫檔或 map>
 ```
 
 ## 8. 回報

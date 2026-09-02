@@ -1066,7 +1066,7 @@ def diff(old: "dict | None", targets: list[dict],
         # 於是它的失明也不會進 `blind` ⇒ exit 2 變 exit 0。實測情境：
         # `IT-department/CLAUDE.md` 的規則節有個沒收尾的 fence（失明），從一個
         # 不屬於任何專案的目錄跑 —— `only_project='__global__'` ⇒ blind=0 ⇒ **exit 0**。
-        # 而 `D:\.ai-harness`（這支工具與測試自己所在的目錄）正是那種目錄。
+        # 而 `D:\Patrick-AI\.ai-harness`（這支工具與測試自己所在的目錄）正是那種目錄。
         #
         # 兩者的語意本來就不同層：「B 專案有膨脹」不該擋 A 專案的工作（所以 reasons
         # 要收斂），但「B 專案量不到」是**工具說不出答案**，而檔頭契約寫的是

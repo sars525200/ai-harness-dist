@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板「工作流程遵循度」：五階段規則有沒有被照著走，從 transcript 實測。
 
-    py -3 D:\.ai-harness\dashboard\gen_workflow_compliance.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_workflow_compliance.py --check   # 只印，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_workflow_compliance.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_workflow_compliance.py --check   # 只印，不寫檔
 
 ## 為什麼要有這一支
 
@@ -601,7 +601,7 @@ def collect() -> dict:
                             # 2026-08-23（票 08）**專案維度改用寫檔路徑**，在這裡另記一份。
                             # transcript 目錄量的其實是「session 在哪個目錄啟動」（cwd），
                             # 不是「錢花在哪個專案」。實測最近 40 個標成 IT-department 的 session、
-                            # 2472 次寫檔裡有 **924 次（37.4%）落在 D:\.ai-harness** ——
+                            # 2472 次寫檔裡有 **924 次（37.4%）落在 D:\Patrick-AI\.ai-harness** ——
                             # harness 的錢一直靜默記在 IT-department 頭上。**$0 看得出來，錯歸屬看不出來。**
                             # 用 Counter 不用 set：跨 repo 的段落要**按寫檔次數比例拆**（票 08 決策二）。
                             _repo = repo_of_path(p)

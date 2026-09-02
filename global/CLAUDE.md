@@ -6,7 +6,7 @@
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
 > 成立才放這裡；只在某個專案成立的規則放該專案自己的 `CLAUDE.md`。
-> （分層原則的完整版見 `D:\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
+> （分層原則的完整版見 `D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
 
 <!-- rules-section: all -->
 <!-- 這份檔每一節都是規則本文（沒有「速查表」與「敘述段」之分），所以整份都受
@@ -150,7 +150,7 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
 - **主 session 只留判斷與統合**：收 subagent 的結論、下決定、動需要全局脈絡的刀。
   高 effort 留在這裡；粗活派低 effort 角色（`model`／`effort` 由角色 frontmatter 承載）。
 - **為什麼派**：慢在推理不在跑指令，且不派會讓原始資料每輪重送 → 實測倍數見 `MODEL_ROUTING_PLAN.md` §7。
-- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
+- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\Patrick-AI\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
 
 
 - **session 指令擋住派工時必須當場說**，別默默自己做完（`CLAUDE_CODE_CHILD_SESSION=1`＝
@@ -177,7 +177,7 @@ Review 的發現要收斂到「**已修且已生效**」，不是「已知道」
   四欄缺一不可：**項目／為何沒驗／驗證指令逐字／誰跑**。**空白＝沒驗過**。
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
-  hunk 並對帳＝0 → `D:\.ai-harness\tools\peek_sessions.py`
+  hunk 並對帳＝0 → `D:\Patrick-AI\.ai-harness\tools\peek_sessions.py`
 
 
 ## 6. 動共用層（harness）

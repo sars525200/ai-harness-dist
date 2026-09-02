@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""產生看板「hook 規則表」：applies／would-block 的即時計數。
 
-    py -3 D:\.ai-harness\dashboard\gen_hook_rules.py           # 注入 HTML
-    py -3 D:\.ai-harness\dashboard\gen_hook_rules.py --check   # 只印，不寫檔
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_hook_rules.py           # 注入 HTML
+    py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_hook_rules.py --check   # 只印，不寫檔
 
 ## 為什麼要有這一支
 

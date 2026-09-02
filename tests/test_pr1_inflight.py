@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""PR-1 覆核進行中便箋的回歸網（2026-08-23）。
 
-    py -3 -X utf8 D:\.ai-harness\tests\test_pr1_inflight.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\tests\test_pr1_inflight.py
 
 ## 這支測試在防什麼
 

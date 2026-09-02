@@ -214,7 +214,7 @@ def _decide_ls(tokens) -> "str | None":
 
 
 def _decide_py(raw_command: str) -> "str | None":
-    r"""`py -3 <D:\.ai-harness 底下的 .py>`：只放行**跑既有的、在版控裡的**探測腳本。
+    r"""`py -3 <D:\Patrick-AI\.ai-harness 底下的 .py>`：只放行**跑既有的、在版控裡的**探測腳本。
 
     **為什麼開這個口**（2026-08-20）：稽核類角色（`harness-auditor`／`project-auditor`／
     `sync-checker`）的工作是**取得獨立證據**，而這套 harness 的證據幾乎全在那幾支確定性
@@ -228,7 +228,7 @@ def _decide_py(raw_command: str) -> "str | None":
     風險等級對齊 `node --check`：跑的是**版控裡的既有檔**，改動看得見、有回歸網守著。
     三道收窄，缺一不可：
 
-    1. **只放行 `D:\.ai-harness` 底下的 `.py`**（絕對路徑）——不放行任意路徑，
+    1. **只放行 `D:\Patrick-AI\.ai-harness` 底下的 `.py`**（絕對路徑）——不放行任意路徑，
        更不放行角色自己剛寫出來的腳本。相對路徑一律拒絕：驗不了它指到哪就是判斷不出來。
     2. **拒絕 `-c`／`-m`**——那是「執行任意程式碼」，與「跑一支看得見的檔」是兩件事。
        既有測試已經釘住 `py -3 -c "open('x','w').write('1')"` 必須被擋。
@@ -243,7 +243,7 @@ def _decide_py(raw_command: str) -> "str | None":
 
     # ⚠ **不能用 `_decide()` 那批 token 做路徑判定**（2026-08-20 實測）：
     #   `contract._tokenize()` 先試 `shlex.split(posix=True)`，而 **posix 模式把 `\`
-    #   當跳脫字元** ⇒ `D:\.ai-harness\hooks\report.py` 被拆成
+    #   當跳脫字元** ⇒ `D:\Patrick-AI\.ai-harness\hooks\report.py` 被拆成
     #   `D:.ai-harnesshooksreport.py`，路徑判定必然誤判成「不在 harness 底下」。
     #   這個 bug 是**既有的**，只是在此之前沒有任何規則按「路徑落在哪」判定，
     #   所以一直沒現形（既有測試的路徑全是正斜線）。這裡改用 non-posix 重拆一次：
@@ -266,7 +266,7 @@ def _decide_py(raw_command: str) -> "str | None":
             return ("py/python 的 -c／-m 是執行任意程式碼，不在唯讀白名單內"
                     "（放行的是「跑一支看得見的既有腳本」，不是「跑一段字串」）。"
                     "⚠ 若你要的是**語法檢查**，用 "
-                    r"`py -3 D:\.ai-harness\tools\py_syntax_check.py <檔…>` —— "
+                    r"`py -3 D:\Patrick-AI\.ai-harness\tools\py_syntax_check.py <檔…>` —— "
                     "`-m py_compile` 不放行的理由不是它危險，是**它會寫 `__pycache__`**，"
                     "而這道閘門的不變量是唯讀。")
         if low.startswith("--write") or low in _PY_WRITE_FLAGS:

@@ -1,6 +1,6 @@
 # 交接：給 Cursor 做專屬資料夾（IT + harness）
 
-> **下一則對話請開在 `D:\.ai-harness`（Agents 視窗那列 `git-mirrors/JEFF-Harness`）。**
+> **下一則對話請開在 `D:\Patrick-AI\.ai-harness`（Agents 視窗那列 `git-mirrors/JEFF-Harness`）。**
 > 不要用 `move_agent_to_root` 從 IT 專案把舊對話搬過來。
 > 開工先 Read 本檔＋`DASHBOARD_HTML_GIT_PLAN.md`（若要接看板產物／git 那條）＋`.cursor/README.md`＋`UNIVERSAL_HARNESS_PLAN.md` §0／§2。
 
@@ -12,7 +12,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 ## 目標（已定案）
 
 1. **IT 資產平台**（`D:\IT-department`）：完整鏈像 `.claude/rules`＋`.claude/skills` → `.cursor/`（user 選的，接受雙改）。
-2. **Harness**（`D:\.ai-harness`）：也做 `.cursor/`，但 **skills 不准再拷一份**（本 repo 的 `skills/` 已是 git 真相，`~\.claude\skills` 是 junction）。
+2. **Harness**（`D:\Patrick-AI\.ai-harness`）：也做 `.cursor/`，但 **skills 不准再拷一份**（本 repo 的 `skills/` 已是 git 真相，`~\.claude\skills` 是 junction）。
 3. **不要**在 harness 建 `.claude/`（`discover_projects()` 會把地基誤認成部門專案）。
 4. **不要**把 `CLAUDE.md`／`global/CLAUDE.md` 再貼成 `AGENTS.md`。
 
@@ -28,7 +28,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 
 ### IT-department（指路 4 檔）
 
-**已在 `master`（`f31194b5` 之後工作區乾淨）**，不必再開 agent 重提。內容是「IT 工作區 glob 打不到 `D:\.ai-harness`，手動 Read `.claude/rules/dashboard-generators.md`」。
+**已在 `master`（`f31194b5` 之後工作區乾淨）**，不必再開 agent 重提。內容是「IT 工作區 glob 打不到 `D:\Patrick-AI\.ai-harness`，手動 Read `.claude/rules/dashboard-generators.md`」。
 
 **不要**把下面這些一起提交，它們不是這次任務：
 
@@ -64,7 +64,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 
 它把目標當成**同一個 repo 的 worktree**，沿用 IT 的分支名 `master`。Harness 實際是：
 
-- 工作樹 `D:\.ai-harness`，分支 **`main`**
+- 工作樹 `D:\Patrick-AI\.ai-harness`，分支 **`main`**
 - 遠端叫 **`backup`** → `C:\Users\<USER>\git-mirrors\JEFF-Harness.git`
 - **沒有 `origin`**
 
@@ -79,7 +79,7 @@ user 原本用 Claude Cloud 建規則，要 Cursor 有自己的專屬資料夾�
 
 1. `D:\IT-department\.claude\rules\dashboard-generators.md`
 2. `D:\IT-department\.cursor\rules\dashboard-generators.mdc`
-3. `D:\.ai-harness\.cursor\rules\dashboard-generators.mdc`
+3. `D:\Patrick-AI\.ai-harness\.cursor\rules\dashboard-generators.mdc`
 
 ### 3. Harness 現在的 HEAD 是工具自動 commit，混了別的東西
 
@@ -130,7 +130,7 @@ IT 指路 4 檔、glob 驗收、CLAUDE.md 地圖：已完成，不要重做。
 ## 新對話建議第一句（可直接貼）
 
 ```
-接 harness。工作區 D:\.ai-harness。先讀 .cursor/HANDOFF.md 與 DASHBOARD_HTML_GIT_PLAN.md。
+接 harness。工作區 D:\Patrick-AI\.ai-harness。先讀 .cursor/HANDOFF.md 與 DASHBOARD_HTML_GIT_PLAN.md。
 §8 已決。不要開工拆 shell，除非我明確說開工。不要把髒的 harness-dashboard.html 跟計畫書一起 commit。
 不要 move_agent_to_root，不要加 origin，不要建 .claude/。改看板用 @dashboard-generators。
 ```

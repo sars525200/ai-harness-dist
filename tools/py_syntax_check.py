@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""Python 語法檢查 —— **不執行、不寫檔**。給唯讀角色用。
 
-    py -3 D:\.ai-harness\tools\py_syntax_check.py <檔或目錄…>
-    py -3 D:\.ai-harness\tools\py_syntax_check.py --warnings <檔…>   # 連 SyntaxWarning 也算
+    py -3 D:\Patrick-AI\.ai-harness\tools\py_syntax_check.py <檔或目錄…>
+    py -3 D:\Patrick-AI\.ai-harness\tools\py_syntax_check.py --warnings <檔…>   # 連 SyntaxWarning 也算
 
 exit 0 ＝ 全部通過；exit 1 ＝ 有語法錯（逐檔印出檔名:行:欄與訊息）。
 
@@ -25,7 +25,7 @@ exit 0 ＝ 全部通過；exit 1 ＝ 有語法錯（逐檔印出檔名:行:欄�
 
 ## 為什麼要有這支（能力邊界的實例）
 
-唯讀角色的白名單只放行 `D:\.ai-harness` 底下的 `.py`。`sync-checker` 的工作是
+唯讀角色的白名單只放行 `D:\Patrick-AI\.ai-harness` 底下的 `.py`。`sync-checker` 的工作是
 「兩端各跑一次語法檢查」，JS 六支 `node --check` 全過，**Python 六支全部跑不了** ——
 而本專案雙改清單實際含 `server.py` 與 `db\*.py` ⇒ 雙改檢核在 Python 側是永久盲區。
 這支住在 harness 底下（所以跑得動），檔案路徑當引數傳進來（所以讀得到專案側）。

@@ -116,7 +116,7 @@
 
 ## 6. 項目③：四層目錄分層（7/30 開議·**未執行，待逐項拍板**）
 
-> user 要求：`D:\.ai-harness` 一個、各專案一個、最細分到各模組一個。
+> user 要求：`D:\Patrick-AI\.ai-harness` 一個、各專案一個、最細分到各模組一個。
 > 本節先把**機制事實**與**兩個會讓效益打折的前提**寫清楚，再談做法 —— 因為其中一個
 > 前提如果沒先講，做完會發現「分了層但 context 沒少」。
 
@@ -130,9 +130,9 @@
 | `.claude/skills/` | 11 份 | 同上 |
 | `.github/copilot-instructions.md` | 1 份 | 只有 `SOP\`（DEV repo），`SOP_PROD\` 沒有 |
 
-**`D:\.ai-harness` 完全沒有自己的規則檔**——它的規則寄生在 IT-department：
+**`D:\Patrick-AI\.ai-harness` 完全沒有自己的規則檔**——它的規則寄生在 IT-department：
 `dashboard-generators.md` 物理上在 `d:\IT-department\.claude\rules\`，管的卻是 harness 的看板，
-而且實測它的 `paths:` 對 `D:\.ai-harness` **不生效**（不在 project 目錄下），只靠 §8 一句索引兜底。
+而且實測它的 `paths:` 對 `D:\Patrick-AI\.ai-harness` **不生效**（不在 project 目錄下），只靠 §8 一句索引兜底。
 
 ### 6.2 載入機制（官方行為，決定一切）
 
@@ -168,7 +168,7 @@ L3 要掛 CLAUDE.md 得有目錄可掛，而目前真的有目錄的只有 `db\`
 
 | 階段 | 做什麼 | 減 always-loaded？ | 真正得到什麼 |
 |---|---|---|---|
-| **A** | 建 `D:\.ai-harness\CLAUDE.md`，把寄生在 IT-department 的 harness 規則搬回去 | ❌（搬走的部分反而在 IT-department 看不到了） | harness 規則終於有家；`cd` 進去工作時規則齊全 |
+| **A** | 建 `D:\Patrick-AI\.ai-harness\CLAUDE.md`，把寄生在 IT-department 的 harness 規則搬回去 | ❌（搬走的部分反而在 IT-department 看不到了） | harness 規則終於有家；`cd` 進去工作時規則齊全 |
 | **B** | 建 `D:\CLAUDE.md`，放真正跨專案的（編碼三雷、commit 紀律、驗證紀律、說停就停） | ❌ 不減（見前提 A） | AI-Projects／未來新專案自動吃到；IT-department 的 §8 可以少列幾條 |
 | **C** | `db\`、`ops\`、`docs\` 掛 L3 | ✅ 少量（那幾塊本來就不大） | 有限，見前提 B |
 

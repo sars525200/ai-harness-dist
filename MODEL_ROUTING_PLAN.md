@@ -1,6 +1,6 @@
 # Model Routing 與成本精算化計畫書
 
-> 2026-08-05 立案。來源：`D:\.ai-harness\參考\Model routing\` 20 張圖（user 提供）。
+> 2026-08-05 立案。來源：`D:\Patrick-AI\.ai-harness\參考\Model routing\` 20 張圖（user 提供）。
 > 與 [`WORKFLOW_5STAGE_PLAN.md`](WORKFLOW_5STAGE_PLAN.md) 是同一套系統的兩半——
 > 那份講**流程與交接**，這份講**每階段派誰上場、花多少錢**。
 > **本檔為計畫書，未逐項討論前不動工。**
@@ -273,7 +273,7 @@ ccusage 有 7/148 個 session 對不上（它少算）、sonnet-5 優惠價未�
 ## §8 子 effort：task-identity-cost-attribution（2026-08-23 開圖）
 
 規劃層走 wayfinder map，不在本檔展開：
-`D:\.ai-harness\.scratch\task-identity-cost-attribution\map.md`
+`D:\Patrick-AI\.ai-harness\.scratch\task-identity-cost-attribution\map.md`
 
 它從本檔長出來的理由：到達點是「判斷派工準不準、錢花在哪個任務」，
 正是 §1 四象限與 §4.4 階段成本歸因沒有回答的那一半 —— 現有兩軸都是「實際用了多少」，

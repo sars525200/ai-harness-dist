@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 r"""分層標註檢查（2026-08-05）。
 
-    py -3 D:\.ai-harness\rulefile\check_layers.py            # 報告未標檔案
-    py -3 D:\.ai-harness\rulefile\check_layers.py --summary  # 只印統計
+    py -3 D:\Patrick-AI\.ai-harness\rulefile\check_layers.py            # 報告未標檔案
+    py -3 D:\Patrick-AI\.ai-harness\rulefile\check_layers.py --summary  # 只印統計
 
 【核心層】通用化的前置工程本身就是通用的——任何要分發出去的 harness 都得先知道
 自己哪些零件帶得走。

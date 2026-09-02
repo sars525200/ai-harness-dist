@@ -24,8 +24,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 # `tests/test_mutation_anchors.py` 用 AST 找 `ast.Constant` 型的賦值來認出被測檔，
 # 寫成 Path 運算它就看不到 → 這支變異腳本不會被納入錨點檢查，
 # 於是「錨點漂掉」這件事再也沒人守（第一版就是這樣寫的，主套件當場擋下）。
-TARGET = r"D:\.ai-harness\rulefile\check_bloat.py"
-TESTS = r"D:\.ai-harness\tests\test_check_bloat.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py"
+TESTS = r"D:\Patrick-AI\.ai-harness\tests\test_check_bloat.py"
 
 
 def read() -> str:

@@ -13,7 +13,7 @@ r"""對「登記簿分類欄漏填守門」做變異，確認 test_todos 真的�
 少了 `cat_col` 這一層，沒有分類欄的表（PENDING_VERIFY 那類）會被整批誤念，
 而誤念的下場跟 `check_bloat` 每次報上百列一樣：三天後就沒人看了。
 
-    py -3 D:\.ai-harness\tests\mutations\mutate_todos_cat.py
+    py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_todos_cat.py
 """
 import hashlib
 import io
@@ -24,8 +24,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 NL = chr(10)
-TARGET = r"D:\.ai-harness\dashboard\gen_todos.py"
-RUNNER = r"D:\.ai-harness\tests\test_todos.py"
+TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\gen_todos.py"
+RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_todos.py"
 
 
 def read():

@@ -10,7 +10,7 @@ type: 流程
 > **兩層分工（2026-08-25 §15 定案）**：判準與硬規則（規模分級／交付物格式／交接契約）
 > 本體在全域 `CLAUDE.md` §3 工作流，本支不重寫；**步驟操作與平台對照**（走哪一步、派誰、
 > 哪個工具名）本體在**本支**，全域 §3 只留指標句。
-> 沿革與踩雷 → `WORKFLOW_5STAGE_PLAN.md`（絕對路徑 `D:\.ai-harness\WORKFLOW_5STAGE_PLAN.md`）
+> 沿革與踩雷 → `WORKFLOW_5STAGE_PLAN.md`（絕對路徑 `D:\Patrick-AI\.ai-harness\WORKFLOW_5STAGE_PLAN.md`）
 > §14（全平台同一條工作流）·§15（§3 與 `/session-workflow` 去重）。
 > 本支只回答：**這一則現在該走哪一步、派誰、何時停下來等人**。
 

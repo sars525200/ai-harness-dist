@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 r"""列出目前側邊欄裡「零真實 user 訊息」的殼，並印出可直接貼的探針命令。
 
-    py -3 D:/.ai-harness/tools/list_shell_sessions.py
+    py -3 D:/Patrick-AI/.ai-harness/tools/list_shell_sessions.py
 
 **唯讀，不讀 token、不發任何網路請求、不改任何檔案。**
 真正要碰 OAuth token 的是 `probe_cloud_session.py`，那支必須由人自己跑
@@ -73,16 +73,16 @@ def main() -> int:
             continue
         print("  cse    : %s" % cse)
         print("  --- 段 A（唯讀 GET）---")
-        print("  py -3 D:/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
+        print("  py -3 D:/Patrick-AI/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
         print("  --- 段 B（PUT 實測·段 B 才是判準）---")
-        print('  py -3 D:/.ai-harness/tools/probe_cloud_session.py --id %s --set "測試改名 勿用"' % cse)
-        print("  py -3 D:/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
+        print('  py -3 D:/Patrick-AI/.ai-harness/tools/probe_cloud_session.py --id %s --set "測試改名 勿用"' % cse)
+        print("  py -3 D:/Patrick-AI/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
 
     print("\n=== 有內容的 session（段 A 的對照組：有過 Stop 的）===")
     for uuid, size, idle, cse, title, proj in sorted(actives, key=lambda r: r[2])[:3]:
         print("  %s  靜置 %.1f 分  %s" % (uuid[:8], idle, title or "(無名)"))
         if cse:
-            print("    py -3 D:/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
+            print("    py -3 D:/Patrick-AI/.ai-harness/tools/probe_cloud_session.py --id %s" % cse)
     return 0
 
 

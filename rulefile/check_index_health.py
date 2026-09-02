@@ -27,7 +27,7 @@ Claude Code 對 `MEMORY.md` 的處理是「**前 200 行或 25KB，先到先算�
 
 ## 用法
 
-    py -3 -X utf8 D:\.ai-harness\rulefile\check_index_health.py
+    py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_index_health.py
     py -3 -X utf8 ...\check_index_health.py --project IT-department
 
 exit 0＝三項都過；exit 1＝有項目不成立。**零目標一律視為失敗**，不報「全部通過」。

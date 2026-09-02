@@ -15,7 +15,7 @@
 """
 import sys, json, os, time
 
-SPIKE_DIR = r"D:\.ai-harness\state\spike"
+SPIKE_DIR = r"D:\Patrick-AI\.ai-harness\state\spike"
 
 
 def main() -> None:
