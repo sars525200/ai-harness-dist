@@ -15,3 +15,11 @@
 # 「不依賴 core.autocrlf」這條策略上面寫得很清楚，只是清單漏了一種副檔名 ——
 # 漏的當下沒有徵兆：檔案照樣打得開，只有還原過再跑測試才會撞到。
 *.html  text eol=lf
+# 2026-09-02 補：`tools/githooks/` 底下的 git hook **沒有副檔名**，於是整張清單
+# 全部漏掉它，`git check-attr` 回 `text: unspecified` ⇒ 又落回 per-machine 的
+# core.autocrlf=true，commit 當下 git 就警告「LF will be replaced by CRLF」。
+# 這次的症狀比 `.html` 那次更硬：shell script 帶 CRLF 在 Linux／git-bash 會直接
+# `/bin/sh^M: bad interpreter` 起不來 ⇒ **重新 clone 之後備份 hook 靜默失效**，
+# 而它正是為了「備份不要靜默失效」才存在的。上面第 15 行那句「清單漏了一種副檔名」
+# 這次是「漏了沒有副檔名的那一類」。用路徑比對，不要再靠副檔名。
+tools/githooks/*  text eol=lf
