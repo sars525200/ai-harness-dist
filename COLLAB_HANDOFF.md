@@ -106,6 +106,92 @@ git log --oneline -8 -- COLLAB_HANDOFF.md CLAUDE.md global/ skills/ agents/
 
 ---
 
+## 共用層現在有哪些斷點（盤點於 2026-09-03）
+
+**這一節列的是「機制上沒人看守的縫」，不是當下的值。** 照本檔保鮮規則，
+每條只寫**怎麼自己量**，不寫量到什麼——量到的東西一週後就是謊話。
+
+判準一句話：**改了 repo，執行期會不會跟著變？** 不會、而且沒有任何訊號 ⇒ 是斷點。
+
+| # | 縫在哪 | 沒人看守會怎樣 | 誰的側 | 有沒有工具 |
+|---|---|---|---|---|
+| 1 | Cursor 角色檔靠手抄，不是 junction | repo 改了、Cursor 載的還是舊版，**完全無訊號** | Cursor | 無 |
+| 2 | Cursor User Rules 存在雲端帳號 | 規則正文對不對，本機**測不到**，只能人開對話肉眼比 | Cursor | 無（有對帳表，要人填） |
+| 3 | Cursor 側沒掛任何 hook | 同一套規則，只有 Claude 這邊擋得住 | Cursor | 不適用 |
+| 4 | 角色數量兩邊不等 | Cursor 少一個角色而它不知道自己少 | Cursor | 無 |
+
+### 1. Cursor 的角色檔靠手抄（無 junction、無工具、無測試）
+
+Claude 的 `agents/`、`skills/` 是 junction（`cmd /c "dir /AL %USERPROFILE%\.claude"` 看得到），
+**改 repo 等於改執行期**。Cursor 這條線是斷的：`cursor-agents/*.md` 要人工複製到
+`~\.cursor\agents\`，每個檔的第一句自己就寫著「那不是 junction」。
+
+⇒ 自己量（在 harness repo 根跑）：
+
+```
+for f in cursor-agents/*.md; do n=$(basename "$f"); \
+  diff -q <(sed 's/\r$//' "$f") <(sed 's/\r$//' "$HOME/.cursor/agents/$n") >/dev/null 2>&1 \
+  || echo "DRIFT or MISSING: $n"; done
+```
+
+⚠ **`sync-checker` 角色不查這一組**——它查的是專案的前端雙目錄。這一縫沒有任何守門。
+
+⚠ **`agents/*.md` 與 `cursor-agents/*.md` 的差異是刻意的**（frontmatter 與平台專屬段落），
+不要拿 diff 有輸出就當成漂移。要比的是 `cursor-agents/` ↔ `~\.cursor\agents\` 這一對。
+
+### 2. Cursor User Rules 在雲端帳號，本機驗不到
+
+`global/CURSOR_USER_RULES.md` 是產生器產出，但**它沒有可寫入的本機目標**——
+Settings → Customize → Rules 的正文存在 Cursor 帳號，`%APPDATA%\Cursor` 與
+`%USERPROFILE%\.cursor` 都沒有。證據與搜尋範圍在
+`.scratch/research/cursor-user-rules-storage.md`（2026-08-26 實查）。
+
+⇒ 唯一的對帳路徑是 `global/user-rules-reconcile.md`，而它**要人開一則新 Cursor 對話、
+讀 `<user_rules>` 標籤內層**才填得出來。**這一列不得由模型代填。**
+
+⇒ 自己量（判斷該不該重貼）：
+
+```
+git log -1 --format=%ci -- global/CURSOR_USER_RULES.md   # 產出檔何時變的
+tail -30 global/user-rules-reconcile.md                   # 最後一次對帳是何時
+```
+
+產出檔比對帳表新 ⇒ **這張表是紅的**，Cursor 載的規則正文與 repo 不一致。
+
+### 3. Cursor 側沒有掛任何 hook
+
+Claude 側有一整組閘門（選擇題、說明頁、停止、角色唯讀）。Cursor 側是空的。
+
+⇒ 自己量：`cat ~/.cursor/hooks.json`，看 `hooks` 是不是 `{}`。
+
+⇒ 後果：規則本文兩邊共用，**強制力只有一邊有**。Cursor 這側的硬規則全靠正文自覺，
+所以 `cursor-agents/*.md` 那些「即使給了 shell 也不跑測試」之類的話**是唯一防線**，
+改的時候要當成閘門在改，不是當成說明文字。
+
+### 4. 角色數量兩邊不等
+
+`agents/` 有一個 `locator.md`（唯讀定位員），`cursor-agents/` 沒有對應檔。
+
+⇒ 自己量：`ls agents/ cursor-agents/` 比清單。
+
+⇒ 這可能是刻意的（Cursor 的 Task 子代理機制不同，見「硬限制」第 4 條旁邊那句
+「Cursor 的 Task 子代理 ≠ `agents/*.md`」），但**沒有任何檔寫下這個決定**。
+⇒ 讀的人只能猜是刻意還是漏掉。要嘛補檔、要嘛在 `cursor-agents/README` 寫一行「為什麼沒有」。
+
+### 已知的死檔與殭屍列
+
+- `~\.cursor\rules\ask-with-choices.mdc`：2026-08-25 實測**不注入**（見「硬限制」第 7 條），
+  留著只會讓人以為選擇題規則有本機來源。
+- `COLLAB_NOW.md` 裡超過 4 小時沒更新的列＝殭屍。收工要刪自己那列，
+  **那個檔自己就寫著這條規則，而它自己違反過**——讀到舊列請直接當它不存在。
+
+### 這一節該怎麼維護
+
+**不要在這裡補「現在量到什麼」。** 要記錄某次量到的結果，寫進 `TODOS.md` 或
+`user-rules-reconcile.md`，那裡是給值住的地方。本節只回答「有哪些縫、怎麼量」。
+
+---
+
 ## 兩人同時改時怎麼做
 
 1. 改共用檔前跑 `py -3 tools/check_before_start.py <你要動的檔...>`。
