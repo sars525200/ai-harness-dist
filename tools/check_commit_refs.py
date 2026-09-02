@@ -42,9 +42,9 @@ ALLOW_PATH = os.path.join(HERE, "commit_refs_allow.json")
 #: 少查一個 repo 就會把正常的引用報成斷線。
 REPOS = [
     ROOT,
-    r"D:\IT-department",
-    r"D:\IT-department\SOP",
-    r"D:\AI-Projects",
+    r"D:\Patrick-AI\IT-department",
+    r"D:\Patrick-AI\IT-department\SOP",
+    r"D:\Patrick-AI\MIS-install",      # 2026-09-02 前叫 D:\AI-Projects
 ]
 
 TOKEN_RE = re.compile(r"`([0-9a-f]{7,40})`")

@@ -933,12 +933,18 @@ def main() -> None:
     buckets = collect()
     layers = _load_layers()
     roots, current = {}, None
+    # 本專案**不能靠 cwd 認**（2026-09-03）：舊寫法是 `p.name == Path.cwd().name`，
+    # 於是同一份看板從哪個目錄跑就決定徽章對不對 —— 從 `.ai-harness` 跑（看板服務
+    # 自己的自動重生就是）會把本專案認成 `.ai-harness`，那個 bucket 是空的
+    # ⇒ 徽章變 0，而畫面上「真的沒待辦」跟「認錯專案」長得一模一樣。
+    # 改問 `current_project()`（實體路徑），與 `project_colors.py` 同一個判準。
+    _here = layers.current_project()
     for p in layers.discover_projects():
         roots[p.name] = str(p)
-        if (p / ".claude").is_dir() and p.name == Path.cwd().name:
+        if p == _here:
             current = p.name
     if current is None:                       # 本專案＝gen_layers 認定的那個
-        current = layers.PROJECT_DIR.parent.name
+        current = _here.name
     total = sum(len(v) for v in buckets.values())
     empty_kinds = [k for k in KIND_ORDER
                    if not any(i["kind"] == k for v in buckets.values() for i in v)]
