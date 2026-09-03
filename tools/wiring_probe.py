@@ -309,24 +309,55 @@ def probe_p10(settings: dict) -> list[Result]:
 def probe_p11(wired_at: str | None) -> list[Result]:
     """skill-watch 基準是本機量的。
 
-    W9 的版控模型變更（user 2026-09-03 拍板）：基準檔各機一份、**不進版控**。
-    第 2 輪原本寫的「刪掉基準檔重量測」做不到 —— 它在版控裡，刪了 git restore 會回來，
-    重量測後 commit 還會經 backup remote 蓋掉舊機那份。
+    ⚠ **判準 2026-09-03 訂正過一次。** 原本驗的是「`SkillViewer/platform_skills.json`
+    不在版控中」——那是錯的：**那個檔同時是 SkillViewer 的顯示清冊**
+    （`skills[]` 現有 54 支，`SkillViewer.ps1` 直接讀它），整檔移出版控會讓
+    新機的 SkillViewer 沒有資料。
+
+    正解在 `SKILL_WATCH_PLAN.md` 的 W-5 訂正（2026-08-23·票 06）：
+    **基準搬到 `state/skill_watch_baselines.json`（gitignore），清冊留原檔原位。**
+    所以這裡驗三件：基準檔在該在的地方、它不在版控、清冊裡已經沒有 baselines。
     """
     out = []
-    baseline = HARNESS_ROOT / "SkillViewer" / "platform_skills.json"
+    viewer = HARNESS_ROOT / "SkillViewer" / "platform_skills.json"
+    baseline = HARNESS_ROOT / "state" / "skill_watch_baselines.json"
 
+    # ① 基準搬到 state\ 了沒
     if not baseline.is_file():
-        out.append(Result(FAIL, "P11", "基準檔存在", f"不存在：{baseline}"))
-        return out
+        out.append(Result(FAIL, "P11", "基準住在 state\\skill_watch_baselines.json",
+                          f"不存在：{baseline} —— SKILL_WATCH_PLAN 票 06 的決定還沒實作"))
+    else:
+        out.append(Result(OK, "P11", "基準住在 state\\skill_watch_baselines.json", str(baseline)))
 
-    rc, tracked = _git("ls-files", "--error-unmatch", "SkillViewer/platform_skills.json")
+    # ② 清冊裡不該再有 baselines（有的話代表沒真的搬，只是多複製一份）
+    if viewer.is_file():
+        try:
+            vdoc = json.loads(viewer.read_text(encoding="utf-8"))
+        except Exception as exc:
+            vdoc = None
+            out.append(Result(FAIL, "P11", "清冊可解析", f"{exc}"))
+        if vdoc is not None:
+            if vdoc.get("baselines"):
+                out.append(Result(FAIL, "P11", "清冊裡已經沒有 baselines",
+                                  "`platform_skills.json` 仍帶著 baselines —— "
+                                  "基準沒搬走，換機時它會跟著 clone 過去"))
+            else:
+                out.append(Result(OK, "P11", "清冊裡已經沒有 baselines", "只剩 skills[]"))
+    else:
+        out.append(Result(FAIL, "P11", "SkillViewer 清冊存在",
+                          f"不存在：{viewer} —— 清冊本來就該留在版控裡"))
+
+    # ③ 基準檔本身不得進版控
+    rc, _ = _git("ls-files", "--error-unmatch", "state/skill_watch_baselines.json")
     if rc == 0:
         out.append(Result(FAIL, "P11", "基準檔不在版控中",
-                          "仍被 git 追蹤 —— W9 的版控模型變更還沒做。"
-                          "換機時它會跟著 clone 過去，而重量測後又會經 backup 蓋掉舊機那份"))
+                          "被 git 追蹤 —— 別部門 clone 下來會對著我這台的快照比，"
+                          "撞收縮守衛，而程式建議的出口正是規格禁止的 --force"))
     else:
-        out.append(Result(OK, "P11", "基準檔不在版控中", "已 gitignore"))
+        out.append(Result(OK, "P11", "基準檔不在版控中", "已 gitignore／未追蹤"))
+
+    if not baseline.is_file():
+        return out
 
     try:
         doc = json.loads(baseline.read_text(encoding="utf-8"))

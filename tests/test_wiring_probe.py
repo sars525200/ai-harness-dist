@@ -267,54 +267,78 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
          and any("鏡像 HEAD 與本機相同" in t for t in titles),
          "只驗 remote 存在不夠——remote 在但推不上去是另一種靜默；得到 %r" % titles)
 
-    # ── 13. P11：基準檔在版控中要紅、不在就綠 ───────────────────
-    #     只斷言「有這條標題」是假綠（變異驗證抓到的）：拿掉版控檢查後
-    #     它走 else 分支，標題一模一樣但結果變 OK。要斷言的是**判定**。
-    def _p11_tracked(add_to_git: bool):
+    # ── 13. P11：基準搬走了沒（判準 2026-09-03 訂正過）──────────
+    #     原本驗「整個 platform_skills.json 不在版控」是錯的 —— 那個檔同時是
+    #     SkillViewer 的顯示清冊，整檔移出版控會讓新機的 SkillViewer 沒資料。
+    #     正解（SKILL_WATCH_PLAN 票 06）：基準搬到 state\，清冊留原位。
+    def _p11_world(moved: bool, baseline_tracked: bool = False):
+        """moved=True 代表票 06 已實作（基準在 state\、清冊裡沒有 baselines）。"""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
-            sv = tmp / "SkillViewer"
-            sv.mkdir(parents=True)
-            f = sv / "platform_skills.json"
-            f.write_text(json.dumps({"baselines": {"headless": {
-                "capturedAt": "2026-09-03T12:00+0800", "names": ["x"]}}},
-                ensure_ascii=False), encoding="utf-8")
+            (tmp / "SkillViewer").mkdir(parents=True)
+            (tmp / "state").mkdir(parents=True)
+            entry = {"capturedAt": "2026-09-03T12:00+0800", "names": ["x"]}
+            viewer = {"skills": [{"name": "a"}]}
+            if not moved:
+                viewer["baselines"] = {"headless": entry}
+            (tmp / "SkillViewer" / "platform_skills.json").write_text(
+                json.dumps(viewer, ensure_ascii=False), encoding="utf-8")
+            if moved:
+                (tmp / "state" / "skill_watch_baselines.json").write_text(
+                    json.dumps({"baselines": {"headless": entry}}, ensure_ascii=False),
+                    encoding="utf-8")
             if subprocess.run(["git", "init", "-q", str(tmp)],
                               capture_output=True).returncode != 0:
                 return None
-            if add_to_git:
+            if baseline_tracked:
                 subprocess.run(["git", "-C", str(tmp), "add",
-                                "SkillViewer/platform_skills.json"], capture_output=True)
+                                "state/skill_watch_baselines.json"], capture_output=True)
             old_root = M.HARNESS_ROOT
             try:
                 M.HARNESS_ROOT = tmp
-                res = M.probe_p11(None)
+                return M.probe_p11(None)
             finally:
                 M.HARNESS_ROOT = old_root
-            hits = [r for r in res if "版控" in r.title]
-            return (hits[0].code if hits else None), res
 
-    got = _p11_tracked(True)
-    case("P11 基準檔在版控中要紅",
-         got is not None and got[0] == FAIL,
-         ("git init 失敗，這條沒測到" if got is None else
-          "W9 沒做就必須紅——換機時它會跟著 clone 過去；得到 %r" % (got[0],)))
-    got = _p11_tracked(False)
-    case("P11 基準檔已 gitignore 就綠",
-         got is not None and got[0] == OK,
-         ("git init 失敗，這條沒測到" if got is None else "得到 %r" % (got[0],)))
+    res = _p11_world(moved=False)
+    by = {r.title: r.code for r in res} if res else {}
+    case("P11 基準還沒搬到 state\\ 要紅",
+         bool(res) and by.get("基準住在 state\\skill_watch_baselines.json") == FAIL,
+         ("git init 失敗，這條沒測到" if res is None else "得到 %r" % by))
+    case("P11 清冊裡還留著 baselines 要紅",
+         bool(res) and by.get("清冊裡已經沒有 baselines") == FAIL,
+         ("git init 失敗，這條沒測到" if res is None else
+          "沒真的搬走、只是多複製一份，也必須紅；得到 %r" % by))
+
+    res = _p11_world(moved=True)
+    by = {r.title: r.code for r in res} if res else {}
+    case("P11 搬好了要綠",
+         bool(res) and by.get("基準住在 state\\skill_watch_baselines.json") == OK
+         and by.get("清冊裡已經沒有 baselines") == OK
+         and by.get("基準檔不在版控中") == OK,
+         ("git init 失敗，這條沒測到" if res is None else "得到 %r" % by))
     case("P11 沒給 --wired-at 時那半要 SKIP 不是 OK",
-         got is not None and any(r.code == SKIP for r in got[1]),
-         "沒驗到不得當成通過；得到 %r" % (codes(got[1]) if got else None))
+         bool(res) and any(r.code == SKIP for r in res),
+         "沒驗到不得當成通過；得到 %r" % (codes(res) if res else None))
+
+    res = _p11_world(moved=True, baseline_tracked=True)
+    by = {r.title: r.code for r in res} if res else {}
+    case("P11 基準檔被加進版控要紅",
+         bool(res) and by.get("基準檔不在版控中") == FAIL,
+         ("git init 失敗，這條沒測到" if res is None else
+          "進版控就會讓別部門對著我這台的快照比；得到 %r" % by))
 
     # ── 14. P11：基準比接線時間早要紅（沿用舊機基準）────────────
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        sv = tmp / "SkillViewer"
-        sv.mkdir(parents=True)
-        (sv / "platform_skills.json").write_text(json.dumps({
-            "baselines": {"headless": {"capturedAt": "2026-08-24T00:09+0800", "names": ["x"]}}
-        }, ensure_ascii=False), encoding="utf-8")
+        (tmp / "SkillViewer").mkdir(parents=True)
+        (tmp / "state").mkdir(parents=True)
+        (tmp / "SkillViewer" / "platform_skills.json").write_text(
+            json.dumps({"skills": []}, ensure_ascii=False), encoding="utf-8")
+        (tmp / "state" / "skill_watch_baselines.json").write_text(json.dumps({
+            "baselines": {"headless": {"capturedAt": "2026-08-24T00:09+0800",
+                                       "names": ["x"]}}}, ensure_ascii=False),
+            encoding="utf-8")
         old_root = M.HARNESS_ROOT
         try:
             M.HARNESS_ROOT = tmp
