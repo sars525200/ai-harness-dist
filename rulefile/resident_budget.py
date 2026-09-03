@@ -28,7 +28,11 @@ from __future__ import annotations
 import json
 import os
 
-# 與 hooks/rules/ctx1_resident_budget.py:86-87 同值。改一處要三處一起改。
+# 與 hooks/rules/ctx1_resident_budget.py:86-87 同值。**副本共兩處，改一處要兩處一起改。**
+# 待辦簿舊票寫「三份副本」是寫錯的：第三處（eval/check_structure.py）抄的是
+# 棘輪的形狀，係數是它自己的、沒有下限那一邊，量的是 skill token 不是常駐層 bytes
+# ⇒ 照舊票「三處一起改係數」會改壞它的門檻語意。
+# 兩處漂開時 tests/test_resident_budget.py 的「跨副本一致性」那一段會紅。
 GROWTH_RATIO = 1.10
 GROWTH_FLOOR = 800  # bytes；至少要多這麼多才算成長，避免小檔被比例判準誤傷
 

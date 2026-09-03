@@ -471,6 +471,7 @@ def main() -> int:
         import test_cursor_agents
         import test_reviewer_config
         import test_backup_global_config
+        import test_wiring_probe
         import test_gen_rule_hub
         import test_session_title
         import test_push_cloud_title
@@ -498,6 +499,10 @@ def main() -> int:
             (test_build_review_sandbox.run, "建覆核沙箱（deny 不會靜默寫錯）"),
             (test_reviewer_config.run, "審查者設定（未知值／缺檔不得靜默）"),
             (test_backup_global_config.run, "全域設定備份方向（無旗標不寫／兩方向）"),
+            # 守的是「探針不會把沒接好讀成接好了」。D-1 三輪覆核連兩輪抓到同一形狀：
+            # 探針把「存在／非空」當成「已改寫／已 restore」。三種靜默失效與「裝好了」
+            # 同形——junction 指到別處、hook command 打空、記憶目錄是空的。
+            (test_wiring_probe.run, "接線探針 P1／P2／P5（存在≠接好了）"),
             (test_gen_rule_hub.run, "規則中繼產生器（audience／針標／冪等）"),
             (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
             (test_push_cloud_title.run, "推雲端標題的憑證續命（過期自動換發／防遞迴）"),
@@ -586,6 +591,7 @@ def main() -> int:
             # import 進來會把後面每一支讀那兩個變數的測試指到已刪的暫存夾。
             ("封存與 /clear 後改名（sweep／閒置名／reason 閘門）", "test_session_archive.py"),
             ("HND-1 交接檔生命週期（誤報率／正對照／歸檔工具）", "test_hnd1_handoff.py"),
+            ("交接檔合併提議（過度合併／不刪不覆蓋）", "test_merge_handoff.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)
