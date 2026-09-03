@@ -166,13 +166,25 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | W9 | **重量測 skill-watch 基準，不沿用舊機那份**（第 3 輪發現 1 改寫，見下） | P11 |
    | W10 | 帶舊機 live `settings.json` 過來**逐欄改寫路徑** | P2、P5 |
 
-   **W9 的前提是一次版控模型變更**（2026-09-03·user 拍板·第 3 輪發現 1）：
-   `SkillViewer/platform_skills.json` **現在在版控裡**（`git ls-files` 命中、`.gitignore`
-   沒排除），所以第 2 輪寫在 B5 那格的「刪掉基準檔重量測」**做不到**——刪了
-   `git restore` 會回來；重量測後 commit 再經 `backup` remote 推回去，**舊機的平台清單
-   會被新機蓋掉**。⇒ 改為 **基準檔加進 `.gitignore`、各機一份**：它量的是「這台機器裝了
-   哪些平台技能」，本來就是機器局部狀態，與 `state\` 同一類。**舊機那份要先從版控移除**
-   （一次 commit，屬本案範圍）。
+   **W9 不在這裡定做法——這件事早就定案了**（2026-09-03 訂正·**跨文件的第三真相**）：
+
+   `SkillViewer/platform_skills.json` 現在在版控裡（`git ls-files` 命中），
+   所以第 2 輪寫在 B5 那格的「刪掉基準檔重量測」**做不到**（刪了 `git restore` 會回來、
+   重量測後還會經 `backup` 蓋掉舊機那份）。但**接著寫的「整個基準檔加進 `.gitignore`」
+   也是錯的**——那個檔同時是 **SkillViewer 的顯示清冊**（`skills[]` 現有 54 支，
+   `SkillViewer.ps1` 直接讀它），整檔移出版控會讓新機的 SkillViewer 沒有資料。
+
+   ⇒ **正解在 `SKILL_WATCH_PLAN.md` 的 W-5 訂正**（2026-08-23·票 06 推翻 W-5 字面）：
+   **基準搬到 `state/skill_watch_baselines.json`（gitignore），清冊留在原檔原位。**
+   它給的理由與本案第 3 輪發現 1 **一模一樣**——別部門 clone 下來第一次跑就對著
+   我這台機器的快照比、撞收縮守衛，而程式建議的出口正是規格禁止的 `--force`。
+
+   ⚠ **那個決定至今沒實作**（2026-09-03 實查）：`state\` 底下沒有
+   `skill_watch_baselines.json`；`tools/skill_watch.py:37` 的 `DEFAULT_BASELINE`
+   仍指 `SkillViewer/platform_skills.json`；該檔裡的 `baselines` 還在
+   （headless `2026-08-24`、interactive `2026-08-22`）。
+   ⇒ **W9 ＝ 去把票 06 實作完**，不是在這裡發明第三種做法。
+   **本節不重述修法**（同本節開頭的唯一真相宣告）——那是 `SKILL_WATCH_PLAN` 的事。
 
    **設定檔怎麼處理，三種對象不要混**（第 2 輪發現 1 拆出前兩列；第 3 輪發現 4 補第三列）：
 
@@ -199,14 +211,14 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P8 | Cursor 側**三態分開** | 已接上／裝了但沒接上／沒裝 Cursor，**三者不得混成同一個綠**：第三態印 `SKIP`，**結束條件只數 `OK`**（第 3 輪發現 5：現有 `check_cursor_agents.py:90-94` 在 live 目錄不存在時 `return 0`，直接拿來當探針會讓「沒裝」冒充全綠）。**且 P8 不是一次性的**——`git pull` 更新 repo 後 live 複本不會跟著動，接線器要能在 pull 後重跑 | Cursor 派出去的是舊複本，沒有紅燈 |
    | P9 | **跨碟備份真的會發生** | `git remote` 有 `backup`，且**實際推一次驗證推得進去**（第 3 輪發現 2：這是定案第 1 點自己點名的靜默失敗，卻不在探針裡。`post-commit:26` 沒有這個 remote 就 `exit 0`，連 `mirror_sync_failed.txt` 都不會產生） | 裝了等於沒裝，而且靜默 |
    | P10 | **輸出風格帶得過來** | `~\.claude\output-styles\` 與 `global/output-styles\` 內容一致，且 `settings.json` 的 `outputStyle` 值在裡面找得到（第 3 輪發現 2：`backup_global_config.py:56-62` 把它與 `CLAUDE.md` 當同一級，接線器與探針原本只收 `CLAUDE.md`） | 對話看起來正常，風格靜默變回預設 |
-   | P11 | **skill-watch 基準是本機量的** | 基準檔 `capturedAt` 晚於本次接線時間（＝新機重量測過），**且該檔已不在版控中**（見 W9） | 沿用舊機基準 ⇒ 滿屏「平台真的變了」，然後照訊息加規格禁止的 `--force`，連守衛一起關掉 |
+   | P11 | **skill-watch 基準是本機量的** | **基準不在版控物裡**——`baselines` 已搬出 `SkillViewer/platform_skills.json`、住在 gitignore 的 `state/skill_watch_baselines.json`（見 W9 指向的票 06）；且其 `capturedAt` 晚於本次接線時間（＝新機重量測過）。⚠ **判準不是「整個 platform_skills.json 不在版控」**——那個檔還兼著 SkillViewer 的顯示清冊，本來就該留在版控 | 沿用舊機基準 ⇒ 滿屏「平台真的變了」，然後照訊息加規格禁止的 `--force`，連守衛一起關掉 |
 
    **任一條紅就不准印「裝好了」**；P8 的第三態 `SKIP` 不算紅也不算綠。
    **六條探針已實作並實跑**（2026-09-03·`tools/wiring_probe.py`·P1／P2／P5／P9／P10／P11）。
    這是 user 拍板「不要純文件打磨到蓋章」的落地：**三輪覆核打的全是規格文字，
    第一次真的跑就在這台舊機上紅了。**
 
-   舊機實跑結果：**OK 26｜FAIL 2｜SKIP 2**（共 30 項）。
+   舊機實跑結果：**OK 27｜FAIL 3｜SKIP 1**（共 31 項）。
 
    | 項 | 結果 | 說明 |
    |---|---|---|
@@ -216,9 +228,9 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P5 「對得上舊機改寫來源」那半 | SKIP | 需要 `--source` 給舊機那份；舊機上沒有「舊機」可比 ⇒ **明說沒驗，不當通過** |
    | P9 跨碟備份 | 3 OK | `backup` remote 在、無失敗標記、鏡像 HEAD 與本機相同。⚠ **「實際推一次」刻意不做**——探針要唯讀；改驗**最後一次推的結果**，兩條合起來就是「推得進去」的證據 |
    | P10 `output-styles` | 3 OK | 兩支風格檔 live 與 repo `filecmp` 相同，`outputStyle=PM-Challenger` 對得到 `pm-challenger.md` |
-   | P11 skill-watch 基準 | **1 FAIL／1 SKIP** | ⚠ **基準檔仍在版控中 ⇒ W9 還沒做**，探針如實紅。「基準晚於接線時間」那半需要 `--wired-at`，沒給 ⇒ SKIP。現有基準：headless `2026-08-24`、interactive `2026-08-22` |
+   | P11 skill-watch 基準 | **1 OK／2 FAIL** | ⚠ **`SKILL_WATCH_PLAN` 票 06 的決定沒實作** —— `state\skill_watch_baselines.json` 不存在、`platform_skills.json` 仍帶著 `baselines`。基準檔本身未被追蹤（那條 OK）。「基準晚於接線時間」那半因為基準檔不在而不進表 |
 
-   **回歸網 27 項、五個變異各自轉紅**（`tests/test_wiring_probe.py`，全套 1662/1662）。
+   **回歸網 29 項、五個變異各自轉紅**（`tests/test_wiring_probe.py`）。
    ⚠ **變異驗證抓到我自己的測試有兩條是假綠**：P9 原本用「不是 git repo 的空目錄」測
    「沒有 backup remote」——`git remote` 本身就會失敗而走前一個分支，判準拿掉仍會紅；
    P11 原本只斷言「有這條標題」——拿掉版控檢查後它走 else 分支，標題一樣但結果變 OK。
@@ -306,7 +318,7 @@ fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變
 | **來源健檢**（帶舊機 live 過來前先列出壞條目） | W10／P5 | ⏳ 未動。**實跑逼出的規格缺口**，已寫進定案；不做的話新機 P5 會永遠紅且指錯方向 |
 | **換機取得來源**（bare 鏡像怎麼搬、新機怎麼重建 `backup` remote） | W5／P9 | ⏳ 未動 |
 | **`additionalDirectories` 的路徑重寫** | W10／P5 | ⏳ 未動 |
-| **skill-watch 基準檔改成各機一份** | W9／P11 | ⏳ 未動，**但已有紅燈**：P11 實跑就是 FAIL（基準檔仍被 git 追蹤）。**含一次版控移除**（`SkillViewer/platform_skills.json` → `.gitignore`），user 2026-09-03 拍板 |
+| **skill-watch 基準搬到 `state\`** | W9／P11 | ⏳ 未動，**但已有紅燈**（P11 兩條 FAIL）。⚠ **這不是 D-1 的新工項**——`SKILL_WATCH_PLAN` 票 06（2026-08-23）早就定案了，只是沒實作。範圍：把 `baselines` 從 `platform_skills.json` 拆到 `state/skill_watch_baselines.json`、改 `skill_watch.py:37` 的 `DEFAULT_BASELINE`、改 `skill_watch_run.py` 的寫入端。⚠ **清冊 `skills[]` 要留在原檔原位**（`SkillViewer.ps1` 直接讀它） |
 | **live `CLAUDE.md` 的 restore** | W7／P6 | ⏳ 未動。它沒有 junction，靠 `backup_global_config.py` 管，接線器要接手 |
 | **`output-styles` 的 restore** | W8／P10 | ⏳ 接線器那半未動；**P10 已實作且本機全綠**（第 3 輪發現 2 補列）。它與 `CLAUDE.md` 在 `backup_global_config.py` 是同一級，之前整項漏在表外 |
 | **Cursor 側改成三態＋pull 後可重跑** | W6／P8 | ⏳ 未動。現有 `check_cursor_agents.py` 不能直接當探針 |

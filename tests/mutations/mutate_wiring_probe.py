@@ -8,10 +8,14 @@ r"""對接線探針做變異，確認 test_wiring_probe.py 真的會叫。
 
 ⚠ 這支自己抓到過兩條假綠（2026-09-03·首跑）：
 `P9 沒有 backup remote` 原本用「不是 git repo 的空目錄」測，但 `git remote`
-本身就會失敗而走前一個分支，判準拿掉仍會紅；`P11 基準檔在版控中` 原本只斷言
-「有這條標題」，拿掉版控檢查後它走 else 分支、標題一模一樣但結果變 OK。
+本身就會失敗而走前一個分支，判準拿掉仍會紅；P11 那條原本只斷言「有這條標題」，
+拿掉檢查後它走 else 分支、標題一模一樣但結果變 OK。
 **兩條的病是同一種——斷言「有跑到」而不是斷言「判定對」。**
 這正是「新寫的驗證預設它自己有問題，先證明它會紅再信它的綠」的實例。
+
+⚠ P11 的**判準本身**也在同日訂正過一次：原本驗「整個 platform_skills.json 不在版控」，
+但那個檔同時是 SkillViewer 的顯示清冊，整檔移出版控會讓新機的 SkillViewer 沒資料。
+現在驗的是 SKILL_WATCH_PLAN 票 06 的決定有沒有實作（基準搬到 state\、清冊留原位）。
 """
 import hashlib
 import io
@@ -37,9 +41,9 @@ MUTATIONS = [
     ("P10 的 filecmp 退化成「檔案存在就算」",
      "        elif not filecmp.cmp(live_f, repo_f, shallow=False):",
      "        elif False:"),
-    ("P11 拿掉版控檢查",
-     '    rc, tracked = _git("ls-files", "--error-unmatch", "SkillViewer/platform_skills.json")',
-     '    rc, tracked = 1, ""'),
+    ("P11 拿掉「清冊裡不該有 baselines」",
+     '        if vdoc.get("baselines"):',
+     "        if False:"),
 ]
 
 # 每個變異預期會轉紅的那條 case 名。**只看 exit code 不夠**——
@@ -49,7 +53,7 @@ EXPECT = {
     "P5 拿掉「空目錄要紅」": "P5 空目錄要紅",
     "P9 拿掉 backup remote 檢查": "P9 有 repo 但沒 backup remote 要紅",
     "P10 的 filecmp 退化成「檔案存在就算」": "P10 內容不同要紅（不是只看檔名）",
-    "P11 拿掉版控檢查": "P11 基準檔在版控中要紅",
+    "P11 拿掉「清冊裡不該有 baselines」": "P11 清冊裡還留著 baselines 要紅",
 }
 
 
