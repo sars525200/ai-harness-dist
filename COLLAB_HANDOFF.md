@@ -302,7 +302,7 @@ Cursor 是這台機器上**唯一真正跨模型族**的審查者。
 
 | 目標 | 處置 |
 |---|---|
-| `deskbus/`（34 個原始碼檔 ＋ 613 MB npm 產物） | **已刪**。原始碼封存在 `D:\AI-Projects\_archive\deskbus-20260826\`（不含 node_modules／.next） |
+| `deskbus/`（34 個原始碼檔 ＋ 613 MB npm 產物） | **已刪**。原始碼封存在 `D:\Patrick-AI\MIS-install\_archive\deskbus-20260826\`（不含 node_modules／.next） |
 | `.cursor/mcp.json` | **整檔刪**（裡面只有 deskbus 一項） |
 | Claude Desktop 的 `claude_desktop_config.json` | `mcpServers` 清空（原本也只有 deskbus）。備份 `.bak-20260826` |
 | `tests/test_deskbus.py` ＋ `run_hook_tests.py` 的註冊 | 已刪 2 行 |
