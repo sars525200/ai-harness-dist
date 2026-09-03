@@ -158,7 +158,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | W1 | 建／修 `~\.claude\agents`、`~\.claude\skills` 的 junction | P1、P7 |
    | W2 | `gen_layers.py --init` 產 `harness.config.json` | P3 |
    | W3 | 確保 `state\` 存在且可寫 | P4 |
-   | W4 | 安裝 `tools/githooks/post-commit` | P2 |
+   | W4 | 安裝 `tools/githooks/post-commit` | **P9**（2026-09-03 訂正·第 4 輪發現 2：原本寫 P2 是錯的——P2 只走 live `settings.json` 的 Claude hook，`.git\hooks\post-commit` 根本不在那條路徑上） |
    | W5 | **在新機建一顆 bare 鏡像並加 `backup` remote** | P9 |
    | W6 | 同步 `cursor-agents\` → `~\.cursor\agents\` | P8 |
    | W7 | 把 `global/CLAUDE.md` restore 到 live | P6 |
@@ -209,11 +209,20 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P6 | `CLAUDE.md` 真的被 restore | live 與 `global/CLAUDE.md` **內容相同**（`filecmp.cmp`，`backup_global_config.py:92` 已有這個判法）——**非空不算數**（第 3 輪發現 3：新機自己寫的那份也非空） | 工作方式規則整份不生效，看不出來 |
    | P7 | 目錄真的列得出來 | agents／skills 目錄可列且非空 | 平台收緊 symlink 政策時整批消失（C2） |
    | P8 | Cursor 側**三態分開** | 已接上／裝了但沒接上／沒裝 Cursor，**三者不得混成同一個綠**：第三態印 `SKIP`，**結束條件只數 `OK`**（第 3 輪發現 5：現有 `check_cursor_agents.py:90-94` 在 live 目錄不存在時 `return 0`，直接拿來當探針會讓「沒裝」冒充全綠）。**且 P8 不是一次性的**——`git pull` 更新 repo 後 live 複本不會跟著動，接線器要能在 pull 後重跑 | Cursor 派出去的是舊複本，沒有紅燈 |
-   | P9 | **跨碟備份真的會發生** | `git remote` 有 `backup`，且**實際推一次驗證推得進去**（第 3 輪發現 2：這是定案第 1 點自己點名的靜默失敗，卻不在探針裡。`post-commit:26` 沒有這個 remote 就 `exit 0`，連 `mirror_sync_failed.txt` 都不會產生） | 裝了等於沒裝，而且靜默 |
+   | P9 | **跨碟備份真的會發生** | 四條缺一不可：① `tools/githooks/post-commit` **已安裝到 `.git\hooks\` 且與 repo 版本逐位元相同**（W4；`.git\hooks\` 不進版控）② `git remote` 有 `backup` ③ 沒有 `state\mirror_sync_failed.txt` ④ 鏡像 HEAD 與本機相同。⚠ **刻意不真的 push**（2026-09-03 訂正·第 4 輪發現 3：原本寫「實際推一次驗證推得進去」，與同節實跑說明互斥）——**探針要唯讀、不製造副作用**，③④ 合起來是「最後一次推的結果」這個唯讀代理。代價寫在明處：**從未推過、也從未失敗時，沒有標記＝該項綠**，所以①才必要 | 裝了等於沒裝，而且靜默 |
    | P10 | **輸出風格帶得過來** | `~\.claude\output-styles\` 與 `global/output-styles\` 內容一致，且 `settings.json` 的 `outputStyle` 值在裡面找得到（第 3 輪發現 2：`backup_global_config.py:56-62` 把它與 `CLAUDE.md` 當同一級，接線器與探針原本只收 `CLAUDE.md`） | 對話看起來正常，風格靜默變回預設 |
    | P11 | **skill-watch 基準是本機量的** | **基準不在版控物裡**——`baselines` 已搬出 `SkillViewer/platform_skills.json`、住在 gitignore 的 `state/skill_watch_baselines.json`（見 W9 指向的票 06）；且其 `capturedAt` 晚於本次接線時間（＝新機重量測過）。⚠ **判準不是「整個 platform_skills.json 不在版控」**——那個檔還兼著 SkillViewer 的顯示清冊，本來就該留在版控 | 沿用舊機基準 ⇒ 滿屏「平台真的變了」，然後照訊息加規格禁止的 `--force`，連守衛一起關掉 |
 
-   **任一條紅就不准印「裝好了」**；P8 的第三態 `SKIP` 不算紅也不算綠。
+   **結束條件（四態）**——2026-09-03 訂正·第 4 輪發現 4：原本 `SKIP` 一個碼扛兩種語意，於是「這台沒裝 Cursor」與「該驗的沒驗」擋住同一件事，**只裝 Claude Code 的新機會永遠印不出「裝好了」**。現在拆開：
+
+   | 碼 | 意思 | 擋不擋「裝好了」 |
+   |---|---|---|
+   | `OK` | 通過 | — |
+   | `FAIL` | 判定失敗 | **擋** |
+   | `SKIP` | **選配不適用**（P8 的「沒裝 Cursor」、P10 的「沒設 outputStyle」） | 不擋 |
+   | `UNVERIFIED` | **該驗但這次沒驗**（P5 沒給 `--source`、P11 沒給 `--wired-at`、P2 抽不出路徑） | **擋** |
+
+   ⚠ **`SKIP` 不是綠**——它宣告的是「這條在這台機器上沒有適用對象」。判不出來屬於 `UNVERIFIED`，不是 `SKIP`。
    **六條探針已實作並實跑**（2026-09-03·`tools/wiring_probe.py`·P1／P2／P5／P9／P10／P11）。
    這是 user 拍板「不要純文件打磨到蓋章」的落地：**三輪覆核打的全是規格文字，
    第一次真的跑就在這台舊機上紅了。**
@@ -249,9 +258,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    ⚠ **`\tmp` 這條本身尚未處理**：它在 live 與 repo 兩份都在，屬個人設定，
    由 user 決定刪不刪 ⇒ 落在待辦表，不在本輪自行動手。
 
-   **SKIP 的語意**（`wiring_probe.py` 已實作）：SKIP **不算綠也不算紅**，
-   但只要有任何 SKIP 就**不印「裝好了」**——這是 P8「沒裝不得冒充全綠」的同一條規矩，
-   在第一批就先立好，免得之後每支探針各自發明一套。
+   **四態的語意見上面探針表後的結束條件表**（2026-09-03 第 4 輪發現 4 拆開後，本節不再自己寫一套——那正是「唯一真相」要防的形狀，而第 4 輪就是在這一節裡抓到它）。
 
 3. **只做 `same-person-new-pc` 一份安裝剖面**。`department` 剖面**留白，綁 D-4**。
    ⚠ 剖面收窄了，**U-4 的完成判準也要跟著拆成兩條**（第 2 輪發現 6），見 §3。
@@ -312,13 +319,13 @@ fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變
 | ~~HND-1 已在跑但沒註冊~~ | — | ✅ **已註冊為 enforce**（別的 session·commit `e6ded68`），規則鍵現為 19 個 |
 | ~~`global/settings.json` 的探針移除未提交~~ | — | ✅ **已提交**（commit `c62f2ac`） |
 | **接線器本體**（W 側一支都還沒有） | W1–W10 | ⏳ 未動。2026-09-03 user 拍板：**先寫探針實跑，拿真實輸出回頭修規格，再派確認輪**（不要純文件打磨到蓋章） |
-| ~~探針一支都沒有~~ | P1／P2／P5／P9／P10／P11 | ✅ **六條已實作並實跑**（2026-09-03·`tools/wiring_probe.py`）。舊機 OK 26／FAIL 2／SKIP 2，見定案第 2 點的實跑節。回歸網 27 項、五個變異各自轉紅 |
+| ~~探針一支都沒有~~ | P1／P2／P5／P9／P10／P11 | ✅ **六條已實作並實跑**（2026-09-03）。**數字見定案第 2 點的實跑節，本欄不複述**（第 4 輪發現 5：本欄的數字與實跑節對不上，而過期的表和真的沒做長得一模一樣） |
 | **探針剩下五條** | P3／P4／P6／P7／P8 | ⏳ 未動。P8 要等 W6 的三態設計 |
 | **`additionalDirectories` 的 `\tmp` 殘留條目** | P5 | ⏳ 未動·**等 user 決定**。live 與 repo `global/settings.json:153` 兩份都有，本機不存在 ⇒ P5 實跑的那一條 FAIL。屬個人設定，接線器不得自行刪 |
 | **來源健檢**（帶舊機 live 過來前先列出壞條目） | W10／P5 | ⏳ 未動。**實跑逼出的規格缺口**，已寫進定案；不做的話新機 P5 會永遠紅且指錯方向 |
 | **換機取得來源**（bare 鏡像怎麼搬、新機怎麼重建 `backup` remote） | W5／P9 | ⏳ 未動 |
 | **`additionalDirectories` 的路徑重寫** | W10／P5 | ⏳ 未動 |
-| **skill-watch 基準搬到 `state\`** | W9／P11 | ⏳ 未動，**但已有紅燈**（P11 兩條 FAIL）。⚠ **這不是 D-1 的新工項**——`SKILL_WATCH_PLAN` 票 06（2026-08-23）早就定案了，只是沒實作。範圍：把 `baselines` 從 `platform_skills.json` 拆到 `state/skill_watch_baselines.json`、改 `skill_watch.py:37` 的 `DEFAULT_BASELINE`、改 `skill_watch_run.py` 的寫入端。⚠ **清冊 `skills[]` 要留在原檔原位**（`SkillViewer.ps1` 直接讀它） |
+| **skill-watch 基準搬到 `state\`** | W9／P11 | ⏳ 未動，**但已有紅燈**（P11 兩條 FAIL）。⚠ **這不是 D-1 的工項**，做法也不在這裡——見 `SKILL_WATCH_PLAN.md` 票 06（2026-08-23 定案）。⚠ 本欄 2026-09-03 刪掉過一段自己寫的修法步驟（第 4 輪發現 5：唯一真相宣告禁止待辦表寫修法，而我在同一輪的處置裡違反了自己剛立的規矩） |
 | **live `CLAUDE.md` 的 restore** | W7／P6 | ⏳ 未動。它沒有 junction，靠 `backup_global_config.py` 管，接線器要接手 |
 | **`output-styles` 的 restore** | W8／P10 | ⏳ 接線器那半未動；**P10 已實作且本機全綠**（第 3 輪發現 2 補列）。它與 `CLAUDE.md` 在 `backup_global_config.py` 是同一級，之前整項漏在表外 |
 | **Cursor 側改成三態＋pull 後可重跑** | W6／P8 | ⏳ 未動。現有 `check_cursor_agents.py` 不能直接當探針 |

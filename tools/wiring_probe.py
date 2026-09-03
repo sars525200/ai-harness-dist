@@ -21,9 +21,16 @@
 尚未實作：P3（harness.config）／P4（STATE_DIR 可寫）／P6（CLAUDE.md filecmp）／
 P7（目錄可列且非空）／P8（Cursor 三態）。
 
-三態：OK ／ FAIL ／ SKIP。**結束條件只數 OK**——SKIP 不算綠也不算紅，
-但只要有任何 SKIP，本檔就**不印「全部通過」**，因為那正是
-「沒裝冒充全綠」（P8 的教訓）要擋的形狀。
+四態（第 4 輪發現 4 把原本的 SKIP 拆開）：
+
+  OK          通過
+  FAIL        判定失敗 ⇒ 不准印「裝好了」
+  SKIP        **選配不適用**（例：這台沒裝 Cursor）⇒ **不擋**結束條件
+  UNVERIFIED  **該驗但這次沒驗**（例：沒給 --source）⇒ **擋住**結束條件
+
+原本兩者共用 SKIP，於是「這台不用 Cursor」與「該驗的沒驗」擋住同一件事 ——
+只裝 Claude Code 的新機會永遠印不出「裝好了」。**SKIP 不是綠**，
+它只是宣告這條在這台機器上沒有適用對象；UNVERIFIED 才是「沒驗到冒充通過」要擋的。
 """
 from __future__ import annotations
 
@@ -37,7 +44,12 @@ HARNESS_ROOT = Path(__file__).resolve().parents[1]
 LIVE_DIR = Path.home() / ".claude"
 LIVE_SETTINGS = LIVE_DIR / "settings.json"
 
-OK, FAIL, SKIP = "OK", "FAIL", "SKIP"
+OK, FAIL = "OK", "FAIL"
+# ⚠ 兩種「不是綠」要分開（第 4 輪發現 4）。原本共用一個 SKIP，於是
+# 「這台不用 Cursor」與「該驗的沒驗」擋住同一件事 —— 只裝 Claude 的新機
+# 會永遠印不出「裝好了」。
+SKIP = "SKIP"              # 選配不適用（例：沒裝 Cursor）。**不影響結束條件**
+UNVERIFIED = "UNVERIFIED"  # 該驗但這次沒驗（例：沒給 --source）。**擋住結束條件**
 
 
 class Result:
@@ -126,7 +138,7 @@ def probe_p2(settings: dict) -> list[Result]:
         targets = _extract_paths(cmd)
         title = f"{event}：{cmd[:60]}{'…' if len(cmd) > 60 else ''}"
         if not targets:
-            out.append(Result(SKIP, "P2", title,
+            out.append(Result(UNVERIFIED, "P2", title,
                               "抽不出路徑 token —— 判不出來就不給綠（可能是內建指令，也可能是抽取邏輯漏了）"))
             continue
         missing = [t for t in targets if not Path(t).is_file()]
@@ -140,6 +152,18 @@ def probe_p2(settings: dict) -> list[Result]:
 
 
 # ---------------------------------------------------------------- P5
+def _tail(p: str, n: int = 3) -> str:
+    """取路徑的最後 n 段，小寫、統一分隔符。
+
+    用來判「本機這一條是不是舊機那一條改寫來的」：改寫只該動前綴
+    （使用者名、碟符），尾段（`projects\<專案>\memory` 這類）必須原封不動。
+    尾段對不上 ⇒ 對應錯位，或那一條被換成了別的東西。
+    """
+    import re
+    parts = [x for x in re.split(r"[\\/]+", str(p)) if x]
+    return "\\".join(parts[-n:]).lower()
+
+
 def probe_p5(settings: dict, source: Path | None) -> list[Result]:
     """additionalDirectories 每一條存在且非空。
 
@@ -172,7 +196,7 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
 
     # 判準的另一半：對得上舊機的改寫來源
     if source is None:
-        out.append(Result(SKIP, "P5", "逐條對得上舊機改寫來源",
+        out.append(Result(UNVERIFIED, "P5", "逐條對得上舊機改寫來源",
                           "沒給 --source（舊機 live settings.json）⇒ **這半沒驗**。"
                           "在 same-person-new-pc 剖面上這半是必要的，不得當成通過"))
     else:
@@ -184,9 +208,28 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
         if len(src_dirs) != len(dirs):
             out.append(Result(FAIL, "P5", "逐條對得上舊機改寫來源",
                               f"條數對不上：舊機 {len(src_dirs)} 條、本機 {len(dirs)} 條 —— 有欄位被靜默丟掉"))
+            return out
+        # ⚠ **只比條數不算數**（第 4 輪發現 1）：改寫函式對錯機、或根本沒改寫
+        # 而只保證條數不變時，條數比對照樣綠。逐條比「尾段」才看得出對應有沒有錯位。
+        mismatched, rewritten, verbatim = [], 0, 0
+        for src, dst in zip(src_dirs, dirs):
+            if _tail(src) != _tail(dst):
+                mismatched.append(f"{src} → {dst}")
+            elif str(src) != str(dst):
+                rewritten += 1
+            else:
+                verbatim += 1
+        if mismatched:
+            out.append(Result(FAIL, "P5", "逐條對得上舊機改寫來源",
+                              f"{len(mismatched)} 條的尾段對不上（改寫錯位或欄位被換掉）："
+                              + "；".join(mismatched[:3])))
         else:
             out.append(Result(OK, "P5", "逐條對得上舊機改寫來源",
-                              f"條數一致（{len(dirs)} 條）"))
+                              f"{len(dirs)} 條尾段逐條吻合（改寫過 {rewritten}、原樣 {verbatim}）"))
+        if verbatim and verbatim == len(dirs):
+            out.append(Result(UNVERIFIED, "P5", "改寫確實發生過",
+                              "每一條都與舊機**逐字相同** —— 可能是同名使用者的正常結果，"
+                              "也可能是改寫整個沒跑。這支分不出來，要人看一眼"))
     return out
 
 
@@ -227,6 +270,42 @@ def probe_p9() -> list[Result]:
         return out
     rc, url = _git("remote", "get-url", "backup")
     out.append(Result(OK, "P9", "backup remote 存在", url if rc == 0 else "（取不到 url）"))
+
+    # ⚠ **hook 檔本身要驗**（第 4 輪發現 2）：W4 原本對到 P2，但 P2 只走 live
+    # settings.json 的 Claude hook，`.git\hooks\post-commit` 根本不在那條路徑上。
+    # 忘了把它拷進去：P2 綠、下面兩條也綠（沒推過就沒有失敗標記），
+    # 而每次 commit 都不會推 —— 又是一次「裝了等於沒裝，而且靜默」。
+    import filecmp
+    src_hook = HARNESS_ROOT / "tools" / "githooks" / "post-commit"
+    live_hook = HARNESS_ROOT / ".git" / "hooks" / "post-commit"
+    # 判定收在這一行，後面只負責報訊息。這樣變異腳本有一個**單行**可下手的錨點，
+    # 而且改了它不會讓下面的 filecmp 拿不存在的檔去炸——用例外換來的紅證明不了判定對不對。
+    hook_installed = live_hook.is_file()
+    hook_same = live_hook.is_file() and filecmp.cmp(src_hook, live_hook, shallow=False) \
+        if src_hook.is_file() else False
+    if not src_hook.is_file():
+        out.append(Result(FAIL, "P9", "post-commit 已安裝", f"repo 側不存在：{src_hook}"))
+    elif not hook_installed:
+        out.append(Result(FAIL, "P9", "post-commit 已安裝",
+                          f"沒安裝：{live_hook} —— `.git\hooks\` 不進版控，"
+                          "換機或重新 clone 都不會有它；沒有它就完全不會推鏡像，也不會留失敗標記"))
+    elif not hook_same:
+        # 訊息要說得出差在哪：註解漂移與行為漂移都該紅（兩份本來就要一起改），
+        # 但人得先知道是哪一種才判得出急不急。
+        import difflib
+        a_lines = src_hook.read_text(encoding="utf-8", errors="replace").splitlines()
+        # live 側可能根本不在（判定被改壞時會走到這裡）——讀不到就當空的，
+        # 讓紅的原因留在判定上，不要變成一個 FileNotFoundError。
+        b_lines = (live_hook.read_text(encoding="utf-8", errors="replace").splitlines()
+                   if live_hook.is_file() else [])
+        delta = [x for x in difflib.unified_diff(b_lines, a_lines, lineterm="", n=0)
+                 if x.startswith(("+", "-")) and not x.startswith(("+++", "---"))]
+        code = [x for x in delta if not x[1:].lstrip().startswith("#") and x[1:].strip()]
+        out.append(Result(FAIL, "P9", "post-commit 已安裝",
+                          f"已安裝但與 repo 版本不同：{len(delta)} 行有差，其中 "
+                          f"{len(code)} 行是**行為碼**（其餘是註解）。裝的是舊的那份"))
+    else:
+        out.append(Result(OK, "P9", "post-commit 已安裝", str(live_hook)))
 
     mark = HARNESS_ROOT / "state" / "mirror_sync_failed.txt"
     if mark.exists():
@@ -293,7 +372,7 @@ def probe_p10(settings: dict) -> list[Result]:
     style = settings.get("outputStyle")
     if not style:
         out.append(Result(SKIP, "P10", "settings 的 outputStyle",
-                          "沒設定值 —— 用平台預設，沒有要比對的東西"))
+                          "沒設定值 —— 用平台預設，**這台不適用**，不是沒驗到"))
     else:
         want = _norm_style(str(style)) + ".md"
         have = [p.name for p in live_dir.glob("*.md")]
@@ -372,7 +451,7 @@ def probe_p11(wired_at: str | None) -> list[Result]:
 
     if wired_at is None:
         modes = ", ".join(f"{k}={(v or {}).get('capturedAt')}" for k, v in baselines.items())
-        out.append(Result(SKIP, "P11", "基準晚於本次接線時間",
+        out.append(Result(UNVERIFIED, "P11", "基準晚於本次接線時間",
                           f"沒給 --wired-at ⇒ **這半沒驗**。現有：{modes}"))
         return out
 
@@ -387,6 +466,24 @@ def probe_p11(wired_at: str | None) -> list[Result]:
             out.append(Result(FAIL, "P11", title,
                               f"{got} < {wired_at} —— 沿用舊機基準，沒有重量測"))
     return out
+
+
+# ---------------------------------------------------------------- 結束條件
+def verdict(results: "list[Result]") -> int:
+    """一組結果該不該印「裝好了」。0＝可以，1＝有 FAIL，2＝有 UNVERIFIED。
+
+    **這是結束條件的唯一實作**——main() 與測試都走這一支。
+    測試自己重跑一份等價邏輯的話，兩份會漂開，而漂開的那天沒有人會發現
+    （這正是本案覆核從第 2 輪追到第 4 輪的那個形狀）。
+
+    `SKIP` 刻意不進判定：它宣告的是「這條在這台機器上沒有適用對象」
+    （沒裝 Cursor、沒設 outputStyle），不是「沒驗到」。
+    """
+    if any(r.code == FAIL for r in results):
+        return 1
+    if any(r.code == UNVERIFIED for r in results):
+        return 2
+    return 0
 
 
 # ---------------------------------------------------------------- 主程式
@@ -418,24 +515,30 @@ def main() -> int:
                + probe_p9() + probe_p10(settings) + probe_p11(args.wired_at))
 
     width = max(len(r.title) for r in results)
+    marks = {OK: "[OK]   ", FAIL: "[FAIL] ", SKIP: "[SKIP] ", UNVERIFIED: "[UNVER]"}
     for r in results:
-        mark = {OK: "[OK]  ", FAIL: "[FAIL]", SKIP: "[SKIP]"}[r.code]
-        print(f"{mark} {r.probe}  {r.title.ljust(width)}  {r.detail}")
+        print(f"{marks[r.code]} {r.probe}  {r.title.ljust(width)}  {r.detail}")
 
     n_ok = sum(1 for r in results if r.code == OK)
     n_fail = sum(1 for r in results if r.code == FAIL)
     n_skip = sum(1 for r in results if r.code == SKIP)
+    n_unver = sum(1 for r in results if r.code == UNVERIFIED)
     print()
-    print(f"OK {n_ok}｜FAIL {n_fail}｜SKIP {n_skip}（共 {len(results)} 項）")
+    print(f"OK {n_ok}｜FAIL {n_fail}｜SKIP {n_skip}｜UNVERIFIED {n_unver}"
+          f"（共 {len(results)} 項）")
 
-    if n_fail:
+    rc = verdict(results)
+    if rc == 1:
         print("⛔ 有 FAIL ⇒ **不准印「裝好了」**。")
-        return 1
-    if n_skip:
-        print("⚠ 沒有 FAIL，但有 SKIP ⇒ 仍**不准印「裝好了」**：SKIP 是「沒驗到」不是「通過」。")
-        return 2
-    print("✔ 這一批（P1／P2／P5／P9／P10／P11）全綠。⚠ 六條 —— P3／P4／P6／P7／P8 尚未實作。")
-    return 0
+    elif rc == 2:
+        print("⚠ 沒有 FAIL，但有 UNVERIFIED ⇒ 仍**不准印「裝好了」**："
+              "那是「沒驗到」不是「通過」。")
+    else:
+        if n_skip:
+            print(f"ℹ 有 {n_skip} 條 SKIP（選配不適用，例如這台沒裝 Cursor）——**不擋**結束條件。")
+        print("✔ 這一批（P1／P2／P5／P9／P10／P11）全綠。"
+              "⚠ 六條 —— P3／P4／P6／P7／P8 尚未實作。")
+    return rc
 
 
 if __name__ == "__main__":

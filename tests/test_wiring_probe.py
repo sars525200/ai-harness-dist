@@ -28,8 +28,9 @@ r"""接線探針 P1／P2／P5／P9／P10／P11 的回歸網（2026-09-03）。
 
 ## 刻意不涵蓋的
 
-- **P5「逐條對得上舊機改寫來源」那半**：需要真的有兩台機器。這裡只釘
-  「沒給 --source 時必須回 SKIP，不得當成通過」。
+- **真的兩台機器**：`--source` 那半用 tmp 造的假舊機設定測（尾段對應錯位要紅），
+  釘得住「不得只比條數」，但釘不住真實改寫函式的正確性。
+- **`verdict()` 之外的結束條件**：主程式印什麼字沒釘，只釘 exit code。
 - **P1 在真實 ~\.claude 上的行為**：測試在 tmp 底下建真 junction（`mklink /J`），
   但指向的是 tmp 目錄；打到真 live 的行為已在本機實跑驗過（見計畫書的實跑節）。
 """
@@ -64,13 +65,22 @@ def _dirlink(link: Path, target: Path) -> bool:
         return False
 
 
+def _exit_for(M, codes_):
+    """把一組碼餵進**被測程式自己的** verdict()，回它會用的 exit code。
+
+    ⚠ 這裡刻意不重寫一份等價邏輯：測試自帶一份判定，兩份就會漂開，
+    而漂開的那天測試照樣綠。走 `M.verdict()` 才釘得住真正在跑的那條路。
+    """
+    return M.verdict([M.Result(c, "T", "t", "") for c in codes_])
+
+
 def _cases(M) -> "list[tuple[str, bool, str]]":
     out = []
 
     def case(name: str, ok: bool, detail: str = "") -> None:
         out.append((name, ok, detail))
 
-    OK, FAIL, SKIP = M.OK, M.FAIL, M.SKIP
+    OK, FAIL, SKIP, UNVER = M.OK, M.FAIL, M.SKIP, M.UNVERIFIED
 
     def codes(results):
         return [r.code for r in results]
@@ -166,9 +176,10 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         case("P5 非空要綠", by.get(str(full)) == OK, "得到 %r" % by.get(str(full)))
         case("P5 不存在要紅", by.get(str(tmp / "missing")) == FAIL,
              "得到 %r" % by.get(str(tmp / "missing")))
-        case("P5 沒給 --source 時「對得上來源」那半要 SKIP 不是 OK",
-             by.get("逐條對得上舊機改寫來源") == SKIP,
-             "沒驗到不得當成通過；得到 %r" % by.get("逐條對得上舊機改寫來源"))
+        case("P5 沒給 --source 時「對得上來源」那半要 UNVERIFIED 不是 OK",
+             by.get("逐條對得上舊機改寫來源") == UNVER,
+             "沒驗到不得當成通過，且**不是 SKIP**——SKIP 是「這台不適用」，不擋結束條件；"
+             "得到 %r" % by.get("逐條對得上舊機改寫來源"))
 
     # ── 6. P5：一條都沒有要紅 ──────────────────────────────────
     res = M.probe_p5({"permissions": {"additionalDirectories": []}}, None)
@@ -176,8 +187,66 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
          bool(res) and res[0].code == FAIL,
          "得到 %r" % codes(res))
 
-    # ── 7. SKIP 不得被當成綠（結束條件的語意）──────────────────
-    case("SKIP 與 OK 是不同的碼", SKIP != OK, "SKIP=%r OK=%r" % (SKIP, OK))
+    # ── 7. 四態的碼互不相同，且 SKIP 與 UNVERIFIED 不得混用 ─────
+    #     第 4 輪發現 4：原本一個 SKIP 扛兩種語意 ——「這台沒裝 Cursor」
+    #     與「該驗的沒驗」擋住同一件事，只裝 Claude 的新機永遠印不出「裝好了」。
+    case("四個碼互不相同", len({OK, FAIL, SKIP, UNVER}) == 4,
+         "OK=%r FAIL=%r SKIP=%r UNVER=%r" % (OK, FAIL, SKIP, UNVER))
+    case("SKIP 不擋結束條件、UNVERIFIED 擋",
+         _exit_for(M, [SKIP]) == 0 and _exit_for(M, [UNVER]) == 2
+         and _exit_for(M, [FAIL]) == 1,
+         "SKIP→%r UNVER→%r FAIL→%r（應為 0／2／1）"
+         % (_exit_for(M, [SKIP]), _exit_for(M, [UNVER]), _exit_for(M, [FAIL])))
+
+    # ── 7b. P5 的「對得上來源」不得只比條數（第 4 輪發現 1）──────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        for name in ("a", "b"):
+            (tmp / name).mkdir()
+            (tmp / name / "x.md").write_text("x", encoding="utf-8")
+        src = tmp / "old.json"
+        # 舊機兩條的尾段是 projA\memory 與 projB\memory；本機第二條被換成別的東西
+        src.write_text(json.dumps({"permissions": {"additionalDirectories": [
+            r"C:\Users\old\projects\projA\memory",
+            r"C:\Users\old\projects\projB\memory"]}}, ensure_ascii=False),
+            encoding="utf-8")
+        live = {"permissions": {"additionalDirectories": [
+            str(tmp / "projects" / "projA" / "memory"),
+            str(tmp / "projects" / "WRONG" / "memory")]}}
+        for rel in (("projects", "projA", "memory"), ("projects", "WRONG", "memory")):
+            d = tmp.joinpath(*rel)
+            d.mkdir(parents=True)
+            (d / "m.md").write_text("m", encoding="utf-8")
+        res = M.probe_p5(live, src)
+        by = {r.title: r.code for r in res}
+        case("P5 條數相同但對應錯位要紅（不得只比 len）",
+             by.get("逐條對得上舊機改寫來源") == FAIL,
+             "改寫對錯機時條數照樣一致，只比 len 會全綠；得到 %r" % by)
+
+    # ── 7c. P9 要驗 post-commit 有沒有裝（第 4 輪發現 2）──────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "tools" / "githooks").mkdir(parents=True)
+        (tmp / "tools" / "githooks" / "post-commit").write_text("#!/bin/sh\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(tmp)], capture_output=True)
+        subprocess.run(["git", "-C", str(tmp), "remote", "add", "backup", str(tmp / "mirror")],
+                       capture_output=True)
+        old_root = M.HARNESS_ROOT
+        try:
+            M.HARNESS_ROOT = tmp
+            res = M.probe_p9()
+        finally:
+            M.HARNESS_ROOT = old_root
+        by = {r.title: r.code for r in res}
+        hook_res = [r for r in res if r.title == "post-commit 已安裝"]
+        case("P9 沒把 post-commit 拷進 .git\\hooks 要紅",
+             bool(hook_res) and hook_res[0].code == FAIL
+             and "沒安裝" in hook_res[0].detail,
+             # ⚠ 只驗 code == FAIL 不夠（變異驗證抓到的）：把「沒安裝」誤判成
+             #   「內容不同」時 code 一樣是 FAIL，那條 case 照樣綠，而訊息會把人
+             #   引去比對檔案內容，不會去想「這台根本沒裝過」。
+             "沒有它就完全不會推鏡像、也不會留失敗標記，而其餘幾條照樣綠；得到 %r"
+             % ([(r.code, r.detail[:40]) for r in hook_res] or by))
 
     # ── 8. P10：live 缺一支風格檔要紅（風格會靜默退回預設）─────
     with tempfile.TemporaryDirectory() as td:
@@ -317,9 +386,9 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
          and by.get("清冊裡已經沒有 baselines") == OK
          and by.get("基準檔不在版控中") == OK,
          ("git init 失敗，這條沒測到" if res is None else "得到 %r" % by))
-    case("P11 沒給 --wired-at 時那半要 SKIP 不是 OK",
-         bool(res) and any(r.code == SKIP for r in res),
-         "沒驗到不得當成通過；得到 %r" % (codes(res) if res else None))
+    case("P11 沒給 --wired-at 時那半要 UNVERIFIED 不是 OK",
+         bool(res) and any(r.code == UNVER for r in res),
+         "沒驗到不得當成通過，且不是 SKIP；得到 %r" % (codes(res) if res else None))
 
     res = _p11_world(moved=True, baseline_tracked=True)
     by = {r.title: r.code for r in res} if res else {}
@@ -386,7 +455,8 @@ def run() -> "tuple[int, list]":
     except Exception as exc:                       # pragma: no cover
         return 0, ["載入 wiring_probe 失敗：%s" % exc]
 
-    for fn in ("probe_p1", "probe_p2", "probe_p5", "probe_p9", "probe_p10", "probe_p11", "main"):
+    for fn in ("probe_p1", "probe_p2", "probe_p5", "probe_p9", "probe_p10", "probe_p11",
+               "verdict", "main"):
         if not hasattr(M, fn):
             return 0, ["wiring_probe 沒有 %s() —— 這支測試釘的行為還沒有實作點" % fn]
 
