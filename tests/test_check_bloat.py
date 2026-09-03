@@ -1029,6 +1029,45 @@ def run() -> "tuple[int, list]":
           "（改回整段長度 ⇒ 每一塊都變成「單行超標」，形狀資訊全失真）",
           ml_units == [(44, 3, 20)], f"實際={ml_units}")
 
+    # ── 票 03 Q2／Q9：`check_generated_consistency()` ─────────────────────
+    #
+    # 借真正的 `tools/gen_rule_hub.py` 剝檔頭／正規化（唯一真相，不重寫第二套），
+    # 只把 GLOBAL_MD／REPO_GLOBAL_MD 指到 fixture，避免碰到真的 live 檔。
+    print("\n[票03-Q9] 產生器產出檔 ↔ live 的一致性")
+    _real_grh = ROOT / "tools" / "gen_rule_hub.py"
+    _gen_bak = (m.GLOBAL_MD, m.REPO_GLOBAL_MD, m.GEN_RULE_HUB_PY)
+    _hdr = ("<!-- GENERATED FILE. Do not edit. -->\n"
+            "<!-- Edit global/hub/ then: py -3 tools/gen_rule_hub.py -->\n")
+    _body = "\n\n# 工作方式\n\n- 一條規則\n"
+    try:
+        live_ok = _mk(tmp, "live_ok.md", _hdr + _body)
+        repo_ok = _mk(tmp, "repo_ok.md", _hdr + _body)
+        m.GLOBAL_MD, m.REPO_GLOBAL_MD, m.GEN_RULE_HUB_PY = live_ok, repo_ok, _real_grh
+        check("兩邊剝檔頭後正文相同 ⇒ 空 list（不誤報）",
+              m.check_generated_consistency() == [])
+
+        live_drift = _mk(tmp, "live_drift.md", _hdr + _body)
+        repo_drift = _mk(tmp, "repo_drift.md", _hdr + _body + "- 多出來的一條\n")
+        m.GLOBAL_MD, m.REPO_GLOBAL_MD = live_drift, repo_drift
+        drift_msgs = m.check_generated_consistency()
+        check("正文真的不同 ⇒ 回非空、講得出是哪個檔",
+              bool(drift_msgs) and "global/CLAUDE.md" in drift_msgs[0], str(drift_msgs))
+
+        # CRLF／行尾空白／連續空行只是格式差異，不是內容差異——normalize() 該吃掉它們。
+        live_fmt = _mk(tmp, "live_fmt.md", _hdr + _body)
+        repo_fmt_text = (_hdr + _body).replace("\n", "\r\n") + "   \n\n\n"
+        repo_fmt = _mk(tmp, "repo_fmt.md", repo_fmt_text)
+        m.GLOBAL_MD, m.REPO_GLOBAL_MD = live_fmt, repo_fmt
+        check("**只有 CRLF／行尾空白／多餘空行的差異 ⇒ normalize() 後仍算一致**"
+              "（不然 Windows 换行習慣不同就天天假紅）",
+              m.check_generated_consistency() == [])
+
+        m.GLOBAL_MD, m.REPO_GLOBAL_MD = live_ok, tmp / "不存在.md"
+        check("repo 產出缺檔 ⇒ 空 list（缺檔已經由 discover_targets() 的 missing 講過，這裡不重講）",
+              m.check_generated_consistency() == [])
+    finally:
+        m.GLOBAL_MD, m.REPO_GLOBAL_MD, m.GEN_RULE_HUB_PY = _gen_bak
+
     return passed, failed
 
 

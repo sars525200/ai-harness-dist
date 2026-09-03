@@ -139,6 +139,8 @@ HISTORY_PATH = HERE / "bloat_history.jsonl"
 LAYERS_PY = HARNESS / "dashboard" / "gen_layers.py"
 PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 GLOBAL_MD = Path.home() / ".claude" / "CLAUDE.md"
+GEN_RULE_HUB_PY = HARNESS / "tools" / "gen_rule_hub.py"
+REPO_GLOBAL_MD = HARNESS / "global" / "CLAUDE.md"   # 產生器的 repo 內產出檔，不是 live
 
 LIMIT = 120          # 每條上限（非空白字元）。CLAUDE.md §4 與 MEMORY.md 檔頭是同一個數字
 KEY_CHARS = 24       # 取條目開頭幾個字當身分，用來跨版本對上同一條
@@ -204,6 +206,42 @@ def _load_layers():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _load_gen_rule_hub():
+    """載入 `gen_rule_hub`，借它的 `strip_generated_header()`／`normalize()`——
+    這兩支已經照票 03 Q4 的正規化規格寫過一次，這裡不重寫第二套（唯一真相）。
+    找不到就回 `None`，呼叫端要能在沒有 rule-hub 產出的專案上照常運作。"""
+    if not GEN_RULE_HUB_PY.exists():
+        return None
+    spec = importlib.util.spec_from_file_location("_grh_for_bloat", GEN_RULE_HUB_PY)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def check_generated_consistency() -> list[str]:
+    """票 03 Q2／Q9：`global/CLAUDE.md`（repo 產出）剝掉 GENERATED 檔頭、正規化後，
+    必須與 live `~\\.claude\\CLAUDE.md` 逐字相同。**這條只比對，不算進膨脹總量**
+    ——repo 產出是 live 的副本，算進去等於把同一份內容記兩次帳。
+
+    回一份訊息 list；空 list＝一致或兩邊有一邊本來就不存在（不歸這條管，`measure()`
+    的 `missing` 已經在報告別的地方講過），非空＝不一致，呼叫端要讓它影響 exit code。
+    """
+    if not REPO_GLOBAL_MD.exists() or not GLOBAL_MD.exists():
+        return []          # 缺檔已經被 discover_targets() 的 `missing` 標記過，這裡不重複講
+    grh = _load_gen_rule_hub()
+    if grh is None:
+        return [f"⚠ 找不到 {GEN_RULE_HUB_PY}——無法剝 GENERATED 檔頭，這條這次沒量到。"]
+    repo_text = REPO_GLOBAL_MD.read_text(encoding="utf-8", errors="replace")
+    live_text = GLOBAL_MD.read_text(encoding="utf-8", errors="replace")
+    repo_n = grh.normalize(grh.strip_generated_header(repo_text))
+    live_n = grh.normalize(grh.strip_generated_header(live_text))
+    if repo_n == live_n:
+        return []
+    return [f"global/CLAUDE.md（repo 產出）剝檔頭後與 live {GLOBAL_MD} 不一致——"
+            "要嘛模組改了還沒重產（`py -3 tools/gen_rule_hub.py`），"
+            "要嘛 repo 產出重產了但 live 還沒 `py -3 tools/backup_global_config.py --restore`。"]
 
 
 def _encode_project_dir(path: str) -> str:
@@ -1378,10 +1416,19 @@ def main() -> None:
     # 判準：**守門的可見性不得依賴被守的東西是不是乾淨的。**
     print(f"\nexit code 只看 {only}；其他專案見上表。")
     reasons, blind = diff(load_snapshot(), targets, only_project=only)
+    # 票 03 Q2／Q9：repo 產出（`global/CLAUDE.md`）跟 live 是不是同一份內容，
+    # 跟「有沒有新增膨脹」是兩個問題，但都屬於「這個檔案現在有沒有問題」
+    # ⇒ 跟全域 CLAUDE.md 的膨脹一樣**不看 `only`，全域的事全域算**。
+    gen_mismatch = check_generated_consistency()
 
-    if not reasons and not blind:
+    if not reasons and not blind and not gen_mismatch:
         print("沒有新增膨脹。")
         sys.exit(0)
+
+    if gen_mismatch:
+        print("\n⚠ 產生器產出檔與 live 不一致：")
+        for m in gen_mismatch:
+            print(f"  - {m}")
 
     if reasons:
         print(f"\n這次變大了（{only}）：")
