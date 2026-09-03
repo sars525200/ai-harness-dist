@@ -3,8 +3,16 @@ r"""對接線探針做變異，確認 test_wiring_probe.py 真的會叫。
 
     py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_wiring_probe.py
 
-八個變異都是「把判準改鬆」——探針守的整件事就是
+十三個變異都是「把判準改鬆」——探針守的整件事就是
 「存在／非空／有跑到」不等於「接好了」，所以每一條的變異都是退化成前者。
+
+⚠ 第 5 輪處置加的六條形狀更明確：**把新判準退化回那個被打穿的舊判準**
+（P5 前綴替換 → 固定尾段 3 段、規則排序取最長 ⇒ 每對套自己那條 ⇒ 恆真檢查、
+拿掉家目錄語意、恆等改寫改回 UNVERIFIED、P10 缺鍵一律 SKIP、P11 不驗執行期讀取點）。
+**退得回去而測試轉紅，才證明新的那一層真的在守東西**；退不回去只證明錨點沒對到。
+
+⚠ 這支打不到的東西：**文件裡的實跑數字**。那一段由
+`tests/mutations/mutate_plan_runlog.py` 另外證明會紅（第 5 輪發現 1 的機制配套）。
 
 ⚠ 這支自己抓到過兩條假綠（2026-09-03·首跑）：
 `P9 沒有 backup remote` 原本用「不是 git repo 的空目錄」測，但 `git remote`
@@ -44,9 +52,27 @@ MUTATIONS = [
     ("P11 拿掉「清冊裡不該有 baselines」",
      '        if vdoc.get("baselines"):',
      "        if False:"),
-    ("P5 的逐條對應退化成只比條數",
-     "            if _tail(src) != _tail(dst):",
-     "            if False:"),
+    # ⚠ 舊的「P5 退化成只比條數」錨點（`if _tail(src) != _tail(dst):`）已隨第 5 輪
+    #   發現 4 的判準改寫消失。固定尾段本身就是被打穿的那個判準，所以現在改成
+    #   **把新判準退化回舊判準**——退得回去就代表新的那一層真的在守東西。
+    ("P5 前綴替換退化回固定尾段 3 段",
+     "    while n < min(len(a), len(b)) and a[-1 - n] == b[-1 - n]:",
+     "    while n < 3 and n < min(len(a), len(b)) and a[-1 - n] == b[-1 - n]:"),
+    ("P5 前綴規則改成取最長（變成恆真檢查）",
+     "    rules.sort(key=lambda r: len(r[0]))",
+     "    rules.sort(key=lambda r: -len(r[0]))"),
+    ("P5 拿掉家目錄語意檢查",
+     "    foreign = [str(d) for d in dirs if _foreign_account(d)]",
+     "    foreign = []"),
+    ("P5 恆等改寫改回 UNVERIFIED（把正確結果擋住）",
+     "                verbatim_code = OK",
+     "                verbatim_code = UNVERIFIED"),
+    ("P10 缺 outputStyle 一律當成「這台不適用」",
+     '        elif src_settings.get("outputStyle"):',
+     "        elif False:"),
+    ("P11 不驗執行期讀取路徑",
+     '        elif "skill_watch_baselines.json" in line:',
+     "        elif True:"),
     # ⚠ 這條的錨點換過一次（2026-09-03）：原本變異 `elif not live_hook.is_file():`
     #   → `elif False:`，會讓後面的 filecmp 拿不存在的檔而拋例外。測試確實紅了，
     #   但**紅的原因是例外不是判定** —— 那種紅證明不了任何事。改成把該分支判成 OK。
@@ -66,7 +92,16 @@ EXPECT = {
     "P9 拿掉 backup remote 檢查": "P9 有 repo 但沒 backup remote 要紅",
     "P10 的 filecmp 退化成「檔案存在就算」": "P10 內容不同要紅（不是只看檔名）",
     "P11 拿掉「清冊裡不該有 baselines」": "P11 清冊裡還留著 baselines 要紅",
-    "P5 的逐條對應退化成只比條數": "P5 條數相同但對應錯位要紅（不得只比 len）",
+    "P5 前綴替換退化回固定尾段 3 段":
+        "P5 長路徑換掉使用者名、別條沒換要紅（前綴替換不一致）",
+    "P5 前綴規則改成取最長（變成恆真檢查）":
+        "P5 條數相同但對應錯位要紅（不得只比 len）",
+    "P5 拿掉家目錄語意檢查": "P5 改寫指到別人的帳號要紅（不必給 --source）",
+    "P5 恆等改寫改回 UNVERIFIED（把正確結果擋住）":
+        "P5 恆等改寫不得留下 UNVERIFIED 擋住結束條件",
+    "P10 缺 outputStyle 一律當成「這台不適用」":
+        "P10 舊機設過、本機沒有這顆鍵要紅（該帶沒帶，不是這台不適用）",
+    "P11 不驗執行期讀取路徑": "P11 搬了檔但執行期還讀舊路徑要紅",
     "P9 把「沒安裝 post-commit」判成已安裝": "P9 沒把 post-commit 拷進 .git\\hooks 要紅",
     "verdict 讓 SKIP 也擋住結束條件": "SKIP 不擋結束條件、UNVERIFIED 擋",
 }
