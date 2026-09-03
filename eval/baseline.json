@@ -1,70 +1,122 @@
 {
   "adversarial-review": {
-    "tokens": 2376,
-    "mtime": 1785475881.4654427
+    "tokens": 3215,
+    "mtime": 1788425446.1854649
   },
   "asset-data-rules": {
-    "tokens": 5122,
-    "mtime": 1786633195.451689
+    "tokens": 2974,
+    "mtime": 1787902574.991245
   },
   "audit": {
-    "tokens": 1128,
-    "mtime": 1785426505.929729
+    "tokens": 2402,
+    "mtime": 1788331899.2474608
+  },
+  "chat-handoff": {
+    "tokens": 1369,
+    "mtime": 1788428791.27507
   },
   "codebase-health": {
-    "tokens": 1294,
-    "mtime": 1784911974.0733016
+    "tokens": 1398,
+    "mtime": 1787766146.014725
   },
   "context-health": {
-    "tokens": 2270,
-    "mtime": 1786721650.0966752
+    "tokens": 4019,
+    "mtime": 1788452458.8766365
   },
   "data-incident": {
-    "tokens": 1471,
-    "mtime": 1785426488.5918748
+    "tokens": 1777,
+    "mtime": 1787766146.0154755
+  },
+  "data-preview-html": {
+    "tokens": 571,
+    "mtime": 1787766146.017751
   },
   "deploy-prod": {
-    "tokens": 1140,
-    "mtime": 1786595667.226614
+    "tokens": 1638,
+    "mtime": 1788425925.1281295
   },
   "design-spec": {
-    "tokens": 1750,
-    "mtime": 1786082482.685371
+    "tokens": 1954,
+    "mtime": 1788326504.1106777
   },
   "diagnose-bug": {
-    "tokens": 1090,
-    "mtime": 1785426481.7184434
+    "tokens": 1226,
+    "mtime": 1787766146.019246
+  },
+  "domain-modeling": {
+    "tokens": 893,
+    "mtime": 1787418221.698695
   },
   "dry-run-migrate": {
-    "tokens": 722,
-    "mtime": 1786816709.7411895
+    "tokens": 790,
+    "mtime": 1787842905.9372725
+  },
+  "escalate": {
+    "tokens": 1194,
+    "mtime": 1787766146.0202506
+  },
+  "explainer-style": {
+    "tokens": 1149,
+    "mtime": 1787905279.3481002
+  },
+  "grilling": {
+    "tokens": 671,
+    "mtime": 1787766231.9686918
   },
   "license-rules": {
-    "tokens": 755,
-    "mtime": 1785210169.0737507
+    "tokens": 1012,
+    "mtime": 1787902591.0521774
   },
   "platform-resource-rules": {
-    "tokens": 1165,
-    "mtime": 1786739170.847409
+    "tokens": 1189,
+    "mtime": 1787766164.9452312
+  },
+  "prototype": {
+    "tokens": 1096,
+    "mtime": 1787806051.8551507
+  },
+  "research": {
+    "tokens": 745,
+    "mtime": 1787766164.9462366
+  },
+  "session-workflow": {
+    "tokens": 1659,
+    "mtime": 1788428822.3049576
   },
   "shougong": {
-    "tokens": 3551,
-    "mtime": 1786588584.4350386
+    "tokens": 6118,
+    "mtime": 1788365664.065132
+  },
+  "skill-watch": {
+    "tokens": 2480,
+    "mtime": 1787766164.9478712
   },
   "suggestion-inbox": {
-    "tokens": 895,
-    "mtime": 1785177740.3237967
+    "tokens": 2194,
+    "mtime": 1787766164.948627
+  },
+  "to-tickets": {
+    "tokens": 1855,
+    "mtime": 1787892855.2231336
+  },
+  "ui-rules": {
+    "tokens": 3430,
+    "mtime": 1788370136.3989785
   },
   "verify-rules": {
-    "tokens": 5784,
-    "mtime": 1786815860.9155705
+    "tokens": 8262,
+    "mtime": 1788331899.293542
   },
   "verify-skill": {
-    "tokens": 1356,
-    "mtime": 1786816040.9544325
+    "tokens": 1653,
+    "mtime": 1787766164.9506629
   },
   "visual-check": {
-    "tokens": 2401,
-    "mtime": 1786022542.1819246
+    "tokens": 1713,
+    "mtime": 1787766164.9511857
+  },
+  "wayfinder": {
+    "tokens": 3309,
+    "mtime": 1787892855.222382
   }
 }

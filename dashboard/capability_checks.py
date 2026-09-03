@@ -895,12 +895,25 @@ def _rule_haystacks() -> list:
     """
     out = [("專案 CLAUDE.md", _read(CLAUDE_MD)),
            ("全域 CLAUDE.md", _read(GLOBAL_CLAUDE_MD))]
+    # ⚠ **`references/` 也要掃**（2026-09-04・SKILL_EVAL_PLAN 案 B 前置）：skill 分層化
+    # 把細節從 `SKILL.md` 搬進 `references/*.md`，只讀 `SKILL.md` 的話**規則一搬就判 False**
+    # ——上面那句「規則會搬家」的第六次發作，差別只在這次搬家發生在 skill 內部。
+    # 標籤另立 `skill-ref:`，因為兩者的可達性不同：`SKILL.md` 被載入就在，
+    # `references/` 要模型自己去讀。**一條規則只剩 `skill-ref:` 撐著時要看得出來。**
     for root, pattern, tag in ((RULES_DIR, "*.md", "rules"),
                                (SKILLS_DIR, "*/SKILL.md", "skill"),
-                               (GLOBAL_SKILLS_DIR, "*/SKILL.md", "全域 skill")):
+                               (SKILLS_DIR, "*/references/*.md", "skill-ref"),
+                               (GLOBAL_SKILLS_DIR, "*/SKILL.md", "全域 skill"),
+                               (GLOBAL_SKILLS_DIR, "*/references/*.md", "全域 skill-ref")):
         if root.exists():
             for p in sorted(root.glob(pattern)):
-                name = p.parent.name if p.name == "SKILL.md" else p.stem
+                if p.name == "SKILL.md":
+                    name = p.parent.name
+                elif p.parent.name == "references":
+                    # 帶上母 skill：只印 `fano-and-bom` 看不出它屬於誰
+                    name = f"{p.parent.parent.name}/{p.stem}"
+                else:
+                    name = p.stem
                 out.append((f"{tag}:{name}", _read(p)))
     return out
 
