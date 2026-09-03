@@ -17,9 +17,12 @@ r"""常駐層預算的門檻公式與基準讀取 —— 給「不走改檔工�
 
 - **本模組不寫任何檔**，也不讀狀態檔；棘輪狀態的讀寫留在呼叫端，
   因為 CTX-1 與產生器**各自有各自的狀態檔**（共用可變狀態會讓兩邊互相踩）。
-- 係數目前有三份副本：本檔、`hooks/rules/ctx1_resident_budget.py:86-87`、
-  `eval/check_structure.py:311-320`。**本檔是後來的**，收斂那兩份登記在 `TODOS.md`。
-  改係數時三處要一起改，這正是登記收斂的理由。
+- **本檔是門檻係數與公式唯一來源**（2026-09-04 收斂，`TODOS.md`「係數 2 份、
+  棘輪形狀 3 份」那一列）。`hooks/rules/ctx1_resident_budget.py` 動態載入本檔、
+  呼叫 `limit_for()`，不再自己存一份係數。`eval/check_structure.py:311-320`
+  **刻意不收進來**：它抄的只是棘輪的形狀（`ref = max(base, last_fired)`），
+  係數是它自己的 `TOKEN_SURGE_RATIO`、沒有下限那一邊，量的是 skill token
+  突增不是常駐層 bytes——收進來會把它的門檻語意改壞。
 
 【核心層】格式與判準跟被服務的專案無關。
 """
@@ -28,11 +31,6 @@ from __future__ import annotations
 import json
 import os
 
-# 與 hooks/rules/ctx1_resident_budget.py:86-87 同值。**副本共兩處，改一處要兩處一起改。**
-# 待辦簿舊票寫「三份副本」是寫錯的：第三處（eval/check_structure.py）抄的是
-# 棘輪的形狀，係數是它自己的、沒有下限那一邊，量的是 skill token 不是常駐層 bytes
-# ⇒ 照舊票「三處一起改係數」會改壞它的門檻語意。
-# 兩處漂開時 tests/test_resident_budget.py 的「跨副本一致性」那一段會紅。
 GROWTH_RATIO = 1.10
 GROWTH_FLOOR = 800  # bytes；至少要多這麼多才算成長，避免小檔被比例判準誤傷
 

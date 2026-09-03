@@ -31,6 +31,8 @@ r"""CTX-1 —— 常駐層檔案寫入後的預算檢查（PostToolUse Write/Edi
 基準取 `rulefile/bloat_snapshot.json`（`check_bloat.py --write-snapshot` 寫的那份，
 單一真相，不另存一份）。判準是 **max(參考值×1.10, 參考值+800)**：
 比例讓大檔有合理的成長空間，絕對值讓小檔不會因為比例太敏感而亂叫。
+係數與公式本身也是單一真相——**動態載入 `rulefile/resident_budget.py` 的
+`limit_for()`**（2026-09-04 收斂前這裡自己存一份，兩邊會漂而且都不報錯）。
 
 ## 為什麼要棘輪（第一版沒有，用資料量掉了）
 
@@ -61,6 +63,7 @@ BUDGET-1 檔頭講的是同一個病，它的藥是「一天只講一次」；�
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 
@@ -75,6 +78,22 @@ _SNAPSHOT_PATH = os.path.join(_HARNESS, "rulefile", "bloat_snapshot.json")
 # 記「上次為這個檔叫過的大小」。沒有它，超標會從持續狀態變成每次都叫（見檔頭）。
 _STATE_PATH = os.path.join(_HARNESS, "state", "ctx1_state.json")
 
+
+def _load_resident_budget():
+    """借 `rulefile/resident_budget.py` 的門檻係數與公式（2026-09-04 收斂，
+    `TODOS.md`「係數 2 份、棘輪形狀 3 份」那一列）——**單一來源，不在這裡另存一份**。
+    用動態載入（跟 `check_bloat.py._load_layers()` 同一個慣例）而不是 `sys.path`
+    塞路徑後 `import`：dispatch.py 一次載入二十幾支規則模組，往 `sys.path` 加
+    harness 根會讓所有規則共用一個全域搜尋路徑，增加名稱撞在一起的面。"""
+    path = os.path.join(_HARNESS, "rulefile", "resident_budget.py")
+    spec = importlib.util.spec_from_file_location("_rb_for_ctx1", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_rb = _load_resident_budget()
+
 # 快照的 key 用 \x01 接「專案名」與「檔案標籤」（check_bloat 寫的格式，不是我發明的）。
 _SEP = "\x01"
 _GLOBAL_KEY = "__global__" + _SEP + "全域 CLAUDE.md"
@@ -82,9 +101,6 @@ _GLOBAL_KEY = "__global__" + _SEP + "全域 CLAUDE.md"
 # 只有這兩個檔名算常駐層。判準用檔名而不是路徑，是為了不必知道
 # 「這台機器上有哪些專案」——那是 check_bloat 的工作，這裡不重做一份。
 _RESIDENT_NAMES = {"claude.md", "memory.md"}
-
-_GROWTH_RATIO = 1.10   # 大檔：容許成長一成
-_GROWTH_FLOOR = 800    # 小檔：至少要多這麼多 bytes 才值得講
 
 # cwd 可能落在專案的子目錄（`D:\IT-department\SOP`），往上找幾層對得上快照就算。
 _MAX_PARENTS = 4
@@ -207,7 +223,7 @@ def check(ctx):
         last_fired = row["last_fired"]
     ref = max(base, last_fired)
 
-    limit = int(max(ref * _GROWTH_RATIO, ref + _GROWTH_FLOOR))
+    limit = _rb.limit_for(ref)
     if size <= limit:
         return allow()
 

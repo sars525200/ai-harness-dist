@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
-"""讓兩份門檻係數漂開，確認 test_resident_budget.py 的跨副本那一段真的會叫。
+"""確認 CTX-1 沒有偷偷加回自己的門檻係數副本、也真的在用 `resident_budget.limit_for()`。
 
     py -3 D:\\Patrick-AI\\.ai-harness\\tests\\mutations\\mutate_budget_coeff_parity.py
 
-**為什麼要有這支**：在跨副本檢查存在之前，改 `ctx1_resident_budget.py` 的係數
-只有它自己的測試會紅，`resident_budget.py` 這一側毫無反應——兩條路徑判準不一致
-而且都不報錯。這裡植入的就是那種漂移。
+**為什麼要有這支**：門檻係數與公式原本在兩個地方各有一份，改一處只有它自己的
+測試會紅、另一處毫無反應——兩條路徑判準不一致而且都不報錯。2026-09-04 收斂成
+CTX-1 動態載入 `resident_budget.py`、不再自己存一份，但**收斂後的測試改成
+「有沒有副本」與「有沒有真的接上」這兩個新斷言，需要自己的變異證明抓得到**。
 
 ⚠ 會**暫時改動活的 hook 檔**（CTX-1），跑完立刻還原並比對雜湊。
 與 `mutate_enc1.py` 同一種做法，所以同樣**不掛進自動流程**。
@@ -39,28 +40,23 @@ def write(path, text):
 # (說明, 被改的檔常數, 錨點, 換成什麼)
 MUTATIONS = [
     (
-        "CTX-1 的比例改成 1.25（兩份係數漂開，值不同）",
+        "CTX-1 偷偷加回自己的 GROWTH_RATIO 副本（回到收斂前的雙份狀態）",
         TARGET,
-        "_GROWTH_RATIO = 1.10",
-        "_GROWTH_RATIO = 1.25",
+        "_rb = _load_resident_budget()",
+        "_rb = _load_resident_budget()\nGROWTH_RATIO = 1.25",
     ),
     (
-        "CTX-1 的下限改成 900（另一個係數漂開）",
+        "CTX-1 加回自己的 GROWTH_FLOOR 副本",
         TARGET,
-        "_GROWTH_FLOOR = 800",
-        "_GROWTH_FLOOR = 900",
+        "_rb = _load_resident_budget()",
+        "_rb = _load_resident_budget()\nGROWTH_FLOOR = 900",
     ),
     (
-        "公式把加號換成乘號（兩個常數仍相等，只比值的檢查會全綠）",
+        "CTX-1 載入了 resident_budget 卻不呼叫 limit_for()，改成自己內聯算"
+        "（有連線但沒真的用，只驗『有沒有副本』會漏掉這種）",
         TARGET,
-        "int(max(ref * _GROWTH_RATIO, ref + _GROWTH_FLOOR))",
-        "int(max(ref * _GROWTH_RATIO, ref * _GROWTH_FLOOR))",
-    ),
-    (
-        "檔頭退回舊票的「三處」說法（訂正被洗掉）",
-        RB,
-        "改一處要兩處一起改",
-        "改一處要三處一起改",
+        "limit = _rb.limit_for(ref)",
+        "limit = int(max(ref * _rb.GROWTH_RATIO, ref + _rb.GROWTH_FLOOR))",
     ),
 ]
 
@@ -97,5 +93,5 @@ restored = all(
 )
 print("\n" + "=" * 60)
 print(f"被改的檔還原：{'✔ 雜湊一致' if restored else '✘ 還原失敗'}")
-print("四個變異全部被抓到，跨副本這一段可信" if all_red else "有變異沒被抓到，需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，單一來源這一段可信" if all_red else "有變異沒被抓到，需補強")
 sys.exit(0 if (all_red and restored) else 1)
