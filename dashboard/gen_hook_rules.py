@@ -155,7 +155,7 @@ DESC = {
                "23 筆（27%）從沒到達模型，而「判定了」與「送達了」在 report.py 上分不出來。",
     },
     "HND-1": {
-        "badge": "9/03 新·shadow", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "badge": "9/03 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
         "why": "交接檔還開著幾份、哪幾份講的東西已經不存在",
         "tip": "動機是實測：<b>22 份交接檔只有 4 份帶結案標記</b>，其中 2 份是當天才補的；"
                "另外 2 份把狀態塞進<b>檔名</b>（<code>-done</code>／<code>-verified</code>）"

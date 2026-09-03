@@ -1,5 +1,8 @@
 {
   "rules": {
+    "HND-1": {
+      "shadow": false
+    },
     "DB-1": {
       "shadow": false
     },
