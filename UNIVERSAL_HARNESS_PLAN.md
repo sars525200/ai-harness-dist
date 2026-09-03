@@ -102,7 +102,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 | U-1 | **不寫死專案路徑** | 新增/修改的核心層檔案 `grep -c "IT-department"` 為 0；路徑一律來自設定檔或參數 |
 | U-2 | **設定缺漏要拒跑，不要猜** | 移掉設定檔跑一次 → 必須明確報錯說缺什麼；不得產出空表、不得 fallback 到預設專案 |
 | U-3 | **新規則先分層** | 規則檔 docstring 第一行寫明「核心層／專案層」與理由（換部門還成立嗎） |
-| U-4 | **安裝流程要能被別人跑完** | 在**沒有既有設定的環境**跑一次裝設，全程不需要問我；每一步失敗都有可讀的錯誤訊息 |
+| U-4 | **安裝流程要能被別人跑完** | **兩個剖面兩條判準，不可只留一條**（2026-09-03 拆·D-1 覆核第 2 輪發現 6）：<br>`department`（**尚未實作**·綁 D-4）＝在沒有既有設定的環境跑一次裝設，全程不需要問我；<br>`same-person-new-pc`（**本次要做的**）＝把舊機 live 設定帶過來、路徑重寫後 §4 的八條探針全綠。<br>兩條共同：每一步失敗都有可讀的錯誤訊息 |
 | U-5 | **功能要對得上「增加效率」** | 說得出「它讓誰少犯哪一種錯／少花哪一段時間」，說不出來就不排優先 |
 | U-6 | **文件分兩種讀者** | 使用者要讀的（怎麼裝、怎麼用）與維護者要讀的（為什麼這樣設計）分開；使用者文件裡不出現踩雷史 |
 | U-7 | **不破壞既有專案** | 每次通用化改動後，本專案的回歸網（目前 302 項）仍全綠——**地基化不是重寫的藉口** |
@@ -133,16 +133,43 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
 **拍板內容（三件，缺一不可）**
 
 1. **內容走 git**——原 (b) 對的那半句留下。
+   ⚠ **但「走 git」不等於有來源**（第 2 輪發現 3）：本機唯一的 remote 叫 `backup`，
+   指向這台機器 C 槽的 bare repo。**換機那台沒有可 clone 的 URL。**
+   ⇒ `same-person-new-pc` 的取得來源明定為**把舊機那顆 bare 鏡像整個搬過去**
+   （隨身碟或網路複製），新機從它 clone。接線器裝完 `post-commit` 之後
+   **必須在新機建一顆新的 bare 鏡像並加 `backup` remote**——
+   `post-commit` 第一件事就是「沒有叫 `backup` 的 remote 就 exit 0」，
+   **裝了而沒有 remote＝裝了等於沒裝，而且靜默**。
 2. **一支冪等、fail-closed 的本機接線器**（現在完全不存在，見處置 A1）。
-   它只做機器局部：建／修 junction、把 hook 模板**從實際 harness root 展開後**合併進
-   live `settings.json`（禁止還原檔案）、`gen_layers.py --init`、確保 `state\` 可寫、
-   安裝 `tools/githooks/post-commit`、同步 `cursor-agents\` 到 `~\.cursor\agents\`。
-   **結束條件不是 exit 0，是探針全綠**：
-   - `samefile(~\.claude\agents, <harness>\agents)`，skills 同理
-   - live `settings.json` 每一條 hook 的 command 至少 `Test-Path` 得到
-   - `harness.config.json` 存在且 `currentProject` 在本機是真目錄
+   它只做機器局部：建／修 junction、`gen_layers.py --init`、確保 `state\` 可寫、
+   安裝 `tools/githooks/post-commit` 並建鏡像 remote、同步 `cursor-agents\` 到
+   `~\.cursor\agents\`、把 `global/CLAUDE.md` restore 到 live。
+
+   **設定檔怎麼處理，兩件事不要混**（第 2 輪發現 1 抓到我把它們寫成同一句）：
+
+   | 對象 | 做法 |
+   |---|---|
+   | repo 的 `global/settings.json` | ❌ **禁止整檔還原**。它是舊絕對路徑的快照，還原＝把舊路徑裝進新機（原 B3） |
+   | **舊機的 live `settings.json`** | ✅ **帶過來，逐欄改寫路徑**——hook `command`、`additionalDirectories`、permissions 裡的路徑。**改寫不掉的欄位要紅，不准靜默保留舊值** |
+
+   §0 的第二個目標是「連個人設定一起還原並重寫路徑」，不是「不要還原」。
+
+   **結束條件不是 exit 0，是探針全綠**（第 2 輪發現 2：原本三條蓋不住）：
+
+   | # | 探針 | 擋掉的失效形狀 |
+   |---|---|---|
+   | 1 | `samefile(~\.claude\agents, <harness>\agents)`，skills 同理 | 斷掉／指舊路徑的 junction，畫面像「還沒建角色」 |
+   | 2 | live 每條 hook command **裡的實體檔**（不是整段字串）`Test-Path` | hook 打空，對話正常但閘門一條都不跑 |
+   | 3 | `harness.config.json` 存在且 `currentProject` 在本機是真目錄 | 看板掃到錯專案 |
+   | 4 | **hook 程式內部的 `STATE_DIR` 指向本機真目錄且可寫** | 路徑對、狀態目錄錯 ⇒ 寫入失敗被吞，看板顯示「沒發生過」 |
+   | 5 | **`additionalDirectories` 每一條在本機存在** | 記憶整批失聯，不報錯 |
+   | 6 | **live `CLAUDE.md` 已 restore 且非空** | 工作方式規則整份不生效，看不出來 |
+   | 7 | **agents／skills 目錄可列且非空** | 平台收緊 symlink 政策時整批消失（C2） |
+   | 8 | **Cursor 側：`~\.cursor\agents\` 存在且與 `cursor-agents\` 內容一致** | 「沒裝 Cursor」與「裝了但沒接上」**不准混成同一個綠**（第 2 輪發現 5） |
+
    任一條紅就不准印「裝好了」。
 3. **只做 `same-person-new-pc` 一份安裝剖面**。`department` 剖面**留白，綁 D-4**。
+   ⚠ 剖面收窄了，**U-4 的完成判準也要跟著拆成兩條**（第 2 輪發現 6），見 §3。
 
 **為什麼收成一份剖面**（審查者建議兩份，user 拍板一份）：§5 明文
 「沒有第二個部門真的要用之前，不做抽象化重構」。department 剖面現在沒有人裝、
@@ -168,16 +195,16 @@ D-4 定案前不動它。
 |---|---|---|---|
 | A1 | 裝設腳本不在 harness、路徑寫死、缺目標只警告不中止 | **接受** | 實查：`git ls-files` 找不到任何裝設腳本；`bootstrap.ps1` 第 19／34／76 行寫死 harness 路徑，第 37–38／79–80 行缺目標 `Write-Warning` 後 skip、腳本照常結束。修法＝定案第 2 點的接線器**取代它**（它在 IT 專案裡，屬專案層） |
 | A2 | 腳本就算 junction 成功也不寫 hook 接線 | **接受** | 實查 live／repo `settings.json`：6 條 hook command 全是絕對路徑，`bootstrap.ps1` 完全不碰它。接線器必須展開模板合併進 live |
-| A3 | 整夾複製會把 gitignore 的本機狀態一併帶走 | **部分接受** | 成立：`state/`、`harness.config.json`、`session-archive/` 確實被排除。定案已捨棄「複製資料夾」⇒ 不再是主線；但**換形狀回來**——`same-person-new-pc` 允許還原 live 設定，必須做路徑重寫、`currentProject` 一律走 `--init`，不得直接搬舊值 |
+| A3 | 整夾複製會把 gitignore 的本機狀態一併帶走 | **部分接受**（第 2 輪修正） | 成立：`state/`、`harness.config.json`、`session-archive/` 確實被排除。⚠ **第 1 輪的處置只寫在這一格、沒改到定案本文，等於沒修**（第 2 輪發現 1）。現在定案第 2 點已用「repo 快照禁止還原／舊機 live 帶過來並逐欄改寫」的兩列表寫清楚，`currentProject` 一律走 `--init` |
 | A4 | 連 `~\.claude` 一起複製時 junction 目標仍指舊絕對路徑 | **接受** | 斷掉的 junction `is_dir()` 回 False，會被當成「還沒建角色」靜默跳過（`dashboard/capability_checks.py:575-576`）。這就是探針第 1 條 `samefile` 存在的理由 |
 | B1 | clone 只拿到版控樹，執行期接線全部缺席 | **接受** | 「三選一框架有缺陷」的核心證據，已寫進上方定案 |
 | B2 | 傾向理由「已有跨磁碟鏡像」把本機備份通道誤當分發通道 | **接受** | 實查 `git remote -v`：只有 `backup` → `C:/Users/<USER>/git-mirrors/JEFF-Harness.git`，**沒有 origin**；`tools/githooks/post-commit` 自己的註解就寫「`.git/hooks/` 不進版控，換機器或重新 clone 都不會有它」。**舊傾向欄已直接改寫，不留附錄** |
 | B3 | 把 repo 的 `global/settings.json` 當「clone 後還原」用會裝進舊路徑 | **接受** | 實測該檔：**6 條 hook command、20 處絕對路徑出現、14 個相異真路徑**（⚠ 交接檔寫的「13 條路徑／7 個 hook」是錯的，以本行為準）。接線器必須**展開模板**而不是**還原檔案** |
-| B4 | hook 程式內部仍寫死舊 `state\` | **接受**，但**不在接線器範圍** | `hooks/dispatch.py:71` `STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"`，寫入失敗 `:365-366` 被 `pass` 吃掉。這是 U-1 台帳裡的既有債，接線器解不掉 ⇒ 另案拆，列入下方待辦 |
-| B5 | skill-watch 基準是原機量的，新 clone 會撞錯出口 | **部分接受·綁 D-4** | 成立，但只在 `department` 剖面才發生；`same-person-new-pc` 同一人同一組基準，不觸發。記票不修 |
+| B4 | hook 程式內部仍寫死舊 `state\` | **接受**，第 2 輪**收回「不在接線器範圍」** | `hooks/dispatch.py:71` `STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"`，寫入失敗 `:365-366` 被 `pass` 吃掉。⚠ 拆字面值仍是另案，但**探針必須驗它**（定案探針第 4 條）——不驗的話「hook 路徑對、狀態目錄錯」會全綠通過，而看板顯示「沒發生過」與「很乾淨」同形 |
+| B5 | skill-watch 基準是原機量的，新 clone 會撞錯出口 | **第 2 輪撤回原處置，改為完全接受** | ⚠ 原處置寫「同一人同一組基準，不觸發」是**把「同一人」誤讀成「同一台機器上的平台技能清單」**（第 2 輪發現 4）。新電腦裝的 Claude／Cursor 版本不同就會撞，與剖面無關。修法：接線器在 `same-person-new-pc` 剖面**刪掉帶過來的基準檔並重跑一次量測**，不得沿用——沿用會讓人滿屏看到「平台真的變了」，然後照訊息加規格禁止的 `--force`，連守衛一起關掉 |
 | C1 | 套件安裝成功的位置不是 Claude 的載入位置 | **接受** | 作為不把 (c) 當主線的理由，已寫進定案；(c) 保留為接線器的包裝 |
 | C2 | 官方 plugin／symlink 模型不保證容器層 junction 讀得到 | **接受為外部相依風險，非本輪修項** | 接線器擋不住平台改政策，但探針要偵測得到（skills 目錄可列且非空）。追蹤點：`TODOS.md` 的 `claude plugin validate` 那筆 |
-| C3 | 套件凍結版本與「改 repo＝改執行期」的 junction 模型打架 | **反駁**（定案範圍內不成立） | 定案沒有選 (c)：內容走 git、執行期靠 junction，`git pull` 就是更新，不存在兩份樹。Cursor 側手抄那半句成立，但那是 D-1 以外的既有事實，已在 `COLLAB_HANDOFF.md`，不在這裡開第二真相 |
+| C3 | 套件凍結版本與「改 repo＝改執行期」的 junction 模型打架 | **部分反駁**（第 2 輪收回一半） | 「兩份樹」那半仍反駁：定案沒選 (c)，`git pull` 就是更新。⚠ **「Cursor 是 D-1 以外」那半是錯的**（第 2 輪發現 5）——定案第 2 點自己把 `cursor-agents\` 同步收進接線器，卻只驗 Claude 側。已補探針第 8 條，並要求**「沒裝 Cursor」與「裝了但沒接上」不得同綠**（現有 `check_cursor_agents.py` 在 live 目錄不存在時 exit 0，直接拿來當探針會漏） |
 | F-a | 三個選項不互斥、混了三條軸 | **接受** | 改寫框架的直接原因，見定案表 |
 | F-b | 傾向 (b) 不成立 | **接受** | 傾向欄已改寫，舊字面刪除 |
 | F-c | §0「分發部門」與新增的「本人換電腦」兩個目標塞同一題 | **接受** | 用「安裝剖面」拆開，且本次只做一份 |
@@ -187,17 +214,50 @@ D-4 定案前不動它。
 fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變少、§5「沒有第二個部門就
 不抽象化」、「空 junction 是最危險狀態、畫面像還沒建角色」。
 
-**本輪衍生的待辦（與 D-1 選哪案無關，任一案都要做）**
+**衍生待辦（與 D-1 選哪案無關，任一案都要做）**
 
-| 項目 | 現況（本則實查） |
+⚠ 這張表 2026-09-03 曾有兩項**寫完當天就過期**（我先寫表、後才修，寫完沒回頭改），
+第 2 輪發現 7 抓到。現況欄一律標日期，過期的直接改掉不留舊字面。
+
+| 項目 | 現況 |
 |---|---|
-| U-1 硬編碼閘門 **F-4 只掃 `.py`** | `tests/test_harness_config.py` 的 `HARNESS.rglob("*.py")` ⇒ `global/settings.json` 的 14 個路徑整個維度掃不到 |
-| **HND-1 已在跑但沒註冊** | 三支活零件**已進版控**（⚠ 交接檔說沒進是舊資訊），但 `hooks/dispatch_config.json` 的 18 條規則裡沒有 HND-1 |
-| `global/settings.json` 的探針移除**尚未提交** | 工作區同時有別的 session 的 22 個未提交檔，commit 只 stage 自己這一支 |
-| B4 的 `STATE_DIR` 字面值 | 見上表 B4 |
+| ~~U-1 硬編碼閘門只掃 `.py`~~ | ✅ **已補 JSON 維度**（2026-09-03·commit `cb75d67`）。設定檔的寫死路徑已凍進台帳、只准變少，測試 32 通過 0 失敗 |
+| ~~HND-1 已在跑但沒註冊~~ | ✅ **已註冊為 enforce**（別的 session·commit `e6ded68`），規則鍵現為 19 個 |
+| ~~`global/settings.json` 的探針移除未提交~~ | ✅ **已提交**（commit `c62f2ac`） |
+| B4 的 `STATE_DIR` 字面值 | ⏳ 未動。拆字面值是另案；探針第 4 條先擋住它的失效形狀 |
+| **換機取得來源**（bare 鏡像怎麼搬過去、新機怎麼重建 `backup` remote） | ⏳ 未動。定案第 1 點已寫明要求，尚未實作 |
+| **`additionalDirectories` 的路徑重寫** | ⏳ 未動。live 那份有多條這台機器的記憶目錄，改寫不掉要紅 |
+| **skill-watch 基準檔換機處置** | ⏳ 未動。見上表 B5 |
+| **live `CLAUDE.md` 的 restore** | ⏳ 未動。它沒有 junction，靠 `backup_global_config.py` 管，接線器要接手 |
+| **Cursor User Rules 雲端那份** | ⏳ 未動。貼雲端是人工步驟，接線器碰不到 ⇒ 只能列進安裝說明，不能假裝有探針 |
 
-**尚未完成**：§7 的**零改動確認輪**（第 2 輪）還沒跑 ⇒ `ADVERSARIAL_REVIEW_PASSED`
-marker 不得蓋；`review_inflight.py` 便箋維持掛著。
+**尚未完成**：第 2 輪**不是**零改動輪（提出 7 條新發現，已處置），
+⇒ 還要再跑一輪確認才能蓋 `ADVERSARIAL_REVIEW_PASSED`；
+`review_inflight.py` 便箋維持掛著。
+
+### D-1 對抗式覆核·第 2 輪逐項處置（2026-09-03）
+
+審查者 Cursor CLI `cursor-grok-4.6-high`；守門 `--check` exit 0、兩輪都齊全。
+本輪 7 條**全部打在第 1 輪的處置上，不是打原計畫**——這正是零改動輪存在的理由。
+
+| # | 發現 | 處置 | 改到哪裡 |
+|---|---|---|---|
+| 1 | 「禁止還原檔案」與 same-person 剖面互相否定，A3 的處置沒改到定案本文 ⇒ 等於沒修 | **接受** | 定案第 2 點改寫成兩列表：repo 快照禁止還原／舊機 live 帶過來逐欄改寫 |
+| 2 | 三條探針全綠仍可接線失敗（不看 `STATE_DIR`、`additionalDirectories`、live `CLAUDE.md`、Cursor） | **接受** | 探針從 3 條擴到 **8 條**，見定案第 2 點的表 |
+| 3 | 「內容走 git」在唯一要做的剖面上沒有來源；`post-commit` 沒有 `backup` remote 就 exit 0 | **接受** | 定案第 1 點補明取得來源＝搬舊機 bare 鏡像，並要求新機重建鏡像 remote |
+| 4 | B5「只在 department 才發生」不成立——把「同一人」誤讀成「同一組平台基準」 | **接受·撤回原處置** | B5 那一列改寫，修法改為刪基準重量測 |
+| 5 | C3 反駁把 Cursor 踢出 D-1，定案卻又收進來，探針不驗 | **部分接受** | C3 改為部分反駁；補探針第 8 條，並要求「沒裝」與「沒接上」不得同綠 |
+| 6 | U-4 仍以「陌生人、沒有既有設定」為判準，與只做 same-person 互斥 | **接受** | §3 U-4 拆成兩條剖面判準 |
+| 7 | 衍生待辦四項不完整，且兩項已過期 | **接受** | 上表重寫，過期三項標完成並附 commit，補上五項漏列 |
+
+**證據漂移一則（審查者主動回報，不算發現）**：`bootstrap.ps1` 第 19–22 行對缺
+`link_memory.py` 現況已是 `Write-Error` ＋ `exit 1`，不是只警告；agents／skills
+兩段（37–38、79–80）仍是 warning 後 skip。第 1 輪 A1 的描述以後者為準。
+
+**審查者本輪自報打不穿的 6 條**（下一輪不要重複去打）：「運輸成功 ≠ 安裝成功、
+三選一框架有缺陷」、§6 明寫接線器還沒寫、B3 的「repo 快照不可整檔還原」那半句、
+D-2 缺設定拒跑與 `--init` 假範本、§5「沒有第二個部門就不要靠想像驗收」、
+「空 junction 必須能被偵測」。
 
 ### D-2 定案（2026-08-13·`CONTEXT_HEALTH_PLAN` C-11 的實例化）
 
@@ -239,8 +299,9 @@ marker 不得蓋；`review_inflight.py` 便箋維持掛著。
   **D-3／D-4／D-5 仍待決，未討論前不動工**。
   ⚠ D-1 的**實作尚未開始**——拍板的是方向，接線器一行都還沒寫；
   §4 那張「本輪衍生的待辦」是與 D-1 無關、任一案都要做的獨立工項，不要當成 D-1 已落地。
-  ⚠ 對抗式覆核**只跑到第 1 輪**，零改動確認輪未跑 ⇒ 本檔**不得**蓋
-  `ADVERSARIAL_REVIEW_PASSED`。
+  ⚠ 對抗式覆核**已跑到第 2 輪**，但第 2 輪**不是零改動輪**（7 條新發現，全部打在
+  第 1 輪的處置上，已逐項處置）⇒ 還要再一輪確認，本檔**不得**蓋
+  `ADVERSARIAL_REVIEW_PASSED`。預設上限 4 輪，目前用掉 2 輪。
   ⚠ D-2 的實作早於決定紀錄（`CONTEXT_HEALTH_PLAN` 覆核 F-7 抓到的順序顛倒）；
   不回退實作，但這一行**必須維持最新**——舊字面會讓下一個人以為設定格式還沒定案。
 
