@@ -152,16 +152,81 @@ def probe_p2(settings: dict) -> list[Result]:
 
 
 # ---------------------------------------------------------------- P5
-def _tail(p: str, n: int = 3) -> str:
-    """取路徑的最後 n 段，小寫、統一分隔符。
-
-    用來判「本機這一條是不是舊機那一條改寫來的」：改寫只該動前綴
-    （使用者名、碟符），尾段（`projects\<專案>\memory` 這類）必須原封不動。
-    尾段對不上 ⇒ 對應錯位，或那一條被換成了別的東西。
-    """
+def _segs(p) -> list[str]:
+    """路徑切段：小寫、統一分隔符、丟掉空段。"""
     import re
-    parts = [x for x in re.split(r"[\\/]+", str(p)) if x]
-    return "\\".join(parts[-n:]).lower()
+    return [x.lower() for x in re.split(r"[\\/]+", str(p)) if x]
+
+
+def _common_tail(src, dst) -> int:
+    """由尾端往前數，src 與 dst 有幾段逐字相同。
+
+    ⚠ **刻意不取固定段數**（第 5 輪發現 4 重想判準）。原本寫死「最後 3 段」，
+    於是「前綴」是**路徑長度**決定的、不是語意決定的，兩頭都會出錯：
+
+    · **長路徑漏抓**：`C:\\Users\\<名>\\AppData\\Roaming\\…\\Startup` 共 9 段，
+      使用者名落在最後 3 段之外 ⇒ 換成別人的帳號照樣「吻合」，
+      而那個資料夾每台 Windows 都有、通常非空，連「存在且非空」也一起綠。
+    · **短路徑誤殺**：`D:\\Patrick-AI\\.ai-harness` 只有 3 段，碟符本身就在比對
+      範圍裡 ⇒ 合法改碟符反而紅，看起來像接線器改壞了。
+
+    改成「共同尾段有多長」由資料自己決定，剩下的那截就是這一條的前綴。
+    """
+    a, b = _segs(src), _segs(dst)
+    n = 0
+    while n < min(len(a), len(b)) and a[-1 - n] == b[-1 - n]:
+        n += 1
+    return n
+
+
+def _rewrite_rules(pairs) -> "tuple[list[tuple[list, list]], list[str]]":
+    """從 (舊, 新) 逐對回推「前綴替換規則」，順便挑出完全對不上的條目。
+
+    改寫的定義是**一組前綴替換一致地套用到每一條**，所以規則就是每一對的
+    「共同尾段以外那一截」。逐字相同的條目**不產生規則**——它沒有主張任何替換，
+    但它仍然要接受別條推出來的規則檢驗（那正是「部分改寫」會露餡的地方）。
+    """
+    rules, broken = [], []
+    for src, dst in pairs:
+        n = _common_tail(src, dst)
+        s, d = _segs(src), _segs(dst)
+        if n == 0:
+            broken.append(f"{src} → {dst}")
+            continue
+        if s == d:
+            continue
+        rules.append((s[:len(s) - n], d[:len(d) - n]))
+    # 由**短到長**排序：套用時取最一般的那條規則。取最長的會讓每一對都套到
+    # 自己推出來的規則，變成恆真檢查（＝什麼都沒驗）。
+    rules.sort(key=lambda r: len(r[0]))
+    uniq = []
+    for r in rules:
+        if r not in uniq:
+            uniq.append(r)
+    return uniq, broken
+
+
+def _apply_rules(rules, src) -> "list[str] | None":
+    """把第一條適用（最一般）的規則套到 src 上，回傳應有的結果段。沒有規則適用回 None。"""
+    s = _segs(src)
+    for old, new in rules:
+        if s[:len(old)] == old:
+            return new + s[len(old):]
+    return None
+
+
+def _foreign_account(dst) -> bool:
+    """dst 是不是落在**別人的**家目錄底下。
+
+    `Path.home()` ＝ `C:\\Users\\<本機這個人>`。同一個 `C:\\Users` 根、卻是另一個
+    帳號名的路徑，代表改寫指到了不是這台機器的人 —— 那個資料夾往往真的存在
+    （多帳號機器）、往往也非空，所以「存在且非空」與「尾段吻合」都攔不住它。
+    """
+    home = _segs(Path.home())
+    if len(home) < 2:
+        return False
+    d = _segs(dst)
+    return len(d) > len(home) - 1 and d[:len(home) - 1] == home[:-1] and d[len(home) - 1] != home[-1]
 
 
 def probe_p5(settings: dict, source: Path | None) -> list[Result]:
@@ -194,6 +259,18 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
         else:
             out.append(Result(OK, "P5", title, "存在且非空"))
 
+    # 改寫指到別人的帳號（第 5 輪發現 4 的長路徑反例）。**刻意放在 --source 之外**：
+    # 這條不需要舊機那份就驗得到，而它擋的正是「尾段吻合、目錄也存在非空」的形狀 ——
+    # 多帳號機器上別人的 AppData 樹是真的存在、真的非空。
+    foreign = [str(d) for d in dirs if _foreign_account(d)]
+    if foreign:
+        out.append(Result(FAIL, "P5", "改寫沒有指到別人的帳號",
+                          f"{len(foreign)} 條落在別人的家目錄底下（本機是 {Path.home()}）："
+                          + "；".join(foreign[:3])))
+    else:
+        out.append(Result(OK, "P5", "改寫沒有指到別人的帳號",
+                          f"沒有一條落在 {Path.home().parent} 底下的別的帳號"))
+
     # 判準的另一半：對得上舊機的改寫來源
     if source is None:
         out.append(Result(UNVERIFIED, "P5", "逐條對得上舊機改寫來源",
@@ -209,27 +286,48 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
             out.append(Result(FAIL, "P5", "逐條對得上舊機改寫來源",
                               f"條數對不上：舊機 {len(src_dirs)} 條、本機 {len(dirs)} 條 —— 有欄位被靜默丟掉"))
             return out
-        # ⚠ **只比條數不算數**（第 4 輪發現 1）：改寫函式對錯機、或根本沒改寫
-        # 而只保證條數不變時，條數比對照樣綠。逐條比「尾段」才看得出對應有沒有錯位。
-        mismatched, rewritten, verbatim = [], 0, 0
-        for src, dst in zip(src_dirs, dirs):
-            if _tail(src) != _tail(dst):
-                mismatched.append(f"{src} → {dst}")
-            elif str(src) != str(dst):
-                rewritten += 1
-            else:
-                verbatim += 1
-        if mismatched:
+        # ⚠ **只比條數不算數**（第 4 輪發現 1）；**固定尾段也不算數**（第 5 輪發現 4）。
+        # 判準改成「改寫＝一組前綴替換，一致地套用到每一條」，驗三件事：
+        #   ① 共同尾段不得是 0 段 —— 那一條被換成了別的東西
+        #   ② 每一條都要吻合**最一般**的那條適用規則 —— 部分改寫、改寫對錯機都會在這裡露餡
+        #   ③ 改寫後的路徑不得落在別人的家目錄底下
+        # ⚠ 能力上限寫在明處：這三條擋不掉「一致地錯」——整組都映到同一個不是這台
+        #   機器的帳號、而那個帳號在本機真的存在。要擋它得由接線器留下它實際用的
+        #   對照表（W10 的「改寫對照表」那條，尚未實作），探針才有第二個獨立來源。
+        pairs = list(zip(src_dirs, dirs))
+        rules, broken = _rewrite_rules(pairs)
+        if broken:
             out.append(Result(FAIL, "P5", "逐條對得上舊機改寫來源",
-                              f"{len(mismatched)} 條的尾段對不上（改寫錯位或欄位被換掉）："
-                              + "；".join(mismatched[:3])))
+                              f"{len(broken)} 條與舊機那一條**一段都對不上**（改寫錯位或欄位被換掉）："
+                              + "；".join(broken[:3])))
         else:
-            out.append(Result(OK, "P5", "逐條對得上舊機改寫來源",
-                              f"{len(dirs)} 條尾段逐條吻合（改寫過 {rewritten}、原樣 {verbatim}）"))
-        if verbatim and verbatim == len(dirs):
-            out.append(Result(UNVERIFIED, "P5", "改寫確實發生過",
-                              "每一條都與舊機**逐字相同** —— 可能是同名使用者的正常結果，"
-                              "也可能是改寫整個沒跑。這支分不出來，要人看一眼"))
+            inconsistent = []
+            for src, dst in pairs:
+                want = _apply_rules(rules, src)
+                if want is None:
+                    if _segs(src) != _segs(dst):
+                        inconsistent.append(f"{src} → {dst}（沒有任何前綴規則適用，卻被改動了）")
+                elif want != _segs(dst):
+                    inconsistent.append(f"{src} → {dst}（依規則應為 {chr(92).join(want)}）")
+            shown = "；".join(f"{chr(92).join(o)} ⇒ {chr(92).join(n) or '(原樣)'}"
+                              for o, n in rules[:3]) or "無（每一條都逐字相同）"
+            if inconsistent:
+                out.append(Result(FAIL, "P5", "逐條對得上舊機改寫來源",
+                                  f"{len(inconsistent)} 條不吻合同一組前綴替換："
+                                  + "；".join(inconsistent[:3])
+                                  + f"｜推出的規則：{shown}"))
+            elif rules:
+                out.append(Result(OK, "P5", "逐條對得上舊機改寫來源",
+                                  f"{len(dirs)} 條吻合同一組前綴替換（{len(rules)} 條規則：{shown}）"))
+            else:
+                # 全部逐字相同。**這不是「沒驗到」**（第 5 輪發現 3 撤回原本的 UNVERIFIED）：
+                # 使用者名與碟符都沒變時，恆等就是改寫的正確結果，硬擋會讓這半永遠到不了綠
+                # （不給 --source 擋、給了且全原樣也擋，而 verdict() 沒有給人放行的口）。
+                # 「改寫到底有沒有跑過」由 P2（hook 路徑）那條回答，不歸這裡。
+                verbatim_code = OK
+                out.append(Result(verbatim_code, "P5", "逐條對得上舊機改寫來源",
+                                  f"{len(dirs)} 條與舊機逐字相同 —— **恆等改寫**："
+                                  "使用者名與碟符都沒變時這就是正確結果"))
     return out
 
 
@@ -335,12 +433,17 @@ def _norm_style(name: str) -> str:
     return "".join(c if c.isalnum() else "-" for c in name.strip().lower()).strip("-")
 
 
-def probe_p10(settings: dict) -> list[Result]:
+def probe_p10(settings: dict, src_settings: "dict | None" = None) -> list[Result]:
     """輸出風格帶得過來。
 
     `backup_global_config.py` 把 output-styles 與 CLAUDE.md 當成同一級，
     但接線器與探針原本只收 CLAUDE.md。漏掉的後果是**對話看起來完全正常**、
     風格靜默變回預設 —— 沒有任何一條錯誤訊息會提到它。
+
+    ⚠ **`outputStyle` 這顆鍵不見時的分界 2026-09-03 訂正過**（第 5 輪發現 5）：
+    原本一律當 `SKIP`（「這台不適用」），但「舊機設過、接線器漏帶」與
+    「舊機本來就沒設」在本機這一份裡**長得一模一樣**，而前者正是加 P10 要擋的畫面。
+    「這台不適用」是一個需要舉證的主張，證據只能來自舊機那份（`--source`）。
     """
     import filecmp
     out = []
@@ -371,8 +474,17 @@ def probe_p10(settings: dict) -> list[Result]:
 
     style = settings.get("outputStyle")
     if not style:
-        out.append(Result(SKIP, "P10", "settings 的 outputStyle",
-                          "沒設定值 —— 用平台預設，**這台不適用**，不是沒驗到"))
+        if src_settings is None:
+            out.append(Result(UNVERIFIED, "P10", "settings 的 outputStyle",
+                              "本機沒有這顆鍵，而沒給 --source ⇒ **判不出舊機有沒有設過**。"
+                              "「這台不適用」要拿舊機那份舉證，不能靠本機這一份自己宣告"))
+        elif src_settings.get("outputStyle"):
+            out.append(Result(FAIL, "P10", "settings 的 outputStyle",
+                              f"舊機設的是 {src_settings.get('outputStyle')!r}，本機這顆鍵不見了 —— "
+                              "**該帶沒帶**，風格會靜默退回平台預設"))
+        else:
+            out.append(Result(SKIP, "P10", "settings 的 outputStyle",
+                              "舊機也沒設 —— 用平台預設，**這台真的不適用**"))
     else:
         want = _norm_style(str(style)) + ".md"
         have = [p.name for p in live_dir.glob("*.md")]
@@ -434,6 +546,27 @@ def probe_p11(wired_at: str | None) -> list[Result]:
                           "撞收縮守衛，而程式建議的出口正是規格禁止的 --force"))
     else:
         out.append(Result(OK, "P11", "基準檔不在版控中", "已 gitignore／未追蹤"))
+
+    # ④ **執行期真的讀那裡嗎**（第 5 輪發現 6）
+    #    ①②③ 全是「檔案擺在哪」，票 06 做一半（搬了檔、沒改讀取點）時三條都會綠，
+    #    而工具一跑就撞缺基準——U-2 說那會把「還沒建立基準」偽裝成「什麼都沒變」。
+    #    探針宣稱 P11 代表「基準是本機量的」，就必須驗到還在用的那條路徑。
+    tool = HARNESS_ROOT / "tools" / "skill_watch.py"
+    title4 = "skill-watch 執行期讀 state\\ 那份"
+    if not tool.is_file():
+        out.append(Result(FAIL, "P11", title4, f"找不到 {tool} —— 讀取點驗不到"))
+    else:
+        line = next((ln for ln in tool.read_text(encoding="utf-8").splitlines()
+                     if ln.lstrip().startswith("DEFAULT_BASELINE")), None)
+        if line is None:
+            out.append(Result(FAIL, "P11", title4,
+                              "抽不出 DEFAULT_BASELINE 的定義 —— 判不出來就不給綠"))
+        elif "skill_watch_baselines.json" in line:
+            out.append(Result(OK, "P11", title4, line.strip()))
+        else:
+            out.append(Result(FAIL, "P11", title4,
+                              f"仍指向舊位置：{line.strip()} —— **搬了檔沒改讀取點**，"
+                              "票 06 只做一半，而前三條照樣全綠"))
 
     if not baseline.is_file():
         return out
@@ -511,8 +644,17 @@ def main() -> int:
         print(f"FAIL  live settings 不是合法 JSON：{exc}")
         return 1
 
+    # --source 同時餵 P5（改寫來源）與 P10（舊機到底有沒有設 outputStyle）。
+    # 讀不到就是 None ⇒ P10 走 UNVERIFIED（判不出來），P5 自己會再報一次 FAIL。
+    src_settings = None
+    if args.source is not None:
+        try:
+            src_settings = _load_settings(args.source)
+        except Exception:
+            src_settings = None
+
     results = (probe_p1() + probe_p2(settings) + probe_p5(settings, args.source)
-               + probe_p9() + probe_p10(settings) + probe_p11(args.wired_at))
+               + probe_p9() + probe_p10(settings, src_settings) + probe_p11(args.wired_at))
 
     width = max(len(r.title) for r in results)
     marks = {OK: "[OK]   ", FAIL: "[FAIL] ", SKIP: "[SKIP] ", UNVERIFIED: "[UNVER]"}

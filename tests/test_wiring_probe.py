@@ -28,8 +28,11 @@ r"""接線探針 P1／P2／P5／P9／P10／P11 的回歸網（2026-09-03）。
 
 ## 刻意不涵蓋的
 
-- **真的兩台機器**：`--source` 那半用 tmp 造的假舊機設定測（尾段對應錯位要紅），
-  釘得住「不得只比條數」，但釘不住真實改寫函式的正確性。
+- **真的兩台機器**：`--source` 那半用 tmp 造的假舊機設定測（前綴替換不一致要紅），
+  釘得住「不得只比條數」「不得用固定尾段」，但釘不住真實改寫函式的正確性。
+- **「一致地錯」的改寫**：整組都映到同一個不是本機、卻真的存在的帳號時，
+  從兩份設定回推出來的規則會完美自洽 ⇒ **這支測不到，探針也擋不掉**。
+  要擋它得由接線器留下它實際用的對照表（計畫書 W10 第二則增訂，尚未實作）。
 - **`verdict()` 之外的結束條件**：主程式印什麼字沒釘，只釘 exit code。
 - **P1 在真實 ~\.claude 上的行為**：測試在 tmp 底下建真 junction（`mklink /J`），
   但指向的是 tmp 目錄；打到真 live 的行為已在本機實跑驗過（見計畫書的實跑節）。
@@ -223,6 +226,78 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
              by.get("逐條對得上舊機改寫來源") == FAIL,
              "改寫對錯機時條數照樣一致，只比 len 會全綠；得到 %r" % by)
 
+    # ── 7d〜7g. P5 的判準從「固定尾段 3 段」改成「一組前綴替換」
+    #     （第 5 輪發現 4）。固定段數讓「前綴」由**路徑長度**決定而不是語意決定，
+    #     兩頭都會錯：長路徑漏抓（使用者名落在最後 3 段之外）、短路徑誤殺
+    #     （碟符本身就在比對範圍裡）。下面四條把兩頭都釘住。
+    def _p5_src(tmp: Path, src_dirs, live_dirs, name="old.json"):
+        src = tmp / name
+        src.write_text(json.dumps({"permissions": {"additionalDirectories": src_dirs}},
+                                  ensure_ascii=False), encoding="utf-8")
+        return M.probe_p5({"permissions": {"additionalDirectories": live_dirs}}, src)
+
+    TITLE5 = "逐條對得上舊機改寫來源"
+    FOREIGN5 = "改寫沒有指到別人的帳號"
+
+    # 7d：短路徑合法改碟符要綠（舊判準會誤殺——碟符就在最後 3 段裡）
+    with tempfile.TemporaryDirectory() as td:
+        res = _p5_src(Path(td),
+                      [r"D:\Patrick-AI\.ai-harness", r"D:\Patrick-AI\IT-department\.aimemory"],
+                      [r"E:\Patrick-AI\.ai-harness", r"E:\Patrick-AI\IT-department\.aimemory"])
+        by = {r.title: r.code for r in res}
+        case("P5 短路徑合法改碟符要綠（不得因為只有 3 段就誤殺）",
+             by.get(TITLE5) == OK,
+             "`D:\\X\\Y` 只有 3 段，固定尾段會把碟符一起比進去；得到 %r" % by.get(TITLE5))
+
+    # 7e：長路徑的使用者名換掉、別條沒換 —— 前綴替換不一致要紅
+    with tempfile.TemporaryDirectory() as td:
+        res = _p5_src(Path(td),
+                      [r"C:\Users\<USER>\.claude\projects\p\memory",
+                       r"C:\Users\<USER>\AppData\Roaming\Microsoft\Windows"
+                       r"\Start Menu\Programs\Startup"],
+                      [r"C:\Users\<USER>\.claude\projects\p\memory",
+                       r"C:\Users\alice\AppData\Roaming\Microsoft\Windows"
+                       r"\Start Menu\Programs\Startup"])
+        by = {r.title: r.code for r in res}
+        case("P5 長路徑換掉使用者名、別條沒換要紅（前綴替換不一致）",
+             by.get(TITLE5) == FAIL,
+             "那條的最後 3 段是 `start menu\\programs\\startup`，每個帳號都一樣 ⇒ "
+             "固定尾段會判成吻合，而那個資料夾每台 Windows 都有且非空；得到 %r" % by.get(TITLE5))
+
+    # 7f：整組一致地映到別人的帳號 —— 前綴替換是一致的，只有家目錄語意攔得住
+    with tempfile.TemporaryDirectory() as td:
+        other = "zz-not-this-machine-user"
+        home_root = Path.home().parent
+        res = M.probe_p5({"permissions": {"additionalDirectories": [
+            str(home_root / other / ".claude" / "projects" / "p" / "memory")]}}, None)
+        by = {r.title: r.code for r in res}
+        case("P5 改寫指到別人的帳號要紅（不必給 --source）",
+             by.get(FOREIGN5) == FAIL,
+             "別人的家目錄在多帳號機器上真的存在、也真的非空 ⇒ "
+             "「存在且非空」與「尾段吻合」兩把尺都攔不住；得到 %r" % by.get(FOREIGN5))
+        res_ok = M.probe_p5({"permissions": {"additionalDirectories": [
+            str(Path.home() / ".claude")]}}, None)
+        by_ok = {r.title: r.code for r in res_ok}
+        case("P5 指到本機自己的家目錄要綠",
+             by_ok.get(FOREIGN5) == OK, "得到 %r" % by_ok.get(FOREIGN5))
+
+    # 7g：同名使用者、碟符也沒變 ⇒ 全條逐字相同就是**正確結果**，不得擋住結束條件
+    #     （第 5 輪發現 3：原本這裡丟 UNVERIFIED，而 UNVERIFIED 擋「裝好了」，
+    #      於是這半永遠到不了綠——不給 --source 擋、給了且全原樣也擋。）
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        same = [str(tmp / "a"), str(tmp / "b")]
+        for n in ("a", "b"):
+            (tmp / n).mkdir()
+            (tmp / n / "x.md").write_text("x", encoding="utf-8")
+        res = _p5_src(tmp, same, same)
+        by = {r.title: r.code for r in res}
+        case("P5 全條逐字相同要綠（恆等改寫，不是「沒驗到」）",
+             by.get(TITLE5) == OK, "得到 %r" % by.get(TITLE5))
+        case("P5 恆等改寫不得留下 UNVERIFIED 擋住結束條件",
+             all(r.code != UNVER for r in res) and _exit_for(M, codes(res)) == 0,
+             "同名使用者的正確結果被擋 ⇒ 這半永遠到不了綠；得到 %r" % codes(res))
+
     # ── 7c. P9 要驗 post-commit 有沒有裝（第 4 輪發現 2）──────────
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -307,6 +382,40 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
              bool(res) and all(r.code == FAIL for r in res),
              "沒帶過去＝風格靜默退回預設，不得當成「這台不用風格」；得到 %r" % codes(res))
 
+    # ── 10b. P10：`outputStyle` 這顆鍵不見時的分界（第 5 輪發現 5）──
+    #     原本一律 SKIP（「這台不適用」、不擋）。但「舊機設過、接線器漏帶」與
+    #     「舊機本來就沒設」在本機這一份裡長得一模一樣，而前者正是加 P10 要擋的畫面。
+    #     ⇒ 「不適用」是需要舉證的主張，證據只能來自舊機那份。
+    def _p10_world(settings, src_settings=None):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            repo = tmp / "harness" / "global" / "output-styles"
+            repo.mkdir(parents=True)
+            (repo / "a.md").write_text("AAA", encoding="utf-8")
+            live = tmp / "live" / "output-styles"
+            live.mkdir(parents=True)
+            (live / "a.md").write_text("AAA", encoding="utf-8")
+            old_live, old_root = M.LIVE_DIR, M.HARNESS_ROOT
+            try:
+                M.LIVE_DIR, M.HARNESS_ROOT = tmp / "live", tmp / "harness"
+                return {r.title: r.code for r in M.probe_p10(settings, src_settings)}
+            finally:
+                M.LIVE_DIR, M.HARNESS_ROOT = old_live, old_root
+
+    T10 = "settings 的 outputStyle"
+    got = _p10_world({}, {"outputStyle": "PM-Challenger"})
+    case("P10 舊機設過、本機沒有這顆鍵要紅（該帶沒帶，不是這台不適用）",
+         got.get(T10) == FAIL,
+         "SKIP 不擋結束條件 ⇒ 風格靜默退回預設而探針說裝好了；得到 %r" % got.get(T10))
+    got = _p10_world({}, None)
+    case("P10 沒給 --source 又沒有這顆鍵要 UNVERIFIED（不是 SKIP）",
+         got.get(T10) == UNVER,
+         "判不出舊機有沒有設過就不得宣告「這台不適用」；得到 %r" % got.get(T10))
+    got = _p10_world({}, {})
+    case("P10 舊機也沒設才是 SKIP",
+         got.get(T10) == SKIP,
+         "有舉證的「不適用」才是 SKIP；得到 %r" % got.get(T10))
+
     # ── 11. P9：**是** git repo 但沒有 backup remote 要紅 ───────
     #     刻意建真 repo。用「不是 repo 的空目錄」測不到這條 —— git remote 本身
     #     就會失敗而走前一個分支，判準改鬆了仍會紅（變異驗證抓到的假綠）。
@@ -340,12 +449,21 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
     #     原本驗「整個 platform_skills.json 不在版控」是錯的 —— 那個檔同時是
     #     SkillViewer 的顯示清冊，整檔移出版控會讓新機的 SkillViewer 沒資料。
     #     正解（SKILL_WATCH_PLAN 票 06）：基準搬到 state\，清冊留原位。
-    def _p11_world(moved: bool, baseline_tracked: bool = False):
-        """moved=True 代表票 06 已實作（基準在 state\、清冊裡沒有 baselines）。"""
+    def _p11_world(moved: bool, baseline_tracked: bool = False, reader_moved: bool = True):
+        """moved=True 代表票 06 已實作（基準在 state\、清冊裡沒有 baselines）。
+
+        `reader_moved` 是第 5 輪發現 6 補的那一軸：**搬了檔、沒改讀取點**。
+        票 06 做一半時前三條照樣全綠，而工具一跑就撞缺基準。
+        """
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             (tmp / "SkillViewer").mkdir(parents=True)
             (tmp / "state").mkdir(parents=True)
+            (tmp / "tools").mkdir(parents=True)
+            target = ('HARNESS_ROOT / "state" / "skill_watch_baselines.json"' if reader_moved
+                      else 'HARNESS_ROOT / "SkillViewer" / "platform_skills.json"')
+            (tmp / "tools" / "skill_watch.py").write_text(
+                "HARNESS_ROOT = None\nDEFAULT_BASELINE = " + target + "\n", encoding="utf-8")
             entry = {"capturedAt": "2026-09-03T12:00+0800", "names": ["x"]}
             viewer = {"skills": [{"name": "a"}]}
             if not moved:
@@ -397,6 +515,25 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
          ("git init 失敗，這條沒測到" if res is None else
           "進版控就會讓別部門對著我這台的快照比；得到 %r" % by))
 
+    # ── 13b. P11：搬了檔但沒改執行期讀取點要紅（第 5 輪發現 6）────
+    #     票 06 做一半時①②③全綠，而 skill-watch 一跑就撞缺基準 ——
+    #     U-2 說那會把「還沒建立基準」偽裝成「什麼都沒變」。
+    T11R = "skill-watch 執行期讀 state\\ 那份"
+    res = _p11_world(moved=True, reader_moved=False)
+    by = {r.title: r.code for r in res} if res else {}
+    case("P11 搬了檔但執行期還讀舊路徑要紅",
+         bool(res) and by.get(T11R) == FAIL
+         and by.get("基準住在 state\\skill_watch_baselines.json") == OK,
+         # ⚠ 第二個條件是刻意的：要證明「檔案擺對了」那三條**照樣綠**，
+         #    這一條才是唯一擋得住「票 06 做一半」的判準。
+         ("git init 失敗，這條沒測到" if res is None else
+          "檔案位置全綠、讀取點卻還指舊檔；得到 %r" % by))
+    res = _p11_world(moved=True, reader_moved=True)
+    by = {r.title: r.code for r in res} if res else {}
+    case("P11 讀取點也改好了才綠",
+         bool(res) and by.get(T11R) == OK,
+         ("git init 失敗，這條沒測到" if res is None else "得到 %r" % by))
+
     # ── 14. P11：基準比接線時間早要紅（沿用舊機基準）────────────
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -445,6 +582,50 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         finally:
             sys.argv = argv
         case("壞 JSON 要 exit 1", rc == 1, "得到 rc=%r" % rc)
+
+    # ── 17. 計畫書實跑節的**總計與分項表要對得起來**（第 5 輪發現 1）─
+    #     這個形狀在五輪覆核裡發作過六次：改了一處、沒改旁邊那處。
+    #     第 5 輪抓到的是總計寫 `SKIP 0`、分項表同一輪卻標 `SKIP` ——
+    #     **`SKIP` 不擋結束條件、`UNVERIFIED` 擋**，兩個碼的後果相反，
+    #     而過期的碼和真的還沒拆長得一模一樣。
+    #     ⚠ 「唯一真相」宣告擋不住這件事——宣告只是意圖，**對帳才是機制**。
+    import re
+    plan = Path(__file__).resolve().parent.parent / "UNIVERSAL_HARNESS_PLAN.md"
+    codes_re = re.compile(r"(\d+)\s*(UNVERIFIED|FAIL|SKIP|OK)")
+    if not plan.is_file():
+        case("實跑節總計與分項表對得起來", False, "找不到 %s" % plan)
+    else:
+        text = plan.read_text(encoding="utf-8")
+        m = re.search(r"舊機實跑結果：\*\*(.+?)\*\*（共 (\d+) 項", text)
+        if m is None:
+            case("實跑節總計與分項表對得起來", False,
+                 "抽不出「舊機實跑結果」那一行 —— 判不出來就不給綠")
+        else:
+            # 總計行寫「OK 29｜FAIL 4」，分項表寫「12 OK／1 FAIL」——**兩段的碼與數字順序相反**，
+            # 所以刻意用兩支 regex，不硬湊成一支（湊出來的那支會在其中一段悄悄抓空）。
+            total_re = re.compile(r"(UNVERIFIED|FAIL|SKIP|OK)\s*(\d+)")
+            claimed = {c: int(n) for c, n in total_re.findall(m.group(1))}
+            claimed_total = int(m.group(2))
+            # 分項表＝總計行之後、下一個空行分隔的表格列
+            rows = re.findall(r"^\s*\|\s*(P\d+[^|]*?)\|([^|]*)\|",
+                              text[m.end():m.end() + 4000], re.M)
+            tallied = {}
+            for _title, result in rows:
+                for n, c in codes_re.findall(result):
+                    tallied[c] = tallied.get(c, 0) + int(n)
+            same = all(tallied.get(c, 0) == claimed.get(c, 0)
+                       for c in (M.OK, M.FAIL, M.SKIP, M.UNVERIFIED))
+            case("實跑節總計與分項表對得起來",
+                 bool(rows) and same,
+                 "總計 %r vs 分項加總 %r（分項列 %d 條）—— 兩段對同一輪實跑用了不同的碼"
+                 % (claimed, tallied, len(rows)))
+            case("實跑節宣稱的項數等於分項加總",
+                 claimed_total == sum(tallied.values()),
+                 "宣稱 %d 項、分項加總 %d 項" % (claimed_total, sum(tallied.values())))
+            case("實跑節用的碼都是探針真的會產生的四態",
+                 set(claimed) <= {M.OK, M.FAIL, M.SKIP, M.UNVERIFIED}
+                 and set(tallied) <= {M.OK, M.FAIL, M.SKIP, M.UNVERIFIED},
+                 "總計 %r／分項 %r" % (set(claimed), set(tallied)))
 
     return out
 

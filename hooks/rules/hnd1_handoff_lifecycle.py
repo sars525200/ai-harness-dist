@@ -108,6 +108,47 @@ _COMMIT_RE = re.compile(r"commit.{0,24}?`([0-9a-f]{7,40})`")
 _PATH_RE = re.compile(r"`([A-Za-z0-9_.\-]+(?:/[A-Za-z0-9_.\-]+)+\.(?:py|md|json|js|ts|ps1|html|txt|yml|yaml))`")
 
 
+# ⚠ 這幾節天生在講「**還不存在的東西**」：交接檔的「未完成」寫的是**目標路徑**，
+# 不是失效的指路。2026-09-03 轉正後第一筆真正送達的便箋就是這一型 ——
+# `20260903-d1-round5-dispositions.md` 的「未完成／刻意沒做」節寫著「把 baselines
+# 搬到 `state/skill_watch_baselines.json`」，那個檔當然不存在，因為 user 拍板不做。
+# 父目錄 `state/` 存在、鄰居 repo 也沒有同名檔 ⇒ **既有兩道限制都擋不住這一型**，
+# 誤報率當時是 1/1。
+#
+# ⚠ 切的是**引用抽取的輸入**，不是 `_is_closed()` 與 mtime 的輸入 ——
+# 結案字樣若剛好寫在被切的節裡，一起切掉會讓已結案的檔重新冒出來。
+# ⚠ 修法刻意不是放寬正則、也不是改看檔名：票 57 記著精準度三版全栽在放寬上。
+_SKIP_WORDS = ("未完成", "刻意沒做", "沒做的", "等人點頭", "待決", "還沒做")
+_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+# 行內欄位：`- 沒做的：…`。這是 2026-09-03 進度日誌格式的**固定欄位**，
+# 每一份用新格式寫的任務檔都會有一行；不處理等於把誤報做成常態。
+_SKIP_LINE_RE = re.compile(r"^\s*[-*]\s*(沒做的|未完成|還沒做)\s*[:：]")
+
+
+def _strip_pending(text: str) -> str:
+    """把「未完成」那幾節與行內的「沒做的：」切掉，只給引用抽取用。
+
+    節的結束以**同級或更高級的標題**為準；更深的子標題仍在節內
+    （「## 未完成」底下的「### 第 2 項」不該被放回來）。
+    """
+    out, skip_level = [], 0
+    for line in text.splitlines():
+        m = _HEADING_RE.match(line)
+        if m:
+            level = len(m.group(1))
+            if skip_level and level <= skip_level:
+                skip_level = 0
+            if not skip_level and any(w in m.group(2) for w in _SKIP_WORDS):
+                skip_level = level
+                continue
+        if skip_level:
+            continue
+        if _SKIP_LINE_RE.match(line):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
 def _walk_up_for_git(start: str) -> str:
     """從 `start` 往上找第一個帶 `.git` 的目錄；找不到回空字串。
 
@@ -284,10 +325,12 @@ def _scan(directory: str, root: str):
             continue
         if os.path.getmtime(p) < cutoff:
             stale.append(name)
-        for sha in set(_COMMIT_RE.findall(text)):
+        # 引用抽取只看切過的正文；結案判定與 mtime 仍用原文（見 _strip_pending）。
+        scan_text = _strip_pending(text)
+        for sha in set(_COMMIT_RE.findall(scan_text)):
             all_shas.append(sha)
             owner.setdefault(sha, []).append(name)
-        dead_p = _dead_paths(set(_PATH_RE.findall(text)), root)
+        dead_p = _dead_paths(set(_PATH_RE.findall(scan_text)), root)
         if dead_p:
             broken.setdefault(name, []).extend(sorted(dead_p))
 
