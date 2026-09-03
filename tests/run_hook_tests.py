@@ -476,6 +476,7 @@ def main() -> int:
         import test_push_cloud_title
         import test_index_health
         import test_log_error_slim
+        import test_checks_failopen
         for run_fn, label in (
             # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
             # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
@@ -529,6 +530,11 @@ def main() -> int:
             (test_warn_wording.selftest, "WARN 措辭守門自檢"),
             (test_warn_wording.run, "WARN 措辭跨規則守門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
+            # 與上一條同一條紀律的另一半：錨點守的是「變異還測得到東西」，
+            # 這支守的是「檢查腳本缺輸入時的收場」。2026-09-03 的實例是
+            # 新加的子檢查把『判不出來』回成失敗，在沒有 harness 的環境裡
+            # 無條件失敗，把 test_gen_rule_hub 從 21/21 打成 19/21。
+            (test_checks_failopen.run, "檢查腳本缺輸入的收場（不丟 traceback／不劫走宿主）"),
             (test_cursor_payload.run, "Cursor payload 正規化"),
             # 補的是那條沒有 junction 的縫：Claude 的 agents/skills 改 repo 等於改
             # 執行期，Cursor 的角色檔是**人工複製**的實體副本。2026-09-03 實測落後

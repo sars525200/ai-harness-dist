@@ -1,0 +1,11 @@
+{
+  "_why": "棘輪：rulefile/ 底下的模組被別人 import 時，非 main() 的 sys.exit 會把宿主一起帶走。這裡記的是 2026-09-03 的現況，只擋新增、不強迫回頭改。要降數字就改小它；改大要在 commit 訊息裡寫理由。",
+  "_seeded": "2026-09-03",
+  "_evidence": "run_hook_tests.py 本文記著 2026-08-15：check_prose_blocks 因 check_bloat 而 exit 2，清單 22 項只跑到第 1 項，後面 21 項從沒執行也沒有痕跡。",
+  "_note": "if __name__ == \"__main__\": sys.exit(main()) 不計入（被 import 時整段不執行）。首版沒有這個豁免，四支模組被誤判成違規——沒有回頭看就會把四筆假陽性釘成「已知違規」。",
+  "allow": {
+    "check_bloat.py": 10,
+    "check_prose_blocks.py": 4,
+    "find_duplicates.py": 1
+  }
+}

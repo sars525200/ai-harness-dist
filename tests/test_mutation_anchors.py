@@ -38,19 +38,68 @@ def _read(path: str) -> str:
         return fh.read()
 
 
+def _as_str(node: ast.AST) -> "str | None":
+    r"""模組層賦值右側能不能當成字串常數。
+
+    `chr(10)` 也算——`mutate_todos_cat.py` 的 `NL` 就是這樣寫的（大概是為了
+    不在原始碼裡放真的換行）。只認 `ast.Constant` 的版本讀不到它，
+    連帶讓那支的第一個變異從沒被錨點檢查過。
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "chr" and len(node.args) == 1
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, int)):
+        return chr(node.args[0].value)
+    return None
+
+
 def _string_assignments(tree: ast.Module) -> dict:
     out = {}
     for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant) \
-                and isinstance(node.value.value, str):
-            for t in node.targets:
-                if isinstance(t, ast.Name):
-                    out[t.id] = node.value.value
+        if not isinstance(node, ast.Assign):
+            continue
+        text = _as_str(node.value)
+        if text is None:
+            continue
+        for t in node.targets:
+            if isinstance(t, ast.Name):
+                out[t.id] = text
     return out
 
 
-def _anchor_lists(tree: ast.Module) -> "list[tuple[str, list]]":
-    """回傳 [(清單名, [(說明, 錨點字串), ...]), ...]。"""
+def _fold_str(node: ast.AST, consts: dict) -> "str | None":
+    r"""把錨點運算式折成字串；折不出來回 None。
+
+    支援字面值、模組層字串常數（例如 `NL`），以及兩者用 `+` 串起來的形式。
+    `mutate_todos_cat.py` 的第一個變異寫成 `"..." + NL + "..."`，
+    只認 `ast.Constant` 的版本讀不到它——那個變異**從來沒被錨點檢查過**，
+    而畫面上只顯示這支有 2 個錨點，看不出少了第 3 個。
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if isinstance(node, ast.Name):
+        return consts.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left = _fold_str(node.left, consts)
+        right = _fold_str(node.right, consts)
+        return None if left is None or right is None else left + right
+    return None
+
+
+def _anchor_lists(tree: ast.Module, consts: dict) -> "list[tuple[str, list, int]]":
+    """回傳 [(清單名, [(說明, 錨點字串, 該項的被測檔常數名或 None), ...], 讀不出來的項數), ...]。
+
+    兩種形狀：
+      三元組 `(說明, 錨點, 換成什麼)`        —— 全清單共用模組層的 TARGET
+      四元組 `(說明, 檔常數, 錨點, 換成什麼)` —— 這一項自己指定要動哪個檔
+    後者是給「一支變異腳本要改好幾個檔」用的（例如同時植入兩種缺陷形狀）。
+
+    ⚠ 第三個回傳值是**讀不出來的項數**。原本這裡是 `continue` 靜默跳過，
+    於是形狀沒對上的項目**看起來像沒有那一項**——與這支自己要防的
+    「變異等於沒在測」是同一個病。
+    """
     found = []
     for node in tree.body:
         if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.List):
@@ -59,15 +108,26 @@ def _anchor_lists(tree: ast.Module) -> "list[tuple[str, list]]":
         name = next((n for n in names if n in _LIST_NAMES), None)
         if name is None:
             continue
-        items = []
+        items, unreadable = [], 0
         for elt in node.value.elts:
             if not isinstance(elt, ast.Tuple) or len(elt.elts) < 2:
+                unreadable += 1
                 continue
-            label, anchor = elt.elts[0], elt.elts[1]
-            if isinstance(label, ast.Constant) and isinstance(anchor, ast.Constant) \
-                    and isinstance(anchor.value, str):
-                items.append((str(label.value), anchor.value))
-        found.append((name, items))
+            label = elt.elts[0]
+            # 四元組的第二欄是「這一項動哪個檔」的常數名。只有在它是 Name
+            # **且該名字確實是已知的字串常數**時才這樣讀——否則
+            # `("說明", "錨點" + NL, "換成")` 這種三元組會被誤讀成四元組。
+            if (len(elt.elts) >= 4 and isinstance(elt.elts[1], ast.Name)
+                    and elt.elts[1].id in consts):
+                per_target, anchor = elt.elts[1].id, elt.elts[2]
+            else:
+                per_target, anchor = None, elt.elts[1]
+            text = _fold_str(anchor, consts)
+            if isinstance(label, ast.Constant) and text is not None:
+                items.append((str(label.value), text, per_target))
+            else:
+                unreadable += 1
+        found.append((name, items, unreadable))
     return found
 
 
@@ -88,26 +148,38 @@ def run() -> "tuple[int, list[str]]":
             continue
 
         consts = _string_assignments(tree)
-        target = next((consts[n] for n in _TARGET_NAMES if n in consts), None)
-        if target is None:
+        default_target = next((consts[n] for n in _TARGET_NAMES if n in consts), None)
+        lists = _anchor_lists(tree, consts)
+        if not lists or all(not items for _, items, _ in lists):
+            failures.append(f"{base} 取不到任何錨點 —— 清單名要是 {'／'.join(_LIST_NAMES)}")
+            continue
+        # 每一項都自己指定被測檔時，模組層的 TARGET 不是必要的。
+        needs_default = any(t is None for _, items, _ in lists for _, _, t in items)
+        if needs_default and default_target is None:
             failures.append(
                 f"{base} 找不到被測檔常數（{'／'.join(_TARGET_NAMES)}）"
                 " —— 新增變異腳本時請沿用既有命名，否則這層檢查看不到它"
             )
             continue
-        if not os.path.exists(target):
-            failures.append(f"{base} 的被測檔不存在：{target}")
-            continue
 
-        source = _read(target)
-        lists = _anchor_lists(tree)
-        if not lists or all(not items for _, items in lists):
-            failures.append(f"{base} 取不到任何錨點 —— 清單名要是 {'／'.join(_LIST_NAMES)}")
-            continue
-
-        for list_name, items in lists:
-            for label, anchor in items:
-                if anchor in source:
+        for list_name, items, unreadable in lists:
+            if unreadable:
+                failures.append(
+                    f"{base} · {list_name} 有 {unreadable} 項讀不出錨點"
+                    "（形狀不是三元組或四元組）—— 那幾項等於沒在測，而畫面上看不出少了它們"
+                )
+            for label, anchor, per_target in items:
+                target = consts.get(per_target) if per_target else default_target
+                if target is None:
+                    failures.append(
+                        f"{base} · {list_name}「{label}」指名的檔常數 {per_target} "
+                        "不是字面字串 —— ast 讀不到，這個變異等於沒在測"
+                    )
+                    continue
+                if not os.path.exists(target):
+                    failures.append(f"{base} · {list_name}「{label}」的被測檔不存在：{target}")
+                    continue
+                if anchor in _read(target):
                     passed += 1
                 else:
                     failures.append(
