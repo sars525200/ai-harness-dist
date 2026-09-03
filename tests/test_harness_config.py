@@ -571,6 +571,169 @@ def test_u1_debt_does_not_grow() -> None:
         print(f"       ※ 已償還但台帳未更新：{repaid} —— 請更新 _KNOWN_U1_DEBT")
 
 
+# ── F-4 的第二個維度：設定檔（JSON）─────────────────────────────────────────
+# ⚠ **為什麼要有這一段**（2026-09-03·`UNIVERSAL_HARNESS_PLAN` D-1 覆核）：
+# `test_u1_debt_does_not_grow` 掃的是 `HARNESS.rglob("*.py")`。
+# 而換機器時**真正會整批失效的東西不在 `.py` 裡**——它在 `global/settings.json`：
+# 六條 hook 的 `command` 全是絕對路徑、`additionalDirectories` 是這台機器的記憶目錄。
+# 一整個維度在閘門外，而畫面上 F-4 是綠的。**綠燈只證明「.py 沒有新增債」。**
+#
+# ## 為什麼 JSON 可以掃所有字串值，`.py` 不行
+#
+# `.py` 那邊刻意只看「路徑上下文」，因為 docstring 與錯誤訊息範本裡本來就會出現
+# 路徑，掃全檔會**逼人去刪說明**（見 `_hardcoded_path_exprs` 的 (a)/(b) 那段）。
+# 設定檔沒有這個問題：**JSON 裡的每一個字串值都是會被拿去用的值**，沒有說明文字。
+#
+# ## 碟號正則為什麼要另寫一條
+#
+# `.py` 用的 `_DRIVE_RE = [A-Za-z]:[\\/]?` 在路徑上下文裡夠用，但拿來掃所有字串值
+# 會把 `https://` 也算成碟號（`s:` + `/`）。這條要求碟號**前面不是英數、後面一定有分隔符**。
+_JSON_DRIVE_RE = __import__("re").compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
+
+# 設定檔債務台帳。規則與 `_KNOWN_U1_DEBT` 相同：**只准變短**。
+# ⚠ 這是**債務台帳不是可接受清單**——列在這裡不代表它是對的，代表它今天就長這樣。
+# ⚠ 兩條 `PowerShell(... C:\:*)` 是 permissions 的 deny 樣式，不是專案路徑：
+#   它在任何 Windows 機器上都成立，優先度低於底下那些 `D:\Patrick-AI\...`。
+#   **仍然凍進台帳而不是加排除規則**——排除規則會讓判準每遇到一次誤報就退讓一次
+#   （同 `_hardcoded_path_exprs` docstring 的 (a) 那條路）。
+_KNOWN_U1_DEBT_JSON = {
+    "global/settings.json": {
+        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI--ai-harness\memory": 1,
+        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI-IT-department\memory": 1,
+        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI-MIS-install\memory": 1,
+        r"C:\Users\<USER>\.claude\projects\d--IT-department\memory": 1,
+        r"C:\Users\<USER>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup": 1,
+        r"C:\itportal-redirect": 1,
+        r"D:\Patrick-AI\.ai-harness": 1,
+        r"D:\Patrick-AI\.ai-harness\dashboard": 1,
+        r"D:\Patrick-AI\.ai-harness\hooks\rules": 1,
+        r"D:\Patrick-AI\.ai-harness\tests": 1,
+        r"D:\Patrick-AI\IT-department\.aimemory": 1,
+        r"D:\Patrick-AI\MIS-install\codebase-health-dashboard": 1,
+        r"PowerShell(Remove-Item -Recurse -Force C:\:*)": 1,
+        r"PowerShell(rm -Recurse -Force C:\:*)": 1,
+        # 六條 hook command。**這六條就是「換機器整批失效」的本體**：
+        # 路徑不對時 Claude 不會報錯，對話照樣進行，閘門一條都不會跑。
+        r'py -3 "D:\Patrick-AI\.ai-harness\hooks\dispatch.py"': 5,
+        r'py -3 "D:\Patrick-AI\.ai-harness\hooks\session_archive.py"': 1,
+    },
+    # ⚠ 這一筆是**閘門自己抓出來的、不是我事先量到的**：
+    #   上線前用臨時腳本量 `global/settings.json` 得到 20 處，以為那就是全部；
+    #   臨時腳本沒有 `_known_project_names()` 這一路判準，所以看不見它。
+    #   （同一個數字用兩種方法量，第二種才會看見第一種漏掉的東西。）
+    # 性質：`repo` 欄是**豁免的作用域鍵**，值就是專案名——它的用途本來就是
+    #   「這筆只對這個專案成立」，檔案裡的 reason 也逐字寫了。改掉它反而會讓
+    #   豁免擴散到別的部門。**凍結留痕，不催償還。**
+    "eval/contract_allowlist.json": {"IT-department": 1},
+}
+
+
+def _json_strings(node, trail: str = ""):
+    """走訪 JSON，吐出所有 `(位置, 字串值)`。位置只給人看，不進判定。"""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from _json_strings(v, f"{trail}.{k}")
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from _json_strings(v, f"{trail}[{i}]")
+    elif isinstance(node, str):
+        yield trail, node
+
+
+def _hardcoded_path_strings_json(raw: str) -> "tuple[Counter, str]":
+    """回 `(值→次數, 讀法)`。解析失敗時退回掃原文，**不當作沒有債**。
+
+    ⚠ fail-open 的方向要選對：`except: continue` 會讓「檔案壞掉」長得跟
+    「沒有債」一模一樣——這正是本檔一路在防的失效形狀。寧可誤報。
+    """
+    names = _known_project_names()
+
+    def _suspicious(v: str) -> bool:
+        if "你的專案" in v:              # 錯誤訊息裡的示範值，不是會被使用的設定
+            return False
+        return bool(_JSON_DRIVE_RE.search(v)) or "d--" in v or v in names
+
+    try:
+        vals = [v for _, v in _json_strings(json.loads(raw))]
+        how = "JSON"
+    except Exception:                    # noqa: BLE001 —— JSONC（帶註解）等
+        import re as _re
+        vals = [v.replace("\\\\", "\\")
+                for v in _re.findall(r'"((?:[^"\\]|\\.)*)"', raw)]
+        how = "原文退回"
+    return Counter(v for v in vals if _suspicious(v)), how
+
+
+def test_u1_debt_json_does_not_grow() -> None:
+    """設定檔裡的寫死路徑只准變少（F-4 的第二維度·2026-09-03 新增）。
+
+    掃描範圍與 `.py` 那條一致：全 harness 扣掉 `_DEBT_SCAN_SKIP`，
+    再扣掉「gitignore 排除且未進版控」的拋棄物（沿用同一支豁免，且同樣留痕）。
+    """
+    actual: dict = {}
+    for f in sorted(HARNESS.rglob("*.json")):
+        rel_parts = f.relative_to(HARNESS).parts
+        if any(part in _DEBT_SCAN_SKIP for part in rel_parts[:-1]):
+            continue
+        try:
+            hits, _how = _hardcoded_path_strings_json(f.read_text(encoding="utf-8-sig"))
+        except Exception:                # noqa: BLE001 —— 讀不到檔（權限／編碼）
+            continue
+        if hits:
+            actual[f.relative_to(HARNESS).as_posix()] = hits
+
+    new_files = sorted(set(actual) - set(_KNOWN_U1_DEBT_JSON))
+    exempt, why = _exempt_untracked_ignored(new_files)
+    if why:
+        print(f"       ※ 未套用 gitignore 豁免：{why}")
+    skipped = [f for f in new_files if f in exempt]
+    new_files = [f for f in new_files if f not in exempt]
+    if skipped:
+        print(f"       ※ 豁免 {len(skipped)} 支未進版控的拋棄物（gitignore 排除）："
+              f"{'、'.join(skipped)}")
+    check("沒有新設定檔引入 U-1 債（F-4·JSON 維度）", not new_files,
+          f"新增檔案：{ {k: dict(actual[k]) for k in new_files} }")
+
+    grew = {}
+    for k in set(actual) & set(_KNOWN_U1_DEBT_JSON):
+        delta = actual[k] - Counter(_KNOWN_U1_DEBT_JSON[k])
+        if delta:
+            grew[k] = dict(delta)
+    check("既有設定檔沒有新增寫死路徑（逐值＋逐次數）", not grew,
+          f"變多了：{grew}")
+
+    repaid = {}
+    for k, known in _KNOWN_U1_DEBT_JSON.items():
+        delta = Counter(known) - actual.get(k, Counter())
+        if delta:
+            repaid[k] = dict(delta)
+    if repaid:
+        print(f"       ※ 已償還但台帳未更新：{repaid} —— 請更新 _KNOWN_U1_DEBT_JSON")
+
+
+def test_json_detector_itself_works() -> None:
+    """偵測器自證會紅。**新寫的驗證預設它自己有問題——先證明它會紅，再信它的綠。**
+
+    三個正向、兩個負向。負向那兩個是重點：`https://` 曾經被 `.py` 那條碟號正則
+    誤判成碟號（`s:` + `/`），把它固定下來，免得有人「順手統一」兩條正則。
+    """
+    probe = json.dumps({
+        "hooks": [{"command": r'py -3 "D:\Patrick-AI\.ai-harness\hooks\dispatch.py"'}],
+        "dirs": [r"C:\Users\someone\.claude", "d--IT-department"],
+        "url": "https://example.com/a/b",
+        "time": "10:30",
+        "note": "把設定放在 你的專案 底下",
+    })
+    hits, how = _hardcoded_path_strings_json(probe)
+    check("JSON 偵測器抓得到 hook command 的絕對路徑", any("dispatch.py" in v for v in hits))
+    check("JSON 偵測器抓得到碟號目錄", any(v.startswith("C:") for v in hits))
+    check("JSON 偵測器抓得到 d-- 前綴", "d--IT-department" in hits)
+    check("JSON 偵測器不把 https:// 當碟號", not any("example.com" in v for v in hits),
+          f"誤判：{[v for v in hits if 'example.com' in v]}")
+    check("JSON 偵測器不把示範值當違規", not any("你的專案" in v for v in hits))
+    check("JSON 讀法回報正確", how == "JSON", f"how={how}")
+
+
 def test_interface_names_preserved() -> None:
     """三個模組層名稱不可消失 —— 外部有 monkeypatch 依賴它們。
 
@@ -598,7 +761,8 @@ def run() -> "tuple[int, list]":
                test_config_schema_guard, test_missing_field_guard,
                test_nonexistent_current_project_refuses,
                test_init_bootstrap_creates_template, test_config_is_gitignored,
-               test_u1_debt_does_not_grow, test_interface_names_preserved):
+               test_u1_debt_does_not_grow, test_json_detector_itself_works,
+               test_u1_debt_json_does_not_grow, test_interface_names_preserved):
         try:
             fn()
         except Exception as exc:                       # noqa: BLE001
