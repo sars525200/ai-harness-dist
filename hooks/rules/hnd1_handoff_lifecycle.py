@@ -206,10 +206,21 @@ def _signature(files) -> str:
 
 
 def _is_closed(name: str, text: str) -> bool:
-    if _CLOSED_NAME_RE.search(name):
-        return True
+    """**欄位優先於檔名**（user 2026-09-03 裁定）。
+
+    真實語料撞到的雙真相：`merged-20260902-d-drive-p4-done.md` 的檔名說結案、
+    frontmatter 寫著 `status: open`，而首版先看檔名 ⇒ 判成結案。後果是
+    `tools/archive_handoff.py`（共用這個判準）會把一份**自稱還開著**的檔搬走。
+
+    ⚠ 欄位一旦寫了就是**唯一依據**：寫著 `open` 的檔，即使檔名帶 `-done`、
+    即使正文有「已結案」字樣，一律算開著。人手動寫下的欄位是最強的意圖表達，
+    讓檔名或內文字樣去推翻它，等於讓推測蓋過宣告。
+    ⚠ 沒有欄位才回頭看檔名與正文字樣 —— 既有那 4 份沒有欄位可標的檔靠這條活著。
+    """
     m = _STATUS_RE.search(text)
-    if m and m.group(1).lower() in _CLOSED_STATUS:
+    if m:
+        return m.group(1).lower() in _CLOSED_STATUS
+    if _CLOSED_NAME_RE.search(name):
         return True
     return any(w in text for w in _CLOSED_WORDS)
 

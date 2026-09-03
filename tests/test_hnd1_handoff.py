@@ -101,6 +101,14 @@ def run_closed():
          R._is_closed("a.md", "# 交接\n做到一半"), False)
     case("status: open 不算結案", "明確標開著的不能被讀成結案",
          R._is_closed("a.md", "---\nstatus: open\n---\n"), False)
+    # 真實語料撞到的雙真相：檔名說結案、欄位說開著。**欄位贏**——否則歸檔工具
+    # 會把一份自稱還開著的檔搬走（user 2026-09-03 裁定）。
+    case("檔名 -done 但欄位 open ⇒ 還開著", "merged-20260902-d-drive-p4-done.md 的實況",
+         R._is_closed("merged-x-done.md", "---\nstatus: open\n---\n內文"), False)
+    case("欄位 open 蓋過正文的已結案字樣", "人寫下的欄位是最強的意圖，不該被內文字樣推翻",
+         R._is_closed("a.md", "---\nstatus: open\n---\n狀態：已結案"), False)
+    case("沒有欄位時檔名仍算數", "既有 4 份沒欄位可標的檔靠這條活著",
+         R._is_closed("y-done.md", "# 交接\n做到一半"), True)
 
 
 def run_precision():
