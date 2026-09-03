@@ -7,7 +7,7 @@ r"""建對抗式覆核用的隔離沙箱，並把 deny 設定一次寫對。
 Windows 直接 exit 1。真正擋得住的是沙箱內 `.cursor/cli.json` 的 `permissions.deny`
 （官方機制；專案層唯一能設的就是 permissions，所以它只影響這一次審查）。
 
-**但那份設定有三個會讓人靜默寫錯的地方**，這支就是為了它們而存在：
+**但那份設定有四個會讓人寫錯的地方（第 1、4 種是靜默的）**，這支就是為了它們而存在：
 
   1. **路徑必須用反斜線**（Windows）。同題對照實測：`Read(D:/x/**)` 檔案照樣讀得到
      且**不報錯**、`Read(D:\x\**)` 才回 `Permission denied`。而**官方範例寫的正是
@@ -15,6 +15,9 @@ Windows 直接 exit 1。真正擋得住的是沙箱內 `.cursor/cli.json` 的 `p
   2. **`allow` 是 schema 必填**。只寫 `deny` 會整份 config 被拒、`exit 1`。
   3. **JSON 裡反斜線要寫兩個**。單反斜線是非法跳脫，CLI 回
      `Bad escaped character in JSON` 並 `exit 1`。用 `json.dump` 就不會錯。
+  4. **檔案不能接 `\**`**（2026-09-03 踩到）。`Read(D:\x\CLAUDE.md\**)` 被讀成
+     「`CLAUDE.md` 目錄底下的東西」，而它是檔不是目錄 ⇒ **一條都擋不到、不報錯**。
+     檔案要寫成 `Read(D:\x\CLAUDE.md)`。`deny_entry()` 現在自己分辨檔／目錄。
 
 【核心層】不得寫死任何專案路徑：deny 清單從 `os.path.expanduser("~")` 與呼叫端給的
 參數推導，不查對照表。分隔符走 `pathlib`，換到 macOS／Linux 自然得到正斜線。
@@ -69,15 +72,39 @@ _DEFAULT_BASE = _default_base()
 _CONTEXT_MARKERS = ("CLAUDE.md", ".claude", "AGENTS.md", ".cursor")
 
 
+def _looks_like_dir(p: Path) -> bool:
+    r"""這個路徑該不該當成「目錄」來寫 deny 條目。
+
+    存在就直接問檔案系統；**不存在時只剩檔名可判**——有副檔名當檔案、
+    沒有的當目錄。點開頭的名字（`.claude`、`.cursor`）在 `Path.suffix`
+    眼中沒有副檔名，所以會落在「目錄」那邊，正是我們要的。
+
+    ⚠ 這條猜測有已知漏網：不存在、名字又帶點的**目錄**（例如 `D:\x\v1.2`）
+    會被猜成檔案。`build()` 的自我驗證只擋得到「存在且是檔案卻寫成目錄樣式」
+    這一邊，猜反的另一邊擋不到——所以 `--deny` 儘量傳存在的路徑。
+    """
+    if p.exists():
+        return p.is_dir()
+    return p.suffix == ""
+
+
 def deny_entry(path: str | Path) -> str:
-    """把一個路徑轉成 `Read(...)` deny 條目。
+    r"""把一個路徑轉成 `Read(...)` deny 條目。
 
     **用平台原生分隔符**：Windows 上 `matchesPathEntry` 不做斜線正規化，
     比對的是解析後的絕對路徑（反斜線），所以正斜線寫法命中不了。
+
+    **目錄才接 `\**`，檔案要寫完整路徑**（2026-09-03 實際踩到）：
+    早期版本無條件接尾巴，`--deny <某個檔>` 會產出 `Read(...\CLAUDE.md\**)`。
+    CLI 把它讀成「`CLAUDE.md` 這個目錄底下的所有東西」，而它是檔不是目錄
+    ⇒ **一條都擋不到，而且不報錯**。這是第 4 種靜默寫錯法，當時是手動改
+    cli.json 才擋住的。
     """
     p = Path(path).expanduser()
     # 不 resolve()：resolve 會把 junction 解成目標，反而擋不到原路徑。
-    return "Read(%s%s**)" % (str(p), os.sep)
+    if _looks_like_dir(p):
+        return "Read(%s%s**)" % (str(p), os.sep)
+    return "Read(%s)" % str(p)
 
 
 def default_deny(extra: "list[str] | None" = None) -> "list[str]":
@@ -130,6 +157,13 @@ def build(name: str, files: "list[str]", extra_deny: "list[str]",
     if os.sep == "\\":
         for d in back["permissions"]["deny"]:
             assert "/" not in d, "deny 條目含正斜線，Windows 上會靜默失效：%s" % d
+    tail = "%s**)" % os.sep
+    for d in back["permissions"]["deny"]:
+        if d.startswith("Read(") and d.endswith(tail):
+            target = Path(d[len("Read("):-len(tail)])
+            assert not target.is_file(), (
+                "deny 條目把檔案寫成目錄樣式，CLI 會靜默失效（擋不到任何東西）：%s" % d)
+
 
     copied = []
     for f in files:

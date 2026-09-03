@@ -119,6 +119,9 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
    `Read(D:/Patrick-AI/.ai-harness/**)`（**官方範例的寫法**）→ 檔案照樣讀得到、**不報錯**；
    `Read(D:\Patrick-AI\.ai-harness\**)` → 回 `Permission denied`。照抄官方範例會得到一份
    **看起來設好、實際沒擋**的設定 —— 這是最難發現的失敗形狀。
+   ⚠ **`\**` 只給目錄，檔案要寫完整路徑**。`Read(D:\x\CLAUDE.md\**)` 會被讀成
+   「`CLAUDE.md` 目錄底下的東西」，而它是檔不是目錄 ⇒ **一條都擋不到、不報錯**；
+   要寫 `Read(D:\x\CLAUDE.md)`。2026-09-03 實際踩到（第二種靜默失敗形狀）。
    ⚠ JSON 裡反斜線要寫**兩個**（上面範例已是正確寫法）：單反斜線是非法跳脫，
    CLI 會回 `Bad escaped character in JSON` 並 `exit 1`。
    ⚠ `allow` 是**必填**：缺了整份 config 被 schema 拒絕、`exit 1`（訊息會明講）。

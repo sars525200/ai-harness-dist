@@ -7,16 +7,18 @@ r"""建覆核沙箱工具的回歸網（2026-08-27）。
 
 2026-08-27 四組實測推翻了 skill 原本的假設：`--workspace` 只是工作目錄、
 `--trust` 只是跳過確認提示，審查者讀得到整台機器。真正擋得住的是沙箱內
-`.cursor/cli.json` 的 `permissions.deny` —— **但它有三種寫錯法，其中一種是靜默的**：
+`.cursor/cli.json` 的 `permissions.deny` —— **但它有四種寫錯法，其中兩種是靜默的**：
 
 1. **正斜線**（`Read(D:/x/**)`）：檔案照樣讀得到、**exit 0、不報錯**。
    而官方範例寫的正是正斜線。這是本檔最重要的一條。
 2. 缺 `allow`：schema 驗證失敗、exit 1（吵，看得見）。
 3. JSON 裡單反斜線：`Bad escaped character`、exit 1（吵，看得見）。
+4. 檔案路徑後面接 `\**`（`Read(...\CLAUDE.md\**)`）：被當成目錄比對，
+   擋不到任何東西、**exit 0、不報錯**。2026-09-03 實際踩到一次。
 
-第 2、3 種會當場炸，人會發現；**第 1 種不會**，它會產生一份看起來設好、
+第 2、3 種會當場炸，人會發現；**第 1、4 種不會**，它們會產生一份看起來設好、
 實際上什麼都沒擋的設定，而覆核照常跑完、報告照常回來。所以這支測試存在的
-主要理由就是第 1 條。
+主要理由就是第 1、4 條。
 
 ## 這支測試自己怎麼證明有效（變異驗證）
 
@@ -24,6 +26,11 @@ r"""建覆核沙箱工具的回歸網（2026-08-27）。
 `deny 用平台原生分隔符` 與 `build 寫出的 deny 不含正斜線` 兩條必須**同時轉紅**；
 改回來必須同時轉綠。紅的原因要是「值不對」，不是「函式不存在」——
 那種紅證明不了任何事。
+
+把 `_looks_like_dir()` 改成永遠回 `True`（＝舊的無條件接 `\**`），
+`檔案的 deny 條目不接 \**`、`檔案的 deny 條目就是完整路徑`、
+`不存在但有副檔名 → 當檔案`、`--deny 傳檔案 → cli.json 裡那條不以 ** 結尾`
+四條必須同時轉紅（2026-09-03 修這條 bug 時就是先這樣看到紅的）。
 
 ## 刻意不涵蓋的
 
@@ -61,6 +68,35 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
     case("deny 條目是 Read(...) 形狀",
          entry.startswith("Read(") and entry.endswith("**)"),
          "得到 %r" % entry)
+    # ── 1b. 檔案 vs 目錄：接上 `\**` 是第四種靜默寫錯法 ────────
+    # 2026-09-03 實際踩到：`--deny <某個檔>` 產出 `Read(...\CLAUDE.md\**)`，
+    # CLI 把它讀成「CLAUDE.md 這個目錄底下的所有東西」，而它是檔不是目錄
+    # ⇒ 擋不到任何東西，且不報錯。當時是手動改 cli.json 才擋住的。
+    with tempfile.TemporaryDirectory() as tmp1:
+        real_file = Path(tmp1) / "CLAUDE.md"
+        real_file.write_text("x", encoding="utf-8")
+        real_dir = Path(tmp1) / "somedir"
+        real_dir.mkdir()
+
+        fe = M.deny_entry(real_file)
+        case("檔案的 deny 條目不接 %s**" % os.sep,
+             not fe.endswith("%s**)" % os.sep),
+             "接了尾巴會被讀成目錄比對 ⇒ 什麼都擋不到，得到 %r" % fe)
+        case("檔案的 deny 條目就是完整路徑",
+             fe == "Read(%s)" % real_file,
+             "得到 %r" % fe)
+        case("目錄的 deny 條目仍要接 %s**" % os.sep,
+             M.deny_entry(real_dir) == "Read(%s%s**)" % (real_dir, os.sep),
+             "得到 %r" % M.deny_entry(real_dir))
+
+        # 路徑不存在時只剩檔名可判——兩種猜法各釘一條。
+        gone_file = M.deny_entry(Path(tmp1) / "nope" / "gone.md")
+        case("不存在但有副檔名 → 當檔案",
+             not gone_file.endswith("%s**)" % os.sep), "得到 %r" % gone_file)
+        gone_dir = M.deny_entry(Path(tmp1) / "nope" / ".claude")
+        case("不存在的點名目錄（.claude）→ 當目錄",
+             gone_dir.endswith("%s**)" % os.sep), "得到 %r" % gone_dir)
+
 
     # ── 2. 預設 deny 涵蓋家目錄的 AI 工作資料 ─────────────────
     d = M.default_deny()
@@ -137,6 +173,15 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         case("keep-readable 會從 deny 剔除",
              not any(".cursor" in x for x in deny2),
              "剔除後仍有 .cursor：%r" % deny2)
+        # ── 4b. --deny 傳「檔案」時，寫出去的那條不能有 \** 尾巴 ──
+        with contextlib.redirect_stdout(buf):
+            sb3 = M.build("t3", [], [str(probe)], [], base=base)
+        deny3 = json.load(open(sb3 / ".cursor" / "cli.json", encoding="utf-8"))["permissions"]["deny"]
+        mine = [x for x in deny3 if probe.name in x]
+        case("--deny 傳檔案 → cli.json 裡那條不以 ** 結尾",
+             bool(mine) and not any(x.endswith("%s**)" % os.sep) for x in mine),
+             "檔案卻被寫成目錄樣式 ⇒ 靜默失效：%r" % (deny3,))
+
 
         # ── 5. 父鏈檢查抓得到脈絡檔 ──────────────────────────
         dirty = Path(tmp) / "dirty"
