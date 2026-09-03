@@ -210,6 +210,36 @@ def run_recall(repo, hd):
     case("同一份檔的未完成節仍不報", "同檔混合才證明切的是節、不是整份檔",
          any("planned.json" in r for r in mix), False)
 
+    # 交接檔互相引用是常態；archive_handoff.py 會把結案的檔搬進 archive/ 子目錄，
+    # 搬家不等於死亡。2026-09-03 第一次真的跑 --move（20 份）就炸出這個洞。
+    os.makedirs(os.path.join(hd, "archive"), exist_ok=True)
+    _write(os.path.join(hd, "archive", "old-task.md"),
+           "---\nstatus: done\n---\n已搬進歸檔區的那份。\n")
+    _write(os.path.join(hd, "refers-archived.md"),
+           "# 交接\n前一則交接：`.scratch/handoff/old-task.md`。\n")
+    _s, broken_arch = R._scan(hd, repo)
+    arch_refs = dict((n, refs) for n, refs in broken_arch).get("refers-archived.md", [])
+    case("引用已搬進歸檔區的交接檔不算失效", "搬家不是死亡，archive_handoff.py 天天在做這件事",
+         ".scratch/handoff/old-task.md" in arch_refs, False)
+
+    # **跳過不能過頭（第二輪）**：同名檔只有真的不存在時才報，歸檔區沒有同名檔就該報。
+    _write(os.path.join(hd, "refers-nonexistent.md"),
+           "# 交接\n前一則交接：`.scratch/handoff/never-existed.md`。\n")
+    _s, broken_non = R._scan(hd, repo)
+    non_refs = dict((n, refs) for n, refs in broken_non).get("refers-nonexistent.md", [])
+    case("引用真的不存在、也不在歸檔區的交接檔仍要報", "歸檔豁免不能變成交接檔路徑全部不報",
+         ".scratch/handoff/never-existed.md" in non_refs, True)
+
+    # 豁免範圍不能只看檔名撞名——真正在擋的是「歸檔區之外、同名的路徑」被誤放行
+    _write(os.path.join(hd, "archive", "collide.md"),
+           "---\nstatus: done\n---\n巧合同名。\n")
+    _write(os.path.join(hd, "refers-collide.md"),
+           "# 交接\n改法見 `tools/collide.md`。\n")
+    _s, broken_col = R._scan(hd, repo)
+    col_refs = dict((n, refs) for n, refs in broken_col).get("refers-collide.md", [])
+    case("非 handoff 路徑撞名歸檔區檔案仍要報", "豁免只對 .scratch/handoff/ 底下的路徑生效",
+         "tools/collide.md" in col_refs, True)
+
     # 已標結案的一律不進任何一欄——否則結了案還天天被念，人會把整條關掉
     _write(os.path.join(hd, "closed.md"),
            "---\nstatus: done\n---\n見 `tools/also_deleted.py`。\n")

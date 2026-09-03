@@ -289,8 +289,29 @@ def _dead_commits(shas, root: str) -> "list[str]":
     return sorted(missing)
 
 
+# 交接檔互相引用是常態（「前一則交接：`.scratch/handoff/xxx.md`」）。
+# `tools/archive_handoff.py` 會把標結案的檔搬進這個子目錄，搬家不等於死亡——
+# 2026-09-03 第一次真的跑 --move（20 份）就炸出這個洞：還開著的檔引用另一份
+# 交接檔，那份被搬走後舊路徑當然 os.path.exists 為 False，但檔案好端端在。
+_ARCHIVE_REL = os.path.join(_HANDOFF_REL, "archive")
+
+
+def _archived(rel_os: str, root: str) -> bool:
+    """`rel` 是不是一個交接檔路徑、而且同名檔躺在歸檔區。
+
+    **只對 `.scratch/handoff/` 底下的路徑生效**——不是任意檔名都去歸檔區找，
+    那樣會把「路徑其實已死、剛好跟歸檔區某個檔同名」的情況也放過去。
+    """
+    handoff_prefix = _HANDOFF_REL + os.sep
+    if not rel_os.startswith(handoff_prefix):
+        return False
+    basename = os.path.basename(rel_os)
+    return os.path.exists(os.path.join(root, _ARCHIVE_REL, basename))
+
+
 def _dead_paths(paths, root: str) -> "list[str]":
-    """兩道限制才算失效：**父目錄存在**，而且**鄰居 repo 也沒有這個檔**。
+    """三道限制才算失效：**父目錄存在**、**鄰居 repo 也沒有這個檔**、
+    **也不是被搬進歸檔區的交接檔**。
 
     父目錄不在 ⇒ 那是別的專案的目錄結構，不是壞掉的指路（`SOP_PROD/...`）。
     父目錄在但檔不在，也可能只是同名目錄撞上 —— `tools/` 在好幾個 repo 都有，
@@ -301,6 +322,8 @@ def _dead_paths(paths, root: str) -> "list[str]":
     for rel in paths:
         rel_os = rel.replace("/", os.sep)
         if any(os.path.exists(os.path.join(r, rel_os)) for r in roots):
+            continue
+        if _archived(rel_os, root):
             continue
         parent = os.path.dirname(os.path.join(root, rel_os))
         if parent and os.path.isdir(parent):
