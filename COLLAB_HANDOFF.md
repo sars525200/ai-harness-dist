@@ -182,6 +182,21 @@ Cursor 的探勘／查詢站**用內建 Task `explore`**，同時頂 Claude 這�
 ⇒ **不補檔**。這條不再是「讀的人只能猜」，往後有人重新質疑這個決定，
 先看上面那份交接檔的原始理由，不要憑空重議。
 
+### 5. 內建子代理只有 `explore` 釘得住模型（**2026-09-04 查證，這條是答案不是缺口**）
+
+`~\.cursor\cli-config.json` 的 `subagentModels` **schema 只收 `explore` 一個鍵**——
+不是沒人去設 `shell`／`cursor-guide`，是**設定檔沒有那兩個鍵可以設**。
+
+⇒ 自己量：讀 `~\.cursor\skills-cursor\update-cli-config\SKILL.md` 的 `subagentModels` 那節
+（Cursor 自己出的設定說明），它逐項列出來的只有 `explore`，值域是
+`"default"`／`"inherit"`／`"disabled"` 或 `{modelId, parameters?, maxMode?}`。
+另有 legacy 的 `exploreSubagentModel`，同樣只管 explore。
+
+⇒ 所以「shell／cursor-guide 沒釘到模型」**不要再當待辦追**。真的要改只剩 IDE
+的 Settings → Agents 選單（人手動點，模型碰不到），而且那份選單與這個 JSON
+是不是同一份真相，本機驗不到。**不要憑猜往 `subagentModels` 塞新鍵**——
+塞了不會報錯，只會變成「看起來設好了、實際沒生效」。
+
 ### 已知的死檔與殭屍列
 
 - `~\.cursor\rules\ask-with-choices.mdc`：2026-08-25 實測**不注入**（見「硬限制」第 7 條），
