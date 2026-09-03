@@ -110,6 +110,9 @@ def run_precision():
     sib, sib_sha = _make_repo(base, "neighbour")
     _write(os.path.join(repo, "tools", "real.py"), "x\n")
     _write(os.path.join(sib, "tools", "only_here.py"), "x\n")
+    # ⚠ 這一行是 ⑥⑦ 能不能驗到東西的前提：`_dead_paths` 要求**父目錄存在**，
+    #   沒有 state/ 的話那幾條會被前一道限制擋掉，變異拿掉切節也不會轉紅。
+    _write(os.path.join(repo, "state", "exists.json"), "{}")
     hd = os.path.join(repo, ".scratch", "handoff")
     os.makedirs(hd, exist_ok=True)
 
@@ -129,6 +132,24 @@ def run_precision():
     _write(os.path.join(hd, "otherproj.md"),
            "# 交接\n見 `SOP_PROD/server/app.js`。\n")
 
+    # ⑥ 「未完成」節寫的是**還沒做的事的目標路徑**，不是失效的指路
+    #    （2026-09-03 轉正後第一筆真正送達的便箋就是這一型，誤報率 1/1）
+    _write(os.path.join(hd, "pending.md"), """# 交接
+正文見 `tools/real.py`。
+## 未完成／刻意沒做
+把 baselines 搬到 `state/never_made.json`。
+### 第 2 項
+還有 `state/also_never.json`。
+""")
+    # ⑦ 進度日誌的「沒做的：」是 2026-09-03 起的**固定欄位**，
+    #    每份用新格式寫的任務檔都會有一行 —— 不處理等於把誤報做成常態
+    _write(os.path.join(hd, "worklog.md"), """# 交接
+## 進度日誌
+### [Design] 某任務
+- 做了什麼：改了 `tools/real.py`
+- 沒做的：`state/not_yet.json` 這支還沒建
+""")
+
     stale, broken = R._scan(hd, repo)
     names = sorted(n for n, _ in broken)
     case("裸檔名不報", "首版拿根目錄去 join，把 8 個實際存在的檔判成失效",
@@ -141,6 +162,10 @@ def run_precision():
          "sibcommit.md" in names, False)
     case("別的專案的路徑不報", "父目錄都不在＝那不是這個 repo 在講的位置",
          "otherproj.md" in names, False)
+    case("未完成節裡的目標路徑不報", "那是還沒做的事的目標，父目錄存在＋鄰居也沒有，兩道既有限制都擋不住",
+         "pending.md" in names, False)
+    case("進度日誌的『沒做的：』不報", "新格式每份檔都有這一行，不處理就是把誤報做成常態",
+         "worklog.md" in names, False)
     case("誤報總數為零", "真實語料上量到的就是這個數；非零代表某道限制被拿掉了",
          len(broken), 0)
     return base, repo, hd, sha
@@ -161,6 +186,21 @@ def run_recall(repo, hd):
          "tools/deleted_thing.py" in sum(hit.values(), []), True)
     case("真的不存在的 commit 要報得出來", "所有 repo 都說 missing 才算死",
          any("deadbee" in r for r in sum(hit.values(), [])), True)
+
+    # **跳過不能過頭**：同一份檔裡，正文的失效引用要報、未完成節的目標路徑不報。
+    # 少了這一條，「切節」與「整條偵測被關掉」在全綠的回歸網上長得一模一樣。
+    _write(os.path.join(hd, "mixed.md"), """# 交接
+## 硬限制
+照 `tools/gone_for_real.py` 做。
+## 未完成
+之後要建 `state/planned.json`。
+""")
+    _s, broken_mix = R._scan(hd, repo)
+    mix = dict((n, refs) for n, refs in broken_mix).get("mixed.md", [])
+    case("切節之後正文的失效引用還要報得出來", "跳太多會把真的壞掉的指路一起藏起來",
+         "tools/gone_for_real.py" in mix, True)
+    case("同一份檔的未完成節仍不報", "同檔混合才證明切的是節、不是整份檔",
+         any("planned.json" in r for r in mix), False)
 
     # 已標結案的一律不進任何一欄——否則結了案還天天被念，人會把整條關掉
     _write(os.path.join(hd, "closed.md"),
