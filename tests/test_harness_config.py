@@ -598,11 +598,17 @@ _JSON_DRIVE_RE = __import__("re").compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
 #   （同 `_hardcoded_path_exprs` docstring 的 (a) 那條路）。
 _KNOWN_U1_DEBT_JSON = {
     "global/settings.json": {
-        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI--ai-harness\memory": 1,
-        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI-IT-department\memory": 1,
-        r"C:\Users\<USER>\.claude\projects\D--Patrick-AI-MIS-install\memory": 1,
-        r"C:\Users\<USER>\.claude\projects\d--IT-department\memory": 1,
-        r"C:\Users\<USER>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup": 1,
+        # 2026-09-04 償還：上面五條 `C:\Users\<帳號>\...` 改成 `~/...`（正斜線）。
+        # 實測（5 輪 headless，每輪帶對照組）：`~/x` 與 `~/x with space` 會展開；
+        # `$HOME`／`${HOME}`／`%USERPROFILE%` **都不展開**；而 `~\x`（反斜線）不但
+        # 不展開，還會讓**整個 additionalDirectories 陣列全部失效且不報錯**
+        # —— 所以這裡改的時候只准用正斜線，加一條反斜線就是全滅。
+        # ⚠ 只償還了「使用者名」那一層。剩下這一條仍綁專案名，換機器照樣失效；
+        #   而它是**判準唯一看得見的一條**（`_known_project_names()` 只認
+        #   `d--<leaf>` 這種目錄名寫法，`D--Patrick-AI-IT-department` 那三條比對不到）
+        #   ⇒ 台帳從 5 條縮到 1 條，但真實債務是 4 條看不見 + 1 條看得見。
+        #   徹底解法是整個 additionalDirectories 由 bootstrap 從設定產生，另開票。
+        r"~/.claude/projects/d--IT-department/memory": 1,
         r"C:\itportal-redirect": 1,
         r"D:\Patrick-AI\.ai-harness": 1,
         r"D:\Patrick-AI\.ai-harness\dashboard": 1,

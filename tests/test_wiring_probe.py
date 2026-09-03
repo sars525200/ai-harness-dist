@@ -252,10 +252,10 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
     # 7e：長路徑的使用者名換掉、別條沒換 —— 前綴替換不一致要紅
     with tempfile.TemporaryDirectory() as td:
         res = _p5_src(Path(td),
-                      [r"C:\Users\<USER>\.claude\projects\p\memory",
-                       r"C:\Users\<USER>\AppData\Roaming\Microsoft\Windows"
+                      [r"C:\Users\testuser\.claude\projects\p\memory",
+                       r"C:\Users\testuser\AppData\Roaming\Microsoft\Windows"
                        r"\Start Menu\Programs\Startup"],
-                      [r"C:\Users\<USER>\.claude\projects\p\memory",
+                      [r"C:\Users\testuser\.claude\projects\p\memory",
                        r"C:\Users\alice\AppData\Roaming\Microsoft\Windows"
                        r"\Start Menu\Programs\Startup"])
         by = {r.title: r.code for r in res}
