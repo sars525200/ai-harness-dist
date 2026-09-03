@@ -586,6 +586,7 @@ def main() -> int:
             # import 進來會把後面每一支讀那兩個變數的測試指到已刪的暫存夾。
             ("封存與 /clear 後改名（sweep／閒置名／reason 閘門）", "test_session_archive.py"),
             ("HND-1 交接檔生命週期（誤報率／正對照／歸檔工具）", "test_hnd1_handoff.py"),
+            ("交接檔合併提議（過度合併／不刪不覆蓋）", "test_merge_handoff.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)
