@@ -144,6 +144,19 @@ _DROPPED: list = []
 # 「沒列的檔案看板當它不存在」是刻意的設計；「列了卻拼錯」不該也一樣安靜。
 _EMPTY_GLOBS: list = []
 
+# 登記簿的**結構**壞掉（2026-09-03 實踩，一次踩到三種）。三種都不會報錯，
+# 而且畫面上跟「這一列不存在」長得一模一樣：
+#   ①表格中間出現一行不以管線開頭的字 ⇒ 下面 `in_tbl = False` 當場關掉整張表，
+#     **它後面的列全部無聲消失**。實際成因是某列裡的 Windows 路徑含 CR，
+#     被某支用預設 newline 的腳本翻成換行，把整列從中間切開。
+#   ②一列的欄數與表頭不符（敘述裡有裸管線）⇒ 分類／優先用**欄位位置**取，
+#     取到的是敘述片段。值域刻意不做白名單 ⇒ 看板上顯示一段怪字，不會報錯。
+#   ③優先欄有值、卻不在 `_PRIO_WORDS` 裡（例如寫成粗體加括號）⇒ 完全比對查不到，
+#     **靜靜落回推導**，而「（推導）」的意思是「沒人真的排過」⇒ 填了跟沒填一樣。
+# 一律**不改解析判準**，只記一筆給 `--check` 與正式產出印，比照 `_DROPPED`。
+_MALFORMED: list = []
+
+
 # 近似狀態格：長得像人想標「待辦」但不在白名單裡的寫法。
 # 只用來**報告**，不放行——放行等於白名單形同虛設。
 _NEAR_MISS_EMOJI = re.compile(r"^(⬜|☐|▢|🔲|🔳|◻|□|◽|▫)")
@@ -286,6 +299,45 @@ def _print_missing_cat(rows: list) -> None:
     print("  值域見 TODOS.md 檔頭那張表；欄位順序不限，用表頭找。")
 
 
+
+def _note_severed(text: str, lineno: int, ln: str, src: str) -> None:
+    """表格中間出現非表格行 ⇒ 它後面的列全部被吃掉。只有真的吃到東西才點名。
+
+    表的**正常**結尾也是一行非表格行，所以不能一律當異常 —— 判準是
+    「同一段裡，這一行之後還有沒有表格列」。有的話那些列一筆都撈不到，
+    而且畫面上跟「這一列不存在」長得一模一樣。
+    """
+    rest = text.splitlines()[lineno:]
+    eaten = 0
+    for nxt in rest:
+        if nxt.startswith("#"):
+            break                      # 換節了，後面本來就不屬於這張表
+        if nxt.startswith("|") and not nxt.startswith("|---"):
+            eaten += 1
+    if not eaten:
+        return
+    _MALFORMED.append({
+        "src": src, "line": lineno, "kind": "整張表被截斷",
+        "reason": ("表格中間出現一行不以管線開頭的字 ⇒ 解析在這裡關掉整張表，"
+                   "**它後面的 %d 列一筆都撈不到**，而且不會報錯" % eaten),
+        "row": _clip(ln.strip(), 60)})
+
+
+def _print_malformed() -> None:
+    """`--check` 與正式產出都會叫。抽成函式的理由同 `_print_dropped`：
+    空分支印的句子自己就含關鍵字，內嵌在 main() 的話斷言穿不透。"""
+    if not _MALFORMED:
+        print()
+        print("登記簿結構：沒有壞掉的列。")
+        return
+    print()
+    print("⚠ 登記簿結構壞掉（%d 筆）—— 這三種都不會報錯，畫面上跟「不存在」一樣："
+          % len(_MALFORMED))
+    for m in _MALFORMED:
+        print("  ✗ [%s] %s:%d" % (m["kind"], m["src"], m["line"]))
+        print("      %s" % m["reason"])
+        print("      %s" % m["row"])
+
 def _load_layers():
     """借 gen_layers 的專案探索 —— 專案清單只能有一份真相，
     兩份會漂到「下拉列得到、待辦列不到」那種最難查的形狀。"""
@@ -314,6 +366,7 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
     排除靠**章節標題**（`_NOT_TODO_SECTION`），不靠「第幾張表」。
     """
     out, in_tbl, skip_section, prio_idx, cat_idx = [], False, False, None, None
+    head_n = None          # 這張表的表頭欄數；用來比對每一列（見 _MALFORMED ②）
     for lineno, ln in enumerate(text.splitlines(), 1):
         if ln.startswith("#"):
             in_tbl = False
@@ -326,6 +379,7 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
                 # 用表頭找它在第幾欄，而不是規定它一定在第幾欄 ——
                 # 規定位置的話，既有那些沒有這一欄的表全部要一起改。
                 heads = split_row(ln)
+                head_n = len(heads)
                 prio_idx = next((i for i, h in enumerate(heads) if "優先" in h), None)
                 # 「分類」同樣是選配、同樣用表頭找（2026-08-23）。位置不限的理由
                 # 與「優先」相同：規定第幾欄的話，既有那些沒有這欄的表要一起改。
@@ -334,9 +388,19 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
         if ln.startswith("|---") or not ln.strip():
             continue
         if not ln.startswith("|"):
+            # 表**正常**的結尾就是一行非表格行，所以不能一律當異常。
+            # 判準是「它後面還有沒有表格列」——有的話，這一行把它們全吃了。
             in_tbl = False
+            _note_severed(text, lineno, ln, src)
             continue
         cells = split_row(ln)
+        if head_n is not None and len(cells) != head_n:
+            _MALFORMED.append({
+                "src": src, "line": lineno, "kind": "欄數不符",
+                "reason": ("切出 %d 格、表頭是 %d 格 —— 敘述裡有沒轉義的半形管線。"
+                           "分類／優先用欄位位置取 ⇒ 會取到敘述片段，而且不會報錯"
+                           % (len(cells), head_n)),
+                "row": _clip(plain(cells[0]) or ln.strip(), 60)})
         if len(cells) < 4:
             continue
         title = plain(cells[0])
@@ -345,7 +409,19 @@ def parse_table_todos(text: str, src: str, kind: str, scope: str) -> list:
             continue
         prio = None
         if prio_idx is not None and prio_idx < len(cells):
-            prio = _PRIO_WORDS.get(plain(cells[prio_idx]).lower())
+            raw_prio = plain(cells[prio_idx]).strip()
+            prio = _PRIO_WORDS.get(raw_prio.lower())
+            if raw_prio and prio is None:
+                # 分類欄的漏填有人點名（`missing_cat`），優先欄查不到卻沒有 ——
+                # 而它的後果更隱蔽：畫面標「（推導）」＝「沒人排過」，
+                # 但實際上人排過，只是寫法帶了裝飾。
+                _MALFORMED.append({
+                    "src": src, "line": lineno, "kind": "優先查不到",
+                    "reason": ("優先欄寫「%s」，不在值域裡（%s）⇒ 靜靜落回推導。"
+                               "畫面會標「（推導）」＝『沒人真的排過』，"
+                               "跟沒填長得一樣" % (_clip(raw_prio, 30),
+                                                  "／".join(sorted(_PRIO_WORDS)))),
+                    "row": _clip(title, 60)})
         cat = ""
         if cat_idx is not None and cat_idx < len(cells):
             # 值域刻意**不做白名單**：填了沒見過的字就照實顯示，
@@ -978,11 +1054,13 @@ def main() -> None:
         _print_dropped()
         _print_empty_globs()
         _print_missing_cat(missing_cat(buckets))
+        _print_malformed()
         return
 
     # 正式產出也要印：登記了卻拼錯的 glob，在 HTML 上跟「那個檔沒有待辦」長得一樣。
     _print_empty_globs()
     _print_missing_cat(missing_cat(buckets))
+    _print_malformed()
 
     # 拒絕產出空表：空清單跟「正常但沒事要做」在畫面上長得一樣。
     if total == 0:

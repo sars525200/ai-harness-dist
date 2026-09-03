@@ -213,6 +213,78 @@ def run() -> "tuple[int, list]":
           not m.missing_cat({"p": [dict(i, kind="pending") for i in ritems]}),
           "pending 類不該被念")
 
+    # ---- 10. 登記簿結構守門（2026-09-03，一次踩到三種）----
+    # 三種形態的共通點：**不會報錯，畫面上跟「這一列不存在」長得一模一樣**。
+    # 實踩經過：登記六列新待辦、產生器回報總數正常 ⇒ 以為成功；
+    # 實際上那六列一列都沒被解析到，因為表格中間有一行散文把整張表關掉了。
+    # 「總數看起來合理」不能拿來當落地證明 —— 這一節就是那次的紅測。
+    _HEAD = ("## 全域（測試）\n\n"
+             "| 項目 | 現況 | 下一步 | 誰 | 分類 | 優先 |\n"
+             "|---|---|---|---|---|---|\n")
+    _ROW = "| 一般列 | 說明 | 動作 | 我 | 流程 | 中 |\n"
+
+    def _mal(text):
+        """回 (解析到幾列, 被點名的形態)。每次都先清空累積容器。"""
+        m._MALFORMED[:] = []
+        got = m.parse_registry(text, "t.md", "__global__")
+        return len(got), [x["kind"] for x in m._MALFORMED]
+
+    # 對照組要放在最前面：乾淨的輸入必須零點名。少了它，一個「無條件點名」
+    # 的實作也會通過下面三條。
+    n, kinds = _mal(_HEAD + _ROW + _ROW)
+    check("對照組：乾淨的登記簿零點名", n == 2 and not kinds,
+          f"解析 {n} 列、點名 {kinds}")
+
+    # ①表格中間一行散文 ⇒ 解析當場關掉整張表，它後面的列全部無聲消失
+    n, kinds = _mal(_HEAD + _ROW + "這是一行散文\n" + _ROW + _ROW)
+    check("表格中間出現散文要點名「整張表被截斷」",
+          n == 1 and "整張表被截斷" in kinds,
+          f"解析 {n} 列、點名 {kinds}")
+
+    # 表的**正常**結尾也是一行非表格行 ⇒ 不能一律當異常
+    n, kinds = _mal(_HEAD + _ROW + _ROW + "\n## 下一節\n\n正文\n")
+    check("表正常結束時不點名（否則每張表都會被念）",
+          n == 2 and "整張表被截斷" not in kinds,
+          f"解析 {n} 列、點名 {kinds}")
+
+    # ②敘述裡有裸管線 ⇒ 欄數變多，分類／優先用欄位位置取會取到敘述片段
+    n, kinds = _mal(_HEAD + _ROW + "| 壞列 | 說明 | 有 | 裸 | 管線 | 我 | 流程 | 中 |\n")
+    check("欄數與表頭不符要點名", "欄數不符" in kinds, f"點名 {kinds}")
+
+    # 轉義過的管線不算多欄 —— 否則正常寫法會被誤念
+    n, kinds = _mal(_HEAD + "| 轉義列 | 說明含 \\| 管線 | 動作 | 我 | 流程 | 中 |\n")
+    check("轉義過的管線不算多欄", n == 1 and "欄數不符" not in kinds,
+          f"解析 {n} 列、點名 {kinds}")
+
+    # ③優先欄有值卻不在值域 ⇒ 靜靜落回推導，畫面標「（推導）」＝沒人排過
+    n, kinds = _mal(_HEAD + _ROW + "| 裝飾列 | 說明 | 動作 | 我 | 流程 | **高（理由）** |\n")
+    check("優先欄查不到要點名，不要靜靜落回推導",
+          "優先查不到" in kinds, f"點名 {kinds}")
+
+    # 優先欄留白是允許的（那才是「沒填，請推導」）⇒ 不該被念
+    n, kinds = _mal(_HEAD + "| 沒填優先 | 說明 | 動作 | 我 | 流程 |  |\n")
+    check("優先欄留白不點名（留白才是合法的『請推導』）",
+          "優先查不到" not in kinds, f"點名 {kinds}")
+
+    # 變異對照：把點名整條打死，上面三條必須全部跟著紅。
+    # 沒有這一條的話，一個什麼都不點名的實作也會通過「不點名」那幾條。
+    _saved = m._MALFORMED
+    class _Sink(list):
+        def append(self, x):        # noqa: D401
+            pass
+    m._MALFORMED = _Sink()
+    _silent = 0
+    for _t in (_HEAD + _ROW + "散文\n" + _ROW,
+               _HEAD + "| 壞列 | a | b | c | d | e | f | g |\n",
+               _HEAD + "| 裝飾 | a | b | 我 | 流程 | **高（x）** |\n"):
+        m._MALFORMED[:] = []
+        m.parse_registry(_t, "t.md", "__global__")
+        if not list(m._MALFORMED):
+            _silent += 1
+    m._MALFORMED = _saved
+    check("變異：拿掉點名後三種缺陷全部變無聲（證明上面的斷言穿得透）",
+          _silent == 3, f"只有 {_silent}/3 變無聲")
+
     return passed, failed
 
 
