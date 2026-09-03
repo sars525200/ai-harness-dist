@@ -459,6 +459,7 @@ def main() -> int:
         import test_warn_channel
         import test_workflow_compliance
         import test_check_bloat
+        import test_skill_inventory_write_gate
         import test_check_prose_blocks
         import test_pyc_freshness
         import test_harness_config
@@ -484,6 +485,7 @@ def main() -> int:
             (test_pyc_freshness.selftest, "stale pyc 偵測器自檢"),
             (test_pyc_freshness.run, "執行中 bytecode 與原始碼一致"),
             (test_check_bloat.run, "常駐層健檢（check_bloat）"),
+            (test_skill_inventory_write_gate.run, "skill_inventory 預設不寫檔"),
             (test_check_prose_blocks.run, "散文塊偵測（check_prose_blocks）"),
             (test_harness_config.run, "harness 設定去專案化（P-12）"),
             (test_context_health_skill.run, "/context-health 可用性（V-14）"),

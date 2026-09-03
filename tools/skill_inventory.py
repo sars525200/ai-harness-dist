@@ -22,8 +22,15 @@
 所以這欄記的是**檔案宣告的值**，另用 `modes` 記實際觀察到的注入情形。
 
 用法：
-    py -3 skill_inventory.py --dry-run     看會產生什麼，不寫檔
-    py -3 skill_inventory.py               重建並寫回
+    py -3 skill_inventory.py               看會產生什麼，不寫檔（**預設，2026-09-04 改**）
+    py -3 skill_inventory.py --write       重建並寫回
+
+**為什麼把預設從「寫」改成「不寫」**（`TODOS.md`「【需要但沒有】唯讀閘門放行了會寫檔
+的腳本」）：`hooks/agent_readonly_gate.py` 放行的判準是「既有 `.py` ＋不帶已知寫入旗標」，
+這支之前預設就寫檔、不帶任何旗標 ⇒ 唯讀角色跑它一樣會回寫 `platform_skills.json`，
+「唯讀」的宣稱有一個洞。改成預設 dry-run、寫檔要帶 `--write` 之後，唯讀角色不加旗標
+執行就落在安全的那一半——跟 `archive_handoff.py`／`backup_global_config.py` 同一個慣例。
+`--dry-run` 仍收（向後相容，不改變行為）。
 """
 from __future__ import annotations
 
@@ -221,7 +228,10 @@ def build(doc: dict, project: Path) -> list[dict]:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="重建 platform_skills.json 的 skills 陣列")
-    ap.add_argument("--dry-run", action="store_true", help="只印摘要，不寫檔")
+    ap.add_argument("--write", action="store_true",
+                     help="真的寫回。不加就只印摘要（2026-09-04 起這是預設）")
+    ap.add_argument("--dry-run", action="store_true",
+                     help="（相容用，不改變行為——不寫檔現在是預設）")
     args = ap.parse_args(argv)
 
     try:
@@ -274,8 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print("  ⚠ 沒有 interactive 基準——清冊的 modes 欄只反映無頭模式")
 
-        if args.dry_run:
-            print("\n--dry-run：不寫檔。前 5 筆預覽：")
+        if not args.write:
+            print("\n不寫檔（預設；要寫回請加 --write）。前 5 筆預覽：")
             for s in skills[:5]:
                 print(f"  {s['name']:<26} {s['origin']:<9} {s['category']:<8} "
                       f"modes={s['modes']}")
