@@ -178,16 +178,6 @@
         ]
       }
     ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\state\\sessionstart_probe.py\""
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell|Skill|Write|Edit|MultiEdit|NotebookEdit|Agent",
