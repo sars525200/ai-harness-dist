@@ -307,13 +307,20 @@ def _note_severed(text: str, lineno: int, ln: str, src: str) -> None:
     「同一段裡，這一行之後還有沒有表格列」。有的話那些列一筆都撈不到，
     而且畫面上跟「這一列不存在」長得一模一樣。
     """
+    # ⚠ 一個檔可以在同一節裡放**兩張表**，中間隔一段散文（`PENDING_VERIFY.md`
+    #   就是這個形狀）—— 那是合法的，一列都沒少。所以不能看到「後面還有表格列」
+    #   就報。判準是**下一個表格列是不是新的表頭**：是的話這只是表的正常結尾。
+    #   （這個誤報是本條上線當天自己測出來的：先證明它會紅，也要證明它不會亂紅。）
     rest = text.splitlines()[lineno:]
     eaten = 0
     for nxt in rest:
         if nxt.startswith("#"):
             break                      # 換節了，後面本來就不屬於這張表
-        if nxt.startswith("|") and not nxt.startswith("|---"):
-            eaten += 1
+        if not nxt.startswith("|") or nxt.startswith("|---"):
+            continue
+        if re.match(r"^\|\s*項目\s*\|", nxt):
+            break                      # 新的一張表開始 —— 前面那行是正常結尾
+        eaten += 1
     if not eaten:
         return
     _MALFORMED.append({

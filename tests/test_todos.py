@@ -241,6 +241,28 @@ def run() -> "tuple[int, list]":
           n == 1 and "整張表被截斷" in kinds,
           f"解析 {n} 列、點名 {kinds}")
 
+    # 同一節裡放**兩張表**、中間隔一段散文是合法的（PENDING_VERIFY.md 就是這個
+    # 形狀），一列都沒少 ⇒ 不該報。這個誤報是守門上線當天自己測出來的：
+    # 先證明它會紅，也要證明它不會亂紅。判準是「下一個表格列是不是新的表頭」。
+    _TBL = "| 項目 | 現況 | 下一步 | 誰 | 分類 | 優先 |\n|---|---|---|---|---|---|\n"
+    _two = ("## 一節\n\n" + _TBL + _ROW
+            + "\n兩張表之間的說明文字。\n\n" + _TBL + _ROW + _ROW)
+    m._MALFORMED[:] = []
+    _n = len(m.parse_table_todos(_two, "t.md", "pending", "p"))
+    _k = [x["kind"] for x in m._MALFORMED]
+    check("同節兩張表隔散文不點名（那是合法形狀，一列都沒少）",
+          _n == 3 and "整張表被截斷" not in _k, f"解析 {_n} 列、點名 {_k}")
+
+    # 真的被吃掉時仍要報，而且要數對吃掉幾列 —— 少了這條，一個「永遠不報」的
+    # 實作也會通過上面那條。
+    m._MALFORMED[:] = []
+    _n = len(m.parse_table_todos("## 一節\n\n" + _TBL + _ROW + "散文\n" + _ROW + _ROW,
+                                 "t.md", "pending", "p"))
+    _eaten = [x for x in m._MALFORMED if x["kind"] == "整張表被截斷"]
+    check("散文後面接的是裸表格列時仍要報，並數出吃掉幾列",
+          _n == 1 and _eaten and "2 列" in _eaten[0]["reason"],
+          f"解析 {_n} 列、點名 {[x['kind'] for x in m._MALFORMED]}")
+
     # 表的**正常**結尾也是一行非表格行 ⇒ 不能一律當異常
     n, kinds = _mal(_HEAD + _ROW + _ROW + "\n## 下一節\n\n正文\n")
     check("表正常結束時不點名（否則每張表都會被念）",
