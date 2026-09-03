@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-r"""接線探針 P1／P2／P5 的回歸網（2026-09-03）。
+r"""接線探針 P1／P2／P5／P9／P10／P11 的回歸網（2026-09-03）。
 
 【核心層】守的是「探針不會把沒接好讀成接好了」，與被服務的專案無關。
 
@@ -22,6 +22,8 @@ r"""接線探針 P1／P2／P5 的回歸網（2026-09-03）。
 把 `probe_p1()` 的 `os.path.samefile` 換成 `Path.exists`：
 「P1 指到別的目錄要紅」必須轉紅、其餘維持綠。
 把 `probe_p5()` 的空目錄判斷拿掉：「P5 空目錄要紅」必須轉紅。
+把 `probe_p9()` 的 backup remote 檢查拿掉、`probe_p10()` 的 filecmp 換成只看檔案存在、
+`probe_p11()` 的版控檢查拿掉：三條各自對應的 case 必須轉紅。
 紅的原因要是「判定不對」，不是「函式不存在」—— 那種紅證明不了任何事。
 
 ## 刻意不涵蓋的
@@ -177,7 +179,158 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
     # ── 7. SKIP 不得被當成綠（結束條件的語意）──────────────────
     case("SKIP 與 OK 是不同的碼", SKIP != OK, "SKIP=%r OK=%r" % (SKIP, OK))
 
-    # ── 8. 缺 live settings 要拒跑，不得產出空表 ────────────────
+    # ── 8. P10：live 缺一支風格檔要紅（風格會靜默退回預設）─────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        repo = tmp / "harness" / "global" / "output-styles"
+        repo.mkdir(parents=True)
+        (repo / "a.md").write_text("AAA", encoding="utf-8")
+        (repo / "b.md").write_text("BBB", encoding="utf-8")
+        live = tmp / "live"
+        (live / "output-styles").mkdir(parents=True)
+        (live / "output-styles" / "a.md").write_text("AAA-changed", encoding="utf-8")
+        old_live, old_root = M.LIVE_DIR, M.HARNESS_ROOT
+        try:
+            M.LIVE_DIR, M.HARNESS_ROOT = live, tmp / "harness"
+            res = M.probe_p10({"outputStyle": "A"})
+        finally:
+            M.LIVE_DIR, M.HARNESS_ROOT = old_live, old_root
+        by = {r.title: r.code for r in res}
+        case("P10 內容不同要紅（不是只看檔名）", by.get("a.md") == FAIL,
+             "得到 %r" % by.get("a.md"))
+        case("P10 live 少一支要紅", by.get("b.md") == FAIL, "得到 %r" % by.get("b.md"))
+        case("P10 outputStyle 對得到檔就綠（大小寫正規化）",
+             by.get("outputStyle=A") == OK, "得到 %r" % by)
+
+    # ── 9. P10：outputStyle 指向不存在的風格要紅 ────────────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        repo = tmp / "harness" / "global" / "output-styles"
+        repo.mkdir(parents=True)
+        (repo / "a.md").write_text("AAA", encoding="utf-8")
+        live = tmp / "live"
+        (live / "output-styles").mkdir(parents=True)
+        (live / "output-styles" / "a.md").write_text("AAA", encoding="utf-8")
+        old_live, old_root = M.LIVE_DIR, M.HARNESS_ROOT
+        try:
+            M.LIVE_DIR, M.HARNESS_ROOT = live, tmp / "harness"
+            res = M.probe_p10({"outputStyle": "Nope-Style"})
+        finally:
+            M.LIVE_DIR, M.HARNESS_ROOT = old_live, old_root
+        by = {r.title: r.code for r in res}
+        case("P10 outputStyle 指到不存在的風格要紅",
+             by.get("outputStyle=Nope-Style") == FAIL, "得到 %r" % by)
+
+    # ── 10. P10：live 整個沒有 output-styles 要紅（不是 SKIP）───
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "harness" / "global" / "output-styles").mkdir(parents=True)
+        ((tmp / "harness" / "global" / "output-styles") / "a.md").write_text("A", encoding="utf-8")
+        live = tmp / "live"
+        live.mkdir()
+        old_live, old_root = M.LIVE_DIR, M.HARNESS_ROOT
+        try:
+            M.LIVE_DIR, M.HARNESS_ROOT = live, tmp / "harness"
+            res = M.probe_p10({})
+        finally:
+            M.LIVE_DIR, M.HARNESS_ROOT = old_live, old_root
+        case("P10 live 沒有 output-styles 要紅",
+             bool(res) and all(r.code == FAIL for r in res),
+             "沒帶過去＝風格靜默退回預設，不得當成「這台不用風格」；得到 %r" % codes(res))
+
+    # ── 11. P9：**是** git repo 但沒有 backup remote 要紅 ───────
+    #     刻意建真 repo。用「不是 repo 的空目錄」測不到這條 —— git remote 本身
+    #     就會失敗而走前一個分支，判準改鬆了仍會紅（變異驗證抓到的假綠）。
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rc = subprocess.run(["git", "init", "-q", str(tmp)], capture_output=True).returncode
+        old_root = M.HARNESS_ROOT
+        try:
+            M.HARNESS_ROOT = tmp
+            res = M.probe_p9() if rc == 0 else []
+        finally:
+            M.HARNESS_ROOT = old_root
+        no_remote = [r for r in res if "backup remote 存在" in r.title]
+        case("P9 有 repo 但沒 backup remote 要紅",
+             rc == 0 and bool(no_remote) and no_remote[0].code == FAIL,
+             ("git init 失敗，這條沒測到" if rc != 0 else
+              "post-commit 沒有 backup 就 exit 0，這條是唯一的偵測面；得到 %r" % codes(res)))
+        case("P9 沒有 remote 時不再往下驗（不得產生假綠）",
+             rc == 0 and len(res) == 1,
+             "得到 %r" % codes(res))
+
+    # ── 12. P9：有 backup remote 就往下驗 HEAD 與失敗標記 ────────
+    res = M.probe_p9()
+    titles = [r.title for r in res]
+    case("P9 有 remote 時會驗到推送結果與 HEAD",
+         any("最後一次推送成功" in t for t in titles)
+         and any("鏡像 HEAD 與本機相同" in t for t in titles),
+         "只驗 remote 存在不夠——remote 在但推不上去是另一種靜默；得到 %r" % titles)
+
+    # ── 13. P11：基準檔在版控中要紅、不在就綠 ───────────────────
+    #     只斷言「有這條標題」是假綠（變異驗證抓到的）：拿掉版控檢查後
+    #     它走 else 分支，標題一模一樣但結果變 OK。要斷言的是**判定**。
+    def _p11_tracked(add_to_git: bool):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            sv = tmp / "SkillViewer"
+            sv.mkdir(parents=True)
+            f = sv / "platform_skills.json"
+            f.write_text(json.dumps({"baselines": {"headless": {
+                "capturedAt": "2026-09-03T12:00+0800", "names": ["x"]}}},
+                ensure_ascii=False), encoding="utf-8")
+            if subprocess.run(["git", "init", "-q", str(tmp)],
+                              capture_output=True).returncode != 0:
+                return None
+            if add_to_git:
+                subprocess.run(["git", "-C", str(tmp), "add",
+                                "SkillViewer/platform_skills.json"], capture_output=True)
+            old_root = M.HARNESS_ROOT
+            try:
+                M.HARNESS_ROOT = tmp
+                res = M.probe_p11(None)
+            finally:
+                M.HARNESS_ROOT = old_root
+            hits = [r for r in res if "版控" in r.title]
+            return (hits[0].code if hits else None), res
+
+    got = _p11_tracked(True)
+    case("P11 基準檔在版控中要紅",
+         got is not None and got[0] == FAIL,
+         ("git init 失敗，這條沒測到" if got is None else
+          "W9 沒做就必須紅——換機時它會跟著 clone 過去；得到 %r" % (got[0],)))
+    got = _p11_tracked(False)
+    case("P11 基準檔已 gitignore 就綠",
+         got is not None and got[0] == OK,
+         ("git init 失敗，這條沒測到" if got is None else "得到 %r" % (got[0],)))
+    case("P11 沒給 --wired-at 時那半要 SKIP 不是 OK",
+         got is not None and any(r.code == SKIP for r in got[1]),
+         "沒驗到不得當成通過；得到 %r" % (codes(got[1]) if got else None))
+
+    # ── 14. P11：基準比接線時間早要紅（沿用舊機基準）────────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        sv = tmp / "SkillViewer"
+        sv.mkdir(parents=True)
+        (sv / "platform_skills.json").write_text(json.dumps({
+            "baselines": {"headless": {"capturedAt": "2026-08-24T00:09+0800", "names": ["x"]}}
+        }, ensure_ascii=False), encoding="utf-8")
+        old_root = M.HARNESS_ROOT
+        try:
+            M.HARNESS_ROOT = tmp
+            res_old = M.probe_p11("2026-09-03T00:00+0800")
+            res_new = M.probe_p11("2026-08-01T00:00+0800")
+        finally:
+            M.HARNESS_ROOT = old_root
+        stale = [r for r in res_old if "基準晚於接線時間" in r.title]
+        fresh = [r for r in res_new if "基準晚於接線時間" in r.title]
+        case("P11 沿用舊機基準要紅",
+             bool(stale) and stale[0].code == FAIL,
+             "沿用會讓人滿屏看到「平台真的變了」然後加 --force；得到 %r" % codes(stale))
+        case("P11 重量測過要綠",
+             bool(fresh) and fresh[0].code == OK, "得到 %r" % codes(fresh))
+
+    # ── 15. 缺 live settings 要拒跑，不得產出空表 ────────────────
     with tempfile.TemporaryDirectory() as td:
         missing = Path(td) / "nope.json"
         argv = sys.argv
@@ -188,7 +341,7 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
             sys.argv = argv
         case("缺 live settings 要 exit 1（U-2：拒跑不猜）", rc == 1, "得到 rc=%r" % rc)
 
-    # ── 9. 壞掉的 JSON 也要拒跑，不得當成「沒有 hook」───────────
+    # ── 16. 壞掉的 JSON 也要拒跑，不得當成「沒有 hook」──────────
     with tempfile.TemporaryDirectory() as td:
         bad = Path(td) / "bad.json"
         bad.write_text("{ not json", encoding="utf-8")
@@ -209,7 +362,7 @@ def run() -> "tuple[int, list]":
     except Exception as exc:                       # pragma: no cover
         return 0, ["載入 wiring_probe 失敗：%s" % exc]
 
-    for fn in ("probe_p1", "probe_p2", "probe_p5", "main"):
+    for fn in ("probe_p1", "probe_p2", "probe_p5", "probe_p9", "probe_p10", "probe_p11", "main"):
         if not hasattr(M, fn):
             return 0, ["wiring_probe 沒有 %s() —— 這支測試釘的行為還沒有實作點" % fn]
 

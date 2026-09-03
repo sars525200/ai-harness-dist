@@ -202,11 +202,11 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P11 | **skill-watch 基準是本機量的** | 基準檔 `capturedAt` 晚於本次接線時間（＝新機重量測過），**且該檔已不在版控中**（見 W9） | 沿用舊機基準 ⇒ 滿屏「平台真的變了」，然後照訊息加規格禁止的 `--force`，連守衛一起關掉 |
 
    **任一條紅就不准印「裝好了」**；P8 的第三態 `SKIP` 不算紅也不算綠。
-   **第一批探針已實作並實跑**（2026-09-03·`tools/wiring_probe.py`·P1／P2／P5）。
+   **六條探針已實作並實跑**（2026-09-03·`tools/wiring_probe.py`·P1／P2／P5／P9／P10／P11）。
    這是 user 拍板「不要純文件打磨到蓋章」的落地：**三輪覆核打的全是規格文字，
-   第一次真的跑就在這台舊機上紅了一條。**
+   第一次真的跑就在這台舊機上紅了。**
 
-   舊機實跑結果：**OK 20｜FAIL 1｜SKIP 1**（共 22 項）。
+   舊機實跑結果：**OK 26｜FAIL 2｜SKIP 2**（共 30 項）。
 
    | 項 | 結果 | 說明 |
    |---|---|---|
@@ -214,6 +214,15 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P2 六條 hook 的實體檔 | 6 OK | 抽取邏輯全部命中，沒有一條落進「抽不出路徑」的 SKIP |
    | P5 `additionalDirectories` 13 條 | **12 OK／1 FAIL** | ⚠ **第 0 條是 `"\\tmp"`，本機不存在**——live 與 repo `global/settings.json:153` 兩份都有它 |
    | P5 「對得上舊機改寫來源」那半 | SKIP | 需要 `--source` 給舊機那份；舊機上沒有「舊機」可比 ⇒ **明說沒驗，不當通過** |
+   | P9 跨碟備份 | 3 OK | `backup` remote 在、無失敗標記、鏡像 HEAD 與本機相同。⚠ **「實際推一次」刻意不做**——探針要唯讀；改驗**最後一次推的結果**，兩條合起來就是「推得進去」的證據 |
+   | P10 `output-styles` | 3 OK | 兩支風格檔 live 與 repo `filecmp` 相同，`outputStyle=PM-Challenger` 對得到 `pm-challenger.md` |
+   | P11 skill-watch 基準 | **1 FAIL／1 SKIP** | ⚠ **基準檔仍在版控中 ⇒ W9 還沒做**，探針如實紅。「基準晚於接線時間」那半需要 `--wired-at`，沒給 ⇒ SKIP。現有基準：headless `2026-08-24`、interactive `2026-08-22` |
+
+   **回歸網 27 項、五個變異各自轉紅**（`tests/test_wiring_probe.py`，全套 1662/1662）。
+   ⚠ **變異驗證抓到我自己的測試有兩條是假綠**：P9 原本用「不是 git repo 的空目錄」測
+   「沒有 backup remote」——`git remote` 本身就會失敗而走前一個分支，判準拿掉仍會紅；
+   P11 原本只斷言「有這條標題」——拿掉版控檢查後它走 else 分支，標題一樣但結果變 OK。
+   兩條都已重寫成斷言**判定**而不是斷言**有跑到**。
 
    ⚠ **實跑逼出一個規格缺口，本文在此補上**（原本三張表都沒有這一態）：
    **來源本身就有壞條目時怎麼辦。** `\tmp` 不是路徑改寫失敗，是這條設定**本來就壞**。
@@ -291,15 +300,15 @@ fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變
 | ~~HND-1 已在跑但沒註冊~~ | — | ✅ **已註冊為 enforce**（別的 session·commit `e6ded68`），規則鍵現為 19 個 |
 | ~~`global/settings.json` 的探針移除未提交~~ | — | ✅ **已提交**（commit `c62f2ac`） |
 | **接線器本體**（W 側一支都還沒有） | W1–W10 | ⏳ 未動。2026-09-03 user 拍板：**先寫探針實跑，拿真實輸出回頭修規格，再派確認輪**（不要純文件打磨到蓋章） |
-| ~~探針一支都沒有~~ | P1／P2／P5 | ✅ **第一批已實作並實跑**（2026-09-03·`tools/wiring_probe.py`）。舊機 OK 20／FAIL 1／SKIP 1，見定案第 2 點的實跑節 |
-| **探針第二批** | P3／P4／P6／P7／P9／P10／P11 | ⏳ 未動。P8 要等 W6 的三態設計 |
+| ~~探針一支都沒有~~ | P1／P2／P5／P9／P10／P11 | ✅ **六條已實作並實跑**（2026-09-03·`tools/wiring_probe.py`）。舊機 OK 26／FAIL 2／SKIP 2，見定案第 2 點的實跑節。回歸網 27 項、五個變異各自轉紅 |
+| **探針剩下五條** | P3／P4／P6／P7／P8 | ⏳ 未動。P8 要等 W6 的三態設計 |
 | **`additionalDirectories` 的 `\tmp` 殘留條目** | P5 | ⏳ 未動·**等 user 決定**。live 與 repo `global/settings.json:153` 兩份都有，本機不存在 ⇒ P5 實跑的那一條 FAIL。屬個人設定，接線器不得自行刪 |
 | **來源健檢**（帶舊機 live 過來前先列出壞條目） | W10／P5 | ⏳ 未動。**實跑逼出的規格缺口**，已寫進定案；不做的話新機 P5 會永遠紅且指錯方向 |
 | **換機取得來源**（bare 鏡像怎麼搬、新機怎麼重建 `backup` remote） | W5／P9 | ⏳ 未動 |
 | **`additionalDirectories` 的路徑重寫** | W10／P5 | ⏳ 未動 |
-| **skill-watch 基準檔改成各機一份** | W9／P11 | ⏳ 未動。**含一次版控移除**（`SkillViewer/platform_skills.json` → `.gitignore`），user 2026-09-03 拍板 |
+| **skill-watch 基準檔改成各機一份** | W9／P11 | ⏳ 未動，**但已有紅燈**：P11 實跑就是 FAIL（基準檔仍被 git 追蹤）。**含一次版控移除**（`SkillViewer/platform_skills.json` → `.gitignore`），user 2026-09-03 拍板 |
 | **live `CLAUDE.md` 的 restore** | W7／P6 | ⏳ 未動。它沒有 junction，靠 `backup_global_config.py` 管，接線器要接手 |
-| **`output-styles` 的 restore** | W8／P10 | ⏳ 未動（第 3 輪發現 2 補列）。它與 `CLAUDE.md` 在 `backup_global_config.py` 是同一級，之前整項漏在表外 |
+| **`output-styles` 的 restore** | W8／P10 | ⏳ 接線器那半未動；**P10 已實作且本機全綠**（第 3 輪發現 2 補列）。它與 `CLAUDE.md` 在 `backup_global_config.py` 是同一級，之前整項漏在表外 |
 | **Cursor 側改成三態＋pull 後可重跑** | W6／P8 | ⏳ 未動。現有 `check_cursor_agents.py` 不能直接當探針 |
 | B4 的 `STATE_DIR` 字面值 | P4 | ⏳ 未動，**且刻意不做**。拆字面值是另案；P4 先擋住它的失效形狀 |
 | **Cursor User Rules 雲端那份** | — | ⏳ 未動，**且探針碰不到**。貼雲端是人工步驟 ⇒ 只能列進安裝說明，**不准假裝有探針** |

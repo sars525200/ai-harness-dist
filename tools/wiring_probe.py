@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""接線探針（第一批：P1／P2／P5）——【核心層】
+"""接線探針（P1／P2／P5／P9／P10／P11）——【核心層】
 
 換一個部門、換一台機器都成立：它問的是「Claude 這個容器有沒有真的接到這顆 harness」，
 不問任何專案內容。harness 位置由本檔自身推導，不寫死（U-1）。
@@ -8,12 +8,18 @@
 規格單一真相在 `UNIVERSAL_HARNESS_PLAN.md` §4 D-1 定案第 2 點的 W／P 兩表。
 **本檔不重述修法**，只實作判準；判準要改先改那兩張表。
 
-本批只做三條——三條都在「舊機」上就跑得動，先拿真實輸出回頭修規格
+本批六條——都在「舊機」上就跑得動，先拿真實輸出回頭修規格
 （user 2026-09-03 拍板：不要純文件打磨到蓋章）：
 
-  P1  junction 真的指到 harness（samefile，不是「目錄存在」）
-  P2  live 每條 hook command **裡的實體檔**存在（不是整段字串）
-  P5  additionalDirectories 每一條存在且**非空**
+  P1   junction 真的指到 harness（samefile，不是「目錄存在」）
+  P2   live 每條 hook command **裡的實體檔**存在（不是整段字串）
+  P5   additionalDirectories 每一條存在且**非空**
+  P9   跨碟備份真的會發生（backup remote ＋ 最後一次推成功 ＋ 鏡像 HEAD 相同）
+  P10  output-styles 帶得過來，且 outputStyle 指得到真的檔
+  P11  skill-watch 基準是本機量的，且該檔已不在版控中
+
+尚未實作：P3（harness.config）／P4（STATE_DIR 可寫）／P6（CLAUDE.md filecmp）／
+P7（目錄可列且非空）／P8（Cursor 三態）。
 
 三態：OK ／ FAIL ／ SKIP。**結束條件只數 OK**——SKIP 不算綠也不算紅，
 但只要有任何 SKIP，本檔就**不印「全部通過」**，因為那正是
@@ -184,6 +190,174 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
     return out
 
 
+# ---------------------------------------------------------------- P9
+def _git(*args: str) -> "tuple[int, str]":
+    """在 harness repo 裡跑一條唯讀 git。不解碼失敗就報，不吞。"""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(HARNESS_ROOT), *args],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
+    except Exception as exc:
+        return 1, str(exc)
+    return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
+
+
+def probe_p9() -> list[Result]:
+    """跨碟備份真的會發生。
+
+    這是定案第 1 點自己點名的靜默失敗，卻到第 3 輪才進探針：
+    `post-commit` 第一件事就是「沒有叫 backup 的 remote 就 exit 0」——
+    **裝了而沒有 remote＝裝了等於沒裝，連 mirror_sync_failed.txt 都不會產生**。
+
+    「實際推一次」不在探針裡做（探針要唯讀，不製造副作用）。改驗**最後一次推的結果**：
+    失敗標記不在 ＋ 鏡像的 HEAD 與本機相同。兩條合起來就是「推得進去」的證據。
+    """
+    out = []
+
+    rc, remotes = _git("remote")
+    names = [x.strip() for x in remotes.splitlines() if x.strip()] if rc == 0 else []
+    if rc != 0:
+        out.append(Result(FAIL, "P9", "backup remote 存在", f"git remote 失敗：{remotes[:120]}"))
+        return out
+    if "backup" not in names:
+        out.append(Result(FAIL, "P9", "backup remote 存在",
+                          f"沒有叫 backup 的 remote（現有：{names or '無'}）"
+                          " —— post-commit 會直接 exit 0，跨碟備份靜默不發生"))
+        return out
+    rc, url = _git("remote", "get-url", "backup")
+    out.append(Result(OK, "P9", "backup remote 存在", url if rc == 0 else "（取不到 url）"))
+
+    mark = HARNESS_ROOT / "state" / "mirror_sync_failed.txt"
+    if mark.exists():
+        out.append(Result(FAIL, "P9", "最後一次推送成功",
+                          f"失敗標記還在：{mark}（檔案存在＝最後一次推送是失敗的）"))
+    else:
+        out.append(Result(OK, "P9", "最後一次推送成功", "無失敗標記"))
+
+    rc_l, local = _git("rev-parse", "HEAD")
+    rc_r, remote_head = _git("ls-remote", "backup", "HEAD")
+    if rc_l != 0 or rc_r != 0:
+        out.append(Result(FAIL, "P9", "鏡像 HEAD 與本機相同",
+                          f"讀不到（local rc={rc_l}, remote rc={rc_r}）：{remote_head[:120]}"))
+    else:
+        rhead = remote_head.split()[0] if remote_head.split() else ""
+        if rhead == local.strip():
+            out.append(Result(OK, "P9", "鏡像 HEAD 與本機相同", local.strip()[:12]))
+        else:
+            out.append(Result(FAIL, "P9", "鏡像 HEAD 與本機相同",
+                              f"本機 {local.strip()[:12]}、鏡像 {rhead[:12] or '(空)'} —— 分岔或沒推上去"))
+    return out
+
+
+# ---------------------------------------------------------------- P10
+def _norm_style(name: str) -> str:
+    """把 outputStyle 的值正規化成檔名比得動的樣子（`PM-Challenger` → `pm-challenger`）。"""
+    return "".join(c if c.isalnum() else "-" for c in name.strip().lower()).strip("-")
+
+
+def probe_p10(settings: dict) -> list[Result]:
+    """輸出風格帶得過來。
+
+    `backup_global_config.py` 把 output-styles 與 CLAUDE.md 當成同一級，
+    但接線器與探針原本只收 CLAUDE.md。漏掉的後果是**對話看起來完全正常**、
+    風格靜默變回預設 —— 沒有任何一條錯誤訊息會提到它。
+    """
+    import filecmp
+    out = []
+    repo_dir = HARNESS_ROOT / "global" / "output-styles"
+    live_dir = LIVE_DIR / "output-styles"
+
+    if not repo_dir.is_dir():
+        out.append(Result(FAIL, "P10", "repo 側 output-styles", f"不存在：{repo_dir}"))
+        return out
+    if not live_dir.is_dir():
+        out.append(Result(FAIL, "P10", "live 側 output-styles",
+                          f"不存在：{live_dir} —— 風格會靜默退回預設"))
+        return out
+
+    repo_files = sorted(p.name for p in repo_dir.glob("*.md"))
+    if not repo_files:
+        out.append(Result(FAIL, "P10", "repo 側 output-styles", "一支風格檔都沒有"))
+        return out
+
+    for name in repo_files:
+        live_f, repo_f = live_dir / name, repo_dir / name
+        if not live_f.is_file():
+            out.append(Result(FAIL, "P10", name, "live 沒有這一支"))
+        elif not filecmp.cmp(live_f, repo_f, shallow=False):
+            out.append(Result(FAIL, "P10", name, "live 與 repo 內容不同 —— 沒 restore 或有一邊改過沒同步"))
+        else:
+            out.append(Result(OK, "P10", name, "內容相同"))
+
+    style = settings.get("outputStyle")
+    if not style:
+        out.append(Result(SKIP, "P10", "settings 的 outputStyle",
+                          "沒設定值 —— 用平台預設，沒有要比對的東西"))
+    else:
+        want = _norm_style(str(style)) + ".md"
+        have = [p.name for p in live_dir.glob("*.md")]
+        if want in have:
+            out.append(Result(OK, "P10", f"outputStyle={style}", f"對得到 {want}"))
+        else:
+            out.append(Result(FAIL, "P10", f"outputStyle={style}",
+                              f"live 沒有 {want}（有的是 {have}）—— 設定指向一支不存在的風格"))
+    return out
+
+
+# ---------------------------------------------------------------- P11
+def probe_p11(wired_at: str | None) -> list[Result]:
+    """skill-watch 基準是本機量的。
+
+    W9 的版控模型變更（user 2026-09-03 拍板）：基準檔各機一份、**不進版控**。
+    第 2 輪原本寫的「刪掉基準檔重量測」做不到 —— 它在版控裡，刪了 git restore 會回來，
+    重量測後 commit 還會經 backup remote 蓋掉舊機那份。
+    """
+    out = []
+    baseline = HARNESS_ROOT / "SkillViewer" / "platform_skills.json"
+
+    if not baseline.is_file():
+        out.append(Result(FAIL, "P11", "基準檔存在", f"不存在：{baseline}"))
+        return out
+
+    rc, tracked = _git("ls-files", "--error-unmatch", "SkillViewer/platform_skills.json")
+    if rc == 0:
+        out.append(Result(FAIL, "P11", "基準檔不在版控中",
+                          "仍被 git 追蹤 —— W9 的版控模型變更還沒做。"
+                          "換機時它會跟著 clone 過去，而重量測後又會經 backup 蓋掉舊機那份"))
+    else:
+        out.append(Result(OK, "P11", "基準檔不在版控中", "已 gitignore"))
+
+    try:
+        doc = json.loads(baseline.read_text(encoding="utf-8"))
+    except Exception as exc:
+        out.append(Result(FAIL, "P11", "基準檔可解析", f"{exc}"))
+        return out
+
+    baselines = doc.get("baselines") or {}
+    if not baselines:
+        out.append(Result(FAIL, "P11", "基準檔有量測結果", "baselines 是空的"))
+        return out
+
+    if wired_at is None:
+        modes = ", ".join(f"{k}={(v or {}).get('capturedAt')}" for k, v in baselines.items())
+        out.append(Result(SKIP, "P11", "基準晚於本次接線時間",
+                          f"沒給 --wired-at ⇒ **這半沒驗**。現有：{modes}"))
+        return out
+
+    for mode, entry in baselines.items():
+        got = (entry or {}).get("capturedAt") or ""
+        title = f"{mode} 基準晚於接線時間"
+        if not got:
+            out.append(Result(FAIL, "P11", title, "沒有 capturedAt"))
+        elif got >= wired_at:
+            out.append(Result(OK, "P11", title, f"{got} ≥ {wired_at}"))
+        else:
+            out.append(Result(FAIL, "P11", title,
+                              f"{got} < {wired_at} —— 沿用舊機基準，沒有重量測"))
+    return out
+
+
 # ---------------------------------------------------------------- 主程式
 def main() -> int:
     ap = argparse.ArgumentParser(description="接線探針 P1／P2／P5（規格見 UNIVERSAL_HARNESS_PLAN §4 D-1）")
@@ -191,6 +365,8 @@ def main() -> int:
                     help=f"live settings.json（預設 {LIVE_SETTINGS}）")
     ap.add_argument("--source", type=Path, default=None,
                     help="舊機的 live settings.json，用來驗 P5 的「改寫來源」那半")
+    ap.add_argument("--wired-at", default=None, metavar="ISO8601",
+                    help="本次接線的時間，用來驗 P11 的「基準是本機重量測的」那半")
     args = ap.parse_args()
 
     print(f"harness  {HARNESS_ROOT}")
@@ -207,7 +383,8 @@ def main() -> int:
         print(f"FAIL  live settings 不是合法 JSON：{exc}")
         return 1
 
-    results = probe_p1() + probe_p2(settings) + probe_p5(settings, args.source)
+    results = (probe_p1() + probe_p2(settings) + probe_p5(settings, args.source)
+               + probe_p9() + probe_p10(settings) + probe_p11(args.wired_at))
 
     width = max(len(r.title) for r in results)
     for r in results:
@@ -226,7 +403,7 @@ def main() -> int:
     if n_skip:
         print("⚠ 沒有 FAIL，但有 SKIP ⇒ 仍**不准印「裝好了」**：SKIP 是「沒驗到」不是「通過」。")
         return 2
-    print("✔ 這一批（P1／P2／P5）全綠。⚠ 只是三條 —— P3／P4／P6–P11 尚未實作。")
+    print("✔ 這一批（P1／P2／P5／P9／P10／P11）全綠。⚠ 六條 —— P3／P4／P6／P7／P8 尚未實作。")
     return 0
 
 
