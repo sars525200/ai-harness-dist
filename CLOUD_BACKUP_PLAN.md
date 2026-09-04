@@ -248,8 +248,40 @@ commit 進來等於把清單公開列出。**檔案不在就拒跑**，不允許
 - [x] 路徑硬編償還（commit `4967fe5`）
 - [x] 備份工具＋兩層判準＋變異自證（commit `678dd3d`）
 - [x] 清洗＋八項驗證全過（`--check` 實跑）
-- [ ] **`gh auth login`** ← 卡在這裡，只能由人做（不得由模型碰 token）
-- [ ] 建 private repo `ai-harness` 並 `--push`
-- [ ] 驗雲端 tip == 匯出品 tip
-- [ ] 回寫 `TODOS.md` 第 87 列③異地落點
-- [ ] 另開票：bootstrap 產生器（6 條 hook 路徑無設定解，見 §2「仍未解」）
+- [x] `gh auth login`（人做的，2026-09-04 上午）
+- [x] 建 private repo `ai-harness` 並 `--push`（tip `08d06eb2`）
+- [x] 驗雲端 tip == 匯出品 tip（`--push` 自己驗，對不上 exit 3）
+- [x] 回寫 `TODOS.md`「harness 跨機同步」列③異地落點（commit `c1499f7`）
+- [x] **接進 post-commit 自動推**（2026-09-04 晚·commit `41c0439`）：見 §6
+- [ ] 換機能用（bootstrap／plugin）：**不在本計畫書**，走 `UNIVERSAL_HARNESS_PLAN.md` 的接線器那條線；本計畫書 §2「仍未解」的三點原封轉過去
+
+> ⚠ 這一節 2026-09-04 白天到晚上之間曾經過期：交接檔與 TODOS 都寫結案，這裡還停在「卡在 gh 登入」。
+> 雙真相維持了約 12 小時。**做完一步就回寫這裡，不要等收工。**
+
+---
+
+## 6. 自動更新：post-commit → 背景推（2026-09-04 晚）
+
+上午推完之後本機又進了 13 顆，雲端那份沒有任何東西會自動更新——跟本機鏡像靜默分叉六天
+是同一個死法，只是換了地方重演。所以接進 `tools/githooks/post-commit`：
+
+| 環節 | 做法 | 為什麼 |
+|---|---|---|
+| 觸發 | post-commit 呼叫 `tools/cloud_backup_hook.py --spawn`，**立刻回** | 一輪 25 秒起跳（實測 `--check` 23s），前景擋 commit 的 hook 會被人拔掉 |
+| 並發 | `state/cloud_backup.lock`；鎖住時寫 `cloud_backup_pending.txt`，跑完那輪再補一輪 | 連續兩次 commit 不能丟掉第二顆 |
+| HEAD 追平 | 推完比 HEAD，動了就再跑，最多 3 輪 | 清洗是對快照做的，推完那刻本機可能已領先 |
+| 結果 | `state/cloud_backup_last.json`（推了哪顆 head、雲端回報哪顆 tip、ok、時間） | 背景程序的輸出沒人看，**落檔是唯一的可見性** |
+| 失敗 | 另寫 `state/cloud_backup_failed.txt`，成功刪掉 | 跟鏡像的標記檔同一套約定 |
+| 開工可見 | `tools/check_before_start.py` [4] 讀結果檔算「本機領先 N 顆」，再 `ls-remote` 核對雲端 tip 是不是結果檔記的那顆 | 結果檔會說謊（鏡像標記檔 09-02 就說過謊），雲端實查才是真相 |
+| 殘留鎖 | 超過 15 分鐘視為殘留、直接接管 | Windows 上 `os.kill(pid, 0)` 是 TerminateProcess，不能用 pid 探活 |
+
+**驗證**：`tests/test_cloud_backup_hook.py` 31 條，後端換假的；三個變異各自轉紅實跑過
+（拿掉待推標記 → 1 紅；只跑一輪不追 HEAD → 2 紅；成功不刪失敗標記 → 1 紅）。
+
+**已知限制**：
+- `.git/hooks/` 不進版控，換機器要 `cp tools/githooks/post-commit .git/hooks/post-commit`（同鏡像那條）。
+- **2026-09-04 23:03 實際踩到**：另一則對話在同一 repo 做 `git stash`／`pop`，25 秒空窗內裝進 `.git/hooks/` 的
+  hook 被舊版蓋掉，第一次 commit 沒觸發背景推。`wiring_probe.py` P9 的「逐位元相同」判準抓得到這一型，
+  但它不會自動跑。
+- 規則檔只在這台機器的 `.scratch/cloud-export/`，**不在任何備份裡**。這台壞了，從雲端還原的那份無法再跑
+  清洗工具。要不要另存一處（密碼管理器／私人雲端）是 user 的決定，2026-09-04 晚已問、待答。
