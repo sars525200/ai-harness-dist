@@ -283,6 +283,12 @@ def main() -> int:
     # ⚠ 這一行必須在載入 fixture **之前**：規則模組可能在 import 時就讀環境變數。
     os.environ["HARNESS_UNDER_TEST"] = "1"
 
+    # 收尾要比對「現行 harness.config.json 有沒有被跑壞／有沒有留下備份」。
+    # 這一行必須在任何測試載入**之前** —— 晚一步拍到的就是已經被動過的狀態，
+    # 比出來永遠是綠的。事故形狀見 tests/test_config_residue.py 的 docstring。
+    import test_config_residue
+    _cfg_before = test_config_residue.snapshot()
+
     filter_word = sys.argv[1] if len(sys.argv) > 1 else None
     fixtures = load_fixtures(filter_word)
 
@@ -462,6 +468,8 @@ def main() -> int:
         import test_skill_inventory_write_gate
         import test_check_prose_blocks
         import test_pyc_freshness
+        import test_doc_integrity
+        import test_runner_deps
         import test_harness_config
         import test_context_health_skill
         import test_anti_bloat_probe
@@ -483,6 +491,16 @@ def main() -> int:
             # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
             # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
             (test_pyc_freshness.selftest, "stale pyc 偵測器自檢"),
+            (test_config_residue.selftest, "設定檔殘留偵測器自檢"),
+            # 2026-09-04 補接。這支 09-03 就寫好了，但**從來沒接進任何 runner** ——
+            # 全 repo 只有看板的來源雜湊檔知道它存在。正是上面那句
+            # 「獨立腳本沒接進來就等於沒裝」，第三次發生。
+            # 它自己的 run() 已含自檢（先證明五種疤各自會紅），所以只接這一支。
+            (test_doc_integrity.run, "文件完整性（表格沒被切斷／跳脫沒被吃掉）"),
+            # ⚠ 這一條要放在最前面那幾條旁邊，理由同 pyc：**它守的是這整份清單
+            # 能不能在別台機器上跑起來**。本檔 :289 是裸 import，依賴的模組沒進
+            # 版控時新機 clone 下來會死在載入階段，後面每一條的綠燈都不存在。
+            (test_runner_deps.run, "回歸網依賴的測試檔都在版控裡"),
             (test_pyc_freshness.run, "執行中 bytecode 與原始碼一致"),
             (test_check_bloat.run, "常駐層健檢（check_bloat）"),
             (test_skill_inventory_write_gate.run, "skill_inventory 預設不寫檔"),
@@ -620,6 +638,22 @@ def main() -> int:
                 failed.append((label, detail))
                 unit_failed.append(label)
                 print(f"  FAIL  {label}")
+
+    # 收尾：現行設定檔還是不是開跑前那一份，有沒有多出備份。
+    # ⚠ 這一項**故意放在最後且不受 filter 影響**：2026-09-03 事故裡
+    # 「1640/1640 全綠」與「環境被留在範本態 12 小時」是同時成立的，
+    # 因為沒有任何一條測試回頭看過現行 config。
+    _cfg_fails = test_config_residue.check_after(_cfg_before)
+    if _cfg_fails:
+        for detail in _cfg_fails:
+            failed.append(("設定檔收尾比對", detail))
+        unit_failed.extend(_cfg_fails)
+        print(f"  FAIL  設定檔收尾比對（{len(_cfg_fails)} 項）")
+        for detail in _cfg_fails:
+            print(f"        {detail}")
+    else:
+        unit_passed += 1
+        print("  PASS  設定檔收尾比對（現行 config 未被改動、無新增備份）")
 
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
