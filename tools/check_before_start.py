@@ -337,6 +337,87 @@ def _tip_age(repo: Path, sha: str) -> str:
     return txt if rc == 0 else ""
 
 
+def _cloud_remote(repo: Path) -> str:
+    """雲端備份的 URL 從 harness.config.json 讀；讀不到就回空字串＝這台沒設雲端備份。"""
+    cfg = repo / "harness.config.json"
+    if not cfg.is_file():
+        return ""
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return ""
+    v = data.get("cloudBackupRemote")
+    return v if isinstance(v, str) else ""
+
+
+def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
+    """雲端備份新鮮度。回「有沒有落後或失敗」。
+
+    雲端那份是**清洗過的複製品**（`tools/push_cloud_backup.py`），識別碼跟本機完全不同，
+    所以不能像上面那樣直接比 tip。能比的是包裝器留下的結果檔：它記了「推的時候本機
+    HEAD 是哪顆」與「雲端回報的 tip 是哪顆」。這裡做兩件事：
+      1. 本機 HEAD 對結果檔的 head 算落後幾顆（不用網路）
+      2. ls-remote 雲端，確認它的 tip 真的是結果檔記的那顆（有網路才做）——
+         結果檔會說謊（鏡像的標記檔 2026-09-02 就說過謊），雲端實查才是真相。
+    """
+    url = _cloud_remote(repo)
+    if not url:
+        return False
+    out("    ── 雲端備份（清洗複製品，%s）" % url)
+    last = repo / "state" / "cloud_backup_last.json"
+    lock = repo / "state" / "cloud_backup.lock"
+    failed = repo / "state" / "cloud_backup_failed.txt"
+    if lock.exists():
+        out("    [..] 背景推送進行中（%s）" % " ".join(lock.read_text(encoding="utf-8").split()))
+    if not last.exists():
+        out("    [!!] 從未由 post-commit 推過（沒有 state/cloud_backup_last.json）——"
+            "**雲端那份的新鮮度沒有答案**。手動：py -3 tools/push_cloud_backup.py --push")
+        return True
+    try:
+        data = json.loads(last.read_text(encoding="utf-8"))
+    except Exception as e:
+        out("    [!!] 結果檔讀不了（%s）—— 當成沒有答案" % e)
+        return True
+    pushed = str(data.get("head", ""))
+    cloud_tip = str(data.get("cloud_tip", ""))
+    ok = bool(data.get("ok"))
+    at = data.get("at", "?")
+    stale = False
+    if not ok:
+        out("    [!!] 最後一輪 %s **失敗**（exit %s）—— 見 state/cloud_backup_failed.txt"
+            % (at, data.get("exit")))
+        stale = True
+    behind = run(["git", "-C", str(repo), "rev-list", "--count", pushed + "..HEAD"])[1] if pushed else ""
+    if behind == "0":
+        out("    [OK] 本機 HEAD 就是最後推的那顆（%s，%s）" % (pushed[:8], at))
+    elif behind:
+        out("    [!!] 本機領先雲端那份 %s 顆（最後推的是 %s，%s）" % (behind, pushed[:8], at))
+        if not lock.exists():
+            out("         沒有背景推送在跑 —— post-commit 沒接上？手動：py -3 tools/push_cloud_backup.py --push")
+        stale = True
+    else:
+        out("    [!!] 結果檔記的 head %s 本機找不到 —— 結果檔來自別的歷史，不能信" % pushed[:8])
+        stale = True
+    if failed.exists() and ok:
+        out("    [!] state/cloud_backup_failed.txt 還在但結果檔說成功 —— 標記過期，可刪")
+    if skip_net:
+        out("    -- 雲端實查 --no-vm → 跳過（結果檔說 tip 是 %s，未向雲端核對）" % (cloud_tip[:8] or "?"))
+        return stale
+    rc, ls = run(["git", "-C", str(repo), "ls-remote", url, "HEAD"], timeout=SSH_TIMEOUT)
+    if rc != 0:
+        out("    [!] 雲端連不上或讀不到 —— 上面的判定只是本機紀錄，**沒有向雲端核對過**")
+        return True
+    remote_tip = ls.split()[0] if ls.split() else ""
+    if cloud_tip and remote_tip == cloud_tip:
+        out("    [OK] 雲端 tip %s 與結果檔一致（紀錄屬實）" % remote_tip[:8])
+    else:
+        out("    [!!] 雲端 tip %s ≠ 結果檔記的 %s —— **結果檔在說謊或有人另外推過**"
+            % (remote_tip[:8] or "?", cloud_tip[:8] or "?"))
+        stale = True
+    return stale
+
+
+
 def block_mirror(repo: Path, skip_net: bool) -> bool:
     """回「有沒有任何 remote 沒跟上」。只報告，不改變 exit code 的既有契約。"""
     out("[4] 備份鏡像新鮮度")
@@ -406,6 +487,9 @@ def block_mirror(repo: Path, skip_net: bool) -> bool:
         else:
             out("    [!] 現況已同步，但 post-commit 的失敗標記還在 —— **那是手動 push 修好後的殘留**")
             out("        （標記只有下一次 commit 推成功才會自刪）刪掉它：del state\\%s" % mark.name)
+
+    if block_cloud(repo, head, skip_net):
+        stale = True
     return stale
 
 

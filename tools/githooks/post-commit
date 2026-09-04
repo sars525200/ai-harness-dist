@@ -23,6 +23,16 @@ set -u
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 MARK="$ROOT/state/mirror_sync_failed.txt"
 
+# ── 雲端備份（2026-09-04 加）──────────────────────────────────────────────
+# 清洗過的複製品推 GitHub private（tools/push_cloud_backup.py）。一輪 25 秒起跳，
+# 所以**不在前景跑**：包裝器立刻回、背景推、結果落 state/cloud_backup_last.json，
+# 失敗另寫 state/cloud_backup_failed.txt；開工檢查 [4] 會讀。規則檔不在時
+# 推送工具會拒跑，那也算失敗、會留標記 —— 這裡刻意不預先判斷，讓失敗被看見。
+if [ -f "$ROOT/tools/cloud_backup_hook.py" ]; then
+    if command -v py >/dev/null 2>&1; then PY="py -3"; else PY="python3"; fi
+    $PY "$ROOT/tools/cloud_backup_hook.py" --spawn 2>&1 | head -2 >&2 || true
+fi
+
 git remote | grep -qx backup || exit 0
 
 ERR=$(git push -q backup --all 2>&1)
