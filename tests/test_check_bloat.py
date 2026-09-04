@@ -325,7 +325,9 @@ def run() -> "tuple[int, list]":
     live = [n.value for n in ast.walk(tree)
             if isinstance(n, ast.Constant) and isinstance(n.value, str)
             and n.value not in docs]
-    for lit in ("IT-department", "AI-Projects"):
+    # MIS-install 是 AI-Projects 的新名（2026-09-02 改名）。舊名一併留著：
+    # 舊名如果哪天又被寫回程式裡，這條要照樣紅。
+    for lit in ("IT-department", "AI-Projects", "MIS-install"):
         hits = [v[:60] for v in live if lit in v]
         check(f"**執行期字串常數**不含專案字面值：{lit}", not hits, f"出現在：{hits[:3]}")
     check("這條測試本身沒有空跑（確實抽出了字串常數）",

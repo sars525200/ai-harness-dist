@@ -39,6 +39,30 @@ import shutil
 import sys
 from pathlib import Path
 
+# 父鏈上出現這些就代表沙箱位置選錯了。
+_CONTEXT_MARKERS = ("CLAUDE.md", ".claude", "AGENTS.md", ".cursor")
+
+
+def _repo_container(here: "Path | None" = None,
+                    exists=os.path.exists) -> "Path | None":
+    r"""這個 repo 被放在哪個容器目錄底下（沒有容器就回 None）。
+
+    本檔在 `<repo>\tools\` ⇒ `parents[1]` 是 repo 根、`parents[2]` 是裝著它的容器。
+    repo 直接躺在磁碟根層時容器就是 `D:\` 本身，那不算容器，回 None。
+
+    `here` 與 `exists` 只為了測試可注入——正式呼叫兩個都不傳。
+    """
+    here = Path(__file__).resolve() if here is None else Path(here)
+    if len(here.parents) < 3:
+        return None
+    container = here.parents[2]
+    if str(container) == container.anchor:
+        return None
+    if any(exists(str(container / m)) for m in _CONTEXT_MARKERS):
+        return None          # 容器自己就帶脈絡檔 ⇒ 沙箱開在那裡不乾淨
+    return container
+
+
 def _default_base() -> Path:
     r"""沙箱預設落點。三個限制夾出來的答案，換一台機器仍然成立：
 
@@ -52,12 +76,19 @@ def _default_base() -> Path:
     ⚠ 2026-08-27 第一版寫 `Path(sys.executable).anchor`（python 所在磁碟機），
     實跑才發現它給出 `C:\.rev-sandbox` —— 正好踩到第 2 條。**測試用 tmpdir，
     照不到這個預設值**，是實跑一次才抓到的。
+
+    ⚠ 2026-09-02 加上第 4 條：**不要污染磁碟根層**。repo 被收進容器目錄之後，
+    這支還是會在 `D:\` 根層長出 `.rev-sandbox`，讓「根層只剩容器」永遠不成立。
+    有容器就開在容器底下（與 repo 平行），沒有容器才退回磁碟根層。
     """
     env = os.environ.get("REVIEW_SANDBOX_BASE")
     if env:
         return Path(env)
     if os.name != "nt":
         return Path("/tmp/.rev-sandbox")
+    container = _repo_container()
+    if container is not None:
+        return container / ".rev-sandbox"
     sysdrive = (os.environ.get("SystemDrive") or "C:").rstrip("\\").upper()
     for letter in "DEFGHIJKLMNOPQRSTUVWXYZ":
         root = "%s:\\" % letter
@@ -68,8 +99,6 @@ def _default_base() -> Path:
 
 _DEFAULT_BASE = _default_base()
 
-# 父鏈上出現這些就代表沙箱位置選錯了。
-_CONTEXT_MARKERS = ("CLAUDE.md", ".claude", "AGENTS.md", ".cursor")
 
 
 def _looks_like_dir(p: Path) -> bool:
@@ -163,7 +192,6 @@ def build(name: str, files: "list[str]", extra_deny: "list[str]",
             target = Path(d[len("Read("):-len(tail)])
             assert not target.is_file(), (
                 "deny 條目把檔案寫成目錄樣式，CLI 會靜默失效（擋不到任何東西）：%s" % d)
-
 
     copied = []
     for f in files:

@@ -68,6 +68,7 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
     case("deny 條目是 Read(...) 形狀",
          entry.startswith("Read(") and entry.endswith("**)"),
          "得到 %r" % entry)
+
     # ── 1b. 檔案 vs 目錄：接上 `\**` 是第四種靜默寫錯法 ────────
     # 2026-09-03 實際踩到：`--deny <某個檔>` 產出 `Read(...\CLAUDE.md\**)`，
     # CLI 把它讀成「CLAUDE.md 這個目錄底下的所有東西」，而它是檔不是目錄
@@ -97,7 +98,6 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         case("不存在的點名目錄（.claude）→ 當目錄",
              gone_dir.endswith("%s**)" % os.sep), "得到 %r" % gone_dir)
 
-
     # ── 2. 預設 deny 涵蓋家目錄的 AI 工作資料 ─────────────────
     d = M.default_deny()
     case("預設擋 ~/.claude", any(".claude" in x for x in d), repr(d))
@@ -119,6 +119,27 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
              "得到 %s，但機器上有非系統碟 %r" % (base_default, others))
     else:
         case("預設落點避開系統碟根層", True)
+
+    # ── 2c. repo 被收進容器目錄後，沙箱不准再長在磁碟根層 ──────
+    # 2026-09-02：D 槽重整時量到，這支會在非系統碟的根層自動建 `.rev-sandbox`，
+    # 讓「根層只剩容器」永遠不成立。`here`／`exists` 可注入就是為了測這條。
+    if os.name == "nt":
+        never = lambda _p: False          # 容器裡沒有任何脈絡檔
+        case("repo 在容器底下 → 容器就是落點",
+             M._repo_container(r"D:\Work\.ai-harness\tools\x.py", exists=never)
+             == Path(r"D:\Work"),
+             "得到 %r" % (M._repo_container(r"D:\Work\.ai-harness\tools\x.py", exists=never),))
+        case("repo 直接躺在磁碟根層 → 沒有容器",
+             M._repo_container(r"D:\.ai-harness\tools\x.py", exists=never) is None,
+             "得到 %r" % (M._repo_container(r"D:\.ai-harness\tools\x.py", exists=never),))
+        always = lambda _p: True          # 容器自己帶 CLAUDE.md／.claude
+        case("容器自己帶脈絡檔 → 不當落點",
+             M._repo_container(r"D:\Work\.ai-harness\tools\x.py", exists=always) is None,
+             "得到 %r" % (M._repo_container(r"D:\Work\.ai-harness\tools\x.py", exists=always),))
+    else:
+        case("repo 在容器底下 → 容器就是落點", True)
+        case("repo 直接躺在磁碟根層 → 沒有容器", True)
+        case("容器自己帶脈絡檔 → 不當落點", True)
 
     # ── 3. build 產出的設定必須合法且真的擋得到 ────────────────
     with tempfile.TemporaryDirectory() as tmp:
@@ -173,6 +194,7 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         case("keep-readable 會從 deny 剔除",
              not any(".cursor" in x for x in deny2),
              "剔除後仍有 .cursor：%r" % deny2)
+
         # ── 4b. --deny 傳「檔案」時，寫出去的那條不能有 \** 尾巴 ──
         with contextlib.redirect_stdout(buf):
             sb3 = M.build("t3", [], [str(probe)], [], base=base)
@@ -181,7 +203,6 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         case("--deny 傳檔案 → cli.json 裡那條不以 ** 結尾",
              bool(mine) and not any(x.endswith("%s**)" % os.sep) for x in mine),
              "檔案卻被寫成目錄樣式 ⇒ 靜默失效：%r" % (deny3,))
-
 
         # ── 5. 父鏈檢查抓得到脈絡檔 ──────────────────────────
         dirty = Path(tmp) / "dirty"

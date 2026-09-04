@@ -110,8 +110,10 @@ def _clean(s: str) -> str:
 # 閘門都管不到路徑），所以這是唯一能說明「它到底走了多遠」的資料。
 _ROOTS = [
     (re.compile(r"(?i)^[a-z]:[\\/]it-department"), "d:\\IT-department"),
-    (re.compile(r"(?i)^[a-z]:[\\/]\.ai-harness"), "D:\\.ai-harness"),
-    (re.compile(r"(?i)^[a-z]:[\\/]ai-projects"), "D:\\AI-Projects"),
+    (re.compile(r"(?i)^[a-z]:[\\/]\.ai-harness"), "D:\\Patrick-AI\\.ai-harness"),
+    # 2026-09-02 改名＋收進容器目錄：新舊名都要認得，舊 transcript 存的是舊路徑。
+    # 不錨在磁碟機後第一段——repo 已經不在根層了，錨死會全部認不出來。
+    (re.compile(r"(?i)[\\/](?:mis-install|ai-projects)(?:[\\/]|$)"), "D:\\Patrick-AI\\MIS-install"),
     (re.compile(r"(?i)appdata[\\/]local[\\/]temp"), "暫存區"),
     (re.compile(r"(?i)^[a-z]:[\\/]users[\\/]"), "C:\\Users（家目錄）"),
     (re.compile(r"^/(srv|etc|var|opt)/"), "VM 檔案系統"),
