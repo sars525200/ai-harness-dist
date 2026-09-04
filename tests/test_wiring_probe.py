@@ -627,6 +627,191 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
                  and set(tallied) <= {M.OK, M.FAIL, M.SKIP, M.UNVERIFIED},
                  "總計 %r／分項 %r" % (set(claimed), set(tallied)))
 
+    # ── 12. P3：範本態要紅（2026-09-04 補後五條）────────────────
+    # 這條釘的是「產了設定 ≠ 設定好了」。2026-09-03 真的發生過 12 小時，
+    # 而檔案存在、JSON 合法、`is_file()` 全綠。
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        real_proj = tmp / "proj"
+        real_proj.mkdir()
+
+        def _cfg(name, doc):
+            p = tmp / name
+            p.write_text(json.dumps(doc), encoding="utf-8")
+            return p
+
+        good = _cfg("good.json", {"currentProject": str(real_proj), "scanRoots": [str(tmp)]})
+        case("P3 設定指向真專案要綠", M.FAIL not in codes(M.probe_p3(good)))
+
+        # ⚠ 這一條**不能只斷言「有 FAIL」**：範本值那個目錄本來就不存在，
+        # 所以就算範本判準被拿掉，下一條「目錄不存在」照樣會紅 ⇒ 變異驗證抓不到。
+        # 實測過：把範本判準改成 `elif False:`，只看 FAIL 的版本仍然全綠。
+        # 要釘的是**哪一條判準在叫**，所以連訊息一起比。
+        tpl = _cfg("tpl.json", {"currentProject": "D:\\你的專案", "scanRoots": [str(tmp)]})
+        tpl_r = M.probe_p3(tpl)
+        case("P3 --init 範本態要紅，而且要說得出是範本",
+             any(r.code == M.FAIL and "範本" in r.detail for r in tpl_r),
+             "拿到 %r —— 範本值被讀成「路徑打錯」而不是「還沒設定」，"
+             "那正是 09-03 那 12 小時的畫面" % [(r.code, r.detail[:40]) for r in tpl_r])
+
+        gone = _cfg("gone.json",
+                    {"currentProject": str(tmp / "不存在"), "scanRoots": [str(tmp)]})
+        case("P3 currentProject 在本機不存在要紅", M.FAIL in codes(M.probe_p3(gone)))
+
+        badroot = _cfg("badroot.json",
+                       {"currentProject": str(real_proj), "scanRoots": [str(tmp / "沒有這個碟")]})
+        case("P3 scanRoots 指到不存在的目錄要紅", M.FAIL in codes(M.probe_p3(badroot)),
+             "少列專案不會變紅，所以要在這裡叫")
+
+        case("P3 設定檔不存在要紅", M.FAIL in codes(M.probe_p3(tmp / "沒這個檔.json")))
+        broken = tmp / "broken.json"
+        broken.write_text("{ 不是 JSON", encoding="utf-8")
+        case("P3 設定檔不是合法 JSON 要紅", M.FAIL in codes(M.probe_p3(broken)))
+
+    # ── 13. P4：STATE_DIR 指到別處要紅 ──────────────────────────
+    # 那一行是寫死的絕對路徑，換機器後指向舊路徑 ⇒ 每個 hook 每次都靜默寫失敗，
+    # 而看板顯示「沒發生過」，與「很乾淨」同形。
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        real_state = (Path(M.HARNESS_ROOT) / "state")
+
+        def _fake_dispatch(name, body):
+            p = tmp / name
+            p.write_text(body, encoding="utf-8")
+            return p
+
+        ok_src = _fake_dispatch("ok.py", 'STATE_DIR = r"%s"\n' % real_state)
+        case("P4 指到這一顆 harness 的 state 要綠", M.FAIL not in codes(M.probe_p4(ok_src)))
+
+        # ⚠ 這裡刻意指到一個**真的存在**的目錄（tmp 自己），而不是 `Z:\舊機\…`。
+        # 指到不存在的路徑時，就算「是不是這一顆 harness」的判準被拿掉，
+        # 下一條「目錄存在嗎」照樣會紅 ⇒ 變異驗證抓不到（實測過，只看 FAIL 的版本全綠）。
+        # 存在但不是這一顆，才是只有這條判準分得出來的情況。
+        other_src = _fake_dispatch("other.py", 'STATE_DIR = r"%s"\n' % tmp)
+        case("P4 指到別的 harness 要紅", M.FAIL in codes(M.probe_p4(other_src)),
+             "目錄存在、寫得進去，但不是這一顆 harness 的 state —— "
+             "換機器後 hook 每次都靜默寫失敗，看板顯示「沒發生過」")
+        case("P4 指到不存在的舊機路徑也要紅",
+             M.FAIL in codes(M.probe_p4(
+                 _fake_dispatch("old.py", 'STATE_DIR = r"Z:\\舊機\\.ai-harness\\state"\n'))))
+
+        no_src = _fake_dispatch("none.py", "HOOKS_DIR = 1\n")
+        case("P4 抽不出字面值要紅", M.FAIL in codes(M.probe_p4(no_src)),
+             "判不出來不給綠")
+        case("P4 原始碼不存在要紅", M.FAIL in codes(M.probe_p4(tmp / "沒這支.py")))
+
+    # ── 14. P6：live 與 repo 內容不同要紅（非空不算數）──────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        repo_md = Path(M.HARNESS_ROOT) / "global" / "CLAUDE.md"
+        live = tmp / "live"
+        live.mkdir()
+        case("P6 live 沒有 CLAUDE.md 要紅", M.FAIL in codes(M.probe_p6(live)))
+
+        (live / "CLAUDE.md").write_text("新機自己寫的一份，非空", encoding="utf-8")
+        case("P6 內容不同要紅（非空不算數）", M.FAIL in codes(M.probe_p6(live)),
+             "這正是第 3 輪發現 3：新機自己寫的那份也非空")
+
+        if repo_md.is_file():
+            (live / "CLAUDE.md").write_bytes(repo_md.read_bytes())
+            case("P6 內容相同要綠", M.FAIL not in codes(M.probe_p6(live)))
+        else:
+            case("P6 內容相同要綠", False, "repo 側找不到 global/CLAUDE.md")
+
+    # ── 15. P7：列得出來但是空的要紅 ────────────────────────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        live = tmp / "live"
+        (live / "agents").mkdir(parents=True)
+        (live / "skills").mkdir(parents=True)
+        case("P7 兩個目錄都空的要紅", M.FAIL in codes(M.probe_p7(live)),
+             "空的與「這台沒有自訂角色」同形，所以要靠這條分開")
+        (live / "agents" / "a.md").write_text("a", encoding="utf-8")
+        case("P7 只有一個目錄非空仍要紅", M.FAIL in codes(M.probe_p7(live)))
+        (live / "skills" / "s").mkdir()
+        case("P7 兩個都非空要綠", M.FAIL not in codes(M.probe_p7(live)))
+        case("P7 目錄根本不存在要紅", M.FAIL in codes(M.probe_p7(tmp / "沒這個")))
+
+    # ── 16. P8：Cursor 三態不得混成同一個綠 ─────────────────────
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        repo_dir = Path(M.HARNESS_ROOT) / "cursor-agents"
+        names = sorted(p.name for p in repo_dir.glob("*.md")) if repo_dir.is_dir() else []
+
+        no_cursor = tmp / "沒裝"
+        r = M.probe_p8(no_cursor)
+        case("P8 沒裝 Cursor 是 SKIP 不是 OK", codes(r) == [SKIP],
+             "拿到 %r —— 現有 check_cursor_agents 在這一態 return 0，直接當探針會冒充全綠"
+             % codes(r))
+        case("P8 沒裝 Cursor 不擋結束條件", _exit_for(M, codes(r)) == 0)
+
+        half = tmp / "裝了沒接上"
+        half.mkdir()
+        case("P8 裝了但沒接上要紅", M.FAIL in codes(M.probe_p8(half)),
+             "「沒裝」與「沒接上」不得同綠")
+
+        full = tmp / "已接上"
+        (full / "agents").mkdir(parents=True)
+        for n in names:
+            (full / "agents" / n).write_bytes((repo_dir / n).read_bytes())
+        case("P8 複本內容相同要綠", bool(names) and M.FAIL not in codes(M.probe_p8(full)),
+             "repo 側有 %d 支角色檔" % len(names))
+
+        (full / "agents" / "多出來的.md.bak").write_text("人手動留的備份", encoding="utf-8")
+        case("P8 live 多出來的檔不判紅", M.FAIL not in codes(M.probe_p8(full)),
+             "判紅會逼人刪掉自己刻意留的東西（票 10-5 同型）")
+
+        if names:
+            (full / "agents" / names[0]).write_text("pull 過了但複本沒跟著動", encoding="utf-8")
+            case("P8 複本內容漂掉要紅", M.FAIL in codes(M.probe_p8(full)),
+                 "複本不會跟著 git pull 動，而且沒有紅燈")
+            (full / "agents" / names[0]).unlink()
+            case("P8 複本少一支要紅", M.FAIL in codes(M.probe_p8(full)))
+        else:
+            case("P8 複本內容漂掉要紅", False, "repo 側沒有 cursor-agents/*.md，測不到")
+
+    # ── 17. 缺席守門：沒實作的探針不得靜默消失 ──────────────────
+    # 2026-09-04 之前 P3／P4／P6／P7／P8 一條結果都不產生 ⇒ 在 verdict() 眼裡不存在，
+    # 前六條全綠就會印「裝好了」。這一組釘的就是那個洞。
+    all_ok = [M.Result(OK, p, "t", "") for p in M.EXPECTED_PROBES]
+    case("宣告的探針全部有結果時不補 UNVERIFIED", M.missing_probes(all_ok) == [])
+    case("EXPECTED_PROBES 涵蓋 11 條", len(M.EXPECTED_PROBES) == 11,
+         "現在是 %d 條" % len(M.EXPECTED_PROBES))
+    for gone_probe in ("P3", "P4", "P6", "P7", "P8"):
+        partial = [r for r in all_ok if r.probe != gone_probe]
+        extra = M.missing_probes(partial)
+        case("%s 整條缺席要補 UNVERIFIED" % gone_probe,
+             [r.code for r in extra] == [UNVER] and extra[0].probe == gone_probe)
+        case("%s 缺席時結束條件不得回 0" % gone_probe,
+             _exit_for(M, [r.code for r in partial + extra]) != 0,
+             "缺席被讀成通過 —— 這正是補齊前的實況")
+
+    # ── 18. 門面：不加 -X utf8 也要印得出非 cp950 字元 ───────────
+    # 新機第一次跑拿到 traceback 而不是判定，違反 U-4。教人記得加旗標行不通。
+    # ⚠ **單純 capture_output 證明不了這件事**：管線的編碼與真實 console 不同，
+    # 拿掉程式裡的 utf-8 接管之後，用管線跑照樣全綠（實測過的變異）。
+    # 真正會炸的是 cp950 console，所以這裡用 PYTHONIOENCODING 把子行程逼回 cp950。
+    probe_py = Path(M.HARNESS_ROOT) / "tools" / "wiring_probe.py"
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "cp950"
+    env.pop("PYTHONUTF8", None)
+    r = subprocess.run([sys.executable, str(probe_py)], capture_output=True, env=env)
+    err = r.stderr.decode("utf-8", "replace")
+    case("console 是 cp950 時不得噴 UnicodeEncodeError",
+         "UnicodeEncodeError" not in err and "Traceback" not in err,
+         "新機第一次跑拿到的會是 traceback 不是判定：%s" % err.strip()[-200:])
+    out_txt = r.stdout.decode("utf-8", "replace")
+    case("console 是 cp950 時仍印得出四態標記與非 cp950 字元",
+         "[OK]" in out_txt and ("⇒" in out_txt or "⚠" in out_txt or "—" in out_txt),
+         "stdout 前 200 字：%r" % out_txt[:200])
+
+    # ── 19. 使用者看得到的訊息裡不得再出現舊票號 ────────────────
+    # 計畫書 2026-09-04 訂正成票 10，程式裡四處還寫票 06 ——
+    # **文件改了碼沒改**，而看訊息的人拿到的是舊票號。
+    src_txt = probe_py.read_text(encoding="utf-8")
+    case("wiring_probe 內不再出現「票 06」", "票 06" not in src_txt,
+         "SKILL_WATCH_PLAN 的正解是票 10")
+
     return out
 
 
@@ -636,8 +821,9 @@ def run() -> "tuple[int, list]":
     except Exception as exc:                       # pragma: no cover
         return 0, ["載入 wiring_probe 失敗：%s" % exc]
 
-    for fn in ("probe_p1", "probe_p2", "probe_p5", "probe_p9", "probe_p10", "probe_p11",
-               "verdict", "main"):
+    for fn in ("probe_p1", "probe_p2", "probe_p3", "probe_p4", "probe_p5", "probe_p6",
+               "probe_p7", "probe_p8", "probe_p9", "probe_p10", "probe_p11",
+               "missing_probes", "verdict", "main"):
         if not hasattr(M, fn):
             return 0, ["wiring_probe 沒有 %s() —— 這支測試釘的行為還沒有實作點" % fn]
 

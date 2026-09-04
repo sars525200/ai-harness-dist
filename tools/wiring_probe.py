@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""接線探針（P1／P2／P5／P9／P10／P11）——【核心層】
+r"""接線探針（P1–P11）——【核心層】
 
 換一個部門、換一台機器都成立：它問的是「Claude 這個容器有沒有真的接到這顆 harness」，
 不問任何專案內容。harness 位置由本檔自身推導，不寫死（U-1）。
@@ -8,18 +8,25 @@
 規格單一真相在 `UNIVERSAL_HARNESS_PLAN.md` §4 D-1 定案第 2 點的 W／P 兩表。
 **本檔不重述修法**，只實作判準；判準要改先改那兩張表。
 
-本批六條——都在「舊機」上就跑得動，先拿真實輸出回頭修規格
-（user 2026-09-03 拍板：不要純文件打磨到蓋章）：
+十一條全部實作（2026-09-04 補齊後五條）：
 
   P1   junction 真的指到 harness（samefile，不是「目錄存在」）
   P2   live 每條 hook command **裡的實體檔**存在（不是整段字串）
+  P3   harness.config 指向真專案（**不是 `--init` 範本態**）
+  P4   hook 自己讀的 STATE_DIR 是本機真目錄且**實際寫得進去**
   P5   additionalDirectories 每一條存在且**非空**
+  P6   live CLAUDE.md 與 `global/CLAUDE.md` **內容相同**（非空不算數）
+  P7   agents／skills 目錄**列得出來且非空**（P1 之外的另一把尺）
+  P8   Cursor 側三態分開（已接上／裝了沒接上／沒裝）
   P9   跨碟備份真的會發生（backup remote ＋ 最後一次推成功 ＋ 鏡像 HEAD 相同）
   P10  output-styles 帶得過來，且 outputStyle 指得到真的檔
   P11  skill-watch 基準是本機量的，且該檔已不在版控中
 
-尚未實作：P3（harness.config）／P4（STATE_DIR 可寫）／P6（CLAUDE.md filecmp）／
-P7（目錄可列且非空）／P8（Cursor 三態）。
+⚠ **「未實作」以前是靜默的**（2026-09-04 補 `EXPECTED_PROBES` 的理由）：
+`verdict()` 只看拿到的結果，而沒實作的探針**一條結果都不產生** ⇒ 它在判定眼裡不存在。
+後五條補齊前，只要前六條全綠就會印「裝好了」，而五個接線點從頭到尾沒驗過 ——
+**正是這份計畫要擋的形狀，發生在它自己的驗收條件裡**。
+所以現在改成先宣告該有哪幾條，缺席的一律 `UNVERIFIED`。
 
 四態（第 4 輪發現 4 把原本的 SKIP 拆開）：
 
@@ -43,6 +50,16 @@ from pathlib import Path
 HARNESS_ROOT = Path(__file__).resolve().parents[1]
 LIVE_DIR = Path.home() / ".claude"
 LIVE_SETTINGS = LIVE_DIR / "settings.json"
+
+# 這支的輸出帶「⇒」「⚠」這類非 cp950 字元。PowerShell 5.1 的 console 是 cp950，
+# 不加 `-X utf8` 直接跑會在印第一條 UNVERIFIED 時 UnicodeEncodeError、丟 traceback、
+# exit 1 —— **新機第一次跑拿到的不是判定，是一個看不懂的失敗**（U-4 要擋的正是這個）。
+# 教使用者記得加旗標是行不通的，所以在程式裡自己接管。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass          # 被重導向到不支援的物件時就照舊，不因為修門面而讓探針跑不完
 
 OK, FAIL = "OK", "FAIL"
 # ⚠ 兩種「不是綠」要分開（第 4 輪發現 4）。原本共用一個 SKIP，於是
@@ -385,7 +402,7 @@ def probe_p9() -> list[Result]:
         out.append(Result(FAIL, "P9", "post-commit 已安裝", f"repo 側不存在：{src_hook}"))
     elif not hook_installed:
         out.append(Result(FAIL, "P9", "post-commit 已安裝",
-                          f"沒安裝：{live_hook} —— `.git\hooks\` 不進版控，"
+                          f"沒安裝：{live_hook} —— `.git\\hooks\\` 不進版控，"
                           "換機或重新 clone 都不會有它；沒有它就完全不會推鏡像，也不會留失敗標記"))
     elif not hook_same:
         # 訊息要說得出差在哪：註解漂移與行為漂移都該紅（兩份本來就要一起改），
@@ -505,7 +522,7 @@ def probe_p11(wired_at: str | None) -> list[Result]:
     （`skills[]` 現有 54 支，`SkillViewer.ps1` 直接讀它），整檔移出版控會讓
     新機的 SkillViewer 沒有資料。
 
-    正解在 `SKILL_WATCH_PLAN.md` 的 W-5 訂正（2026-08-23·票 06）：
+    正解在 `SKILL_WATCH_PLAN.md` 的 W-5 訂正（2026-08-23·票 10）：
     **基準搬到 `state/skill_watch_baselines.json`（gitignore），清冊留原檔原位。**
     所以這裡驗三件：基準檔在該在的地方、它不在版控、清冊裡已經沒有 baselines。
     """
@@ -516,7 +533,7 @@ def probe_p11(wired_at: str | None) -> list[Result]:
     # ① 基準搬到 state\ 了沒
     if not baseline.is_file():
         out.append(Result(FAIL, "P11", "基準住在 state\\skill_watch_baselines.json",
-                          f"不存在：{baseline} —— SKILL_WATCH_PLAN 票 06 的決定還沒實作"))
+                          f"不存在：{baseline} —— SKILL_WATCH_PLAN 票 10 的決定還沒實作"))
     else:
         out.append(Result(OK, "P11", "基準住在 state\\skill_watch_baselines.json", str(baseline)))
 
@@ -548,7 +565,7 @@ def probe_p11(wired_at: str | None) -> list[Result]:
         out.append(Result(OK, "P11", "基準檔不在版控中", "已 gitignore／未追蹤"))
 
     # ④ **執行期真的讀那裡嗎**（第 5 輪發現 6）
-    #    ①②③ 全是「檔案擺在哪」，票 06 做一半（搬了檔、沒改讀取點）時三條都會綠，
+    #    ①②③ 全是「檔案擺在哪」，票 10 做一半（搬了檔、沒改讀取點）時三條都會綠，
     #    而工具一跑就撞缺基準——U-2 說那會把「還沒建立基準」偽裝成「什麼都沒變」。
     #    探針宣稱 P11 代表「基準是本機量的」，就必須驗到還在用的那條路徑。
     tool = HARNESS_ROOT / "tools" / "skill_watch.py"
@@ -566,7 +583,7 @@ def probe_p11(wired_at: str | None) -> list[Result]:
         else:
             out.append(Result(FAIL, "P11", title4,
                               f"仍指向舊位置：{line.strip()} —— **搬了檔沒改讀取點**，"
-                              "票 06 只做一半，而前三條照樣全綠"))
+                              "票 10 只做一半，而前三條照樣全綠"))
 
     if not baseline.is_file():
         return out
@@ -601,6 +618,243 @@ def probe_p11(wired_at: str | None) -> list[Result]:
     return out
 
 
+# ---------------------------------------------------------------- P3
+# `gen_layers.py --init` 產的範本用這些字當佔位。它們**不是**合法的專案路徑，
+# 但檔案本身完全合法、`is_file()` 與 `json.loads()` 都會過。
+_INIT_TEMPLATE_MARKS = ("你的專案", "your-project", "YOUR-PROJECT")
+
+
+def probe_p3(config: "Path | None" = None) -> list[Result]:
+    r"""harness.config 指向真專案——而且不是 `--init` 剛產出來的範本態。
+
+    判準刻意比「檔案存在」嚴一級，因為有前例：2026-09-03 這個檔被留在範本態約
+    12 小時，`currentProject` 指向 `D:\你的專案`，`discover_projects()` 全部拒跑。
+    行為是對的，但**那個檔 gitignored，git 一個字都不會提醒** —— 沒有人注意到。
+    「還沒設定」「設定被寫壞」「設定好了」三者在 `is_file()` 這一層完全同形。
+
+    `scanRoots` 一併驗：它指到不存在的碟時，看板不會報錯，只會少列幾個專案，
+    而**少列不會變紅**（U-2 拒跑管的是設定讀不到，不是設定讀得到但指向空的）。
+    """
+    cfg = HARNESS_ROOT / "harness.config.json" if config is None else Path(config)
+    title = "harness.config 指向真專案"
+    if not cfg.is_file():
+        return [Result(FAIL, "P3", title,
+                       f"不存在：{cfg} —— 跑 `py -3 dashboard\\gen_layers.py --init` 產一份再改成真路徑")]
+    try:
+        doc = json.loads(cfg.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [Result(FAIL, "P3", title, f"不是合法 JSON：{exc}")]
+
+    out = []
+    cur = doc.get("currentProject")
+    if not cur:
+        out.append(Result(FAIL, "P3", title, "沒有 currentProject 這顆鍵"))
+    elif any(m in str(cur) for m in _INIT_TEMPLATE_MARKS):
+        out.append(Result(FAIL, "P3", title,
+                          f"還是 --init 的範本值：{cur!r} —— **產了設定不等於設定好了**，"
+                          "這個狀態下 discover_projects() 會整批拒跑而 git 不提醒"))
+    elif not Path(cur).is_dir():
+        out.append(Result(FAIL, "P3", title,
+                          f"指向的目錄在本機不存在：{cur} —— 舊機的路徑被原封帶過來了"))
+    else:
+        out.append(Result(OK, "P3", title, str(cur)))
+
+    roots = doc.get("scanRoots") or []
+    if not roots:
+        out.append(Result(FAIL, "P3", "scanRoots 非空", "一個掃描根都沒有 ⇒ 自動偵測永遠找不到專案"))
+    else:
+        for r in roots:
+            t = f"scanRoots {r}"
+            out.append(Result(OK, "P3", t, "是本機真目錄") if Path(r).is_dir()
+                       else Result(FAIL, "P3", t, "在本機不存在 ⇒ 少列專案，而少列不會變紅"))
+    return out
+
+
+# ---------------------------------------------------------------- P4
+def _state_dir_literal(src: "Path | None" = None) -> "str | None":
+    r"""從 `hooks/dispatch.py` 的原始碼抽出 `STATE_DIR` 的字面值。
+
+    **刻意讀原始碼而不 import**：`import dispatch` 會拉起整包 hook（插 sys.path、
+    讀設定、可能寫檔），探針不該帶那種副作用。抽不出來就回 None，由呼叫端判紅——
+    判不出來不給綠。
+    """
+    path = (HARNESS_ROOT / "hooks" / "dispatch.py") if src is None else Path(src)
+    if not path.is_file():
+        return None
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.lstrip().startswith("STATE_DIR"):
+            _, _, rhs = line.partition("=")
+            rhs = rhs.strip()
+            try:
+                import ast
+                return ast.literal_eval(rhs)
+            except Exception:
+                return None
+    return None
+
+
+def probe_p4(src: "Path | None" = None) -> list[Result]:
+    r"""hook 自己讀的狀態目錄是本機真目錄，而且**實際寫得進去**。
+
+    為什麼不能只驗「目錄存在」：`hooks/dispatch.py` 的寫入失敗是 `pass` 吃掉的
+    （計畫書 B4）。路徑對、目錄在、但寫不進去的時候，**看板顯示「沒發生過」，
+    而「沒發生過」與「很乾淨」長得一模一樣**。所以這條真的去寫一個檔再刪掉。
+
+    也驗「它指的是這一顆 harness」：那行是寫死的絕對路徑，換機器後會指向舊路徑，
+    而舊路徑在新機上通常不存在 ⇒ 每個 hook 每次都靜默寫失敗。
+    """
+    out = []
+    lit = _state_dir_literal(src)
+    title = "hook 的 STATE_DIR"
+    if lit is None:
+        return [Result(FAIL, "P4", title, "抽不出 STATE_DIR 的字面值 —— 判不出來就不給綠")]
+
+    want = (HARNESS_ROOT / "state").resolve()
+    try:
+        got = Path(lit).resolve()
+    except OSError:
+        got = Path(lit)
+    if got != want:
+        out.append(Result(FAIL, "P4", title,
+                          f"指向 {lit} —— 這一顆 harness 的狀態目錄是 {want}。"
+                          "那行是寫死的絕對路徑，換機器後每個 hook 每次都靜默寫失敗"))
+        return out
+    out.append(Result(OK, "P4", title, lit))
+
+    if not got.is_dir():
+        out.append(Result(FAIL, "P4", "狀態目錄存在", f"不存在：{got}"))
+        return out
+
+    probe_file = got / ".wiring_probe_write_test"
+    try:
+        probe_file.write_text("ok", encoding="utf-8")
+        probe_file.unlink()
+    except OSError as exc:
+        out.append(Result(FAIL, "P4", "狀態目錄寫得進去",
+                          f"{exc} —— dispatch 的寫入失敗是 pass 吃掉的，"
+                          "看板會顯示「沒發生過」，而那與「很乾淨」同形"))
+    else:
+        out.append(Result(OK, "P4", "狀態目錄寫得進去", "實際寫入並刪除成功"))
+    return out
+
+
+# ---------------------------------------------------------------- P6
+def probe_p6(live_dir: "Path | None" = None) -> list[Result]:
+    """live 的 `CLAUDE.md` 與 `global/CLAUDE.md` **內容相同**。
+
+    ⚠ **非空不算數**（第 3 輪發現 3）：新機自己寫的那份也非空，而工作方式規則整份
+    不生效這件事**沒有任何一條錯誤訊息會提到**——對話看起來完全正常。
+    判法沿用 `backup_global_config.py:92` 的 filecmp，不另發明一套。
+    """
+    import filecmp
+    ld = LIVE_DIR if live_dir is None else Path(live_dir)
+    repo_f = HARNESS_ROOT / "global" / "CLAUDE.md"
+    live_f = ld / "CLAUDE.md"
+    title = "live CLAUDE.md 與 global/CLAUDE.md 相同"
+    if not repo_f.is_file():
+        return [Result(FAIL, "P6", title, f"repo 側不存在：{repo_f}")]
+    if not live_f.is_file():
+        return [Result(FAIL, "P6", title,
+                       f"live 側不存在：{live_f} —— 工作方式規則整份不生效，且不會報錯")]
+    if filecmp.cmp(live_f, repo_f, shallow=False):
+        return [Result(OK, "P6", title, str(live_f))]
+    return [Result(FAIL, "P6", title,
+                   "內容不同 —— 沒 restore，或有一邊改過沒同步。**非空不代表是這一份**")]
+
+
+# ---------------------------------------------------------------- P7
+def probe_p7(live_dir: "Path | None" = None) -> list[Result]:
+    r"""agents／skills 目錄**列得出來且非空**。
+
+    這是 P1 之外的另一把尺，兩把量的不是同一件事：P1 問「連到對的地方嗎」，
+    P7 問「連過去之後真的看得到東西嗎」。平台哪天收緊 symlink 政策時
+    （計畫書 C2 追蹤點），`samefile` 可能仍然通過而列舉整批回空——
+    角色與 skill 靜默消失，而畫面上只是「這台沒有自訂角色」。
+    """
+    ld = LIVE_DIR if live_dir is None else Path(live_dir)
+    out = []
+    for name in ("agents", "skills"):
+        live = ld / name
+        title = f"~\\.claude\\{name} 列得出來且非空"
+        try:
+            entries = list(os.scandir(live))
+        except OSError as exc:
+            out.append(Result(FAIL, "P7", title, f"列不出來：{exc}"))
+            continue
+        if entries:
+            out.append(Result(OK, "P7", title, f"{len(entries)} 項"))
+        else:
+            out.append(Result(FAIL, "P7", title,
+                              "列得出來但是空的 —— 角色／skill 整批不見，"
+                              "而畫面上只是「這台沒有自訂的」"))
+    return out
+
+
+# ---------------------------------------------------------------- P8
+def probe_p8(cursor_home: "Path | None" = None) -> list[Result]:
+    r"""Cursor 側**三態分開**：已接上／裝了但沒接上／沒裝 Cursor。
+
+    三者不得混成同一個綠。現有的 `check_cursor_agents.py:90-94` 在 live 目錄不存在時
+    `return 0`（第 3 輪發現 5）——直接拿它當探針會讓「沒裝」冒充全綠。
+
+    ⚠ **這條不是一次性的**：`~\.cursor\agents\` 是**複本**不是 junction，
+    `git pull` 更新 repo 之後 live 那份不會跟著動 ⇒ Cursor 派出去的是舊複本，
+    而且沒有紅燈。所以比的是內容不是存在，接線器每次 pull 後都要能重跑。
+
+    live 側多出來的檔（例如人手動留的 `.bak-…`）**不判紅**：那不是「沒接上」，
+    判紅會逼人刪掉自己刻意留的東西（票 10-5 同型）。
+    """
+    import filecmp
+    home = (Path.home() / ".cursor") if cursor_home is None else Path(cursor_home)
+    repo_dir = HARNESS_ROOT / "cursor-agents"
+    live_dir = home / "agents"
+    title = "Cursor 角色複本"
+
+    if not repo_dir.is_dir():
+        return [Result(FAIL, "P8", title, f"repo 側不存在：{repo_dir}")]
+    if not home.is_dir():
+        return [Result(SKIP, "P8", title,
+                       f"這台沒裝 Cursor（{home} 不存在）—— **真的不適用**，不擋結束條件")]
+    if not live_dir.is_dir():
+        return [Result(FAIL, "P8", title,
+                       f"裝了 Cursor 但沒接上：{live_dir} 不存在 —— "
+                       "**「沒裝」與「沒接上」不得同綠**，這一態是紅的")]
+
+    out = []
+    repo_files = sorted(p.name for p in repo_dir.glob("*.md"))
+    if not repo_files:
+        return [Result(FAIL, "P8", title, "repo 側一支角色檔都沒有")]
+    # ⚠ 變數刻意叫 `live_a`／`repo_a` 而不是 P10 用的 `live_f`／`repo_f`：
+    # 兩邊的比對邏輯逐字相同，同名會讓 P10 那條變異的錨點命中兩次而**被靜默跳過**。
+    for name in repo_files:
+        live_a, repo_a = live_dir / name, repo_dir / name
+        if not live_a.is_file():
+            out.append(Result(FAIL, "P8", name, "live 沒有這一支 —— 複本沒同步"))
+        elif not filecmp.cmp(live_a, repo_a, shallow=False):
+            out.append(Result(FAIL, "P8", name,
+                              "內容不同 —— 複本不會跟著 git pull 動，"
+                              "Cursor 現在派出去的是舊的那份"))
+        else:
+            out.append(Result(OK, "P8", name, "內容相同"))
+    return out
+
+
+# ---------------------------------------------------------------- 缺席守門
+# 該有哪幾條**先宣告**，不要靠「跑出來幾條就是幾條」。
+# 2026-09-04 之前 P3／P4／P6／P7／P8 沒實作，而**沒實作的探針一條結果都不產生**
+# ⇒ 在 verdict() 眼裡它們不存在，前六條全綠就會印「裝好了」。
+# 「該驗但沒驗」正是 UNVERIFIED 這個碼存在的理由，卻漏掉了缺席這一種。
+EXPECTED_PROBES = ("P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10", "P11")
+
+
+def missing_probes(results: "list[Result]") -> list[Result]:
+    """宣告過但一條結果都沒有的探針，一律 UNVERIFIED。"""
+    seen = {r.probe for r in results}
+    return [Result(UNVERIFIED, p, f"{p} 沒有產生任何結果",
+                   "宣告在 EXPECTED_PROBES 裡卻沒跑出東西 —— **沒實作不等於通過**")
+            for p in EXPECTED_PROBES if p not in seen]
+
+
 # ---------------------------------------------------------------- 結束條件
 def verdict(results: "list[Result]") -> int:
     """一組結果該不該印「裝好了」。0＝可以，1＝有 FAIL，2＝有 UNVERIFIED。
@@ -621,7 +875,7 @@ def verdict(results: "list[Result]") -> int:
 
 # ---------------------------------------------------------------- 主程式
 def main() -> int:
-    ap = argparse.ArgumentParser(description="接線探針 P1／P2／P5（規格見 UNIVERSAL_HARNESS_PLAN §4 D-1）")
+    ap = argparse.ArgumentParser(description="接線探針 P1–P11（規格見 UNIVERSAL_HARNESS_PLAN §4 D-1）")
     ap.add_argument("--settings", type=Path, default=LIVE_SETTINGS,
                     help=f"live settings.json（預設 {LIVE_SETTINGS}）")
     ap.add_argument("--source", type=Path, default=None,
@@ -653,8 +907,12 @@ def main() -> int:
         except Exception:
             src_settings = None
 
-    results = (probe_p1() + probe_p2(settings) + probe_p5(settings, args.source)
-               + probe_p9() + probe_p10(settings, src_settings) + probe_p11(args.wired_at))
+    results = (probe_p1() + probe_p2(settings) + probe_p3() + probe_p4()
+               + probe_p5(settings, args.source) + probe_p6() + probe_p7()
+               + probe_p8() + probe_p9() + probe_p10(settings, src_settings)
+               + probe_p11(args.wired_at))
+    # 缺席的探針要自己冒出來，不能靠人去數少了幾條。
+    results += missing_probes(results)
 
     width = max(len(r.title) for r in results)
     marks = {OK: "[OK]   ", FAIL: "[FAIL] ", SKIP: "[SKIP] ", UNVERIFIED: "[UNVER]"}
@@ -678,8 +936,9 @@ def main() -> int:
     else:
         if n_skip:
             print(f"ℹ 有 {n_skip} 條 SKIP（選配不適用，例如這台沒裝 Cursor）——**不擋**結束條件。")
-        print("✔ 這一批（P1／P2／P5／P9／P10／P11）全綠。"
-              "⚠ 六條 —— P3／P4／P6／P7／P8 尚未實作。")
+        print(f"✔ 宣告的 {len(EXPECTED_PROBES)} 條探針全部有結果，且沒有 FAIL／UNVERIFIED。")
+        print("⚠ 全綠只涵蓋「這台機器現在的終態」。接線器本體（W1–W10 的動作）"
+              "另有其事，探針量不到冪等性與拒跑三態 —— 那些要在新機上才驗得到。")
     return rc
 
 
