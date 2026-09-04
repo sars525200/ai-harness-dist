@@ -21,6 +21,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -740,6 +741,172 @@ def test_json_detector_itself_works() -> None:
     check("JSON 讀法回報正確", how == "JSON", f"how={how}")
 
 
+# ── U-1 第三維度：指令層 `.md`（2026-09-04·B-3 收尾補上）────────────────────
+#
+# **為什麼要有這一條**：B-3 把三個 repo 指令層的 52 處寫死磁碟路徑換成 `<harness>`
+# 佔位符，而 `.md` 這一維度**沒有任何閘門**——上面兩條只掃 `.py` 與 `.json`。
+# 一次性清帳沒有守門 ＝ 下一個人在 skill 裡貼一條 `py -3 D:\...\x.py` 不會有任何提示，
+# 而這種漂移**畫面上看不出來**，只有換機器時一次爆開。這是 §5 V-1 教訓的同一個形狀：
+# 一次把數字清成 0，然後那個 0 沒有人守著。
+#
+# ⚠ **與上面兩條的判準差別**：`.md` 只記**處數**，不記值集合。理由是這裡的字面值
+#   只有一個（harness 根目錄本身），值不會變、只有數量會變。代價要說清楚：
+#   **同一檔案內把一處搬到另一行，處數不變 ⇒ 這條看不見**。那正是 `.py` 那條改用
+#   值集合在防的繞過，這裡防不了——但這裡也沒有第二個值可以搬過去。
+#
+# ⚠ **掃描對象是「指令層」不是全 repo**：規則模組、角色檔、skill 正文、專案脈絡檔。
+#   計畫書、交接紀錄、進度檔**刻意不掃**——那裡的絕對路徑是給人點開用的，
+#   換成佔位符只會更難用，而且那些檔不會被當成規則載入。掃全 repo 的話是 487 處，
+#   閘門會變成一條長期常駐的紅，而長期常駐的紅等於沒有紅。
+#
+# ⚠ **產出檔不掃**：`global/CLAUDE.md`／`CURSOR_USER_RULES.md` 由 `global/hub/` 產生，
+#   掃它們等於同一筆債記兩次，而且每次合法改 hub 都會誤報。
+#   `global/user-rules-inventory.md` 也不掃——那是 Cursor 雲端規則的雜湊對帳快照。
+
+# 指令層的掃描點。harness 側是相對於 repo 根；專案側是相對於各專案根。
+_MD_SCAN_HARNESS = ("global/hub", "agents", "cursor-agents", "skills")
+_MD_SCAN_PROJECT = (".claude/skills", ".claude/rules", ".claude/PROJECT_CONTEXT.md",
+                    ".claude/CLAUDE.md", "CLAUDE.md", ".cursor/rules")
+# 機器直接執行的行：角色 frontmatter 的 hook 指令。塞佔位符會讓閘門**靜默失效**，
+# 所以那幾行本來就該寫實際路徑 —— 不是漏網，是不同類。
+_MD_SKIP_LINE = re.compile(r"^\s*command:\s")
+
+
+def _md_harness_re() -> "re.Pattern":
+    """從 `__file__` 推出的 harness 根，兩種分隔符都吃。**不寫死專案路徑**——
+    寫死的話這條閘門自己就是一筆 U-1 債。"""
+    parts = re.split(r"[\\/]", str(HARNESS))
+    return re.compile(r"[\\/]".join(re.escape(p) for p in parts), re.I)
+
+
+def _md_project_roots() -> "list[Path]":
+    """專案根從設定讀（U-1）。讀不到就回空 —— 只掃 harness，不猜專案在哪。"""
+    try:
+        cfg = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
+    except Exception:                                # noqa: BLE001
+        return []
+    out = []
+    for v in [cfg.get("currentProject")] + list(cfg.get("extraProjects") or []):
+        if isinstance(v, str) and v:
+            out.append(Path(v))
+    return out
+
+
+def _md_scan(root: "Path", subs) -> dict:
+    """回 `{相對路徑: 命中處數}`。讀不到的檔跳過但**不當作沒有債**（見下方警語）。"""
+    pat = _md_harness_re()
+    out: dict = {}
+    for sub in subs:
+        p = root / sub
+        files = []
+        if p.is_file():
+            files = [p]
+        elif p.is_dir():
+            for f in p.rglob("*"):
+                if f.suffix.lower() not in (".md", ".mdc") or not f.is_file():
+                    continue
+                # `worktrees` 是別的分支的 checkout（同名 SKILL.md 副本），
+                # 不是要手動維護的第二份 —— 掃它會把同一筆債數兩次。
+                if any(x in f.parts for x in ("worktrees", "__pycache__", "archive")):
+                    continue
+                files.append(f)
+        for f in files:
+            try:
+                txt = f.read_text(encoding="utf-8")
+            except Exception:                        # noqa: BLE001
+                continue
+            n = sum(1 for ln in txt.splitlines()
+                    if pat.search(ln) and not _MD_SKIP_LINE.match(ln))
+            if n:
+                out[f.relative_to(root).as_posix()] = n
+    return out
+
+
+# 台帳＝2026-09-04 B-3 收尾當下的現況。**只准變少。**
+# harness 側每一筆都附理由；專案側刻意是空的 —— B-3 已清到 0，任何新增都該被擋。
+_KNOWN_U1_DEBT_MD = {
+    # 佔位符的定義本身，**單一真相刻意保留**：換機器就是改這一行。
+    # 修掉它反而會讓其他 52 處失去展開依據。
+    "global/hub/00-preamble.md": 1,
+    # 以下四支屬 B-4（共用 14 支）範圍，B-3 明文不得改（R2-8），B-4 已結案。
+    # ⚠ 其中至少兩處是**內容本身**不是指路，換掉會毀掉那段的意思：
+    #   `adversarial-review` 有兩行在示範「正斜線寫法讀得到且不報錯、反斜線才擋得住」，
+    #   那兩個字面值就是那一課的證據；`session-workflow` 那行是刻意的雙形並列
+    #   （反引號內只要有磁碟機代號就掉出 `PATH_RE`，寫絕對路徑會拿掉機器兜底）。
+    #   ⇒ 這四支要不要改是一個**新的決定**，不是順手清一清。
+    "skills/adversarial-review/SKILL.md": 9,
+    "skills/context-health/SKILL.md": 6,
+    "skills/design-spec/SKILL.md": 2,
+    "skills/session-workflow/SKILL.md": 1,
+}
+
+
+def test_u1_debt_md_does_not_grow() -> None:
+    """指令層 `.md` 的寫死 harness 路徑只准變少（F-4 的第三維度）。
+
+    紅法（新寫的驗證預設它自己有問題，所以下面同時驗偵測器本身）：
+    在任一支 skill 或規則模組貼一條寫死的 harness 路徑 → 必須被抓到；
+    貼在計畫書或交接檔 → **不該**被抓到（那不是指令層）。
+    """
+    actual = _md_scan(HARNESS, _MD_SCAN_HARNESS)
+
+    # 專案側：讀不到的專案要**留痕**，不能靜靜跳過 —— 靜靜跳過等於把閘門範圍偷偷改小。
+    missing = []
+    for root in _md_project_roots():
+        if not root.is_dir():
+            missing.append(str(root))
+            continue
+        for rel, n in _md_scan(root, _MD_SCAN_PROJECT).items():
+            actual[f"{root.name}/{rel}"] = n
+    if missing:
+        print(f"       ※ 掃不到的專案（不當作沒有債，只是這台機器上沒有）：{'、'.join(missing)}")
+
+    new_files = sorted(set(actual) - set(_KNOWN_U1_DEBT_MD))
+    check("沒有新檔案在指令層寫死 harness 路徑（F-4·.md 維度）", not new_files,
+          f"新增檔案：{ {k: actual[k] for k in new_files} }")
+
+    grew = {k: actual[k] - _KNOWN_U1_DEBT_MD[k]
+            for k in set(actual) & set(_KNOWN_U1_DEBT_MD)
+            if actual[k] > _KNOWN_U1_DEBT_MD[k]}
+    check("既有指令層檔案沒有新增寫死路徑", not grew, f"變多了：{grew}")
+
+    repaid = {k: v - actual.get(k, 0) for k, v in _KNOWN_U1_DEBT_MD.items()
+              if v > actual.get(k, 0)}
+    if repaid:
+        print(f"       ※ 已償還但台帳未更新：{repaid} —— 請更新 _KNOWN_U1_DEBT_MD")
+
+
+def test_md_detector_itself_works() -> None:
+    """偵測器自己會不會抓 —— **先證明它會紅，再信它的綠**。
+
+    三件事一起驗：①指令層裡的寫死路徑抓得到 ②`command:` 那種機器讀的行放過
+    ③非指令層（計畫書）不在掃描範圍內，不會被誤抓。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "skills" / "canary").mkdir(parents=True)
+        (root / "global" / "hub").mkdir(parents=True)
+        h = str(HARNESS)
+        # ①該抓的：skill 正文裡一條寫死指令
+        (root / "skills" / "canary" / "SKILL.md").write_text(
+            f"py -3 {h}\\dashboard\\x.py\n乾淨的一行\n", encoding="utf-8")
+        # ②不該抓的：frontmatter 的 hook 指令（機器直接執行）
+        (root / "agents").mkdir()
+        (root / "agents" / "a.md").write_text(
+            f"          command: 'py -3 \"{h}\\hooks\\g.py\"'\n", encoding="utf-8")
+        # ③不該抓的：計畫書不在指令層掃描點裡
+        (root / "SOME_PLAN.md").write_text(f"見 {h}\\X_PLAN.md §2\n", encoding="utf-8")
+
+        got = _md_scan(root, _MD_SCAN_HARNESS)
+        check("偵測器抓得到 skill 正文裡的寫死路徑",
+              got.get("skills/canary/SKILL.md") == 1, f"實得 {got}")
+        check("偵測器放過 frontmatter 的 `command:` 行",
+              "agents/a.md" not in got, f"實得 {got}")
+        check("偵測器不掃計畫書（非指令層）",
+              "SOME_PLAN.md" not in got, f"實得 {got}")
+        check("乾淨的行不會被算進去", sum(got.values()) == 1, f"實得 {got}")
+
+
 def test_interface_names_preserved() -> None:
     """三個模組層名稱不可消失 —— 外部有 monkeypatch 依賴它們。
 
@@ -768,7 +935,9 @@ def run() -> "tuple[int, list]":
                test_nonexistent_current_project_refuses,
                test_init_bootstrap_creates_template, test_config_is_gitignored,
                test_u1_debt_does_not_grow, test_json_detector_itself_works,
-               test_u1_debt_json_does_not_grow, test_interface_names_preserved):
+               test_u1_debt_json_does_not_grow,
+               test_md_detector_itself_works, test_u1_debt_md_does_not_grow,
+               test_interface_names_preserved):
         try:
             fn()
         except Exception as exc:                       # noqa: BLE001
