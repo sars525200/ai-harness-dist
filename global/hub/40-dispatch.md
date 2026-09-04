@@ -14,4 +14,4 @@ audience: all
 - **主 session 只留判斷與統合**：收 subagent 的結論、下決定、動需要全局脈絡的刀。
   高 effort 留在這裡；粗活派低 effort 角色（`model`／`effort` 由角色 frontmatter 承載）。
 - **為什麼派**：慢在推理不在跑指令，且不派會讓原始資料每輪重送 → 實測倍數見 `MODEL_ROUTING_PLAN.md` §7。
-- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\Patrick-AI\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
+- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `<harness>\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。

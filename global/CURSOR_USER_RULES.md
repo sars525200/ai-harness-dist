@@ -6,7 +6,12 @@
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
 > 成立才放這裡；只在某個專案成立的規則放該專案自己的 `CLAUDE.md`。
-> （分層原則的完整版見 `D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
+> （分層原則的完整版見 `<harness>\UNIVERSAL_HARNESS_PLAN.md` §2。）
+
+> **`<harness>` ＝ harness repo 的根目錄，這台機器上是 `D:\Patrick-AI\.ai-harness`。**
+> 規則／角色／skill 一律寫 `<harness>\…`，**要貼進終端機前自己展開成實際路徑**；
+> 換一台機器、換一個磁碟代號只改這一行。**機器直接讀的檔不適用**（`settings.json`、
+> 角色 frontmatter 的 `command:`）——那裡塞佔位符會當場壞掉，只能寫實際路徑。
 
 <!-- rules-section: all -->
 <!-- 這份檔每一節都是規則本文（沒有「速查表」與「敘述段」之分），所以整份都受
@@ -156,7 +161,7 @@ L 級可壓成一次 grep。**派誰＝哪個平台哪個型別見 skill 步驟 
 - **主 session 只留判斷與統合**：收 subagent 的結論、下決定、動需要全局脈絡的刀。
   高 effort 留在這裡；粗活派低 effort 角色（`model`／`effort` 由角色 frontmatter 承載）。
 - **為什麼派**：慢在推理不在跑指令，且不派會讓原始資料每輪重送 → 實測倍數見 `MODEL_ROUTING_PLAN.md` §7。
-- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\Patrick-AI\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
+- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `<harness>\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
 
 
 ## 5. 交付
@@ -166,7 +171,7 @@ L 級可壓成一次 grep。**派誰＝哪個平台哪個型別見 skill 步驟 
   四欄缺一不可：**項目／為何沒驗／驗證指令逐字／誰跑**。**空白＝沒驗過**。
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
-  hunk 並對帳＝0 → `D:\Patrick-AI\.ai-harness\tools\peek_sessions.py`
+  hunk 並對帳＝0 → `<harness>\tools\peek_sessions.py`
 
 
 ## 6. 動共用層（harness）

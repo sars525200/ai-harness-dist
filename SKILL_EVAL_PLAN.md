@@ -467,7 +467,7 @@ IT 專案側 `080ad8e7` 又把 14 支補齊了 `type:` 宣告。⇒ 上面那個
 |---|---|---|
 | **B-1** | 4 支參考型 `SKILL.md` ＋各自 `references/*.md` | 正文只留判斷分支＋症狀端索引。**先做 `asset-data-rules` 探針**（理由：分節最清楚。⚠ 不是「最大」——最大的是 `verify-rules` 5,263 > 5,122，F-15）。**✅ 探針那一支已於 2026-08-24 完成**（IT `ba19ee50`），剩 `verify-rules`／`platform-resource-rules`／`license-rules` 三支，見下方回填 |
 | **B-2** | 部門專案層 15 支 `SKILL.md` | 補「## 邊界（不得做的事）」節，**一律 `##` 級**。與 B-1 有 4 支同檔 ⇒ **B-1 先**。共用層 14 支由 B-4 一次處理，不再回頭重改。**⚠ 2026-09-04 重算：15 支裡 `ui-rules`／`verify-skill` 早就有了，實際要補的是 13 支**（計畫書的「15」是舊值） |
-| **B-3** | 部門專案層與 `<harness>/skills/` 以外檔案（開工前重算） | 將寫死的 harness 磁碟路徑改成可移植入口。舊盤點的 **11 檔 34 處**只留作歷史基準；共用層 14 支全部由 B-4 負責，B-3 **不得改 `<harness>/skills/*`，不論隊列狀態** |
+| **B-3** | 部門專案層與 `<harness>/skills/` 以外檔案（開工前重算） | 將寫死的 harness 磁碟路徑改成可移植入口。舊盤點的 **11 檔 34 處**只留作歷史基準；共用層 14 支全部由 B-4 負責，B-3 **不得改 `<harness>/skills/*`，不論隊列狀態**。**✅ 2026-09-04 完成**，範圍與實測見下方「B-3 完成紀錄」 |
 
 **案 B 的驗證**（沿用 v2 的 V4／V6／V8／V9，V5 依 R2-3 重寫）
 
@@ -743,7 +743,7 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
   `LOCAL EDIT` 標記**，依停止線第 6 條要先做上游對帳才能改；`adversarial-review`／
   `explainer-style` 屬 B-4 已結案範圍）＋其餘為 token baseline 類 WARN。
   **這不是沒做完，是範圍外**——要不要處理是另一個決定。
-- [ ] 案 B　B-3（開工前要先重算命中，舊盤點的 11 檔 34 處只作歷史基準）
+- [x] **案 B　B-3 已完成（2026-09-04）**——重算後 **24 檔 68 處**，實改 **22 檔 52 處**，見下方「B-3 完成紀錄」
 - [x] **VB-2 已驗（2026-09-04，`verify-rules`）**：獨立 subagent 取 `git show HEAD:` 原檔逐行機器比對
   → **遺失 0 項／變義 0 項**（223 行逐行正規化後全部命中新結構；唯二不逐字的是 `type:` 那行與
   被拆成「標題＋引言」的節標題）。⚠ **它同時抓到新結構自身的 3 個缺陷**，已當場修掉：
@@ -752,7 +752,8 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
   （視覺演算法／golden case CLIENT 側／Standards＋Spec 兩軸），文字在檔裡但**從症狀端進不去**。
   ⇒ 修法：索引表加「主題」欄，欄值就是 references 的回指標籤，並補上漏掉的 3 列；
   另寫了一支一次性檢查逐支核對「回指標籤是否在主檔逐字存在 ＋ 主檔是否連得到每份 references」→ **對不上 0**。
-- [ ] 案 B 驗　VB-4 ～ VB-6（VB-1／VB-2 已完成；VB-3 見下表）
+- [x] **VB-4 已驗（2026-09-04）**：兩條紅線都實測——①逐處展開後 `py -3` 找得到檔（harness 18／IT 25／MIS 2，共 **45 個引用、找不到 0 個**；驗證器先用 canary 檔證明它會紅才信它的綠）②三個 repo 的 diff **命中 `<harness>/skills/*` 共 0 個檔**。
+- [ ] 案 B 驗　VB-5 ～ VB-6（VB-1／VB-2／VB-4 已完成；VB-3 見下表）
 
 **B-1 完成紀錄（VB-3 實測，`text` 欄 tok，基準已於本日 `--update-baseline` 重建為 30 支）**
 
@@ -801,6 +802,63 @@ exit 0。只比較**目標列新增的** WARN／FAIL；全量 exit code 與聚�
 
 ⚠ **這一列的教訓比數字重要**：拆分收益（59%）確實成立，但它是**繞過計畫書做掉的**，
 所以少了 VB-2 那道「有沒有掉內容」的驗證。剩下 3 支要照流程走，**不要拿這支的成功當「不驗也沒事」的先例**。
+**B-3 完成紀錄（2026-09-04·路徑可移植化）**
+
+**範圍是重算出來的，不是照抄舊值。** 舊盤點「11 檔 34 處」查證後**不是 skills-only**：
+2026-08-16 當時 IT `.claude/` 整層是 **10 檔 33 處**、其中 skill 只佔 22 處。
+⇒ **原始範圍本來就是「AI 指令層」**（skill＋規則檔＋專案脈絡檔），不是「所有檔案」。
+照字面把「`<harness>/skills/` 以外檔案」讀成全部檔案的話是 **487 處**，而且會去改
+`test_harness_config.py` 的 **U-1 台帳**（`.py`／`.json` 兩個維度、凍結 8 筆）刻意留著的項目
+——**兩條線互相打架**。user 2026-09-04 拍板取「指令層三 repo」。
+
+| 層 | 檔 | 命中 | 實改 | 沒改的 |
+|---|---:|---:|---:|---|
+| harness 指令層（`global/hub/`・`agents/`・`cursor-agents/`） | 12 | 29 | **13** | 產出檔 7 由產生器自動跟上；角色 frontmatter `command:` 6；快照檔 3 |
+| IT 部門指令層（skill 3・rules 3・PROJECT_CONTEXT・`.cursor/` 3） | 10 | 37 | **37** | 無 |
+| MIS 指令層（`CLAUDE.md`・`PROJECT_CONTEXT.md`） | 2 | 2 | **2** | 無 |
+| **合計** | **24** | **68** | **52** | — |
+
+**佔位符的形狀**（user 選「全域層定義一次＋各處只寫佔位符」）：
+`global/hub/00-preamble.md` 新增四行定義 → 產生器同時寫進 `global/CLAUDE.md` 與
+`global/CURSOR_USER_RULES.md`，兩個平台都拿得到。定義本身**刻意保留一次實際路徑**
+（單一真相，換機器只改那一行），其餘一律 `<harness>\…`。
+
+**兩類刻意不改，理由不同，不要下一輪當漏網**：
+
+1. **角色 frontmatter 的 `command:` 6 處**（`harness-auditor`／`project-auditor`／`sync-checker`
+   各 2 處的 `agent_hitl_gate.py`／`agent_readonly_gate.py`）——**平台直接執行的字串**，
+   塞佔位符會讓兩道閘門當場失效，而且**不會報錯，只會不擋**。與 `settings.json` 同類。
+   這條已寫進定義本身（「機器直接讀的檔不適用」），不是靠人記得。
+2. **`global/user-rules-inventory.md` 3 處**——那是**貼進 Cursor 雲端 User Rules 的全文快照**，
+   由 `global/user-rules-reconcile.md` 以雜湊對帳。直接編輯會讓對帳表的雜湊對不上，
+   而**現在沒有任何測試會抓到**。它只能走「重貼→回寫」的既定流程。
+
+**VB-4 兩條紅線的實測**：①45 個引用逐處展開、`py -3` 找不到檔 **0 個**（驗證器先餵一個
+指向不存在檔案的 canary 證明它會紅，`exit 1`，才信它的綠）；另實跑 `hooks/report.py`
+（exit 0）、`dashboard/capability_checks.py`（正常輸出）、`tools/peek_sessions.py`（exit 0）、
+`dashboard/check_freshness.py`（exit 1＝它本來就在說「看板該重發布」，不是找不到檔）。
+②三個 repo 的 `git diff --name-only` 命中 `skills/` 的檔數 **0**。
+
+**常駐層代價照實記**：全域 `CLAUDE.md` **+367 bytes**（定義區塊約 +560、路徑縮短省回約 −190）；
+三個 repo 合計 harness **+973**／IT **−592**／MIS **−32** ⇒ **淨 +349 bytes**。
+**這一塊是契約強化不是縮減，不得報成優化成果。**
+（⚠ `check_bloat.py` 同時印「單次增加 2,382 bytes」——那是**別人留下的快照漂移**，
+`git show HEAD:global/CLAUDE.md` 比對出來我這次只佔 367，不要把那個數字掛到本列。）
+
+**回歸與 eval**：`run_hook_tests.py` **1716/1717**，唯一那條紅是既有的
+`skill 來歷與文件引用`（`global/user-rules-reconcile.md:29` 的 SHA8 被誤判成 git hash，
+本輪前後同紅）。`eval/run_all.py` L1／L1-self／L2-self／L3／L4 全 PASS；
+L2 唯一缺失是 `deploy-prod` 的 `/portal.html`（URL path 被當檔案路徑，**本輪未動該檔**）。
+關鍵正面證據：`audit` 契約 10/10、`shougong` 27/27 **全數 OK**
+⇒ **`<harness>` 佔位符不影響 L2 契約抽取**，W-4 當年的預判成立。
+
+**沒做的**：
+- 上面兩類刻意不改（6＋3 處）已開票，見 `TODOS.md` 全域·需求表。
+- **Cursor 雲端 User Rules 尚未重貼**：`global/CURSOR_USER_RULES.md` 已重產，
+  但貼進 Cursor 是人工步驟 ⇒ 落待驗清單，不是我驗得掉的。
+- **沒有新增任何閘門去守「以後不准再寫死」**：`.md` 這一維度目前無台帳、無測試，
+  U-1 台帳只掃 `.py` 與 `.json`。這一輪是一次性清帳，**下一次漂移不會有人來通知**。
+
 - [x] **B-4 規範草案與固定 roster 已落檔**
 - [x] **user 定案**：只做共用 14 支／每支有 diff 時一個原子 commit（零縮減不造空 commit）／先完成對抗式覆核
 - [x] **B-4 完整 gate 版覆核 Round 1～4**：10＋8＋4＋5＝27 項，Round 4 仍有 blocker，

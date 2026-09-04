@@ -6,7 +6,12 @@
 
 > 所有專案都會載入這份。**判準是一句話：換一個專案／換一個部門還成立嗎？**
 > 成立才放這裡；只在某個專案成立的規則放該專案自己的 `CLAUDE.md`。
-> （分層原則的完整版見 `D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md` §2。）
+> （分層原則的完整版見 `<harness>\UNIVERSAL_HARNESS_PLAN.md` §2。）
+
+> **`<harness>` ＝ harness repo 的根目錄，這台機器上是 `D:\Patrick-AI\.ai-harness`。**
+> 規則／角色／skill 一律寫 `<harness>\…`，**要貼進終端機前自己展開成實際路徑**；
+> 換一台機器、換一個磁碟代號只改這一行。**機器直接讀的檔不適用**（`settings.json`、
+> 角色 frontmatter 的 `command:`）——那裡塞佔位符會當場壞掉，只能寫實際路徑。
 
 <!-- rules-section: all -->
 <!-- 這份檔每一節都是規則本文（沒有「速查表」與「敘述段」之分），所以整份都受
@@ -53,7 +58,7 @@ Step 5 否則                         → DEV（可改開發環境檔）
   **scratchpad／暫存檔不必列**（對帳時也不算專案改動）。這一欄是規模分級（§3）的事後對帳依據。
 
 - **對話名稱**：任務一確定就呼叫 `set_session_title`（`session_id: "self"`）；轉向再叫一次。user 給了名字就用他的，**不必等人開口**。
-- **改完名要推雲端**（本機改名不會自動同步）：跑 `py -3 D:/Patrick-AI/.ai-harness/tools/push_cloud_title.py "同一個標題"`，**推失敗當場講、不准吞**。
+- **改完名要推雲端**（本機改名不會自動同步）：跑 `py -3 <harness>/tools/push_cloud_title.py "同一個標題"`，**推失敗當場講、不准吞**。
 - **沒有程式會代勞**：自動改名 hook 已退役。**不叫不是沒名字，是平台塞一個**（你的第一句話，或 `pc-…-sunny-ripple` 代號）——看起來像名字，所以漏命名很難發現。
 - **標題格式**（整串 ≤48 字、任務名 ≤12 字、標記在最前）：【收尾】原名｜收尾／【討論】主題／【任務】名稱｜階段｜進度%。收尾用**原名**。
 - **判定順序不能換**：收工／封存／交接／收尾／handoff →【收尾】；ASK／VERIFY 且修改檔案為無或待定 →【討論】；其餘 →【任務】。進度寫得出來才加。
@@ -154,7 +159,7 @@ L 級可壓成一次 grep。**派誰＝哪個平台哪個型別見 skill 步驟 
 - **主 session 只留判斷與統合**：收 subagent 的結論、下決定、動需要全局脈絡的刀。
   高 effort 留在這裡；粗活派低 effort 角色（`model`／`effort` 由角色 frontmatter 承載）。
 - **為什麼派**：慢在推理不在跑指令，且不派會讓原始資料每輪重送 → 實測倍數見 `MODEL_ROUTING_PLAN.md` §7。
-- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `D:\Patrick-AI\.ai-harness\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
+- **角色回報的 `【需要但沒有】` 必落檔**：抄進 `<harness>\TODOS.md`「全域·需求」表（角色沒 Write 權限，落檔是我的事）；我自己繞路多花時間時同樣登記、附實例。
 
 
 - **session 指令擋住派工時必須當場說**，別默默自己做完（`CLAUDE_CODE_CHILD_SESSION=1`＝
@@ -181,7 +186,7 @@ L 級可壓成一次 grep。**派誰＝哪個平台哪個型別見 skill 步驟 
   四欄缺一不可：**項目／為何沒驗／驗證指令逐字／誰跑**。**空白＝沒驗過**。
 - 報告要誠實：測試失敗就說失敗並附輸出、步驟跳過就說跳過。
 - 同一個 repo 可能有別的 session 在改：開工前 `git status` 須乾淨、commit 前只 stage 自己的
-  hunk 並對帳＝0 → `D:\Patrick-AI\.ai-harness\tools\peek_sessions.py`
+  hunk 並對帳＝0 → `<harness>\tools\peek_sessions.py`
 
 
 ## 6. 動共用層（harness）
