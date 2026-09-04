@@ -1,0 +1,373 @@
+#!/usr/bin/env python3
+# 層級：核心（harness 自身工具）。**禁寫死專案路徑** —— 路徑一律從腳本位置或設定推導。
+"""把本機 repo 清洗成「可以交給第三方」的版本，驗過了才推上雲端 git。
+
+    py -3 tools/push_cloud_backup.py --check          # 只清洗＋驗證，不推（先跑這個）
+    py -3 tools/push_cloud_backup.py --push           # 驗證全過才推
+    py -3 tools/push_cloud_backup.py --push --remote https://github.com/<user>/<repo>.git
+
+## 為什麼要有這支
+
+本機那份 repo 帶著公司內部 IP、正式網域、管理帳號名、機器名，以及 500 多筆
+commit metadata 裡的公司信箱。這些東西**不能交給雲端服務商**，而且推上去之後
+刪不乾淨（force push 仍留舊 object，要開工單請對方清）。
+
+所以雲端那份是**清洗過的複製品**，本機一個 byte 都不動。代價是兩份歷史從此
+分叉、識別碼完全不同 —— 它是**備份，不是可以推拉的 remote**。
+
+## 為什麼不是手動做一次就好
+
+手動的東西等於不會做。本機鏡像已經靜默分叉過六天沒人發現（`TODOS.md`
+「harness 跨機同步」那列），成因是「沒有東西提醒他要看」。這支的存在就是為了
+讓「更新雲端備份」變成一行指令。
+
+## 規則檔為什麼不進版控
+
+`replace-rules.txt` 的**左半邊就是要清掉的那些字串**。把它 commit 進 repo 等於
+把敏感清單公開列出來 —— 清洗就白做了。所以它放在 gitignored 的
+`.scratch/cloud-export/`，而且**檔案不在就拒跑**：這裡不允許預設值，
+一個「找不到規則檔就跳過清洗」的 fallback 會讓這支變成靜默的洩漏管道。
+
+## 驗證為什麼要有對照組
+
+清洗後掃出「0 命中」有兩種可能：真的清乾淨了，或**掃描根本沒生效**。
+兩者長得一模一樣。所以每個樣式都要先在**未清洗的原始複製品**上證明掃得到，
+掃不到就中止 —— 那代表判準壞了，這時候的 0 不算數。
+（2026-09-04 手動跑第一輪時，規則漏了單獨的 `examplecorp`，正是驗證抓到的。）
+
+## 這支自己被驗過什麼（2026-09-04·變異測試）
+
+| 變異 | 預期 | 實測 |
+|---|---|---|
+| 規則檔不存在 | 拒跑，不得靜默跳過 | ✅ 拒跑並印出格式說明 |
+| 規則含 repo 裡不存在的字串 | 對照組轉紅（判準壞了） | ✅ FAIL，點名該樣式 |
+| 拿掉 `<USER>==>` 那條規則 | 清單判準看不到，**形狀判準要抓到** | ✅ FAIL，點名 `<USER>` |
+| 白名單清空 | 判準本身還活著，報出全部命中 | ✅ FAIL，列出 8 個 |
+
+⚠ **已知限制，不要當成做完了**：拿掉 `<ADMIN-ACCT>==>` 那條規則時，**兩層判準都不會紅**。
+   `<ADMIN-ACCT>` 是任意字串、沒有形狀，形狀判準認不出它；清單判準的清單又正是規則檔本身。
+   ⇒ **「規則漏了一個沒有形狀的字串」這件事，這支抓不到。** 有形狀的（IP／email／
+   使用者路徑）抓得到，沒形狀的（帳號名／機器名／公司名）只能靠人維護規則檔。
+   加新規則時請一併想：這個東西如果漏了，有沒有東西會叫？沒有的話就只剩人。
+"""
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HARNESS_ROOT = Path(__file__).resolve().parent.parent
+RULES_DIR = HARNESS_ROOT / ".scratch" / "cloud-export"
+RULES_FILE = RULES_DIR / "replace-rules.txt"
+MAILMAP_FILE = RULES_DIR / "mailmap.txt"
+CONFIG_FILE = HARNESS_ROOT / "harness.config.json"
+
+
+def die(msg: str, code: int = 1):
+    print(f"\n拒跑：{msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def run(args, cwd=None, check=True, capture=True):
+    r = subprocess.run(args, cwd=cwd, check=False,
+                       stdout=subprocess.PIPE if capture else None,
+                       stderr=subprocess.STDOUT if capture else None)
+    out = (r.stdout or b"").decode("utf-8", "replace")
+    if check and r.returncode != 0:
+        die(f"指令失敗（exit {r.returncode}）：{' '.join(map(str, args))}\n{out}")
+    return out
+
+
+def filter_repo_cmd() -> list:
+    """找 git-filter-repo 的進入點。**不寫死安裝路徑** —— 換機器一定不一樣。"""
+    exe = shutil.which("git-filter-repo")
+    if exe:
+        return [exe]
+    spec = importlib.util.find_spec("git_filter_repo")
+    if spec and spec.origin:
+        return [sys.executable, spec.origin]
+    die("找不到 git-filter-repo。先跑：py -3 -m pip install git-filter-repo")
+
+
+def load_patterns() -> list:
+    """讀規則檔左半邊（要被清掉的字串）—— 那就是驗證要掃的樣式清單。
+
+    刻意**從同一份檔案推導**而不是另外維護一張表：兩張表會漂移，而漂移的方向
+    永遠是「規則加了、驗證沒加」，也就是清了但沒驗到。
+    """
+    if not RULES_FILE.is_file():
+        die(f"規則檔不存在：{RULES_FILE}\n"
+            f"      它含敏感字串所以不進版控，**沒有預設值**。\n"
+            f"      格式：每行 `原字串==>替換值`，長字串排前面（逐條套用）。")
+    pats = []
+    for ln, raw in enumerate(RULES_FILE.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "==>" not in line:
+            die(f"規則檔第 {ln} 行沒有 `==>`：{line!r}")
+        old, _, new = line.partition("==>")
+        if not old:
+            die(f"規則檔第 {ln} 行左半邊是空的")
+        pats.append((old, new))
+    if not pats:
+        die("規則檔沒有任何規則 —— 空檔不是「不用清」，是「忘了寫」。")
+    return pats
+
+
+# ── 形狀判準：**不依賴規則檔**的第二道 ────────────────────────────────
+#
+# 2026-09-04 變異測試抓到的洞：驗證的掃描清單原本完全從規則檔推導，於是
+# 「規則漏了一條」時驗證也跟著不掃它 —— 拿掉 `<ADMIN-ACCT>==>` 那行，七項照樣全過。
+# 而「規則漏一條」正是最常發生的錯（同一天手動跑第一輪就漏了單獨的 `examplecorp`）。
+#
+# 所以這裡另外用**形狀**認：私有網段 IP、email、Windows 使用者路徑。這三類
+# 不管規則檔寫了什麼都會被掃到。白名單是規則檔的**右半邊**（替換後的值本來就
+# 該長成這些形狀）加上幾個公認安全的。
+#
+# ⚠ **這一層抓不到沒有形狀的東西** —— 帳號名、機器名、公司名就是任意字串，
+#   只能靠規則清單。報告會把兩類分開印，不要把「形狀判準過了」讀成「全清乾淨了」。
+SHAPES = {
+    "私有網段 IP": re.compile(
+        r"\b(?:10\.\d{1,3}|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"),
+    "email 位址": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+    "Windows 使用者路徑": re.compile(
+        r"[A-Za-z]:[\\/]{1,2}Users[\\/]{1,2}([A-Za-z0-9._-]+)"),
+}
+SHAPE_SAFE = {
+    "users.noreply.github.com", "example.com", "example.org", "example.net",
+    "localhost", "10.0.0.0", "127.0.0.1", "0.0.0.0",
+}
+
+
+def blob_dump(repo: Path) -> str:
+    """把 repo 裡**所有 blob**（不只 HEAD）倒成一個字串。
+
+    只掃 HEAD 會漏掉歷史 —— 例如某個檔今天 gitignore 了，但它的舊版本還在歷史裡
+    （這個 repo 的看板 html 正是如此：現行 tree 沒有，歷史裡帶著管理帳號名）。
+    """
+    listing = run(["git", "-C", str(repo), "cat-file", "--batch-all-objects",
+                   "--batch-check=%(objecttype) %(objectname)"])
+    blobs = [l.split()[1] for l in listing.splitlines() if l.startswith("blob ")]
+    if not blobs:
+        return ""
+    proc = subprocess.run(["git", "-C", str(repo), "cat-file", "--batch"],
+                          input="\n".join(blobs).encode(),
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return proc.stdout.decode("utf-8", "replace")
+
+
+def load_allowlist() -> set:
+    """人逐項判定過、確認無害的形狀命中（測試假帳號、Windows 內建目錄之類）。
+
+    ⚠ 它跟「遇到誤報就放寬判準」不是同一件事：判準本身不動，只是把**具體的值**
+      一個一個記下來，而且要寫理由。放寬判準會讓往後所有同形狀的東西都溜過去；
+      列具體值只放行這一個。檔案不存在＝白名單為空，不是跳過檢查。
+    """
+    f = RULES_DIR / "shape-allowlist.txt"
+    if not f.is_file():
+        return set()
+    out = set()
+    for raw in f.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            out.add(line)
+    return out
+
+
+def shape_hits(data: str, pats: list) -> dict:
+    """用形狀認出可疑值，扣掉白名單。回 {類別: sorted(可疑值)}。"""
+    safe = set(SHAPE_SAFE) | load_allowlist()
+    for _, new in pats:
+        v = new.strip()
+        if v:
+            safe.add(v)
+            safe.add(v.lstrip("<").rstrip(">"))
+    out = {}
+    for name, rx in SHAPES.items():
+        bad = set()
+        for m in rx.finditer(data):
+            val = m.group(0)
+            # 使用者路徑只看帳號名那一段；佔位符（<...>）算已清
+            probe = m.group(1) if rx.groups else val
+            if probe.startswith("<") or probe in safe:
+                continue
+            if any(s in val for s in safe):
+                continue
+            bad.add(val if not rx.groups else probe)
+        if bad:
+            out[name] = sorted(bad)[:8]
+    return out
+
+
+def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
+    """七項驗證。任一項不過就回 False —— 呼叫端據此中止，不推。"""
+    ok = True
+    needles = [old for old, _ in pats]
+
+    def check(name, passed, detail=""):
+        nonlocal ok
+        print(f"  {'ok  ' if passed else 'FAIL'} {name}" + (f"\n       {detail}" if detail and not passed else ""))
+        if not passed:
+            ok = False
+
+    print("     （倒出所有 blob 中…）")
+    pristine_data = blob_dump(pristine)
+    export_data = blob_dump(export)
+
+    # V-A 對照組：先證明掃描判準有效，否則後面的 0 不算數。
+    dead = [n for n in needles if pristine_data.count(n) == 0]
+    check("清單判準在未清洗的複製品上抓得到（對照組）", not dead,
+          f"這些樣式在原始 repo 就掃不到 ⇒ 判準壞了，清洗後的 0 不算數：{dead}")
+    if dead:
+        return False   # 判準都壞了，後面每一項都沒有意義
+
+    # V-B 全歷史所有 blob 都清乾淨（清單判準：只認規則檔列出來的字串）
+    left = {n: export_data.count(n) for n in needles if export_data.count(n)}
+    check(f"全歷史敏感字串已清除（清單判準·{len(needles)} 條）", not left,
+          f"仍有殘留：{left}")
+
+    # V-B2 形狀判準：**不看規則檔**，所以規則漏了一條時這裡還抓得到。
+    #      對照組同理 —— 先確認它在未清洗的 repo 上真的會叫。
+    base_shapes = shape_hits(pristine_data, pats)
+    check("形狀判準在未清洗的複製品上抓得到（對照組）", bool(base_shapes),
+          "形狀判準在原始 repo 一個都沒抓到 ⇒ 它壞了，它的綠不算數")
+    if base_shapes:
+        found = shape_hits(export_data, pats)
+        check("全歷史敏感字串已清除（形狀判準·IP／email／使用者路徑）", not found,
+              f"規則檔沒涵蓋到的殘留：{found}")
+    else:
+        ok = False
+
+    # V-C commit metadata（`git grep` 掃不到這一層，最容易漏）
+    ids = run(["git", "-C", str(export), "log", "--all", "--format=%ae%n%ce"])
+    bad = sorted({e for e in ids.split() if any(n in e for n in needles)})
+    check("commit 作者／提交者信箱已清除", not bad, f"殘留：{bad}")
+
+    # V-D 沒弄丟東西
+    n_exp = run(["git", "-C", str(export), "rev-list", "--count", "--all"]).strip()
+    n_loc = run(["git", "-C", str(local), "rev-list", "--count", "--all"]).strip()
+    check(f"commit 數一致（{n_exp}）", n_exp == n_loc, f"匯出 {n_exp} vs 本機 {n_loc}")
+
+    f_exp = len(run(["git", "-C", str(export), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
+    f_loc = len(run(["git", "-C", str(local), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
+    check(f"檔案數一致（{f_exp}）", f_exp == f_loc, f"匯出 {f_exp} vs 本機 {f_loc}")
+
+    # V-E 內容只差該差的：把兩邊 HEAD 展開逐行比，未解釋的差異必須是 0
+    with tempfile.TemporaryDirectory() as td:
+        a, b = Path(td) / "a", Path(td) / "b"
+        for d, repo in ((a, export), (b, local)):
+            d.mkdir()
+            # archive 是二進位，不能經過 run()（它會 utf-8 解碼）
+            blob = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"],
+                                  stdout=subprocess.PIPE).stdout
+            subprocess.run(["tar", "-x", "-C", str(d)], input=blob,
+                           stderr=subprocess.DEVNULL)
+        diff = subprocess.run(["diff", "-r", str(a), str(b)],
+                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        lines = [l for l in diff.stdout.decode("utf-8", "replace").splitlines()
+                 if l[:1] in "<>"]
+        vocab = [re.escape(x) for pair in pats for x in pair if x]
+        rx = re.compile("|".join(vocab)) if vocab else None
+        unexplained = [l for l in lines if not (rx and rx.search(l))]
+        check(f"內容差異全部落在替換規則上（{len(lines)} 行）", not unexplained,
+              f"{len(unexplained)} 行無法用規則解釋，前 3 行：{unexplained[:3]}")
+
+    return ok
+
+
+def resolve_remote(cli_remote: str | None) -> str | None:
+    if cli_remote:
+        return cli_remote
+    if CONFIG_FILE.is_file():
+        try:
+            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
+        except Exception:
+            return None
+        v = cfg.get("cloudBackupRemote")
+        return v if isinstance(v, str) and v else None
+    return None
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="清洗本機 repo 並推上雲端 git（本機不動）")
+    g = ap.add_mutually_exclusive_group(required=True)
+    g.add_argument("--check", action="store_true", help="只清洗＋驗證，不推")
+    g.add_argument("--push", action="store_true", help="驗證全過才推")
+    ap.add_argument("--remote", help="雲端 URL（不給就讀 harness.config.json 的 cloudBackupRemote）")
+    ap.add_argument("--keep", action="store_true", help="保留工作目錄供檢查")
+    args = ap.parse_args()
+
+    if not (HARNESS_ROOT / ".git").exists():
+        die(f"{HARNESS_ROOT} 不是 git repo")
+    pats = load_patterns()
+    mailmap = MAILMAP_FILE if MAILMAP_FILE.is_file() else None
+    fr = filter_repo_cmd()
+
+    head = run(["git", "-C", str(HARNESS_ROOT), "rev-parse", "HEAD"]).strip()
+    dirty = len([l for l in run(["git", "-C", str(HARNESS_ROOT), "status", "--porcelain"]).splitlines() if l])
+    print(f"本機快照  HEAD={head[:12]}  未提交={dirty} 個檔（未提交的東西不會進備份）")
+    print(f"規則      {len(pats)} 條，來源 {RULES_FILE}")
+    print(f"mailmap   {'有' if mailmap else '無'}")
+
+    work = Path(tempfile.mkdtemp(prefix="cloudbak-"))
+    export = work / "export.git"
+    pristine = work / "pristine.git"
+    try:
+        print("\n[1/4] 複製本機 repo（本機不會被動到）")
+        run(["git", "clone", "--mirror", str(HARNESS_ROOT), str(export)])
+        run(["git", "clone", "--mirror", str(HARNESS_ROOT), str(pristine)])
+
+        # remote refs 是「本機鏡像的追蹤分支」，推上雲端只會製造垃圾 ref
+        for repo in (export, pristine):
+            for ref in run(["git", "-C", str(repo), "for-each-ref",
+                            "--format=%(refname)", "refs/remotes"]).split():
+                run(["git", "-C", str(repo), "update-ref", "-d", ref])
+
+        print("[2/4] 清洗（只動複製品）")
+        cmd = fr + ["--replace-text", str(RULES_FILE), "--force"]
+        if mailmap:
+            cmd += ["--mailmap", str(mailmap)]
+        run(cmd, cwd=str(export))
+
+        print("[3/4] 驗證")
+        if not verify(export, pristine, HARNESS_ROOT, pats):
+            die("驗證沒過 —— **不推**。上面 FAIL 的那幾條要先修規則檔再重跑。", 2)
+        print("  —— 七項全過")
+
+        if args.check:
+            print(f"\n--check 模式，不推。匯出品：{export if args.keep else '（已清除，加 --keep 保留）'}")
+            return 0
+
+        remote = resolve_remote(args.remote)
+        if not remote:
+            die("沒有雲端 URL。用 --remote，或在 harness.config.json 加 cloudBackupRemote。")
+        print(f"[4/4] 推上 {remote}")
+        run(["git", "-C", str(export), "remote", "add", "origin", remote])
+        run(["git", "-C", str(export), "push", "--mirror", "origin"], capture=False)
+
+        tip = run(["git", "-C", str(export), "rev-parse", "HEAD"]).strip()
+        ls = run(["git", "-C", str(export), "ls-remote", "origin", "HEAD"])
+        print(f"\n匯出品 tip {tip[:12]}")
+        print(f"雲端回報   {ls.strip() or '(空)'}")
+        if tip[:12] not in ls:
+            die("雲端 tip 與匯出品對不上 —— 推可能沒真的成功，自己去看一眼。", 3)
+        print("雲端 tip 與匯出品一致 ✓")
+        print(f"\n⚠ 本機 HEAD 仍是 {head[:12]} —— 兩份歷史是分叉的，這是備份不是 remote。")
+        return 0
+    finally:
+        if args.keep:
+            print(f"\n工作目錄保留：{work}")
+        else:
+            shutil.rmtree(work, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
