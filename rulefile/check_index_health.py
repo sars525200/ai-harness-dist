@@ -81,6 +81,12 @@ def check_capacity(targets: list) -> list:
     fails = []
     print("── ① 平台容量（MEMORY.md 200 行／25KB 是硬限制·超標安靜丟掉）")
     for t in targets:
+        # `path` 可以是 None —— `discover_targets()` 的契約寫明「探索不到的要留下痕跡，
+        # 不是消失」，記憶目錄還沒建起來的專案就是 None。2026-09-02 專案改名後第一次真的
+        # 出現，整支 check 直接 TypeError 掛掉：**一個專案沒有索引檔，不該讓其他專案的
+        # 檢查也一起消失**。
+        if t.get("path") is None:
+            continue
         p = Path(t["path"])
         if t.get("weight") != "always" or not p.exists():
             continue
@@ -109,7 +115,7 @@ def check_index_links(targets: list, bloat) -> list:
     fails = []
     print("\n── ② 索引指向（MEMORY.md 的 [[name]] 對不對得到檔）")
     for t in targets:
-        if t.get("kind") != "index":
+        if t.get("kind") != "index" or t.get("path") is None:
             continue
         p = Path(t["path"])
         if not p.exists():
@@ -140,7 +146,7 @@ def check_rule_globs(targets: list) -> list:
     roots = {}
     for t in targets:
         proj = t.get("project")
-        if proj and proj != "__global__":
+        if proj and proj != "__global__" and t.get("path") is not None:
             roots.setdefault(proj, Path(t["path"]).parent)
     for proj, root in sorted(roots.items()):
         rules_dir = root / ".claude" / "rules"
