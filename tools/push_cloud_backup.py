@@ -53,13 +53,15 @@ commit metadata 裡的公司信箱。這些東西**不能交給雲端服務商**
 from __future__ import annotations
 
 import argparse
+import difflib
 import importlib.util
+import io
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -182,6 +184,21 @@ def load_allowlist() -> set:
     return out
 
 
+def read_tree(repo: Path) -> dict:
+    """把 repo 的 HEAD tree 讀成 {路徑: bytes}。用標準庫解 tar，不呼叫外部 `tar`。"""
+    blob = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"],
+                          stdout=subprocess.PIPE).stdout
+    out = {}
+    with tarfile.open(fileobj=io.BytesIO(blob)) as tf:
+        for m in tf.getmembers():
+            if not m.isfile():
+                continue
+            f = tf.extractfile(m)
+            if f:
+                out[m.name] = f.read()
+    return out
+
+
 def shape_hits(data: str, pats: list) -> dict:
     """用形狀認出可疑值，扣掉白名單。回 {類別: sorted(可疑值)}。"""
     safe = set(SHAPE_SAFE) | load_allowlist()
@@ -208,12 +225,19 @@ def shape_hits(data: str, pats: list) -> dict:
 
 
 def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
-    """七項驗證。任一項不過就回 False —— 呼叫端據此中止，不推。"""
+    """全部驗證。任一項不過就回 False —— 呼叫端據此中止，不推。
+
+    項數用 `verify.n_checks` 累計，**不寫死在訊息裡**：2026-09-04 加了一項
+    「兩邊檔案清單一致」之後，收尾那行還印著「七項全過」—— 寫死的數字會在
+    加減判準時無聲說謊，而它印的正是「我驗了幾項」這個最不該騙人的數字。
+    """
+    verify.n_checks = 0
     ok = True
     needles = [old for old, _ in pats]
 
     def check(name, passed, detail=""):
         nonlocal ok
+        verify.n_checks += 1
         print(f"  {'ok  ' if passed else 'FAIL'} {name}" + (f"\n       {detail}" if detail and not passed else ""))
         if not passed:
             ok = False
@@ -260,25 +284,36 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
     f_loc = len(run(["git", "-C", str(local), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
     check(f"檔案數一致（{f_exp}）", f_exp == f_loc, f"匯出 {f_exp} vs 本機 {f_loc}")
 
-    # V-E 內容只差該差的：把兩邊 HEAD 展開逐行比，未解釋的差異必須是 0
-    with tempfile.TemporaryDirectory() as td:
-        a, b = Path(td) / "a", Path(td) / "b"
-        for d, repo in ((a, export), (b, local)):
-            d.mkdir()
-            # archive 是二進位，不能經過 run()（它會 utf-8 解碼）
-            blob = subprocess.run(["git", "-C", str(repo), "archive", "HEAD"],
-                                  stdout=subprocess.PIPE).stdout
-            subprocess.run(["tar", "-x", "-C", str(d)], input=blob,
-                           stderr=subprocess.DEVNULL)
-        diff = subprocess.run(["diff", "-r", str(a), str(b)],
-                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        lines = [l for l in diff.stdout.decode("utf-8", "replace").splitlines()
-                 if l[:1] in "<>"]
-        vocab = [re.escape(x) for pair in pats for x in pair if x]
-        rx = re.compile("|".join(vocab)) if vocab else None
-        unexplained = [l for l in lines if not (rx and rx.search(l))]
-        check(f"內容差異全部落在替換規則上（{len(lines)} 行）", not unexplained,
-              f"{len(unexplained)} 行無法用規則解釋，前 3 行：{unexplained[:3]}")
+    # V-E 內容只差該差的：逐檔逐行比，未解釋的差異必須是 0。
+    #
+    # ⚠ 2026-09-04：第一版用 `tar` 解壓 ＋ `diff -r` 比對，在 Git Bash 下跑得好好的，
+    #    但 user 在 PowerShell 跑就 FileNotFoundError —— 那兩支是 Git for Windows
+    #    帶的 Unix 工具，只有 Git Bash 的 PATH 有。**「我這邊能跑」不等於「它能跑」**。
+    #    改成純標準庫（tarfile ＋ difflib），不依賴任何外部指令。
+    a_files = read_tree(export)
+    b_files = read_tree(local)
+    only = sorted(set(a_files) ^ set(b_files))
+    check("兩邊檔案清單一致", not only, f"只存在於一邊：{only[:5]}")
+
+    vocab = [re.escape(x) for pair in pats for x in pair if x]
+    rx = re.compile("|".join(vocab)) if vocab else None
+    lines, unexplained = [], []
+    for name in sorted(set(a_files) & set(b_files)):
+        if a_files[name] == b_files[name]:
+            continue
+        try:
+            ta = a_files[name].decode("utf-8").splitlines()
+            tb = b_files[name].decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            unexplained.append(f"{name}（二進位檔內容不同）")
+            continue
+        for d in difflib.unified_diff(tb, ta, lineterm="", n=0):
+            if d[:1] in "+-" and d[:3] not in ("+++", "---"):
+                lines.append(d)
+                if not (rx and rx.search(d)):
+                    unexplained.append(f"{name}: {d[:70]}")
+    check(f"內容差異全部落在替換規則上（{len(lines)} 行）", not unexplained,
+          f"{len(unexplained)} 行無法用規則解釋，前 3 筆：{unexplained[:3]}")
 
     return ok
 
@@ -340,7 +375,7 @@ def main() -> int:
         print("[3/4] 驗證")
         if not verify(export, pristine, HARNESS_ROOT, pats):
             die("驗證沒過 —— **不推**。上面 FAIL 的那幾條要先修規則檔再重跑。", 2)
-        print("  —— 七項全過")
+        print(f"  —— {verify.n_checks} 項全過")
 
         if args.check:
             print(f"\n--check 模式，不推。匯出品：{export if args.keep else '（已清除，加 --keep 保留）'}")
