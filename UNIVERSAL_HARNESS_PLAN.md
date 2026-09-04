@@ -341,6 +341,19 @@ D-4 定案前不動它。
 不能替代 git；plugin 只適合 skills／agents 的官方載入，替代不了 hook 絕對路徑
 與 `harness.config.json`。
 
+⚠ **2026-09-04 增訂：上面「plugin 替代不了 hook 絕對路徑」這半句站不住**（官方文件實查，非推測）：
+`plugins.md` 明寫 plugin 可帶 `hooks/hooks.json`（格式與 settings.json 的 `hooks` 相同），
+`hooks.md` 明寫 hook command 可用 `${CLAUDE_PLUGIN_ROOT}`；plugin 同時可帶 `skills/` 與 `agents/`。
+⇒ plugin 能拿走 **W1 的兩條 junction ＋ W10 裡 12 條指令路徑改寫**（6 條 hook command＋6 條角色 frontmatter），
+正是最容易靜默失效的那一半。**拿不走的**：`harness.config.json`（W2）、`state\`（W3）、post-commit 與
+bare 鏡像（W4／W5）、Cursor 複本（W6）、CLAUDE.md 與 output-styles 的 restore（W7／W8）、5 處 `STATE_DIR` 字面值（B4）。
+官方**沒寫**的：plugin 與 user 層 hooks 並存的順序與合併規則、安裝後執行一次的機制、`additionalDirectories` 的 `~` 支援
+（本機實測可用，見 `CLOUD_BACKUP_PLAN.md` §2）。
+**待決（user 尚未答）**：要不要先做一小時 spike——harness 根放 `hooks/hooks.json`＋`.claude-plugin/plugin.json`，
+`claude --plugin-dir <harness>` 開一則對話，驗 PreToolUse 真的從 plugin 觸發、`state\` 有心跳。不動 live 設定、可逆。
+**在 spike 出結果前，本節定案不改**——憑文件改定案就是第 4 輪發現 5 那種「過期的表和真的沒做長得一模一樣」的反面：憑沒跑過的東西改規格。
+換機失效點的完整盤點（6＋6＋5＋13＋看板 6＋不進 clone 3＋junction 7＋IT 專案 1）在 2026-09-04 晚的說明頁與 `.scratch/handoff/20260904-cloud-autopush.md`。
+
 ### D-1 對抗式覆核·第 1 輪逐項處置（2026-09-03）
 
 審查者 Cursor CLI `cursor-grok-4.6-high`；守門 `adversarial_exchange_gate.py --check` exit 0。
@@ -384,6 +397,7 @@ fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變
 | ~~HND-1 已在跑但沒註冊~~ | — | ✅ **已註冊為 enforce**（別的 session·commit `e6ded68`），規則鍵現為 19 個 |
 | ~~`global/settings.json` 的探針移除未提交~~ | — | ✅ **已提交**（commit `c62f2ac`） |
 | **接線器本體**（W 側一支都還沒有） | W1–W10 | ⏳ 未動。2026-09-03 user 拍板：**先寫探針實跑，拿真實輸出回頭修規格，再派確認輪**（不要純文件打磨到蓋章） |
+| **plugin 路線 spike**（能否拿走 W1＋W10 的指令路徑那一半） | W1／W10 | ⏳ **等 user 決定要不要做**（2026-09-04 晚·官方文件核實 plugin 可帶 hooks，見定案末段增訂）。出結果前定案不改 |
 | ~~探針一支都沒有~~ | P1／P2／P5／P9／P10／P11 | ✅ **六條已實作並實跑**（2026-09-03）。**數字見定案第 2 點的實跑節，本欄不複述**（第 4 輪發現 5：本欄的數字與實跑節對不上，而過期的表和真的沒做長得一模一樣） |
 | ~~探針剩下五條~~ | P3／P4／P6／P7／P8 | ✅ **2026-09-04 補齊並實跑**，數字見定案第 2 點的實跑節（本欄不複述——第 4 輪發現 5：過期的表和真的沒做長得一模一樣）。⚠ **同時補了 `EXPECTED_PROBES` 缺席守門**：在這之前沒實作的探針一條結果都不產生，`verdict()` 看不見它們 ⇒ 少驗五條仍會印「全綠」 |
 | **`additionalDirectories` 的 `\tmp` 殘留條目** | P5 | ⏳ 未動·**等 user 決定**。live 與 repo `global/settings.json:153` 兩份都有，本機不存在 ⇒ P5 實跑的那一條 FAIL。屬個人設定，接線器不得自行刪 |

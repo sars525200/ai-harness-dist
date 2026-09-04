@@ -280,8 +280,10 @@ commit 進來等於把清單公開列出。**檔案不在就拒跑**，不允許
 
 **已知限制**：
 - `.git/hooks/` 不進版控，換機器要 `cp tools/githooks/post-commit .git/hooks/post-commit`（同鏡像那條）。
-- **2026-09-04 23:03 實際踩到**：另一則對話在同一 repo 做 `git stash`／`pop`，25 秒空窗內裝進 `.git/hooks/` 的
-  hook 被舊版蓋掉，第一次 commit 沒觸發背景推。`wiring_probe.py` P9 的「逐位元相同」判準抓得到這一型，
-  但它不會自動跑。
+- **2026-09-04 23:03 實際踩到**：另一則對話在同一 repo 做 `git stash`（23:02:18）／`pop`（23:03:24），我的
+  `cp tools/githooks/post-commit .git/hooks/` 落在那 66 秒空窗內——工作區那份當時被 stash 藏回舊版，**我複製的
+  就是舊版，而 `cmp` 當然說相同**。pop 把原始檔還回來，但 `.git/hooks/` 不歸 git 管、不會跟著回來。
+  第一次 commit 沒觸發背景推。`wiring_probe.py` P9 的「逐位元相同」判準抓得到這一型，但它不會自動跑；
+  真正的教訓是**動共用 repo 前跑 `tools/peek_sessions.py`**，兩邊都沒跑。
 - 規則檔只在這台機器的 `.scratch/cloud-export/`，**不在任何備份裡**。這台壞了，從雲端還原的那份無法再跑
   清洗工具。要不要另存一處（密碼管理器／私人雲端）是 user 的決定，2026-09-04 晚已問、待答。
