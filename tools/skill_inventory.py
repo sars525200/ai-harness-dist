@@ -162,9 +162,17 @@ def fetch_platform() -> list[dict]:
     return items
 
 
-def build(doc: dict, project: Path) -> list[dict]:
+def build(doc: dict, project: Path, baseline_doc: "dict | None" = None) -> list[dict]:
+    """`doc` ＝清冊（`skills[]`）；`baseline_doc` ＝基準（`baselines`）。
+
+    ⚠ **2026-09-04 拆成兩個參數**（票 10：基準搬去 `state\\`）。拆之前兩者同檔，
+    所以 `doc.get("baselines")` 拿得到。搬家後如果留著那行寫法，它會**回空 dict、
+    迴圈空轉、不報錯**，結果是 `skills[].modes` 欄悄悄變空——計畫書 §14
+    早就點名這是「改前先 grep 找齊全部 copy」要擋的第一個坑。
+    `baseline_doc` 預設 None 是為了讓舊呼叫點在型別上就斷掉，不是為了相容。
+    """
     old_by_name = {s.get("name"): s for s in doc.get("skills", []) if isinstance(s, dict)}
-    baselines = doc.get("baselines", {})
+    baselines = (baseline_doc or {}).get("baselines", {})
     seen_in = {}
     for mode in ("interactive", "headless"):
         for n in baselines.get(mode, {}).get("names", []):
@@ -245,9 +253,22 @@ def main(argv: list[str] | None = None) -> int:
         if not project.is_dir():
             raise InventoryError(f"currentProject 目錄不存在：{project}")
 
-        path = skill_watch.DEFAULT_BASELINE
+        # 2026-09-04 起這是**兩個檔**（票 10：基準搬出版控，清冊留原位）。
+        # 之前一個 doc 同時扛清冊與基準，所以只要一個路徑。現在：
+        #   · path     ＝清冊，讀也寫（版控中，SkillViewer 顯示用）
+        #   · baseline ＝基準，只讀（state\，gitignored，本機快照）
+        # ⚠ 基準缺席**不拒跑**：清冊的三個來源不需要它，只有 `modes` 欄需要。
+        # 新機 clone 下來還沒建基準時，拒跑會讓「清冊也產不出來」，
+        # 而 `modes` 欄空著本來就有明確的訊息（下面那句「沒有 interactive 基準」）。
+        path = skill_watch.ROSTER_PATH
         doc = skill_watch.load_doc(path)
-        skills = build(doc, project)
+        baseline_doc: dict = {}
+        if skill_watch.DEFAULT_BASELINE.exists():
+            baseline_doc = skill_watch.load_doc(skill_watch.DEFAULT_BASELINE)
+        else:
+            print(f"  ⚠ 還沒有基準檔（{skill_watch.DEFAULT_BASELINE}）"
+                  "——modes 欄會是空的，不是「兩個模式都看不到」")
+        skills = build(doc, project, baseline_doc)
 
         by_origin: dict[str, int] = {}
         for s in skills:
@@ -269,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
         # ⚠ 覆核 F-5：`interactive` 基準沒有任何自動更新路徑（排程只更新 headless），
         # 而 `presentLocally` 吃兩份基準的聯集 ⇒ 它凍結越久，一支「已被平台移除」的
         # skill 就越可能永遠標成存在，讓清冊回到 §1.3 描述的原始病灶。
-        inter = doc.get("baselines", {}).get("interactive", {})
+        inter = baseline_doc.get("baselines", {}).get("interactive", {})
         stamp = inter.get("capturedAt")
         if stamp:
             try:
@@ -299,8 +320,10 @@ def main(argv: list[str] | None = None) -> int:
         doc["updatedAt"] = _dt.datetime.now().astimezone().strftime("%Y-%m-%d")
         doc["generatedBy"] = "tools/skill_inventory.py"
         doc["note"] = ("本檔由 tools/skill_inventory.py 產生，**請勿手動編輯**"
-                       "（下次產生會整批覆蓋）。skills[] 是顯示用清冊、"
-                       "baselines 是變動偵測基準（由 tools/skill_watch_run.py 維護）。"
+                       "（下次產生會整批覆蓋）。這裡只有 skills[]＝顯示用清冊；"
+                       "變動偵測的基準 2026-09-04 起住在 state/skill_watch_baselines.json"
+                       "（不進版控——它帶 cliVersion，是版本綁定的本機快照），"
+                       "由 tools/skill_watch_run.py 維護。"
                        "要改內容請改產生器或其來源：<harness>/skills、"
                        "<project>/.claude/skills、官方 commands 文件。")
         # 用共用的 save_doc：它帶 `newline=""`，否則每次寫入都把這個版控中的

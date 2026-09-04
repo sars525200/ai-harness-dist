@@ -99,11 +99,17 @@ def _make_root(root: Path) -> None:
         "# 假 TODOS\n\n## 全域·需求\n\n| 項目 | 現況 | 下一步 | 誰 |\n"
         "|---|---|---|---|\n| 佔位 | 佔位 | 佔位 | 待判斷 |\n",
         encoding="utf-8")
-    doc = {"schemaVersion": 2, "skills": [],
-           "baselines": {"headless": {"capturedAt": "2026-01-01T00:00+0800",
-                                      "names": list(_BASE_NAMES)}}}
+    # 2026-09-04：基準搬進 `state\`（票 10），清冊留在 SkillViewer。
+    # 兩個檔各造一份——只造清冊的話，`compare()` 會因為找不到基準而拒跑，
+    # 而那個紅看起來像「比對邏輯壞了」，不像「fixture 沒跟著搬」。
+    (root / "state" / "skill_watch_baselines.json").write_text(
+        json.dumps({"schemaVersion": 2,
+                    "baselines": {"headless": {"capturedAt": "2026-01-01T00:00+0800",
+                                               "names": list(_BASE_NAMES)}}},
+                   ensure_ascii=False, indent=2), encoding="utf-8")
     (root / "SkillViewer" / "platform_skills.json").write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps({"schemaVersion": 2, "skills": []},
+                   ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 class _Sandbox:
@@ -206,7 +212,7 @@ def test_writes_land_in_tmp_and_real_files_untouched() -> None:
               (tmp / "TODOS.md").read_text(encoding="utf-8"))
         check("① 心跳寫進 tmp", (tmp / "state" / "skill_watch_heartbeat.json").exists())
         check("① log 寫進 tmp", (tmp / "state" / "skill_watch.log").exists())
-        base = json.loads((tmp / "SkillViewer" / "platform_skills.json")
+        base = json.loads((tmp / "state" / "skill_watch_baselines.json")
                           .read_text(encoding="utf-8"))
         check("① 基準在 tmp 裡前進了",
               "fake-skill-new" in base["baselines"]["headless"]["names"])

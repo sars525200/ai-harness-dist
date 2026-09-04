@@ -180,10 +180,12 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    它給的理由與本案第 3 輪發現 1 **一模一樣**——別部門 clone 下來第一次跑就對著
    我這台機器的快照比、撞收縮守衛，而程式建議的出口正是規格禁止的 `--force`。
 
-   ⚠ **那個決定至今沒實作**（2026-09-03 實查）：`state\` 底下沒有
-   `skill_watch_baselines.json`；`tools/skill_watch.py:37` 的 `DEFAULT_BASELINE`
-   仍指 `SkillViewer/platform_skills.json`；該檔裡的 `baselines` 還在
-   （headless `2026-08-24`、interactive `2026-08-22`）。
+   ✅ **2026-09-04 已實作**（原文寫「那個決定至今沒實作」，2026-09-03 實查為真，
+   已於次日處理）。搬家走一次性冪等工具 `tools/migrate_skill_baselines.py`；
+   `baselines` 與 `officialCrossCheck` 兩個鍵都搬——後者沒被票文點名，但它記的是
+   「上次跟官方文件比的差集」，同樣是本機快照，留在版控裡別部門會拿到我這台的
+   `missingLocally`，而判定看的是「鍵在不在」（R3-2）⇒ **鍵在但內容是別人的**
+   正好落進那條註解說的洞。P11 四條判準現在全綠。
    ⇒ **W9 ＝ 去把票 10 實作完**，不是在這裡發明第三種做法。
    **本節不重述修法**（同本節開頭的唯一真相宣告）——那是 `SKILL_WATCH_PLAN` 的事。
 
@@ -250,7 +252,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    不靠人記得加旗標。②程式裡四處使用者看得到的訊息還寫「票 06」，
    而本節 2026-09-04 已訂正成票 10——**文件改了碼沒改**。
 
-   舊機實跑結果：**OK 41｜FAIL 4｜SKIP 0｜UNVERIFIED 1**（共 46 項·2026-09-04 補齊後五條後）。
+   舊機實跑結果：**OK 44｜FAIL 1｜SKIP 0｜UNVERIFIED 2**（共 47 項·2026-09-04 W9 完成後）。
    ⚠ **分項表的碼與總計現在有測試在對帳**（2026-09-03 補·第 5 輪發現 1）。
    那一輪抓到的互斥就在這兩段之間：總計寫 `SKIP 0`、分項表同一輪卻標 `SKIP`，
    而**兩個碼的後果相反**（`SKIP` 不擋、`UNVERIFIED` 擋），過期的碼和真的還沒拆同形。
@@ -272,7 +274,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | P5 「對得上舊機改寫來源」那半 | 1 UNVERIFIED | 需要 `--source` 給舊機那份；舊機上沒有「舊機」可比 ⇒ **明說沒驗，不當通過**（⚠ 2026-09-03 訂正碼名·第 5 輪發現 1：這格原本寫 `SKIP`，而 `SKIP` 不擋結束條件——過期的碼和真的還沒拆長得一模一樣） |
    | P9 跨碟備份 | 4 OK | post-commit 已安裝且與 repo 相同、`backup` remote 在、無失敗標記、鏡像 HEAD 與本機相同。⚠ **這條探針一寫出來就抓到本機真的漂了**：裝的是舊版（8 行差、**0 行是行為碼**，註解還停在舊路徑寫法 `D:\.ai-harness`），已把 repo 版本拷過去 |
    | P10 `output-styles` | 3 OK | 兩支風格檔 live 與 repo `filecmp` 相同，`outputStyle=PM-Challenger` 對得到 `pm-challenger.md` |
-   | P11 skill-watch 基準 | **1 OK／3 FAIL** | ⚠ **`SKILL_WATCH_PLAN` 票 10 的決定沒實作** —— `state\skill_watch_baselines.json` 不存在、`platform_skills.json` 仍帶著 `baselines`、**`skill_watch.py` 的 `DEFAULT_BASELINE` 仍指舊檔**（第 5 輪發現 6 新增的第 4 段判準，一寫出來就紅）。基準檔本身未被追蹤（那條 OK）。「基準晚於接線時間」那半因為基準檔不在而不進表 |
+   | P11 skill-watch 基準 | **4 OK／1 UNVERIFIED** | ✅ **W9 已完成**（2026-09-04·`tools/migrate_skill_baselines.py`）：基準搬進 `state\skill_watch_baselines.json`、清冊只剩 `skills[]`、執行期讀取點跟著改。⚠ **搬家順帶暴露一條新機必死的路**：`--capture` 是建立基準的唯一入口，而它一開頭就 `load_doc()` ⇒ 檔不在就拒跑，新機永遠建不了基準。搬家前那個檔在版控裡、一定存在，所以這條路從來沒被走過。「基準晚於接線時間」那半仍是 `UNVERIFIED`（要 `--wired-at`，接線器還不存在） |
 
    **回歸網 86 項、二十個變異各自轉紅**（`tests/test_wiring_probe.py`；變異腳本 `tests/mutations/mutate_wiring_probe.py`）。86 項裡有 3 項是上面那組文件對帳，另有 `mutate_plan_runlog.py` 專門證明那 3 項會紅。
    ⚠ **2026-09-04 那七個新變異裡有三條第一次寫出來抓不到東西**，而且形狀值得記：

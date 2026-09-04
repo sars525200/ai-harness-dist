@@ -34,7 +34,15 @@ from pathlib import Path
 
 # harness 根目錄＝本檔的上一層的上一層。不從專案路徑推算（U-1）。
 HARNESS_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_BASELINE = HARNESS_ROOT / "SkillViewer" / "platform_skills.json"
+# ⚠ **基準不進版控**（SKILL_WATCH_PLAN W-5 的字面被票 10 推翻，2026-09-04 實作）。
+# 它帶著 `cliVersion`、`capturedAt`、`cwdKind`——設計自己就知道它是**版本綁定的
+# 本機快照**。放進版控的後果不是「多一個檔」：別部門 clone 下來第一次跑就對著
+# 我這台機器的快照比，撞收縮守衛，而程式建議的出口正是 W-15 明文禁止的 `--force`。
+# 清冊（`SkillViewer/platform_skills.json` 的 `skills[]`）留在原檔原位不動——
+# 它是 SkillViewer 的顯示資料，整檔移出版控會讓新機的 SkillViewer 沒東西可顯示。
+DEFAULT_BASELINE = HARNESS_ROOT / "state" / "skill_watch_baselines.json"
+# 清冊（顯示用）。本檔不寫它，只有 `skill_inventory.py` 寫。
+ROSTER_PATH = HARNESS_ROOT / "SkillViewer" / "platform_skills.json"
 
 VALID_MODES = ("headless", "interactive")
 SCHEMA_VERSION = 2
@@ -301,7 +309,14 @@ def capture(doc: dict, mode: str, names: list[str], cli_version: str | None = No
 
 def save_doc(path: Path, doc: dict) -> None:
     """落盤。`newline=""` 是必要的：預設會把 `\\n` 翻成 `\\r\\n`，
-    讓一個版控中的檔案每次寫入都整檔改行尾（覆核 F-11 實測已經發生過）。"""
+    讓一個版控中的檔案每次寫入都整檔改行尾（覆核 F-11 實測已經發生過）。
+
+    ⚠ 目錄不存在要自己建（2026-09-04）：基準搬進 `state\\` 之後，那個目錄是
+    gitignored ⇒ **新機 clone 下來它不存在**，而 `write_text` 對缺目錄丟的是
+    `FileNotFoundError`，訊息只說「找不到檔案」——看的人會去找那個檔，
+    而真正缺的是它的上一層。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="")
 
@@ -346,7 +361,17 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     try:
-        doc = load_doc(args.baseline)
+        # ⚠ **只有 `--capture` 容許基準檔不存在**（2026-09-04·基準搬出版控後才成立的路徑）。
+        # 搬家之前那個檔一定在（它在版控裡），所以「新機器上根本沒有基準」這條路
+        # 從來沒被走過。搬出去之後 `--capture` 是建立基準的**唯一**入口，
+        # 而它以前一開頭就 `load_doc()` ⇒ 新機第一次跑必定拒跑，永遠建不了基準。
+        # `--show`／`--compare` 維持拒跑（U-2）：沒有基準不等於沒有變動。
+        if args.capture and not args.baseline.exists():
+            print(f"[skill_watch] 沒有基準檔，這次會建立一份新的：{args.baseline}",
+                  file=sys.stderr)
+            doc: dict = {}
+        else:
+            doc = load_doc(args.baseline)
 
         if args.show:
             bl = doc.get("baselines", {})

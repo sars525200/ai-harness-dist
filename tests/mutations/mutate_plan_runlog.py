@@ -29,14 +29,14 @@ TEST = r"D:\Patrick-AI\.ai-harness\tests\test_wiring_probe.py"
 # 四元組：(說明, 要動哪個檔, 錨點, 換成什麼)。被測物是文件，不是程式。
 MUTATIONS = [
     ("總計把 UNVERIFIED 寫成 SKIP（第 5 輪發現 1 的原形）", PLAN,
-     "OK 41｜FAIL 4｜SKIP 0｜UNVERIFIED 1",
-     "OK 41｜FAIL 4｜SKIP 1｜UNVERIFIED 0"),
+     "OK 44｜FAIL 1｜SKIP 0｜UNVERIFIED 2",
+     "OK 44｜FAIL 1｜SKIP 2｜UNVERIFIED 0"),
     ("分項表少算一條 FAIL", PLAN,
-     "| P11 skill-watch 基準 | **1 OK／3 FAIL** |",
-     "| P11 skill-watch 基準 | **1 OK／2 FAIL** |"),
+     "| P11 skill-watch 基準 | **4 OK／1 UNVERIFIED** |",
+     "| P11 skill-watch 基準 | **3 OK／1 UNVERIFIED** |"),
     ("宣稱的項數與分項加總對不上", PLAN,
-     "（共 46 項·2026-09-04 補齊後五條後）",
-     "（共 44 項·2026-09-04 補齊後五條後）"),
+     "（共 47 項·2026-09-04 W9 完成後）",
+     "（共 45 項·2026-09-04 W9 完成後）"),
 ]
 
 # 每個變異預期會轉紅的那條 case 名。**只看 exit code 不夠**——

@@ -102,7 +102,9 @@ def _set_paths(root) -> None:
     STATE_DIR = root / "state"
     LOG_PATH = STATE_DIR / "skill_watch.log"
     HEARTBEAT_PATH = STATE_DIR / "skill_watch_heartbeat.json"
-    BASELINE_PATH = root / "SkillViewer" / "platform_skills.json"
+    # 2026-09-04：基準搬進 `state\`（票 10）。這裡跟著 STATE_DIR 走，
+    # 而不是自己再拼一次 `root / "state"`——多一份拼法就多一個會漂開的地方。
+    BASELINE_PATH = STATE_DIR / "skill_watch_baselines.json"
 
 
 DOCS_URL = "https://code.claude.com/docs/en/commands.md"
