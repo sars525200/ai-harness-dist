@@ -1,5 +1,9 @@
 # 06 任務身分 vs `effort_of_path`：兩套 key 的關係
 
+狀態：**部分修** eba4202（2026-08-23）　裁決 (c) 已落檔，**但施作沒做** —— 軌跡仍用 effort／session 當 key，缺值繼承與 docstring 都沒改。⚠ commit 訊息寫「任務欄取代 effort key」，只看訊息會誤判成已施作
+（2026-09-03 盤點：三個唯讀稽核員逐張比對現行碼與 git 歷史，不只看 commit 訊息。判不出來的一律留「待確認」，不猜。）
+
+
 **Type:** grilling
 **Status:** resolved（2026-08-23 · user 裁決）
 
