@@ -275,14 +275,29 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
     bad = sorted({e for e in ids.split() if any(n in e for n in needles)})
     check("commit 作者／提交者信箱已清除", not bad, f"殘留：{bad}")
 
-    # V-D 沒弄丟東西
+    # V-D 沒弄丟東西。
+    #
+    # ⚠ 比對基準是 `pristine`（同一時刻 clone 的未清洗複製品），**不是活的本機 repo**。
+    #    2026-09-04 實地咬到：另一條 session 在 clone 之後又 commit 了一顆，於是
+    #    「匯出 592 vs 本機 593」直接偽紅，而清洗其實一點問題都沒有。
+    #    這個 repo 隨時可能有別的 session 在寫 —— 拿快照去比一個還在動的東西，
+    #    紅的是時間差不是內容。兩邊都用同一時刻的快照才問得出「清洗有沒有弄丟東西」。
     n_exp = run(["git", "-C", str(export), "rev-list", "--count", "--all"]).strip()
-    n_loc = run(["git", "-C", str(local), "rev-list", "--count", "--all"]).strip()
-    check(f"commit 數一致（{n_exp}）", n_exp == n_loc, f"匯出 {n_exp} vs 本機 {n_loc}")
+    n_pri = run(["git", "-C", str(pristine), "rev-list", "--count", "--all"]).strip()
+    check(f"commit 數與清洗前快照一致（{n_exp}）", n_exp == n_pri,
+          f"匯出 {n_exp} vs 清洗前 {n_pri}")
 
     f_exp = len(run(["git", "-C", str(export), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
-    f_loc = len(run(["git", "-C", str(local), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
-    check(f"檔案數一致（{f_exp}）", f_exp == f_loc, f"匯出 {f_exp} vs 本機 {f_loc}")
+    f_pri = len(run(["git", "-C", str(pristine), "ls-tree", "-r", "--name-only", "HEAD"]).splitlines())
+    check(f"檔案數與清洗前快照一致（{f_exp}）", f_exp == f_pri,
+          f"匯出 {f_exp} vs 清洗前 {f_pri}")
+
+    # 資訊，不是判準：本機在這段期間又前進了幾顆。備份本來就是快照，
+    # 但把差距印出來，人才知道這份備份落後現況多少。
+    n_loc = run(["git", "-C", str(local), "rev-list", "--count", "--all"]).strip()
+    if n_loc != n_pri:
+        print(f"       ※ 本機已前進到 {n_loc} 顆（快照 {n_pri}）——"
+              f" 有別的 session 在寫，備份是快照，這是正常的")
 
     # V-E 內容只差該差的：逐檔逐行比，未解釋的差異必須是 0。
     #
@@ -290,10 +305,11 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
     #    但 user 在 PowerShell 跑就 FileNotFoundError —— 那兩支是 Git for Windows
     #    帶的 Unix 工具，只有 Git Bash 的 PATH 有。**「我這邊能跑」不等於「它能跑」**。
     #    改成純標準庫（tarfile ＋ difflib），不依賴任何外部指令。
+    # 同 V-D：基準是清洗前的快照，不是活的本機 repo。
     a_files = read_tree(export)
-    b_files = read_tree(local)
+    b_files = read_tree(pristine)
     only = sorted(set(a_files) ^ set(b_files))
-    check("兩邊檔案清單一致", not only, f"只存在於一邊：{only[:5]}")
+    check("檔案清單與清洗前快照一致", not only, f"只存在於一邊：{only[:5]}")
 
     vocab = [re.escape(x) for pair in pats for x in pair if x]
     rx = re.compile("|".join(vocab)) if vocab else None
