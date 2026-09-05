@@ -16,7 +16,11 @@ import sys
 import tempfile
 from contextlib import redirect_stdout
 
-_HOOKS = r"D:\Patrick-AI\.ai-harness\hooks"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死絕對路徑。這一行決定 `import report`
+# 拿到的是哪一份 hooks —— 在 clone／worktree 裡跑，插進去的是主目錄那一份，
+# 於是綠燈是主目錄的綠燈，而畫面上與「這份 clone 全綠」一模一樣。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOOKS = os.path.join(_HARNESS_ROOT, "hooks")
 for _p in (_HOOKS, os.path.join(_HOOKS, "rules")):
     if _p not in sys.path:
         sys.path.insert(0, _p)

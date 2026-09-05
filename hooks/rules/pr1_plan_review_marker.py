@@ -250,10 +250,15 @@ _IGNORE_BLOCK = re.compile(
 # 不像「指令少插一個 path」—— 人會去查 hook 而不是去補路徑。
 # 這道閘門攔下來之後**唯一的出路就是這行指令**；指令自己跑不動＝擋了人卻沒給路走，
 # 與 PR-1 每個判斷都往 fail-open 走的設計方向相反。
+# 2026-09-05·B4 續：兩條 sys.path 原本寫死絕對路徑。這道閘門攔下來之後唯一的出路
+# 就是這行指令，換機後它會指回原機那份 ⇒ **擋了人卻給了一條跑不動的路**。
+# 用 `%` 而不是 `.format`：底下的 `{path}` 是留給呼叫端填的，不能在這裡被吃掉。
 _RECOMPUTE_HINT = (
     "重算 hash："
-    "`py -3 -c \"import sys;sys.path.insert(0,r'D:\\Patrick-AI\\.ai-harness\\hooks');"
-    "sys.path.insert(0,r'D:\\Patrick-AI\\.ai-harness\\hooks\\rules');"
+    "`py -3 -c \"import sys;sys.path.insert(0,r'%s');"
+    "sys.path.insert(0,r'%s');"
+    % (os.path.join(_HARNESS_ROOT, "hooks"),
+       os.path.join(_HARNESS_ROOT, "hooks", "rules")) +
     "import pr1_plan_review_marker as p;"
     # 覆核 R1-L16：這裡曾是 encoding='utf-8'，而規則本體 _read_text 用 utf-8-sig
     # ⇒ 檔案帶 BOM 時照官方指令算出的 marker 從寫下那刻就無效（實測兩 hash 不同），

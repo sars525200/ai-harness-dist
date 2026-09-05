@@ -55,12 +55,52 @@ def _as_str(node: ast.AST) -> "str | None":
     return None
 
 
-def _string_assignments(tree: ast.Module) -> dict:
+# `os.path.*` 裡可以安全折算的那幾支（純字串運算，不碰檔案系統）。
+_OSPATH_FOLDABLE = {"join", "dirname", "abspath", "normpath"}
+
+
+def _as_path(node: ast.AST, consts: dict, script: str) -> "str | None":
+    r"""模組層賦值右側是不是**用 `os.path.*` 從 `__file__` 推出來的路徑**。
+
+    2026-09-05 加（B4 續）。變異腳本開始從自身位置推被測檔（那正是這個 repo
+    現在要求的寫法），而 `_as_str` 只認字面值 ⇒ **這一層對它們完全看不到**：
+    `TARGET` 讀不到 ⇒ 整支被判「找不到被測檔常數」，裡面每一個錨點都沒被檢查過。
+    症狀與這支自己要防的「變異等於沒在測」完全同型，只是換成整支不見。
+
+    `abspath` 用得到腳本自己的路徑，所以要把 `__file__` 餵進來——
+    折不出來一律回 None，**不猜**。
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return script if node.id == "__file__" else consts.get(node.id)
+    if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _OSPATH_FOLDABLE):
+        return None
+    # 只認真的 `os.path.x(...)`，不要把別的物件的 `.join()` 一起折進來。
+    owner = node.func.value
+    if not (isinstance(owner, ast.Attribute) and owner.attr == "path"
+            and isinstance(owner.value, ast.Name) and owner.value.id == "os"):
+        return None
+    args = [_as_path(a, consts, script) for a in node.args]
+    if not args or any(a is None for a in args):
+        return None
+    if node.func.attr == "join":
+        return os.path.join(*args)
+    if len(args) != 1:
+        return None
+    return {"dirname": os.path.dirname, "abspath": os.path.abspath,
+            "normpath": os.path.normpath}[node.func.attr](args[0])
+
+
+def _string_assignments(tree: ast.Module, script: str = "") -> dict:
     out = {}
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
         text = _as_str(node.value)
+        if text is None:
+            text = _as_path(node.value, out, script)
         if text is None:
             continue
         for t in node.targets:
@@ -147,7 +187,7 @@ def run() -> "tuple[int, list[str]]":
             failures.append(f"{base} 解析失敗：{exc}")
             continue
 
-        consts = _string_assignments(tree)
+        consts = _string_assignments(tree, os.path.abspath(script))
         default_target = next((consts[n] for n in _TARGET_NAMES if n in consts), None)
         lists = _anchor_lists(tree, consts)
         if not lists or all(not items for _, items, _ in lists):

@@ -359,7 +359,10 @@ def _c4d():
     import json as _json
     import os
     sid = "warnchan-spawn-0001"
-    state = r"D:\Patrick-AI\.ai-harness\state"
+    # 2026-09-05·B4 續：原本寫死絕對路徑。這個 case 要真的落檔，所以掃的必須是
+    # **dispatch 這一輪真正會寫進去的那個目錄**——寫死的話在 clone 裡會去清主目錄的
+    # 殘留、然後對著空目錄斷言「有寫到」，而那與「真的寫到了」在輸出上同形。
+    state = contract._STATE_DIR
     for stale in glob.glob(os.path.join(state, f"events.{sid}*.ndjson")):
         os.remove(stale)
 

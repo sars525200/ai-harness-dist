@@ -11,11 +11,15 @@
        一個每次印給人看的數字寫死在原始碼裡，只會愈來愈假。
 """
 import io
+import os
 import sys
 from contextlib import redirect_stdout
 
-_TOOLS = r"D:\Patrick-AI\.ai-harness\tools"
-_DASH = r"D:\Patrick-AI\.ai-harness\dashboard"
+# 從本檔位置推（2026-09-05·B4 續）：原本兩行都是寫死絕對路徑。這支 import 的是
+# 探針與產生器本體，在 clone／worktree 裡跑會去驗主目錄那一份。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_TOOLS = os.path.join(_HARNESS_ROOT, "tools")
+_DASH = os.path.join(_HARNESS_ROOT, "dashboard")
 for _p in (_TOOLS, _DASH):
     if _p not in sys.path:
         sys.path.insert(0, _p)

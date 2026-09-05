@@ -705,31 +705,186 @@ def _state_dir_literal(src: "Path | None" = None) -> "str | None":
     return None
 
 
+# 掃描時整棵跳過的目錄。`.claude` 底下是別條線的 worktree（整份 repo 的複本）、
+# `.scratch` 是暫存——**在複本裡找到的命中不是缺陷，是同一個缺陷的回音**。
+_SCAN_SKIP_DIRS = (".git", "__pycache__", "node_modules", ".scratch", ".claude")
+
+
+def _is_abs_literal(v: str) -> bool:
+    r"""這個字串是不是 Windows 絕對路徑字面值（`X:\…` 或 `X:/…`）。"""
+    return len(v) > 2 and v[0].isalpha() and (v[1:3] == ":\\" or v[1:3] == ":/")
+
+
+def _docstring_nodes(tree) -> set:
+    """這棵樹裡每一個 docstring 的 `Constant` 節點（用 id 認）。
+
+    docstring 是唯一要整批排除的字串——用法示例、路徑範例、警語都住在那裡，
+    而它們只是印錯路徑、不影響執行（2026-09-05 實掃約 30 處）。
+    **排除的依據是節點位置（模組／類別／函式的第一句），不是內容比對**，
+    所以不會有一張「哪些字串是說明文字」的清單要維護。
+    """
+    import ast
+    out = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(body, list) or not body:
+            continue
+        first = body[0]
+        if (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)):
+            out.add(id(first.value))
+    return out
+
+
+def _module_abs_assigns(root: Path, subdir: "str | None" = None
+                        ) -> "list[tuple[str, int, str, str]]":
+    r"""`root`（或其 `subdir`）底下，每一個**帶路徑的字串常數**（docstring 除外）。
+
+    回 `(相對 root 的路徑, 行號, 名字, 值)`；`名字` 在常數不是某個指派的右側時
+    會是形狀提示（`(值)`／`(項)`／`(引數)`），因為那時候它根本沒有名字。
+
+    ⚠ **這裡刻意不只看「指派給一個名字」**（2026-09-05 第二輪放寬）。第一版只認
+    `名字 = "路徑"`，而 `TODOS.md` 記票的另外三處**沒有一處是那個形狀**：
+
+    * `dashboard\gen_roles_topology.py` —— 路徑是 **dict 的值**
+    * `dashboard\subagent_stats.py` —— 路徑在 **tuple 清單裡**
+    * `tools\register_session_title_hook.py` —— 路徑**包在一整條命令字串裡**
+      （`'py -3 "D:\\…\\session_title.py"'`，開頭不是碟符）
+
+    三處都是真的寫死、都會在換機時指回原機，而第一版守門**一處都看不到**——
+    「只認指派」本身就是另一種形狀白名單，只是換了個維度。
+    """
+    import ast
+    import warnings
+    base = root if subdir is None else root / subdir
+    hits: list[tuple[str, int, str, str]] = []
+    if not base.is_dir():
+        return hits
+    for py in sorted(base.rglob("*.py")):
+        if set(py.relative_to(root).parts) & set(_SCAN_SKIP_DIRS):
+            continue
+        try:
+            # ⚠ 一定要壓掉 `SyntaxWarning`：`ast.parse` 會替**被掃的那支檔**發警告
+            # （現況 `tests\test_ctx1.py` 有兩處 invalid escape），而警告印出來的是
+            # `<unknown>:202` —— 掃描器把別人的問題印成自己的、還指不出是哪一支檔。
+            # 回歸網每跑一次就多兩行看不懂的雜訊，久了就沒有人在讀輸出了。
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", SyntaxWarning)
+                tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        rel = str(py.relative_to(root))
+        docs = _docstring_nodes(tree)
+        # 常數 → 它被指派給哪個名字（只認直接的 `名字 = 常數`）。
+        named = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        named[id(node.value)] = t.id
+                        break
+        # 常數 → 它長在什麼形狀裡，用來在報訊息時指得出位置。
+        shape = {}
+        for node in ast.walk(tree):
+            for key, mark in (("values", "(值)"), ("elts", "(項)"), ("args", "(引數)")):
+                # ⚠ `getattr(FunctionDef, "args")` 回的是 `ast.arguments`（不是 list），
+                #    直接 for 會 TypeError。這裡只要真的是清單的那幾種。
+                children = getattr(node, key, None)
+                if not isinstance(children, list):
+                    continue
+                for child in children:
+                    if isinstance(child, ast.Constant):
+                        shape.setdefault(id(child), mark)
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+                continue
+            if id(node) in docs:
+                continue
+            hits.append((rel, node.lineno,
+                         named.get(id(node)) or shape.get(id(node)) or "(字串)",
+                         node.value))
+    return hits
+
+
 def _hardcoded_state_dirs(root: "Path | None" = None) -> "list[tuple[str, str]]":
     r"""全 `hooks\` 裡還有沒有人把 `STATE_DIR` 指派成**絕對路徑字面值**。
 
     這是 B4 的回歸守門：2026-09-05 之前 `dispatch`／`report`／規則模組各自寫死
     `r"D:\...\state"`，換機就靜默寫失敗。拆成 `contract.py` 從自身位置推之後，
     **要有人盯著它不要再長回來**——不然下一次有人「順手」寫一行就退回去了。
+
+    ⚠ 這一支與 `_selfref_abs_paths()` 問的**不是同一件事**，兩者都要留：
+    這支問「`STATE_DIR` 這個名字有沒有被寫死」（不管指到哪，指到舊機也算），
+    那支問「有沒有人把**這一顆 harness 自己的路徑**寫死」（不管叫什麼名字）。
+    只留任何一支都會漏掉另一支抓的那一半。
     """
-    import ast
-    base = (root or HARNESS_ROOT) / "hooks"
-    hits: list[tuple[str, str]] = []
-    for py in sorted(base.rglob("*.py")):
-        try:
-            tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
-        except SyntaxError:
+    return [(f, v) for f, _ln, n, v in _module_abs_assigns(root or HARNESS_ROOT, "hooks")
+            if n.lstrip("_") == "STATE_DIR" and _is_abs_literal(v)]
+
+
+# 自指寫死的**明列豁免**。刻意做成「檔案前綴＋理由」而不是「名字白名單」：
+# 名字白名單要求預測下一個人會取什麼變數名，而 2026-09-05 實掃的 7 個缺口裡
+# 只有 1 個（`SPIKE_DIR`）叫得出當時想得到的名字，其餘是
+# `_HOOKS`／`_DASH`／`_TOOLS`／`state`。**放寬名字集合抓不到它們，換軸才抓得到。**
+# 豁免要動就會出現在 diff 裡，這是它比「數量棘輪」強的地方——棘輪允許拿一個換一個。
+_SELFREF_EXEMPT: "tuple[tuple[str, str], ...]" = (
+    ("tests/mutations/",
+     "變異腳本刻意指向正本（它的工作就是改主目錄那一份再改回來），"
+     "而且是手動跑的開發工具、不在回歸網的執行路徑上。"
+     "⚠ 能力上限：豁免是整個前綴 ⇒ 這個目錄裡新長出來的自指寫死看不見。"
+     "改成自推的票開在 TODOS.md（2026-09-05）"),
+)
+
+
+def _exempt_selfref(rel: str) -> "str | None":
+    """這條相對路徑有沒有被豁免；有的話回傳理由（供報訊息用），沒有回 None。"""
+    key = rel.replace("\\", "/")
+    for prefix, why in _SELFREF_EXEMPT:
+        if key.startswith(prefix):
+            return why
+    return None
+
+
+def _selfref_abs_paths(root: "Path | None" = None) -> "list[tuple[str, int, str, str]]":
+    r"""全 repo 裡把**這一顆 harness 自己的路徑**寫死成絕對路徑的指派。
+
+    這是 B4 回歸守門的第二把尺，2026-09-05 換軸加的。原本那把只掃 `hooks\`
+    底下名字叫 `STATE_DIR` 的指派 ⇒ 同一天被修掉的回歸網五處（`HOOKS_DIR`／
+    `RULES_DIR`）**一處都掃不到**，而實掃還找到另外六處同形的（`_HOOKS`／`_DASH`／
+    `_TOOLS`／`state`）連當初的搜尋都沒撈到。
+
+    **判準是「指到哪」不是「叫什麼」**：值落在這一顆 harness 底下 ⇒ 換機／clone
+    時它會指回原機那一份。這條判準順帶把合法的那幾類自動放行，不必維護白名單：
+
+    * `tests\r4_e2e\_gen_*.py` 的 `d:\IT-department\…` —— 那個路徑就是測試資料本身
+    * `tests\test_wire_machine.py` 的 `D:\OLD-harness`／`C:\Users\olduser` —— 刻意的假舊機
+
+    後果與 `STATE_DIR` 那批同型，而且是**危險的那一種**：不是「跑不起來」而是
+    「跑起來但測錯東西」—— 在 clone 裡跑全套，`sys.path` 插的是主目錄那份 hooks，
+    於是綠燈是主目錄的綠燈，畫面上與「這份 clone 全綠」一模一樣。
+    """
+    base = (root or HARNESS_ROOT).resolve()
+    # 比對用「字串裡有沒有這顆 harness 的路徑」而不是「這個值是不是一條路徑」：
+    # 寫死不一定寫成一個乾淨的路徑值，也可能包在一整條命令字串裡
+    # （`'py -3 "D:\…\session_title.py"'`）。正斜線與大小寫都先正規化掉。
+    needle = str(base).replace("/", "\\").lower()
+    hits = []
+    for rel, lineno, name, val in _module_abs_assigns(base):
+        if _exempt_selfref(rel):
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Assign):
-                continue
-            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            if not any(n.lstrip("_") == "STATE_DIR" for n in names):
-                continue
-            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
-                v = node.value.value
-                if len(v) > 2 and (v[1:3] == ":\\" or v[1:3] == ":/"):
-                    hits.append((str(py.relative_to(base.parent)), v))
+        # ⚠ **只留有名字的指派**，不含 dict 的值／tuple 的項。這一刀 2026-09-05
+        #   量過才下的：不設限的話全 repo 有 63 處命中，其中約 60 處是**印給人看的
+        #   說明字串**（看板的橫幅 HTML、閘門訊息裡的「請改跑這一行」）。
+        #   那一類的後果是「印出來的路徑不對」——換機後照著貼會**當場報錯**，
+        #   吵得很大聲，與這道守門要抓的「靜默測錯東西」不是同一種病。
+        #   把兩種混在一起的代價是守門永遠紅著、於是沒有人在看它。
+        #   ⚠ **能力上限**：`dashboard\gen_roles_topology.py:129`（dict 的值）與
+        #   `dashboard\subagent_stats.py:113`（tuple 的項）這兩處真的寫死、而且
+        #   這道尺看不到。票在 `TODOS.md`。
+        if name.startswith("("):
+            continue
+        if needle in val.replace("/", "\\").lower():
+            hits.append((rel, lineno, name, val))
     return hits
 
 

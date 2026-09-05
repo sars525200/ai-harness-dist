@@ -612,8 +612,10 @@ def main(argv: list[str] | None = None) -> int:
                   + ("⚠ 官方文件未抓到，本次只有半邊資料。" if err else ""))
         # 這一列會被讀到的時候，寫它的 session 早就結束了 —— 所以要自己帶路，
         # 而不是靠常駐層（CLAUDE.md／MEMORY.md）多一行索引去養每一輪的 token。
+        # 2026-09-05·B4 續：這條指路原本寫死絕對路徑。它會被寫進 TODOS.md 留給後人，
+        # 換機之後留下來的是一條指回原機的路。
         nxt = ("逐支判斷是否與現有全域技能重疊（可合併／可取代）。"
-               "機制與判準見 D:\\Patrick-AI\\.ai-harness\\SKILL_WATCH_PLAN.md（§4 分岔決定、§11 覆核紀錄）。"
+               f"機制與判準見 {HARNESS_ROOT / 'SKILL_WATCH_PLAN.md'}（§4 分岔決定、§11 覆核紀錄）。"
                "判定完把這一列刪掉；要保留判斷結果就搬進該計畫書。")
 
         if args.dry_run:

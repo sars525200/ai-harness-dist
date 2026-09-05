@@ -550,6 +550,7 @@ def main() -> int:
         import test_reviewer_config
         import test_backup_global_config
         import test_wiring_probe
+        import test_abs_path_guard
         import test_wire_machine
         import test_gen_rule_hub
         import test_session_title
@@ -597,6 +598,12 @@ def main() -> int:
             # 探針把「存在／非空」當成「已改寫／已 restore」。三種靜默失效與「裝好了」
             # 同形——junction 指到別處、hook command 打空、記憶目錄是空的。
             (test_wiring_probe.run, "接線探針 P1／P2／P5／P9／P10／P11（存在≠接好了）"),
+            # 上面那支守的是探針的判準，這支守的是**這個 repo 現在有沒有自指的寫死路徑**。
+            # 兩件事分開的理由：B4 原本的守門只掃 `hooks\` 底下叫 `STATE_DIR` 的指派，
+            # 而且餵給它的全是臨時假樹 ⇒ **它從來不會對真 repo 響**。2026-09-05 實掃
+            # 找到六處同形的漏在回歸網裡（`_HOOKS`／`_DASH`／`_TOOLS`／`state`），
+            # 當初按名字搜尋一處都沒撈到。判準因此換軸：看「指到哪」不看「叫什麼」。
+            (test_abs_path_guard.run, "自指的寫死絕對路徑（換機會指回原機那一份）"),
             # 上面那支守「探針會不會在該紅的時候紅」，這支守**接線器會不會在該擋的時候擋**。
             # 接線器 09-05 寫好、模擬新機跑過一次，但一條測試都沒有——而那次抓到的
             # 兩個 bug 都只有「第一次接一台新機器」才撞得到，且**都不報錯**：

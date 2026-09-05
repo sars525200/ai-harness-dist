@@ -18,7 +18,9 @@ import subprocess
 import sys
 from contextlib import redirect_stdout
 
-_DASH = r"D:\Patrick-AI\.ai-harness\dashboard"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死絕對路徑。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_DASH = os.path.join(_HARNESS_ROOT, "dashboard")
 if _DASH not in sys.path:
     sys.path.insert(0, _DASH)
 

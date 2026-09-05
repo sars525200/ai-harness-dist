@@ -36,7 +36,11 @@ except Exception:
     pass
 
 SETTINGS = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
-COMMAND = 'py -3 "D:\\Patrick-AI\\.ai-harness\\hooks\\session_title.py"'
+# 從本檔位置推（2026-09-05·B4 續）：原本整條命令字串裡寫死絕對路徑。
+# 這一條**會被寫進 live settings.json**，所以換機之後註冊出來的 hook 指的是原機那份
+# ——`session_title.py` 打空、而 hook 打空不會讓對話壞掉，只是永遠不改名。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COMMAND = 'py -3 "%s"' % os.path.join(_HARNESS_ROOT, "hooks", "session_title.py")
 EVENT = "PreToolUse"
 
 

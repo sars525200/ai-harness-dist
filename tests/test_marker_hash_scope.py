@@ -26,8 +26,11 @@ import types
 # 在模組層設，直接跑與經由 runner 跑都涵蓋得到（不是靠個別測試自律）。
 os.environ.setdefault("HARNESS_UNDER_TEST", "1")
 
-_HOOKS = r"D:\Patrick-AI\.ai-harness\hooks"
-for _p in (_HOOKS, _HOOKS + r"\rules"):
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死絕對路徑。同 test_hook_encoding，
+# 這一行決定被測的是哪一份規則模組；指回主目錄時測出來的綠與這份 clone 無關。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HOOKS = os.path.join(_HARNESS_ROOT, "hooks")
+for _p in (_HOOKS, os.path.join(_HOOKS, "rules")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 

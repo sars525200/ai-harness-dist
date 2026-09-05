@@ -901,8 +901,10 @@ def build_html(by_day: dict, ev: dict, cost: "dict | None",
         <p><b>這欄是精確值</b>；走勢圖虛線是按日分攤的估算，{_esc(recon)}<b>對帳一律用這裡，不用走勢圖</b>。</p>
       </div>"""
     else:
-        cost_block = """      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
-        <code>py -3 D:\\Patrick-AI\\.ai-harness\\dashboard\\gen_cost_panel.py --with-cost</code>
+        # 2026-09-05·B4 續：這條指令原本寫死絕對路徑。它是給人照著貼的，
+        # 換機之後貼出去會指回原機那一份。
+        cost_block = f"""      <div class="copy-note"><span>※</span><span>尚無金額快取。跑
+        <code>py -3 {DASHBOARD_DIR / "gen_cost_panel.py"} --with-cost</code>
         取得（會呼叫 ccusage，需要網路）。<b>沒有金額不影響 mix</b>——mix 是自建聚合算的。</span></div>"""
 
     # 使用率

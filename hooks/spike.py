@@ -9,13 +9,17 @@
    * **stdout 保持全空** —— hook 的 stdout 可能被解析成控制指令或注入模型 context，
      這裡只寫檔案，不輸出任何東西。
    * **一律 exit 0** —— 任何例外都吞掉（fail-open，§6）。
-   * 只寫入 D:\\Patrick-AI\\.ai-harness\\state\\spike\\，不碰任何專案檔。
+   * 只寫入 <harness>\\state\\spike\\，不碰任何專案檔。
 
 【核心層】探測平台的 hook 契約，跟被服務的是哪個專案無關。
 """
 import sys, json, os, time
 
-SPIKE_DIR = r"D:\Patrick-AI\.ai-harness\state\spike"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死絕對路徑。這支的寫入失敗是被吞掉的
+# （安全設計那條「一律 exit 0」），所以換機之後它會**靜默什麼都不記**，
+# 而「沒記到」與「這台沒觸發過」在畫面上同形。
+SPIKE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "state", "spike")
 
 
 def main() -> None:
