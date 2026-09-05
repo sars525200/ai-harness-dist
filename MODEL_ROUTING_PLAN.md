@@ -602,7 +602,7 @@ Opus 佔配額 93–95% 的真正成因＝**介面選單被記成 Opus，此後�
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
 | 介面選單切 Sonnet 後，新對話是否沿用 | 只有 user 能操作介面 | 切完開一則新對話**不要碰選單**，再跑 `.scratch/handoff/20260905-token-saving-research.md` 的 `py -3` 量測 | user 切、Claude 量 |
-| `settings.json` 的 `model` 到底會不會生效 | 選單 sticky，取不到乾淨樣本 | 在**終端機**直接跑 `claude`（無選單）開一則，再量開場模型 | user |
+| ~~`settings.json` 的 `model` 到底會不會生效~~ **已驗，見 §9.19** | — | — | ✅ 2026-09-06 02:50 |
 | `autoCompactWindow` 300000 是否生效 | 未逐項量 | 新對話跑 `/context` 看壓縮門檻 | user |
 | `switchModelsOnFlag: false`、`crossSessionInbound: hold` | 未逐項量 | 與上兩項同 commit（`773b302`），**推定生效但未證實** | 待安排 |
 
@@ -618,3 +618,39 @@ user 選「改成完整 ID」。兩份副本同步改成 **`claude-sonnet-5`**�
 **本輪到此結束。剩下的兩件事都在 user 手上，Claude 做不到**：
 ① 介面模型選單切 Sonnet（§9.15，真正的槓桿）
 ② 終端機開一則驗 `model` 值是否合法（§9.17）
+
+### 9.19 ✅ 已驗：`claude-sonnet-5` 在設定檔【合法且生效】（2026-09-06 02:50·headless 實跑＋官方文件雙路）
+
+覆蓋 §9.17 第二列、解除 §9.18 的「仍未驗證」。兩條互不參照的路徑得到同一結論。
+
+**路徑一：headless CLI 實跑（CLI `2.1.247`）**
+
+| 組別 | 指令 | 量到的 model | 判讀 |
+|---|---|---|---|
+| 基準 | `claude -p "回一個字：ok" --output-format json` | `canonicalModel: claude-sonnet-5`、`is_error:false` | 設定檔的值生效 |
+| 對照 A | 同上加 `--model haiku` | `claude-haiku-4-5-20251001` | **量法會變**，綠不是假的 |
+| 對照 B | 同上加 `--model claude-sonnet-99` | `modelUsage:{}`、`api_error_status:404` | 不合法值**當場報錯** |
+| 對照 C | `--settings <探針>` 內容 `{"model":"haiku"}` | `claude-haiku-4-5` | **設定檔的 `model` 欄位確實被讀** |
+| 對照 D | 探針內容 `{"model":"claude-sonnet-99"}` | 404 報錯 | 設定檔的不合法值**不會靜默忽略、不會 fallback** |
+
+⇒ 「靜默忽略」這個可能性被 B/D 兩路排除。基準組沒報錯 ⇒ `claude-sonnet-5` 是合法 id；
+對照 C 證明來源是設定檔而非 CLI 內建預設巧合。探針檔寫在 scratchpad，跑完已刪，正本一個 byte 未動。
+
+**路徑二：官方文件**（`code.claude.com/docs/en/model-config.md`、`settings.md`、`errors.md`）
+
+- `model` 欄位**別名與完整 ID 都吃**，文件明列 `{"model": "claude-opus-5"}` 這種寫法。
+- 不合法值報 `Model ... is not a recognized model id`，**不是靜默忽略**——與實跑一致。
+- 優先順序（高→低）：Managed → CLI `--model` → project local → shared project → user `~/.claude/settings.json`。
+- `sonnet[1m]` 的 `[1m]` 是 **1M context 變體**標記，仍受支援。
+
+**附帶發現（原本最可能踩的坑，結果安全）**：基準組回報 `contextWindow: 1000000`。
+從 `sonnet[1m]` 改成 `claude-sonnet-5` **沒有丟掉 1M context window**。
+
+**仍未驗（不要當成已驗）**
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| 桌面版 App「改設定檔沒用」這條規則 | 本次只驗 headless CLI，觀察不到 App | 介面選單切 Sonnet 後開新對話不碰選單，看開場模型 | user 切、Claude 量 |
+| 互動式終端機（不帶 `-p`）的開場模型 | 只驗了 `-p` 這條路徑 | 終端機直接跑 `claude`（互動模式），問它是哪個模型 | user |
+| 兩份 `settings.json` 誰同步誰 | 只比對文字相同，沒查時間戳與 git | `git log -1 -- global/settings.json` 與 `~\.claude\settings.json` 的 mtime 對比 | 待安排 |
+| `claude-sonnet-5` 是否為長期穩定 id | 只證明今天這台機器這個帳號可用 | 無現成指令，看官方 deprecation 公告 | 待安排 |

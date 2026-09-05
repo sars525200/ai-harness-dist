@@ -51,6 +51,7 @@
 
 | 項目 | 現況／為何還沒做 | 下一步（逐字指令或動作） | 誰 | 分類 | 優先 |
 |---|---|---|---|---|---|
+| 🔧 **HND-1 對「計畫要新建的檔」誤報**（2026-09-06 實測·1/1 誤報） | HND-1 把交接檔裡反引號包住的路徑一律當「指路」，但 Design／做法節寫的是**還沒建立的目標路徑**。實例：`20260906-third-party-gate.md` 第 48 行的變異腳本，檔頭表格自己就寫著「沒有」，守門仍判成「引用的東西已經不存在」。⚠ **不修的後果：Design 節寫得越完整、誤報越多**，人習慣之後就不讀它的輸出了——「永遠紅的守門等於沒有守門」。該規則自己的 `_strip_pending()` 已有 `未完成／待決／沒做的` 節的豁免，但涵蓋不到 Design 節。 | ①讀 `hooks/rules/hnd1_handoff_lifecycle.py` 的 `_strip_pending()` 與 `_PATH_RE` ②**判準綁後果不綁字樣**：判「這個路徑在本檔是否被標成新建／目標」而不是再加一個 `_SKIP_WORDS`（該檔註解自陳放寬正則三版全栽） ③改完先證明它會紅：造一個真的失效引用必須 FAIL，再跑 `py -3 eval/run_all.py` 確認不新增紅 ④動 hook＝M 級，先寫計畫書再動 | 我 | 閘門 | 中 |
 | 🔧 **`eval/run_all.py` 的 L2 長期紅在 `deploy-prod` 契約：`/portal.html` 找不到檔案**（2026-09-06 補 `CLAUDE.md` §4.2 規則後跑 eval 撞到·**與該次改動無關，是既有紅**） | L2 契約回歸 30 支只有這一支紅：`deploy-prod` 14 項契約缺 1，缺的是 `/portal.html`。沒查是檔案搬家、路徑寫法變了、還是那個引用本來就該改成條件式。⚠ **不修的後果：L2 永遠 FAIL ⇒ 整支 eval 的總結永遠帶一個紅**，下次真的因為改壞而多紅一項時沒人分得出來——跟「永遠紅的守門等於沒有守門」是同一個死法。 | ①`py -3 <harness>/eval/run_all.py 2>&1 | grep -n "deploy-prod" -A 3` 看缺的是哪一行契約 ②`grep -rn "portal.html" <harness>/skills/deploy-prod/` 找出引用處 ③判定是「檔案該存在但不見了」還是「引用該改成條件式」——**兩者的修法相反，不要直接補一個空檔案讓它變綠** ④修完重跑 `py -3 <harness>/eval/run_all.py` 確認 L2 轉 PASS | 我 | 閘門 | 中 |
 un_all.py 2>&1 | grep -n "deploy-prod" -A 3` 看缺的是哪一行契約 ②`grep -rn "portal.html" <harness>\skills\deploy-prod\` 找出引用處 ③判定是「檔案該存在但不見了」還是「引用該改成條件式」——**兩者的修法相反，不要直接補一個空檔案讓它變綠** ④修完重跑 `py -3 <harness>\eval
 un_all.py` 確認 L2 轉 PASS | 我 | 閘門 | 中 |
