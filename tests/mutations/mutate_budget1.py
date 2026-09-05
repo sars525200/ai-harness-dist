@@ -46,7 +46,7 @@ MUTATIONS = [
     ),
     (
         "沒越線也出聲（成本閘門開始亂叫）",
-        "    if total < _DAILY_OUTPUT_LIMIT:",
+        "    if total < _DAILY_QUOTA_LIMIT:",
         "    if False:",
     ),
     (
@@ -56,13 +56,30 @@ MUTATIONS = [
     ),
     (
         "不濾日期（昨天的訊息也算進今日用量）",
-        '                    if (rec.get("timestamp") or "")[:10] != today:',
+        '                    if _local_date(rec.get("timestamp") or "") != today:',
         "                    if False:",
     ),
     (
         "訊息不提規則來源（模型會判為不可信而無視）",
-        'f"CLAUDE.md §7：本專案今日',
-        'f"本專案今日',
+        'f"CLAUDE.md §7：今日',
+        'f"今日',
+    ),
+    # ↓ 2026-09-05 新增：保護那次修復的三個行為。少了這三條，修好的東西
+    #   會用跟上次一模一樣的方式再爛掉一次 —— 測試還在，但已經測不到東西。
+    (
+        "檔案探索改回非遞迴（正式路徑掃到 0 個檔，規則變啞巴：這正是 8/23~9/5 的真實死法）",
+        '    return glob.glob(os.path.join(_PROJECTS_ROOT, "**", "*.jsonl"), recursive=True)',
+        '    return glob.glob(os.path.join(_PROJECTS_ROOT, "*.jsonl"))',
+    ),
+    (
+        "判準漏掉 cache read（改回只看 output，實測會少算約八成配額）",
+        '            + (usage.get("cache_read_input_tokens", 0) or 0) * _W_CR)',
+        "            + 0)",
+    ),
+    (
+        "去重失效（續接／分支複製進來的訊息重複計算，實測會虛高一倍以上）",
+        "                        if mid in seen:",
+        "                        if False:",
     ),
 ]
 
@@ -89,5 +106,5 @@ finally:
 same = hashlib.sha256(read().encode("utf-8")).hexdigest() == digest
 print("\n" + "=" * 60)
 print(f"規則檔還原：{'✔ 雜湊一致' if same else '✘ 還原失敗'}")
-print("六個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
 sys.exit(0 if (all_red and same) else 1)

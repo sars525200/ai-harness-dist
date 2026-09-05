@@ -19,6 +19,7 @@ import os
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
@@ -32,29 +33,44 @@ for p in (HOOKS, os.path.join(HOOKS, "rules")):
 RULE_PATH = os.path.join(HOOKS, "rules", "budget1_daily_usage.py")
 
 
-def _load(tmpdir, project_dir=None, limit=None):
-    """每次拿乾淨模組，並把狀態檔與掃描目錄導到暫存區。"""
+def _load(tmpdir, projects_root=None, limit=None):
+    """每次拿乾淨模組，並把狀態檔與掃描根目錄導到暫存區。
+
+    ⚠ 這個覆寫讓測試跑得穩，但也正是它讓正式路徑死了 13 天沒人發現 ——
+    七個 case 全部繞過真實常數。所以另外有 `_case_production_path_alive`
+    **刻意不覆寫**，直接打正式路徑。
+    """
     spec = importlib.util.spec_from_file_location("budget1_under_test", RULE_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod._STATE_PATH = os.path.join(tmpdir, "budget_state.json")
-    if project_dir:
-        mod._PROJECT_DIR = project_dir
+    if projects_root:
+        mod._PROJECTS_ROOT = projects_root
     if limit is not None:
-        mod._DAILY_OUTPUT_LIMIT = limit
+        mod._DAILY_QUOTA_LIMIT = limit
     return mod
 
 
-def _write_transcript(path, rows):
-    """rows: [(model, output_tokens)]，時間戳一律寫今天。"""
-    today = time.strftime("%Y-%m-%d")
+def _utc_now_iso() -> str:
+    """本機「現在」對應的 UTC 時間戳。
+
+    不能寫死 f"{本機日期}T10:00:00Z" —— 在 UTC+8 以外的時區那會落到別的本機日期，
+    測試就會在某些機器上莫名其妙紅。規則讀的是 UTC，測試也照著給。
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _write_transcript(path, rows, cache_read=0, mid_prefix="m"):
+    """rows: [(model, output_tokens)]，時間戳一律寫「現在」。"""
+    ts = _utc_now_iso()
     with open(path, "w", encoding="utf-8") as f:
-        for model, out in rows:
+        for i, (model, out) in enumerate(rows):
             f.write(json.dumps({
-                "timestamp": f"{today}T10:00:00.000Z",
-                "message": {"model": model, "usage": {
+                "timestamp": ts,
+                "message": {"model": model, "id": f"{mid_prefix}{i}", "usage": {
                     "input_tokens": 1, "output_tokens": out,
-                    "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}},
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": cache_read}},
             }) + "\n")
 
 
@@ -64,9 +80,10 @@ def _case_scan_math(fails):
                           [("claude-opus-5", 600), ("claude-sonnet-5", 400)])
         m = _load(tmp, proj)
         total, fams = m._scan_today()
-        if total != 1000:
-            fails.append(f"總量算錯：{total}（應 1000）")
-        if fams.get("opus") != 600 or fams.get("sonnet") != 400:
+        # 加權配額單位：in x1 + out x5。opus 1+3000=3001、sonnet 1+2000=2001。
+        if total != 5002:
+            fails.append(f"總量算錯：{total}（應 5002）")
+        if fams.get("opus") != 3001 or fams.get("sonnet") != 2001:
             fails.append(f"家族拆分錯：{fams}")
 
 
@@ -85,8 +102,8 @@ def _case_synthetic_and_old_excluded(fails):
                                             "usage": {"output_tokens": 888888}}}) + "\n")
         m = _load(tmp, proj)
         total, _ = m._scan_today()
-        if total != 100:
-            fails.append(f"沒排除 synthetic／非今日訊息：{total}（應 100）")
+        if total != 501:
+            fails.append(f"沒排除 synthetic／非今日訊息：{total}（應 501）")
 
 
 def _case_under_limit_silent(fails):
@@ -168,10 +185,70 @@ def _case_state_unreadable_fail_open(fails):
             fails.append("狀態檔壞掉時整條規則啞掉了 —— 應該當作沒紀錄重算")
 
 
+def _case_cache_read_counted(fails):
+    """判準必須含 cache read —— 舊版只算 output，而實測 output 只佔配額約兩成。
+
+    2026-09-05 實測：一個五小時視窗裡 cache read 2.345 億、output 只有 134 萬，
+    加權後 cache read 佔 67.6%、output 佔 19.4%。只看 output 等於看錯儀表。
+    這裡同樣的 output、把 cache read 從 0 加到 100 萬，總量就該多 10 萬（係數 0.1）。
+    **舊版在這裡完全不動，所以這個 case 會紅。**
+    """
+    with tempfile.TemporaryDirectory() as tmp, \
+            tempfile.TemporaryDirectory() as p1, \
+            tempfile.TemporaryDirectory() as p2:
+        _write_transcript(os.path.join(p1, "a.jsonl"), [("claude-opus-5", 100)])
+        _write_transcript(os.path.join(p2, "a.jsonl"), [("claude-opus-5", 100)],
+                          cache_read=1_000_000)
+        base, _ = _load(tmp, p1)._scan_today()
+        with_cr, _ = _load(tmp, p2)._scan_today()
+        if with_cr - base != 100_000:
+            fails.append(
+                f"cache read 沒被計入：差 {with_cr - base}（應 100000）"
+                f" —— 這正是 2026-09-05 之前漏掉的大宗")
+
+
+def _case_production_path_alive(fails):
+    """**不覆寫任何常數**，直接打正式路徑。
+
+    這是唯一會抓到「掃錯目錄」的 case。舊版寫死 `d--IT-department` 且非遞迴，
+    在這裡會回 0 個檔而紅；其餘 case 都把根目錄導到暫存區，所以照樣全綠 ——
+    那正是它啞了 13 天沒人發現的原因。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        m = _load(tmp)  # 刻意不傳 projects_root
+        root = m._PROJECTS_ROOT
+        if not os.path.isdir(root):
+            fails.append(f"正式 transcript 根目錄不存在：{root}")
+            return
+        if not m._transcript_files():
+            fails.append(
+                f"正式路徑掃不到任何 transcript：{root} —— "
+                f"總量會恆為 0，這條規則等於啞的")
+
+
+def _case_dedup_by_message_id(fails):
+    """續接／分支的 session 會把舊訊息複製進新檔，同一則 API 訊息只能算一次。
+
+    改成遞迴掃全部專案之後，重複計算的機會變多（subagent 檔＋續接檔），
+    少了這道去重，門檻會被虛高的數字提早觸發。
+    """
+    with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as proj:
+        rows = [("claude-opus-5", 100)]
+        _write_transcript(os.path.join(proj, "a.jsonl"), rows, mid_prefix="same")
+        _write_transcript(os.path.join(proj, "b.jsonl"), rows, mid_prefix="same")
+        m = _load(tmp, proj)
+        total, _ = m._scan_today()
+        if total != 501:
+            fails.append(f"同一則 message.id 被重複計算：{total}（應 501）")
+
+
 def run() -> "tuple[int, list]":
     cases = [
-        ("掃描：今日 output 與家族拆分算得對", _case_scan_math),
+        ("掃描：加權配額單位與家族拆分算得對", _case_scan_math),
         ("掃描：排除 synthetic 與非今日訊息", _case_synthetic_and_old_excluded),
+        ("判準含 cache read（不是只看 output）", _case_cache_read_counted),
+        ("正式 transcript 路徑掃得到檔", _case_production_path_alive),
+        ("同一則 message.id 只算一次", _case_dedup_by_message_id),
         ("沒越線就不出聲", _case_under_limit_silent),
         ("越線出聲且指出規則來源", _case_over_limit_warns),
         ("一天只講一次", _case_once_per_day),
