@@ -602,3 +602,325 @@ user 手動跑了 `/context`（我在無頭環境跑不了），補上前一節�
 **這個錯誤的形狀值得記**：我看到兩組名字重複就宣告「可以省」，**沒有先確認它們在不在計費的那一側**。
 `/context` 的 `—` 就寫在畫面上。與 §18 ⑩ 同型：**判準測的是另一件事**——
 我量的是「有沒有重複」，該量的是「有沒有計入」。
+
+### 決定：常駐兩份都不關（2026-09-05 22:45·user 決定）
+
+**開關實查補完**（查 `claude_desktop_config.json` 與 `~\.claude.json`，兩處 `mcpServers` 皆空
+⇒ 這兩個伺服器由桌面 app 自己注入，沒有使用者層的個別開關）：
+
+| 項目 | 上一節寫的 | 實查修正 |
+|---|---|---|
+| `visualize` 1,488 | 「關常駐那份零功能損失」 | **沒有獨立開關 ⇒ 關不掉**。可執行的只有 7,337，不是 8,825 |
+| `coworkPreferredBrowser` | 未評估 | 是「哪一套常駐」不是「開哪一套」。切 `chrome` ⇒ 常駐變成 10,505，**反而貴 3.2k** |
+| `coworkBrowserToolsEnabled` | 「關掉多一次 `ToolSearch` 往返」 | 是**總開關**。關掉不是退到 `claude-in-chrome`，是兩套都沒有（推測，未驗——無非破壞性驗法） |
+
+**效益重估**：7,337 ÷ 每回合中位 180k ≈ **4%**（地板的 13.7%）。
+**代價**：破一次快取、重開 app、失去所有瀏覽器能力（截圖驗 UI／查網頁／debug 前端）。
+
+**user 選「不關，先做 `/clear` 換題」**——理由是 §「地板已證實」那節自己量出來的槓桿排序：
+對話累積 63%、地板 37%，`/clear` 換題零成本零功能損失。**瀏覽器的 4% 擱置**，
+等實際一週沒用到瀏覽器再回頭談。此條**結案，不要再重算**。
+
+## Phase 5 候選⑤：對話累積那 63%，主體是「讀檔」（2026-09-05 23:10 實測）
+
+user 質疑前面的選項全都繞在「加一個 hook 提醒」同一圈裡，要求評估別的類別。
+本節是**唯讀量測**的結果（腳本在 scratchpad：`reread.py`／`bigout.py`／`classify.py`，
+一次性分析不落 repo）。掃 `~/.claude/projects/**/*.jsonl` 近 3 天、7 個 transcript、278 次工具呼叫。
+
+### 5.6 關鍵概念：殘留成本
+
+工具結果**寫進 context 只有一次**，但它之後的**每一個回合都以快取讀取重付**。
+所以真正的成本＝`結果 tokens × 它之後還剩幾個 assistant 回合`，本節叫**殘留成本**。
+
+| 量 | 值 |
+|---|---|
+| 工具結果寫入一次合計 | 133,878 tok |
+| **殘留成本合計** | **9,979,275 tok**（依配額加權 ×0.1 約 **998k**） |
+| 放大倍率 | 約 **75 倍** |
+
+**單次輸出大小幾乎不決定成本**：最大的單次輸出 12,219 tok，殘留 1,087,491 tok（放大 89 倍）；
+而同樣 3,667 tok 的另一筆只殘留 51 萬。**決定成本的是「出現得多早」，不是「輸出多大」。**
+
+### 5.7 殘留成本分類——讀檔佔 86%
+
+| 類別 | 殘留 tok | 佔比 | 次數 |
+|---|---|---|---|
+| **讀檔（走 Bash：`sed -n`／`cat`／`grep`／`head`／`tail`）** | 6,277,752 | **62.9%** | **97** |
+| **讀檔（走 `Read` 工具）** | 2,303,022 | **23.1%** | 19 |
+| 跑程式（`py -3`／`node`／`pytest`／`git log`…） | 1,267,458 | 12.7% | 96 |
+| 其他工具 | 117,415 | 1.2% | 70 |
+| 搜尋（`Grep`／`Glob`） | 11,741 | 0.1% | 10 |
+
+⇒ **讀檔合計 86.0%。跑測試、跑腳本、跑 git 全部加起來只有 12.7%。**
+
+⇒ **97 次讀檔繞過專用工具走 Bash，只有 19 次走 `Read`。** 平台的環境提示本身就寫著
+「避免用 Bash 跑 `find`／`grep`／`cat`／`head`／`tail`／`sed`，改用專用工具」——
+**這是今晚找到的第三條「規則存在但沒生效」**（前兩條：§4.2 預設 Sonnet、§4.1 預設派工）。
+差別在 `Read` 有分頁與截斷保護，`cat` 沒有、整份進 context。
+
+### 5.8 撤回：前一版「重複閱讀只佔 1.5%」是錯的
+
+我第一版（`reread.py`）量到「同一個檔被讀第二次以上只佔 tool_result 的 1.5%」，
+據此宣告「重複閱讀不是兇手」。**這個結論撤回**：那支腳本只比對 `Read` 工具的 `file_path`，
+**97 次 Bash 讀檔完全沒被納入**。同型錯誤第三次出現（§18 ⑩、常駐 MCP 的「有沒有重複 vs 有沒有計入」）：
+**判準測的是另一件事**——我量的是「Read 工具重複幾次」，該量的是「這個檔的內容進了幾次 context」。
+
+### 5.9 這個量測的界線（沒找到的·必填）
+
+- 只算 `tool_result` 的文字。**沒算**：`tool_use` 的輸入（另有 54,766 tok 寫入）、模型自己的文字輸出、
+  thinking 區塊、system-reminder／attachment 列。⇒ 9.98M 是**下限**。
+- 字元轉 token 用固定 3.6 字元／token 估算，中英混雜可能有偏差，沒有用官方 tokenizer 對過。
+- 「殘留＝tok × 其後回合數」**假設全程沒有 auto-compact**。若中途壓縮過，實際殘留比這個小。未查本機有沒有觸發過。
+- 7 個 transcript 裡有 1 個 0 回合（空檔），已在分母內但不影響結論。
+- **沒有隔離變因**：讀檔佔比高的那幾則正好都是大型排查任務，不代表所有任務都長這樣。
+
+### 5.10 這個數字指向哪裡（尚未選，等 user 決定）
+
+讀檔佔 86%，而讀檔的成本由「出現多早」決定 ⇒ 兩個方向，都不必寫新程式：
+
+1. **把探索性讀檔派給 subagent**——subagent 讀 20 個檔，主對話只收回報那幾百字。
+   這正是 §4.1「預設派出去」的原始理由。實測 subagent 只佔加權用量 2.3%，
+   而 §4.1 的「不必每次再問」在 2026-09-01 被 user 主動撤回 ⇒ **這是 user 的決定，不自行改回**。
+2. **讀檔改走 `Read`＋`offset`／`limit`，不要用 `cat`／`sed`**——平台自己的環境提示就這麼寫。
+   紀律問題，沒有承載體；要有承載體就得寫規則或 hook。
+
+## Phase 5 候選⑥：官方旋鈕盤點（2026-09-05 23:40·兩位研究員回報合併）
+
+user 質疑先前的選項全繞在「加一個 hook」同一圈，要求評估官方設定與上網外查。派兩位並行：
+①官方設定與環境變數（用 `Invoke-WebRequest` 抓 `env-vars.md` 原始 markdown 481KB／352 個變數、
+`settings-reference` 225 個鍵，繞過 WebFetch 截斷）；②官方與社群怎麼處理工具輸出膨脹。
+
+### 5.11 兩條必須先更正的事實
+
+**① 本機版本是 2.1.260，不是 2.1.247。**
+`claude --version` 回報 2.1.247，但實際執行檔 `CLAUDE_CODE_EXECPATH` 指向
+`…\claude-code\2.1.260\claude.exe`，環境變數 `AI_AGENT=claude-code_2-1-260_agent`。
+PATH 上那支是舊安裝。**§5.4b 的版本對照表整張要重判**：
+
+| 功能 | 門檻 | 舊判定（依 247） | 更正（依 260） |
+|---|---|---|---|
+| `/usage` 的 `Prompt cache (main)` 命中率 | ≥2.1.251 | 「還沒有，差 4 個小版」 | **有** |
+| `/usage` 的 miss likely-cause 文字 | ≥2.1.260 | 未評估 | **剛好有** |
+| `modelSettings`（逐模型存 effort） | ≥2.1.251 | 未評估 | **有** |
+| `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` | ≥2.1.257 | 未評估 | **有** |
+| `bashOutputMaxChars`／`taskOutputMaxChars` | ≥2.1.261 | 未評估 | **差一個小版，沒有** |
+| `subagentPromptCacheTtl` | ≥2.1.242 | 有 | 有 |
+
+**② `sonnet[1m]` 的 `[1m]` 是「100 萬 token 的 context 窗」，不是「一小時快取 TTL」。**
+21:35 那則進度日誌寫「保留 `[1m]` 一小時快取 TTL」——**讀錯了**。快取 TTL 是完全另一組東西
+（`promptCacheTtl` 設定／`CLAUDE_CODE_PROMPT_CACHE_TTL` 環境變數）。
+後果不是筆誤而已：`[1m]` 正是把自動壓縮門檻推到 96.7 萬的原因，見下節。
+
+### 5.12 最大的單一發現：這台機器實質上從不自動壓縮
+
+官方（`model-config#context-window-and-auto-compaction`）：不設 `autoCompactWindow` 時
+「Claude Code compacts **when the conversation reaches the model's context limit**」，
+而 Sonnet 5 那節寫明「Sessions auto-compact before the window fills, **at about 967K tokens by default**」。
+
+⇒ **本機 `autoCompactWindow` 未設 ＋ `model` 帶 `[1m]` ⇒ 門檻約 96.7 萬。**
+每回合中位數 180k、最長那則 266k，**離門檻連三成都不到**——沒有任何機制在攔對話累積。
+
+這一條同時解釋了先前所有量測：對話累積佔 63%、讀檔殘留 998 萬 tok，
+不是因為讀太多，是因為**讀進來的東西永遠不會被清掉**。
+
+可設定的入口（優先序由高到低）：
+`CLAUDE_CODE_AUTO_COMPACT_WINDOW`（**只收純整數**，`500k` 會被讀成 500 再夾到最小值）
+→ `--autocompact` → `/autocompact <值>`（會寫進 user settings）→ `autoCompactWindow` 設定。
+範圍 100K–1M。另有 `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`（1–100，**只能調低不能調高**）。
+還有 `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`，官方定位是「用 1M 模型但要 200K 行為」的做法。
+
+⚠ **代價**：壓縮必然作廢 conversation 層快取；壓縮後**讀過／改過的檔只重讀最近 5 個**、
+已叫用的 skill 內文每支上限 5,000 tok／總計 25,000 tok。門檻設太低會一直付壓縮成本。
+
+### 5.13 官方旋鈕總表（本機現值 × 建議）
+
+**A 攻對話累積（63%）**
+
+| 旋鈕 | 本機 | 官方說明 | 判定 |
+|---|---|---|---|
+| `autoCompactWindow` | **未設** | 100000–1000000；不設＝模型上限才壓 | **最大槓桿**，見 5.12 |
+| `/clear` | — | costs 頁原文：「`/clear` **costs nothing**」 | 零成本，已是第一槓桿 |
+| `/rewind` | — | 「truncates back to a prefix that is **already cached**, rather than building a new one as compaction does」 | 想放棄整條路徑時比 `/compact` 便宜 |
+| `crossSessionInbound` | 未設 | `"hold"`＝別的 session 的訊息只通知不投遞；costs 頁明列 cross-session message「sending your **full context** each time」 | 你有 6 個並行 session，可調 |
+
+**B 攻地板（37%，其中工具定義是大宗）**
+
+| 旋鈕 | 本機 | 官方說明 | 判定 |
+|---|---|---|---|
+| `CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=1` | 未設 | 「shorter system prompt and **abbreviated tool descriptions**…full tool set, hooks, MCP servers, and CLAUDE.md discovery remain enabled」 | **唯一直接針對地板最大塊的官方旋鈕**，值得試 |
+| `skillOverrides` | 未設 | 逐支設 `on`／`name-only`／`user-invocable-only`（模型看不到、人仍可打 `/name`）／`off` | 本機 skill 清單很長，最無痛的地板削減 |
+| `skillListingBudgetFraction` | 未設（預設 0.01） | skill 清單上限＝context 窗的 1%。**1M 窗的 1% 是 200K 窗的 5 倍** | 可調低；⚠ 單位官方自相矛盾（見 5.14） |
+| `skillListingMaxDescChars` | 未設（預設 1536） | 每支 skill 描述字元上限 | 可調 |
+| `disableBundledSkills` | 未設 | 移除內建 skills／workflows，`/init` 等仍可手打 | 可調，先跑 `/doctor` 看誰最貴 |
+| `ENABLE_TOOL_SEARCH` | **未設** | 未設＝MCP 工具全部延後載入（只載名稱）；設 `false` 反而全部前置 | **維持不設**，預設值正在幫你 |
+| `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` | **未設** | 未設＝額外目錄**不**載入記憶檔 | **維持不設**（本機有 5 個額外目錄） |
+
+**C 攻輸出（19.4%，計費權重最高）**
+
+| 旋鈕 | 本機 | 官方說明 | 判定 |
+|---|---|---|---|
+| `effortLevel` | `"high"` | **`high` 就是 Sonnet 5 的內建預設** | **目前這個設定一個 token 都沒省到**。要有效果得降 `medium` |
+| 中途改 effort | — | 「changing the effort level **mid-session** means the next request reads the entire conversation history **with no cache hits**」（Fable 5.1 例外） | **effort 只能在開場定，中途改一次＝一次全額重算** |
+| `MAX_THINKING_TOKENS` | 未設 | 「**Nonzero values are ignored on adaptive reasoning models**」 | **不可用**：Sonnet 5 是 adaptive，沒辦法「把思考預算調小一點」，只能全關或改 effort |
+| `Concise` 內建輸出風格 | 用自訂 `PM-Challenger` | 官方唯一明文「縮短輸出」的開關 | **與本機自訂風格衝突**，且切換整份快取失效 |
+
+**D 攻快取（讀 67.6%／寫 13.0%）**
+
+| 旋鈕 | 本機 | 官方說明 | 判定 |
+|---|---|---|---|
+| `switchModelsOnFlag` | **`true`** | 官方明列「Automatic model fallback…**is also a model switch**」＝整份 request 無快取重讀 | **可調 `false`**：改成先問你，避免無聲的整份重算 |
+| `subagentPromptCacheTtl` | 未設 | subagent／壓縮／session title 那一桶**預設一律 5m**（主對話 1h） | 派工密集時設 `"1h"` 可減少重複暖機 |
+| `promptCacheTtl` | 未設 | 訂閱制主對話預設已是 1h | 不必動 |
+| `DISABLE_PROMPT_CACHING*` | 未設 | — | **不准動**（沒快取要多花 5.3 倍，已實測） |
+
+**E 攻工具輸出（讀檔 86%）**
+
+| 旋鈕 | 本機 | 官方說明 | 判定 |
+|---|---|---|---|
+| `CLAUDE_CODE_SUBAGENT_MODEL` | 未設 | subagent 預設模型；角色 frontmatter 的 `model` 優先於它 | 可設 `haiku` 讓沒指定的粗活自動降檔 |
+| subagent 隔離 | — | 三處官方原文互證：「the subagent's tool calls **stay out of your context**」「**returns only the summary**」「the verbose output stays in the subagent's context」 | **這是攻讀檔 86% 的正解**，且不必寫程式 |
+| `BASH_MAX_OUTPUT_LENGTH` | 未設（預設 30000 字元） | 超過即落檔、對話中換成檔案路徑 | 已在運作 |
+| `MAX_MCP_OUTPUT_TOKENS` | 未設（預設 25000） | 超過即落檔換成參照 | 已在運作 |
+| `bashOutputMaxChars` | — | — | **版本不足**（需 2.1.261，本機 2.1.260） |
+| PostToolUse hook 改輸出 | — | 官方：「the tool **already ran**」 | **做不到**。只能用 PreToolUse 改「輸入」（官方自己的省 context 範例：把 `npm test` 接上 `grep`＋`head`） |
+| 內建 tool-result clearing | — | 機制存在（`/usage` 會顯示 `expected rebuild (compaction or tool-result clearing)`），但**閾值、保留筆數、開關全部未文件化，無任何設定鍵** | 不可控 |
+
+**F 明列不准動**：`ultracode`、`fastMode`、`DISABLE_AUTO_COMPACT`／`DISABLE_COMPACT`、
+`CLAUDE_CODE_DISABLE_CLAUDE_MDS`、`autoMemoryEnabled=false`、`CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS`
+（關掉反而讓大量讀檔進主 context）。
+
+### 5.14 沒找到的（兩位合併·必填）
+
+- **effort 各檔位的量化差異**：官方只有質性描述，沒有任何百分比、token 數或 benchmark。
+  「降到 medium 能省多少」**沒有官方答案**。
+- **`skillListingBudgetFraction` 的單位**：設定頁寫「share of the **context window**」（token），
+  skills 頁寫「the listing's **character** budget」。**官方兩處不一致，未解決**
+  ⇒「1M 窗把 skill 清單上限放大 5 倍」方向可信、**絕對數字不可信**。
+- **`max` 檔位能否用設定持久化**：`effortLevel` 與環境變數都不收 `max`，但 model-config 又寫
+  「Unless you set it through the `CLAUDE_CODE_EFFORT_LEVEL` environment variable…」。**官方自相矛盾**。
+- **壓縮的絕對 token 成本**：只有「a fraction of what the context size suggests」，無公式無數字。
+- **hook 每回合成本**：無官方旋鈕、也無官方量測方式（`/usage` 的歸因只拆
+  skills／subagents／plugins／MCP servers，**不含 hooks**）。
+- **`CLAUDE_CODE_MAX_OUTPUT_TOKENS` 在 Sonnet 5 的預設值**、`CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS`
+  的預設值：官方皆未寫。
+- **53.5k 地板的官方組成分解**：無官方頁面給各層 token 數；`context-window` 頁的數字是該頁模擬器的
+  **示意值**（頁面自己標明 representative），不可當實測。真數字只能跑 `/context`。
+- **官方有沒有「到某個 token 門檻自動換便宜模型」**：225 個設定鍵、352 個環境變數裡**都沒有**。
+  `fallbackModel` 是給 overloaded／flagged 用的，不是成本觸發。
+- **社群方案的自報數字全無第三方複驗**：RTK（78.7k★）自報砍 90% bash 輸出但自己聲明不等於帳單省 90%；
+  Context Mode（20.4k★，ELv2 非 OSI 授權）自報 98%；`read-once` hook 自報省 40%；
+  `context-analyzer`（**15★**，兩個月沒動，**純觀測不處理**）。**都沒有裝的理由，先用官方旋鈕。**
+- 未讀完的官方頁：`monitoring-usage.md`（139KB，OTel 欄位定義）、`hooks.md`（317KB，只做關鍵字掃描）、
+  `mcp.md`（同）；`slash-commands` 抓回的位元組數與 `skills.md` 完全相同，**未驗證是否為同一頁**。
+
+### 5.15 狀態
+
+2026-09-05 23:40：旋鈕盤點完成，**一項都還沒動**。等 user 逐項選。
+
+### 5.16 快取實測已補（2026-09-05 23:55·user 手動貼 `/usage` 面板）
+
+| 項目 | 值 |
+|---|---|
+| **快取命中率** | **96%** |
+| 快取讀取（本則累計） | **9.4M** |
+| 快取寫入（本則累計） | 373.5k |
+| 一般 input／output | 162／429 |
+| 本則模型 | **Opus 5**（`/clear` 不換模型，21:35 的預設值待驗仍未收） |
+| 五小時桶 | 53%；週·全模型 26%；週·Fable 20% |
+
+**判定：快取不是兇手，優先序不變。** 命中 96% ⇒ 67.6% 的快取讀取是**必要開銷**，
+不是重建浪費。讀寫比 **25:1**——同一份內容寫進快取一次、被讀回 25 次。
+
+⇒ 成本結構最終確認為：**「每回合背得多 × 回合多」，而沒有任何機制在攔**。
+直接對應 5.12：`autoCompactWindow` 未設、門檻約 96.7 萬。**第一槓桿確定是自動壓縮門檻。**
+
+沒找到的：面板版的 `/usage` **沒有顯示 miss 的 likely-cause 文字**（2.1.260 應該有），
+可能要用 `/usage` 的文字模式或別的分頁才看得到；本次未追。
+「What's using your limits?」的歸因只列出 skill（`/usage-credits` 2%），**不拆 hook、不拆讀檔**。
+
+### 5.17 已執行：自動壓縮門檻設 300000（2026-09-05 23:58·user 逐項同意）
+
+**改了什麼**：兩份 `settings.json` 各加一行 `"autoCompactWindow": 300000`——
+`~\.claude\settings.json`（機器讀的）與 `global\settings.json`（版控的）。
+兩份 JSON 都驗過合法、都讀得到新值；版控那份 `git diff --stat` ＝ 1 檔 1 行，動工前 `git status` 乾淨。
+
+**為什麼是 300000 不是更低**：實測最長那則對話 266k。門檻壓到 266k 以下會讓那類任務
+**每則都付一次壓縮成本**，而壓縮會作廢對話層快取、且壓縮後只重讀最近 5 個檔。
+300k 留一點餘裕，先看一週再決定要不要往下調。
+
+**為什麼只動這一個**：快取命中 96%（5.16）已排除快取候選；hook 已排除（候選②）；
+常駐 MCP 已排除（4% 換掉瀏覽器不划算）。**這是唯一對到 63% 對話累積的官方旋鈕，且單一變因可歸因。**
+
+### 5.18 追加兩個旋鈕（2026-09-05 00:05·user 續選「再裝兩個零風險的」）
+
+同兩份 `settings.json`：`"switchModelsOnFlag": false`（原 `true`）、`"crossSessionInbound": "hold"`（原未設）。
+兩份 JSON 皆驗過合法、值都讀得到；版控那份 `git diff` 共 3 行（含 5.17 那行）。
+
+**動手前先驗證過的疑慮**：研究員②的對照表寫「本 repo 便箋投遞用的正是 cross-session message」，
+若成立，設 `hold` 會讓 WIN-1／BUDGET-1 等所有提醒靜默失效。
+實查 `grep -rn "send_message\|ccd_session_mgmt\|crossSession" hooks/ tools/` ⇒ **零命中**；
+便箋走的是 `dispatch.py` 自己的檔案佇列＋`UserPromptSubmit` 的 `additionalContext`。
+**研究員②那條判定是錯的，已推翻，提醒管線不受影響。**
+
+**待驗（追加兩列）**：
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| `switchModelsOnFlag: false` 在**非互動 session** 的行為 | 官方只寫「會先問你」，而背景 agent／subagent 沒有對話框；本次沒有被分類器標記的樣本可觸發 | 下次背景 agent 跑失敗時看錯誤訊息是否提到 model switch；真的卡住就把該行改回 `true`（一行可逆） | user 或下一則 |
+| `crossSessionInbound: "hold"` 是否影響平台自己的 session 間訊息 | harness 不用它，但**平台的 `SendMessage`／teammate 功能會用**；本則未派 teammate 驗證 | 下次用 `SendMessage` 對別的 session 送訊息時看對方收不收得到 | user 或下一則 |
+
+### 5.19 地板那組（2026-09-06 00:15·user 續選「再裝地板那組」）
+
+**與前三個旋鈕的差別：這一組有功能代價，而且官方沒有給任何量化效果。** 先講清楚才動。
+
+**① `env.CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT = "1"`**
+
+官方原文：「shorter system prompt and **abbreviated tool descriptions**…full tool set, hooks,
+MCP servers, and CLAUDE.md discovery remain enabled」。
+對到 5.12 的地板驗算 `4.7+26+11.2+0.39+6+5.2 = 53.49k`——**26k 與 11.2k 兩塊就是工具定義**，
+是地板最大的兩項。這是官方唯一直接針對它們的旋鈕。
+
+⚠ **代價**：工具描述變粗 ⇒ 可能影響工具用得準不準。官方**沒有任何量化數字**。
+⚠ 改系統提示會破一次快取，且只對**新 session** 生效。
+
+**② `skillOverrides` 13 支設 `user-invocable-only`**（模型看不到、人仍可打 `/name`）
+
+判準**不是猜的**：讀 `~\.claude.json` 的 `skillUsage`（42 筆真實使用計數）。
+選的全是「零使用或極低使用 ＋ 本來就靠人打斜線叫」的平台內建：
+
+| 支 | 使用次數 |
+|---|---|
+| `code-review`／`security-review`／`simplify`／`loop`／`keybindings-help`／`workflow-authoring`／`design` | **0** |
+| `anthropic-skills:setup-cowork`／`import-memory`／`consolidate-memory` | **0** |
+| `init`／`anthropic-skills:schedule` | 1（皆為數月前） |
+| `fewer-permission-prompts` | 2 |
+
+**刻意不砍的**（有功能代價，需要模型自己判斷觸發）：
+`anthropic-skills:docx`／`pptx`／`xlsx`／`pdf`／`<COMPANY>-sop`（人說「做一份 Word」時要我自己認出來）、
+`dataviz`／`artifact-*`（畫面類）、以及**所有 harness 自己的 skill**（`shougong` 143 次、
+`adversarial-review` 47、`chat-handoff` 47、`artifact-design` 39、`visual-check` 22…）。
+
+**沒做的**：`skillListingBudgetFraction`／`skillListingMaxDescChars`（會截斷**全部**描述，
+包含高使用那幾支，風險比逐支指定高）、`disableBundledSkills`（範圍太大）、
+`effortLevel` 仍 `high`（＝模型內建預設，等於沒設）、`CLAUDE_CODE_SUBAGENT_MODEL` 未設。
+
+**待驗（追加三列）**：
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| 簡短系統提示到底省多少 | 只對新 session 生效，本則不受影響；官方無數字 | 開新對話跑 `/context`，把地板數字對上本次基準 **53.5k** | user |
+| 工具用得準不準有沒有退步 | 沒有客觀量測；只能靠實際使用觀察 | 接下來幾則若出現工具參數錯、選錯工具，第一個懷疑這條，把 `env` 那三行拿掉即可 | user 觀察 |
+| 13 支 skill 藏起來會不會誤傷 | 本則未觸發任何一支 | 需要時直接打 `/code-review`／`/design` 等，看還叫不叫得出來 | user |
+
+**三組旋鈕合計**：版控那份 `git diff --stat` ＝ 21 增 1 刪。兩份 JSON 皆驗過合法。**未 commit。**
+
+**待驗（四欄）**：
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| 300k 門檻是否真的生效 | 設定只對**新 session** 生效，本則已在跑 | 開新對話後打 `/context`，看它標示的壓縮門檻是不是 300k 而非 96.7 萬 | user 下次開新對話 |
+| 是否真的降低殘留成本 | 要累積幾天資料才看得出來 | 一週後重跑 scratchpad 的 `bigout.py`，比對殘留成本合計（本次基準：近 3 天 7 則＝9,979,275 tok） | user 或下一則 |
+| 壓縮成本會不會反而變高 | 要有對話真的長到 300k 才觀察得到 | 同上，看 `/usage` 的 cache write 有沒有異常上升（本次基準：本則 373.5k） | user |
+| 預設模型是否 Sonnet（21:35 遺留） | `/clear` 不重啟程式，本則全程 Opus 5 | 開一則**全新對話**（不是 `/clear`）看開場模型 | user 下次開新對話 |
+
+**未 commit**（延續今晚做法）。

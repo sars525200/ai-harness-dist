@@ -165,6 +165,7 @@
     ]
   },
   "model": "sonnet[1m]",
+  "autoCompactWindow": 300000,
   "hooks": {
     "SessionEnd": [
       {
@@ -230,10 +231,29 @@
       }
     ]
   },
+  "env": {
+    "CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT": "1"
+  },
+  "skillOverrides": {
+    "code-review": "user-invocable-only",
+    "security-review": "user-invocable-only",
+    "simplify": "user-invocable-only",
+    "loop": "user-invocable-only",
+    "keybindings-help": "user-invocable-only",
+    "workflow-authoring": "user-invocable-only",
+    "fewer-permission-prompts": "user-invocable-only",
+    "init": "user-invocable-only",
+    "design": "user-invocable-only",
+    "anthropic-skills:setup-cowork": "user-invocable-only",
+    "anthropic-skills:import-memory": "user-invocable-only",
+    "anthropic-skills:consolidate-memory": "user-invocable-only",
+    "anthropic-skills:schedule": "user-invocable-only"
+  },
   "outputStyle": "PM-Challenger",
   "effortLevel": "high",
   "theme": "dark",
-  "switchModelsOnFlag": true,
+  "switchModelsOnFlag": false,
+  "crossSessionInbound": "hold",
   "remoteControlAtStartup": true,
   "agentPushNotifEnabled": true
 }
