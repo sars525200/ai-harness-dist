@@ -23,7 +23,10 @@ try:
 except Exception:
     pass
 
-HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
+# 從本檔位置推（2026-09-05·B4）：原本寫死絕對路徑，在 clone／worktree 裡會
+# 靜默 import 主目錄那份 hooks ⇒ 測到的不是眼前這一份。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOOKS_DIR = os.path.join(_HARNESS_ROOT, "hooks")
 sys.path.insert(0, HOOKS_DIR)
 
 from _lib import RealGitContext  # noqa: E402

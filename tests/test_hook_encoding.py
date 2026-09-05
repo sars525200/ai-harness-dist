@@ -23,7 +23,11 @@ import subprocess
 import sys
 import tempfile
 
-HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
+# 從本檔位置推（2026-09-05·B4）：原本寫死絕對路徑。這支跑的是**真的**
+# `dispatch.main()`，在 clone／worktree 裡會去跑主目錄那一份 ⇒ 驗到的編碼行為
+# 不是眼前這份的，而且兩者的輸出長得一樣。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOOKS_DIR = os.path.join(_HARNESS_ROOT, "hooks")
 
 # 兩支 hook 的訊息裡都真實存在的字串，用來確認「中文有被寫出來」。
 _GATE_MARK = "唯讀角色"

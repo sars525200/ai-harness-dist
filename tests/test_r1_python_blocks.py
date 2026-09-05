@@ -33,10 +33,14 @@ P6 走 `KNOWN_RED` 表達，所以這支**整體 exit 0**、接進總表不會�
 """
 from __future__ import annotations
 
+import os
 import sys
 
-HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
-RULES_DIR = r"D:\Patrick-AI\.ai-harness\hooks\rules"
+# 從本檔位置推（2026-09-05·B4）：原本兩行都寫死絕對路徑，在 clone／worktree 裡
+# 會靜默載入主目錄那份規則 ⇒ 測到的不是眼前這一份。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOOKS_DIR = os.path.join(_HARNESS_ROOT, "hooks")
+RULES_DIR = os.path.join(HOOKS_DIR, "rules")
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")

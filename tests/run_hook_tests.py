@@ -34,7 +34,12 @@ try:
 except Exception:
     pass
 
-HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"
+# 從本檔位置推（2026-09-05·B4）：這裡原本寫死 `D:\Patrick-AI\.ai-harness\hooks`。
+# 後果不是「跑不起來」而是**跑起來但測錯東西**——在 clone 或 worktree 裡跑這支，
+# 它 import 的是主目錄那份 hooks，於是印出來的綠燈是主目錄的綠燈，
+# 而畫面上跟「這份 clone 全綠」長得一模一樣。換機驗證因此驗不到。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOOKS_DIR = os.path.join(_HARNESS_ROOT, "hooks")
 FIXTURE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 # fixture 的 expect 支援的鍵。多一個打錯的鍵會被靜默忽略 → 那條斷言等於沒寫，
