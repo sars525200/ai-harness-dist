@@ -156,6 +156,181 @@ def run() -> tuple[int, list]:
               and (live / "CLAUDE.md").read_text(encoding="utf-8") == "A\n",
               fr.stdout + fr.stderr)
 
+    # ── 覆寫前備份：工具做不可逆的寫入就得自己留還原點 ───────────────────
+    # 2026-08-27 那次救回來靠的是另一條線碰巧留的探針備份，**不是這支工具**。
+    # 「現場剛好有人留了一份」不是還原點。
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed(live, repo, "LIVE-OLD\n", "REPO-NEW\n", repo_newer=True)
+        rst = _run(live, repo, "--restore")
+        baks = sorted(live.glob("CLAUDE.md.bak.*"))
+        check("--restore 留下 live 側備份", len(baks) == 1,
+              "找到 %s\n%s" % ([b.name for b in baks], rst.stdout))
+        check("備份內容是被覆寫掉的那一份",
+              bool(baks) and baks[0].read_text(encoding="utf-8") == "LIVE-OLD\n",
+              baks[0].read_text(encoding="utf-8") if baks else "無備份")
+        check("備份路徑有講出來", "另存" in rst.stdout, rst.stdout)
+
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed(live, repo, "LIVE-NEW\n", "REPO-OLD\n", repo_newer=False)
+        bak = _run(live, repo, "--backup")
+        baks = sorted(repo.glob("CLAUDE.md.bak.*"))
+        check("--backup 留下 repo 側備份", len(baks) == 1,
+              "找到 %s\n%s" % ([b.name for b in baks], bak.stdout))
+        check("repo 側備份內容正確",
+              bool(baks) and baks[0].read_text(encoding="utf-8") == "REPO-OLD\n")
+
+    # 目的端本來就不存在時不該生出空備份（否則每次新增檔案都留一個垃圾）
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        live.mkdir(parents=True)
+        repo.mkdir(parents=True)
+        (repo / "CLAUDE.md").write_text("ONLY-REPO\n", encoding="utf-8")
+        r = _run(live, repo, "--restore")
+        check("目的端不存在：不留空備份", not list(live.glob("*.bak.*")),
+              "%s\n%s" % ([x.name for x in live.iterdir()], r.stdout))
+
+    # ── JSON 雙向獨有：mtime 與行數兩個判準都接不住 ──────────────────────
+    # 2026-08-27 第二次事故：repo 的 settings.json mtime 較新（剛補過一行），
+    # 內容卻整段少了 live 才有的 SessionStart hook。照建議 --restore 會第二次
+    # 刪掉同一個 hook。行數判準也接不住 —— 兩邊各加各的時行數可以打平。
+    def _seed_json(live, repo, live_obj, repo_obj, *, repo_newer=True):
+        import json as _j
+        live.mkdir(parents=True, exist_ok=True)
+        repo.mkdir(parents=True, exist_ok=True)
+        (live / "CLAUDE.md").write_text("SAME\n", encoding="utf-8")
+        (repo / "CLAUDE.md").write_text("SAME\n", encoding="utf-8")
+        (live / "settings.json").write_text(_j.dumps(live_obj, indent=1), encoding="utf-8")
+        (repo / "settings.json").write_text(_j.dumps(repo_obj, indent=1), encoding="utf-8")
+        now = time.time()
+        older, newer = (live, repo) if repo_newer else (repo, live)
+        os.utime(older / "settings.json", (now - 30, now - 30))
+        os.utime(newer / "settings.json", (now, now))
+
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        # 行數刻意相同：讓收縮閘門必然放行，證明擋下來的是這條新判準
+        _seed_json(live, repo,
+                   {"model": "x", "hooks": 1},
+                   {"model": "x", "outputStyle": "PM"})
+        before = _snap(live)
+        rst = _run(live, repo, "--restore", "--only", "settings.json")
+        check("雙向獨有：--restore 拒跑 exit 2", rst.returncode == 2,
+              "got %s\n%s" % (rst.returncode, rst.stdout))
+        check("雙向獨有：點名兩邊各獨有什麼",
+              "hooks" in rst.stdout and "outputStyle" in rst.stdout, rst.stdout)
+        check("雙向獨有：live 沒被動", _snap(live) == before, _snap(live))
+        bk = _run(live, repo, "--backup", "--only", "settings.json")
+        check("雙向獨有：--backup 也拒跑", bk.returncode == 2,
+              "got %s\n%s" % (bk.returncode, bk.stdout))
+        rep = _run(live, repo)
+        check("雙向獨有：報告改印需人合併", "需人合併" in rep.stdout, rep.stdout)
+        check("雙向獨有：報告不得再指一個方向",
+              "建議 --restore" not in rep.stdout and "建議 --backup" not in rep.stdout,
+              rep.stdout)
+        fr = _run(live, repo, "--restore", "--only", "settings.json", "--force")
+        check("雙向獨有：--force 仍可強蓋", fr.returncode == 0, fr.stdout + fr.stderr)
+
+    # 對照組：單向獨有不得誤擋（repo 多一個 key ⇒ restore 就是對的方向）
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed_json(live, repo, {"model": "x"}, {"model": "x", "outputStyle": "PM"})
+        r = _run(live, repo, "--restore", "--only", "settings.json")
+        check("單向獨有：不誤擋", r.returncode == 0, "got %s\n%s" % (r.returncode, r.stdout))
+        check("單向獨有：確實寫進去了",
+              "outputStyle" in (live / "settings.json").read_text(encoding="utf-8"))
+
+    # ── 巢狀缺段：2026-08-27 事故的真實形狀 ──────────────────────────────
+    # 被刪掉的是 hooks.SessionStart，而 hooks 這個 top-level key 兩邊都在。
+    # 只比第一層的話，這道閘門抓不到當初讓它存在的那個事故。
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed_json(live, repo,
+                   {"model": "x", "hooks": {"SessionStart": 1}},
+                   {"model": "x", "hooks": {"PreToolUse": 1}})
+        before = _snap(live)
+        r = _run(live, repo, "--restore", "--only", "settings.json")
+        check("巢狀缺段：拒跑 exit 2", r.returncode == 2,
+              "got %s\n%s" % (r.returncode, r.stdout))
+        check("巢狀缺段：點名到子層路徑",
+              "hooks.SessionStart" in r.stdout and "hooks.PreToolUse" in r.stdout,
+              r.stdout)
+        check("巢狀缺段：live 沒被動", _snap(live) == before)
+
+    # 對照組：只有值不同不得誤擋 —— 那是尋常漂移，方向判斷本來就該處理。
+    # 若連值也比，model: a vs model: b 每次都會拒跑，這道閘門會被人拔掉。
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed_json(live, repo,
+                   {"model": "sonnet", "permissions": {"allow": ["a"]}},
+                   {"model": "opus", "permissions": {"allow": ["b"]}})
+        r = _run(live, repo, "--restore", "--only", "settings.json")
+        check("只有值不同：不誤擋", r.returncode == 0 and "需人合併" not in r.stdout,
+              "got %s\n%s" % (r.returncode, r.stdout))
+
+    # 對照組：非 JSON 檔不受這條判準影響
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        _seed(live, repo, "A\nB\n", "C\nD\n", repo_newer=True)
+        r = _run(live, repo, "--restore", "--only", "CLAUDE.md")
+        check("非 JSON：不套用 key 判準", r.returncode == 0 and "需人合併" not in r.stdout,
+              "got %s\n%s" % (r.returncode, r.stdout))
+
+    # 對照組：JSON 壞掉時不誤擋 —— live 壞了正是要 --restore 救它的時候
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        live.mkdir(parents=True)
+        repo.mkdir(parents=True)
+        (live / "settings.json").write_text("{ 壞掉的 json", encoding="utf-8")
+        (repo / "settings.json").write_text('{"model":"x"}', encoding="utf-8")
+        r = _run(live, repo, "--restore", "--only", "settings.json", "--force")
+        check("JSON 解析不了：不誤擋（那正是要救它的時候）", r.returncode == 0,
+              "got %s\n%s" % (r.returncode, r.stdout))
+
+    # ── 票 82 的驗收原文 ─────────────────────────────────────────────────
+    # 「造一個 live 較新的 settings.json ＋ repo 較新的 CLAUDE.md，跑 --restore
+    #   必須拒絕動 settings.json，且 CLAUDE.md 的舊 live 有 .bak 落地」
+    # 兩步達成：混向閘門先拒跑整批，收窄到單檔後才寫、才留備份。
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        live, repo = base / "live", base / "repo"
+        live.mkdir(parents=True)
+        repo.mkdir(parents=True)
+        (live / "CLAUDE.md").write_text("LIVE-OLD\n", encoding="utf-8")
+        (repo / "CLAUDE.md").write_text("REPO-NEW\n", encoding="utf-8")
+        (repo / "settings.json").write_text('{"a": 1}\n', encoding="utf-8")
+        time.sleep(0.05)
+        (live / "settings.json").write_text('{"a": 2}\n', encoding="utf-8")
+        now = time.time()
+        os.utime(repo / "CLAUDE.md", (now, now))
+        os.utime(live / "CLAUDE.md", (now - 30, now - 30))
+        r = _run(live, repo, "--restore")
+        check("驗收：整批 --restore 被拒", r.returncode == 2,
+              "got %s\n%s" % (r.returncode, r.stdout))
+        check("驗收：settings.json 沒被動",
+              (live / "settings.json").read_text(encoding="utf-8") == '{"a": 2}\n')
+        r2 = _run(live, repo, "--restore", "--only", "CLAUDE.md")
+        check("驗收：收窄後 CLAUDE.md 才被還原",
+              r2.returncode == 0
+              and (live / "CLAUDE.md").read_text(encoding="utf-8") == "REPO-NEW\n",
+              r2.stdout + r2.stderr)
+        baks = sorted(live.glob("CLAUDE.md.bak.*"))
+        check("驗收：舊 live 有 .bak 落地且內容正確",
+              len(baks) == 1 and baks[0].read_text(encoding="utf-8") == "LIVE-OLD\n",
+              "%s" % [b.name for b in baks])
+        check("驗收：settings.json 不留備份（沒被寫就不該有）",
+              not list(live.glob("settings.json.bak.*")))
+
     return passed, failed
 
 

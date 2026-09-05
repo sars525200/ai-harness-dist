@@ -32,12 +32,26 @@ agents／skills 之所以可行是因為 **junction 是目錄專用**；單一�
 契約：編輯在 repo。日常同步是 `--restore`（repo → live）。`--backup` 才是
 把 live 收進 git——無旗標做這件事會在「剛改完產出檔」時把新規則蓋掉。
 
+## 四道閘門（任一擋下就不寫那個檔）
+
+1. **跨檔方向不一致** —— 旗標一次套用全部檔案，方向相反的一起跑必有一邊被靜默蓋掉。
+2. **來源比目的端短** —— 較新不等於較完整；mtime 只說誰後被寫。
+3. **雙向獨有鍵路徑** —— 兩邊各有對方整段沒有的內容，任一方向都會刪東西，
+   這個狀態沒有正確的一邊。比的是**鍵路徑不是值**（值不同屬尋常漂移），
+   而且**遞迴比**：2026-08-27 被刪掉的是 `hooks.SessionStart`，只比第一層看不到。
+4. **覆寫前一律另存** `<檔>.bak.<時間戳>` —— 工具做不可逆的寫入就得自己留還原點。
+   2026-08-27 救回來靠的是別條線碰巧留的探針備份，不是這支工具。
+
+前三道加 `--force` 可越過；第四道不是閘門、是無條件的。
+
 【核心層】與被服務的專案無關。
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import filecmp
+import json
 import os
 import shutil
 import sys
@@ -98,8 +112,110 @@ def _mtime(path: str) -> float | None:
     return os.path.getmtime(path)
 
 
+def _walk_keys(obj, prefix: str = "", depth: int = 0):
+    """遞迴收集鍵路徑（`permissions.allow`、`hooks.SessionStart` 這種）。
+
+    **只看結構，不看值**。值不同是尋常的編輯，方向判斷本來就該處理；
+    要抓的是「一邊整個沒有這一段」。若連值也比，`model: a` vs `model: b`
+    就會被判成雙向獨有，每一次尋常漂移都拒跑，這道閘門會被人拔掉。
+
+    **不下潛陣列**：陣列元素的增減是內容變化不是結構缺漏，
+    而且 `hooks` 的矩陣形狀會讓路徑爆量。整段被刪的形狀在
+    `hooks.SessionStart` 這一層就看得到了。
+    """
+    if depth > 8 or not isinstance(obj, dict):
+        return set()
+    out = set()
+    for k, v in obj.items():
+        path = f"{prefix}.{k}" if prefix else str(k)
+        out.add(path)
+        out |= _walk_keys(v, path, depth + 1)
+    return out
+
+
+def _key_paths(path: str):
+    """JSON 檔的鍵路徑集合。非 JSON、讀不到、或不是物件 → None。
+
+    回 `None` 與回 `set()` **必須分得開**：前者是「這支判準對這個檔沒有意見」，
+    後者是「真的一個 key 都沒有」。合成同一個值的話，一個解析失敗的
+    settings.json 會被當成「沒有獨有內容」而放行 —— 正是要防的那一型。
+
+    ⚠ **為什麼不是只比 top-level**：票上原本寫「top-level key」，但它引用的
+    2026-08-27 事故裡被刪掉的是 `hooks.SessionStart` —— `hooks` 在兩邊都在，
+    只比第一層的話，這道閘門抓不到當初讓它存在的那個事故。
+    """
+    if not path.lower().endswith(".json") or not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            obj = json.load(fh)
+    except Exception:
+        return None
+    return _walk_keys(obj) if isinstance(obj, dict) else None
+
+
+def _divergence(live: str, repo: str):
+    """回 `(live 獨有, repo 獨有)`；判不了或沒有雙向獨有時回 None。
+
+    為什麼不能只比 mtime：**mtime 只說「誰最後被寫」，不說「誰內容較全」**。
+    2026-08-27 第二次事故就是這個形狀 —— repo 的 settings.json mtime 較新
+    （剛補過一行），內容卻整段少了 live 才有的 `SessionStart` hook。
+    照建議 `--restore` 會第二次刪掉同一個 hook，而且不會有錯誤訊息。
+
+    行數判準（`_shrink_blocked`）也接不住它：兩邊各加各的東西時行數可以打平，
+    甚至來源還比較長。要看的是**內容集合的方向**，不是長度。
+    """
+    lk, rk = _key_paths(live), _key_paths(repo)
+    if lk is None or rk is None:
+        return None
+    live_only, repo_only = sorted(lk - rk), sorted(rk - lk)
+    return (live_only, repo_only) if live_only and repo_only else None
+
+
+def _merge_blocked(name: str, live: str, repo: str, force: bool) -> bool:
+    """兩邊各有對方沒有的 top-level key ⇒ 任一方向都會刪掉東西，拒寫。
+
+    這道閘門**與方向無關**：它擋的不是「寫錯邊」，是「這個狀態沒有正確的一邊」。
+    """
+    div = _divergence(live, repo)
+    if not div or force:
+        return False
+    live_only, repo_only = div
+    print("✋ %s 跳過：兩邊各有對方沒有的內容，需人合併。" % name)
+    print("   live 獨有：" + "、".join(live_only))
+    print("   repo 獨有：" + "、".join(repo_only))
+    print("   （比的是鍵路徑不是值；值不同屬尋常漂移，由方向判斷處理）")
+    print("   任一方向覆寫都會刪掉一整段，而且不會有錯誤訊息。先合併再挑旗標。")
+    return True
+
+
+def _backup_before_write(dst: str) -> str | None:
+    """覆寫前把目的端另存一份 `<檔>.bak.<時間戳>`，回備份路徑。
+
+    2026-08-27 那次救回來靠的是**另一條線碰巧留的**探針備份，不是這支工具 ——
+    它自己不備份。工具做的是不可逆的寫入，就得自己留還原點，
+    不能指望現場剛好有人留了一份。
+    """
+    if not os.path.exists(dst):
+        return None
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    cand = "%s.bak.%s" % (dst, stamp)
+    n = 1
+    while os.path.exists(cand):          # 同一秒內跑第二次不得覆蓋前一份備份
+        cand = "%s.bak.%s_%d" % (dst, stamp, n)
+        n += 1
+    shutil.copy2(dst, cand)
+    return cand
+
+
 def _recommend(live: str, repo: str) -> str:
-    """restore＝repo 較新（蓋到 live）；backup＝live 較新（收進 repo）；tie＝不猜。"""
+    """restore＝repo 較新；backup＝live 較新；tie＝mtime 分不出；merge＝雙向獨有。
+
+    merge **排在 mtime 之前判**：mtime 永遠指得出一個方向，
+    先問它就等於讓一個「沒有正確方向」的狀態拿到一個看起來合理的建議。
+    """
+    if _divergence(live, repo):
+        return "merge"
     lm, rm = _mtime(live), _mtime(repo)
     if rm is not None and (lm is None or rm > lm):
         return "restore"
@@ -151,10 +267,11 @@ def _mixed_gate(action: str, only) -> int:
     for nm, r in sorted(recs.items()):
         print("   %-32s %s" % (nm, {"restore": "repo → live",
                                     "backup": "live → repo",
-                                    "tie": "mtime 分不出，先看 diff"}[r]))
+                                    "tie": "mtime 分不出，先看 diff",
+                                    "merge": "兩邊各有對方沒有的內容，需人合併"}[r]))
     print("   逐檔做：")
     for nm, r in sorted(recs.items()):
-        if r != "tie":
+        if r not in ("tie", "merge"):
             print("     py -3 tools/backup_global_config.py --%s --only %s" % (r, nm))
     return 2
 
@@ -190,6 +307,7 @@ def cmd_report(only=None) -> int:
                 "restore": "建議 --restore（repo 較新或 live 缺檔）",
                 "backup": "建議 --backup（live 較新或 repo 缺檔）",
                 "tie": "mtime 分不出，不要猜；看 diff 再挑旗標",
+                "merge": "⚠ 兩邊各有對方沒有的內容，需人合併 —— 兩個旗標都會刪東西",
             }[rec]
         else:
             hint = ""
@@ -204,6 +322,8 @@ def cmd_report(only=None) -> int:
             print(f"\n{drift} 個檔不同 —— 建議 --backup（live → repo）。")
         else:
             print(f"\n{drift} 個檔不同 —— 各檔方向不一或分不出 mtime，逐檔看上面的建議。")
+        if "merge" in uniq:
+            print("⚠ 有檔案標為「需人合併」—— 那不是挑錯旗標，是這個狀態沒有正確的一邊。")
     else:
         print("\nlive 與 repo 一致。")
     return 1 if drift else 0
@@ -224,12 +344,18 @@ def cmd_backup(only=None, force=False) -> int:
             continue
         # ⚠ 用 `copy` 不是 `copy2`：`copy2` 會保留**來源的 mtime**，於是「三十天沒改的
         # 設定今天剛備份」會被判成舊備份。這裡要的語意是「這份副本是什麼時候取的」。
+        if _merge_blocked(name, live, repo, force):
+            blocked += 1
+            continue
         if _shrink_blocked(name, live, repo, force):
             blocked += 1
             continue
         os.makedirs(os.path.dirname(repo), exist_ok=True)
+        bak = _backup_before_write(repo)
         shutil.copy(live, repo)
         changed.append(name)
+        if bak:
+            print(f"  {name}：覆寫前的 repo 版另存 {os.path.basename(bak)}")
     if changed:
         print("已 --backup 進 repo：" + "、".join(changed))
         try:
@@ -256,12 +382,17 @@ def cmd_restore(only=None, force=False) -> int:
         if st == "相同":
             print(f"  {name}：相同，不動。")
             continue
+        if _merge_blocked(name, live, repo, force):
+            blocked += 1
+            continue
         if _shrink_blocked(name, repo, live, force):
             blocked += 1
             continue
         os.makedirs(os.path.dirname(live), exist_ok=True)
+        bak = _backup_before_write(live)
         shutil.copy2(repo, live)
-        print(f"  {name}：已 --restore 到 live（原狀態：{st}）。")
+        note = f"，覆寫前的 live 版另存 {os.path.basename(bak)}" if bak else ""
+        print(f"  {name}：已 --restore 到 live（原狀態：{st}）{note}。")
     print("⚠ 還原後請重開 session —— 全域 CLAUDE.md 是開場載入的。")
     return 2 if blocked else 0
 

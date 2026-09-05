@@ -53,3 +53,9 @@ dashboard/harness-dashboard.html
 # 同 state/ 的理由：內容是**其他 session 的完整對話**，動輒數 MB 到數十 MB，
 # 跨機器沒有意義，而且正是為了躲平台的 cleanupPeriodDays 才複製出來的。
 session-archive/
+
+# backup_global_config.py 覆寫 repo 側副本前留的還原點（<檔>.bak.<時間戳>）。
+# repo 這一側本來就有 git 歷史，備份是給「還沒 commit 就被蓋掉」那個空窗用的，
+# 不該再進版控。live 側（~/.claude）的同名備份不在這個 repo 裡，不受這條影響。
+global/*.bak.*
+global/output-styles/*.bak.*
