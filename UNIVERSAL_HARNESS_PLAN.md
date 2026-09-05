@@ -349,9 +349,29 @@ D-4 定案前不動它。
 bare 鏡像（W4／W5）、Cursor 複本（W6）、CLAUDE.md 與 output-styles 的 restore（W7／W8）、5 處 `STATE_DIR` 字面值（B4）。
 官方**沒寫**的：plugin 與 user 層 hooks 並存的順序與合併規則、安裝後執行一次的機制、`additionalDirectories` 的 `~` 支援
 （本機實測可用，見 `CLOUD_BACKUP_PLAN.md` §2）。
-**待決（user 尚未答）**：要不要先做一小時 spike——harness 根放 `hooks/hooks.json`＋`.claude-plugin/plugin.json`，
-`claude --plugin-dir <harness>` 開一則對話，驗 PreToolUse 真的從 plugin 觸發、`state\` 有心跳。不動 live 設定、可逆。
-**在 spike 出結果前，本節定案不改**——憑文件改定案就是第 4 輪發現 5 那種「過期的表和真的沒做長得一模一樣」的反面：憑沒跑過的東西改規格。
+**spike 已跑（2026-09-05·實跑非推測）**：在暫存目錄做一個最小 plugin
+（`.claude-plugin/plugin.json` ＋ `hooks/hooks.json`，hook 指令是
+`py -3 "${CLAUDE_PLUGIN_ROOT}/mark.py" <事件>`），以 `claude -p ... --plugin-dir <暫存>`
+在 harness 之外的工作目錄開一則 headless 對話。**完全不動 harness 本體、不動 live 設定。**
+
+| 問題 | 結果 |
+|---|---|
+| plugin 帶的 hook 會不會觸發 | ✅ 會。`SessionStart` 與 `PreToolUse` **兩個事件都落了標記** |
+| `${CLAUDE_PLUGIN_ROOT}` 會不會展開 | ✅ 會，展開成 plugin 目錄的絕對路徑 |
+| 與 user 層 hooks 並存會不會互相壓掉 | ✅ **不會**。同一則對話裡 harness 的 user 層閘門照樣跑完整輪（`state/events.<那則>.ndjson` 有 `dispatch`／`AWC-1`／`DECL-1`／`WIN-1`），plugin 的標記也同時落地 |
+
+⇒ **「plugin 替代不了 hook 絕對路徑」這句正式被推翻**，不再是文件推論而是實跑。
+plugin 拿得走 W1 的兩條 junction ＋ W10 裡 12 條指令路徑改寫。
+
+**spike 沒有回答的（不要當成一起驗過了）**：
+
+* **驗的是 `--plugin-dir`（單則對話的旗標），不是安裝**。換機真正要的是裝一次就常駐，
+  那條路徑（`claude plugin install`／marketplace）**沒驗**。旗標能跑不等於裝得起來。
+* 並存的**順序與合併規則**沒驗——只證明兩邊都跑，沒證明誰先誰後、衝突時誰贏。
+* 安裝後執行一次的機制（W2／W3／W5 那類「跑一次就好」的動作）官方沒寫，spike 也沒碰。
+* 拿不走的那一半原封不動：`harness.config.json`（W2）、`state\`（W3）、post-commit 與
+  bare 鏡像（W4／W5）、Cursor 複本（W6）、CLAUDE.md 與 output-styles 的 restore（W7／W8）、
+  5 處 `STATE_DIR` 字面值（B4）。**接線器還是要做，只是變小。**
 換機失效點的完整盤點（6＋6＋5＋13＋看板 6＋不進 clone 3＋junction 7＋IT 專案 1）在 2026-09-04 晚的說明頁與 `.scratch/handoff/20260904-cloud-autopush.md`。
 
 ### D-1 對抗式覆核·第 1 輪逐項處置（2026-09-03）
@@ -397,7 +417,7 @@ fallback、「核心層 Claude 不會自動載入」、U-1 債務閘門只准變
 | ~~HND-1 已在跑但沒註冊~~ | — | ✅ **已註冊為 enforce**（別的 session·commit `e6ded68`），規則鍵現為 19 個 |
 | ~~`global/settings.json` 的探針移除未提交~~ | — | ✅ **已提交**（commit `c62f2ac`） |
 | **接線器本體**（W 側一支都還沒有） | W1–W10 | ⏳ 未動。2026-09-03 user 拍板：**先寫探針實跑，拿真實輸出回頭修規格，再派確認輪**（不要純文件打磨到蓋章） |
-| **plugin 路線 spike**（能否拿走 W1＋W10 的指令路徑那一半） | W1／W10 | ⏳ **等 user 決定要不要做**（2026-09-04 晚·官方文件核實 plugin 可帶 hooks，見定案末段增訂）。出結果前定案不改 |
+| **plugin 路線 spike**（能否拿走 W1＋W10 的指令路徑那一半） | W1／W10 | ✅ **已跑（2026-09-05）**：plugin 帶的 hook 真的觸發、`${CLAUDE_PLUGIN_ROOT}` 正確展開、與 user 層 hooks 並存不互相壓掉——三項都是實跑。⚠ 驗的是 `--plugin-dir` 旗標**不是安裝路徑**，裝一次就常駐那條沒驗。詳見定案末段增訂 |
 | ~~探針一支都沒有~~ | P1／P2／P5／P9／P10／P11 | ✅ **六條已實作並實跑**（2026-09-03）。**數字見定案第 2 點的實跑節，本欄不複述**（第 4 輪發現 5：本欄的數字與實跑節對不上，而過期的表和真的沒做長得一模一樣） |
 | ~~探針剩下五條~~ | P3／P4／P6／P7／P8 | ✅ **2026-09-04 補齊並實跑**，數字見定案第 2 點的實跑節（本欄不複述——第 4 輪發現 5：過期的表和真的沒做長得一模一樣）。⚠ **同時補了 `EXPECTED_PROBES` 缺席守門**：在這之前沒實作的探針一條結果都不產生，`verdict()` 看不見它們 ⇒ 少驗五條仍會印「全綠」 |
 | **`additionalDirectories` 的 `\tmp` 殘留條目** | P5 | ⏳ 未動·**等 user 決定**。live 與 repo `global/settings.json:153` 兩份都有，本機不存在 ⇒ P5 實跑的那一條 FAIL。屬個人設定，接線器不得自行刪 |
