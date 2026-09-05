@@ -164,7 +164,7 @@
       "D:\\Patrick-AI\\.ai-harness"
     ]
   },
-  "model": "sonnet[1m]",
+  "model": "claude-sonnet-5",
   "autoCompactWindow": 300000,
   "hooks": {
     "SessionEnd": [
