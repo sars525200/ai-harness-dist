@@ -19,7 +19,9 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -116,6 +118,57 @@ class FakeGitContext(GitContext):
         # 兩個構造點（main/dev，見 run_one）傳不同的 default_root，
         # 讓既有 fixture 不必逐一補 repo_root 也能滿足 D15 的相異性斷言。
         return self.spec.get("repo_root", self._default_root)
+
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# `import test_x` 與 `from test_x import y` 兩型都要收。
+# 只認前者會留一個靜默的洞：漏掉的那支照樣會在 import 階段炸，
+# 但自檢不會點名它 —— 那正是這條自檢要防的形狀。
+_TEST_IMPORT_RE = re.compile(r"^\s*(?:import|from)\s+(test_[A-Za-z0-9_]+)", re.M)
+
+
+def runner_test_modules(src_path: str | None = None) -> list[str]:
+    """從 runner 自己的原始碼抽出它依賴的測試模組名。
+
+    刻意讀原始碼而不是維護一份手寫清單：手寫清單會跟 import 漂移，
+    而漂移的方向必然是「清單漏了新加的」—— 漏掉的那支剛好就是沒人驗過的。
+    """
+    path = src_path or os.path.abspath(__file__)
+    with open(path, encoding="utf-8") as fh:
+        return sorted(set(_TEST_IMPORT_RE.findall(fh.read())))
+
+
+def check_module_tracking(mods) -> tuple[list[str], list[str], str | None]:
+    """回 `(缺檔, 未進版控, 無法判定的理由)`。
+
+    兩態刻意不合併，因為後果不同：
+
+    * **缺檔** —— 這台機器就跑不動，`import` 當場炸。
+    * **檔在但沒 `git add`** —— 這台跑得動，**換一台 clone 下來就 `ModuleNotFoundError`**，
+      而且在原機上沒有任何現象會提醒你。2026-09-04 咬到的就是這一型：
+      `tests/test_config_residue.py` 沒進版控，而 runner 是裸 import，
+      新機器上 1722 條一條都跑不到。
+
+    第三個回傳值是「查不出來」，**不併進「全數通過」**：
+    查不到與確認乾淨長得一樣，而這支檔的職責就是不讓這兩者長得一樣。
+    """
+    missing = [m for m in mods if not os.path.isfile(os.path.join(TESTS_DIR, m + ".py"))]
+    try:
+        r = subprocess.run(
+            ["git", "-C", REPO_ROOT, "ls-files", "--", "tests"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception as exc:  # git 不存在、逾時
+        return missing, [], f"叫不動 git：{exc}"
+    if r.returncode != 0:
+        return missing, [], f"git ls-files 失敗（exit {r.returncode}）：{r.stderr.strip()[:200]}"
+    tracked = {os.path.basename(ln.strip()) for ln in r.stdout.splitlines() if ln.strip()}
+    if not tracked:
+        return missing, [], "git ls-files 對 tests/ 回空 —— 零目標不算乾淨"
+    untracked = [m for m in mods if m not in missing and (m + ".py") not in tracked]
+    return missing, untracked, None
 
 
 def load_fixtures(filter_word: str | None):
@@ -282,6 +335,16 @@ def main() -> int:
     # 的資料源，跑一次測試就 +2 筆（R3-3 實測 57→59）。標成 source=test 之後消費者濾得掉。
     # ⚠ 這一行必須在載入 fixture **之前**：規則模組可能在 import 時就讀環境變數。
     os.environ["HARNESS_UNDER_TEST"] = "1"
+
+    # 回歸網對自己缺件的防禦。
+    # ⚠ 這一段必須在任何 `import test_*` **之前**：缺件的現象是死在 import，
+    # 那時候丟出來的是 traceback 不是判定 —— 人看得到有東西壞了，
+    # 看不出「少跑了哪幾條、還能不能信剩下的綠」。
+    _dep_missing, _dep_untracked, _dep_unverified = check_module_tracking(runner_test_modules())
+    if _dep_missing:
+        print("FAIL: 回歸網依賴的測試模組不存在：" + "、".join(_dep_missing))
+        print("      檔案不在就沒有東西可跑，**拒跑整批** —— 少跑幾條而報全綠是假綠燈。")
+        return 1
 
     # 收尾要比對「現行 harness.config.json 有沒有被跑壞／有沒有留下備份」。
     # 這一行必須在任何測試載入**之前** —— 晚一步拍到的就是已經被動過的狀態，
@@ -658,6 +721,26 @@ def main() -> int:
     else:
         unit_passed += 1
         print("  PASS  設定檔收尾比對（現行 config 未被改動、無新增備份）")
+
+    # 缺件自檢的判定（實際比對在 main() 開頭做，那裡才來得及趕在 import 之前）。
+    # 未進版控**不拒跑**：本機檔案在、跑得動，硬擋會讓「新寫一支測試還沒 add」
+    # 無法先跑一次。但它一定要進 failed ⇒ exit 非零，不讓它靜靜地綠過去。
+    _dep_fails = [
+        f"tests/{m}.py 沒進版控 —— 這台跑得動，clone 到別台就 ModuleNotFoundError"
+        for m in _dep_untracked
+    ]
+    if _dep_unverified:
+        _dep_fails.append(f"無法判定依賴是否全數進版控：{_dep_unverified}")
+    if _dep_fails:
+        for detail in _dep_fails:
+            failed.append(("回歸網缺件自檢", detail))
+        unit_failed.extend(_dep_fails)
+        print(f"  FAIL  回歸網缺件自檢（{len(_dep_fails)} 項）")
+        for detail in _dep_fails:
+            print(f"        {detail}")
+    else:
+        unit_passed += 1
+        print(f"  PASS  回歸網缺件自檢（{len(runner_test_modules())} 支依賴模組全數在版控）")
 
     total = len(fixtures) + unit_passed + len(unit_failed)
     print()
