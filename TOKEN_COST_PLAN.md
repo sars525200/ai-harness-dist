@@ -278,8 +278,14 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 
 ### 8.4 基準線（下次對照用這組）
 
-本則對話 `7f3bfeb7` 前 100 回合、全 `claude-opus-5`、`effortLevel: high`：
-`cache_read` 53.6%／`output` 32.4%／`cache_write` 14.0%，最大前綴 173,089。
+⚠ **佔比不能跨 session 比**：短對話的 `cache_read` 佔比天生就低。`tools/token_usage_breakdown.py`
+已補一列不受對話長度影響的指標，**驗 `effortLevel` 只准看那一列**。
+
+| 指標 | 基準值 | 條件 |
+|---|---|---|
+| **平均每回合 output** | **1,312** | 全 `claude-opus-5`、`effortLevel: high`、145 回合樣本 |
+| 平均每回合 cache_read（＝平均前綴） | 123,693 | 同上 |
+| 佔比（僅供了解結構） | cache_read 54.7%／output 29.9%／cache_write 15.4% | 同上 |
 
 ---
 

@@ -61,7 +61,7 @@ def main():
         agg, models, peak, turns = scan(f)
         if not turns:
             continue
-        grand.update(agg); gmodels.update(models)
+        grand.update(agg); gmodels.update(models); grand["turns"] += turns
         print("%s  %d 回合  模型 %s" % (os.path.basename(f)[:8], turns, dict(models)))
         print("   cache_read=%s  cache_write=%s  output=%s  未命中 input=%s  最大前綴=%s"
               % (agg["cache_read_input_tokens"], agg["cache_creation_input_tokens"],
@@ -80,8 +80,16 @@ def main():
                             key=lambda x: -x[1]):
         print("  %-12s %12.0f  (%4.1f%%)" % (name, val, val / total * 100))
     print("  %-12s %12.0f" % ("合計", total))
+    turns = grand["turns"] or 1
+    print("")
+    print("=== 不被對話長度混淆的指標（比對 effortLevel 用這個）===")
+    print("  回合數                 %12d" % turns)
+    print("  平均每回合 output      %12.0f   <- effortLevel 降了就該掉" % (grand["output_tokens"] / turns))
+    print("  平均每回合 cache_read  %12.0f   <- 等於平均前綴長度" % (grand["cache_read_input_tokens"] / turns))
     print("\n判讀：cache_read 正比於「回合數 × 前綴長度」——它大就是對話太長太多回合；")
     print("      output 含 thinking——它大就看 effortLevel。")
+    print("注意：佔比會被對話長度影響，短對話的 cache_read 佔比天生就低。")
+    print("      跨 session 比 effortLevel 只看「平均每回合 output」那一列。")
 
 
 if __name__ == "__main__":
