@@ -224,6 +224,103 @@ def run():
         check("後端不存在：exit 2", r.returncode == 2, str(r.returncode))
         check("後端不存在：有失敗標記", (st / "cloud_backup_failed.txt").exists())
 
+    # ── 規則檔副本新鮮度 ─────────────────────────────────────────────────
+    # 規則檔刻意不進版控、也不在雲端那份裡 ⇒ 這台壞了，從雲端還原的那份
+    # 跑不起來清洗工具。副本存在別處是必要的，而「存了就再也沒更新」
+    # 跟鏡像靜默分叉六天是同一個死法。
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location("_cbh_probe", TOOL)
+    _h = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_h)
+
+    def _seed_rules(repo: Path, files=None):
+        d = repo.joinpath(*_h.RULES_SUBDIR)
+        d.mkdir(parents=True, exist_ok=True)
+        for f in (files if files is not None else _h.RULES_FILES):
+            (d / f).write_text("x==>y\n", encoding="utf-8")
+        return d
+
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        repo = _make_repo(base)
+        be = _make_backend(base)
+
+        # 規則目錄不在：那是推送工具的問題，不是副本的問題，兩者不可合成一種
+        st, _, _ = _h.rules_copy_state(repo)
+        check("規則目錄不在：回 no_rules", st == "no_rules", st)
+        r = _run(repo, be, "--mark-copied")
+        check("規則目錄不在：拒絕登記 exit 2", r.returncode == 2, r.stdout + r.stderr)
+
+        # 正本缺一個：登記一份不完整的副本比不登記更糟
+        _seed_rules(repo, ["replace-rules.txt", "mailmap.txt"])
+        r = _run(repo, be, "--mark-copied")
+        check("正本缺檔：拒絕登記 exit 2", r.returncode == 2, r.stdout + r.stderr)
+        check("正本缺檔：點名缺哪個", "shape-allowlist.txt" in r.stdout, r.stdout)
+
+        # 齊全但沒登記過 —— never，不是 stale。
+        # 「還沒開始做」不可以長得像「已經做完」。
+        _seed_rules(repo)
+        st, files, why = _h.rules_copy_state(repo)
+        check("齊全未登記：回 never", st == "never", "%s %s" % (st, why))
+        check("齊全未登記：列得出涵蓋哪些檔", len(files) == 3, str(files))
+
+        # 登記之後 fresh
+        r = _run(repo, be, "--mark-copied")
+        check("登記成功 exit 0", r.returncode == 0, r.stdout + r.stderr)
+        check("登記留下標記檔",
+              (repo / "state" / _h.COPIED_MARK).is_file())
+        st, _, why = _h.rules_copy_state(repo)
+        check("登記之後：回 fresh", st == "fresh", "%s %s" % (st, why))
+
+        # 正本被改過 ⇒ stale，且點名是哪一個
+        time.sleep(1.1)   # 檔案時間戳的解析度，睡不夠會偶發偽綠
+        (repo.joinpath(*_h.RULES_SUBDIR) / "replace-rules.txt").write_text(
+            "x==>y\nz==>w\n", encoding="utf-8")
+        st, files, why = _h.rules_copy_state(repo)
+        check("正本改過：回 stale", st == "stale", "%s %s" % (st, why))
+        check("正本改過：只點名改過的那個",
+              files == ["replace-rules.txt"], str(files))
+
+        # 再登記一次就回 fresh（可重跑，不是一次性）
+        _run(repo, be, "--mark-copied")
+        st, _, _ = _h.rules_copy_state(repo)
+        check("重新登記後回 fresh", st == "fresh", st)
+
+    # 接線層：判準寫對但沒接上開工檢查，症狀跟沒寫一樣。
+    _cbs_src = (ROOT / "tools" / "check_before_start.py").read_text(encoding="utf-8")
+    _blk = _cbs_src[_cbs_src.index("def block_cloud("):]
+    _blk = _blk[:_blk.index("\ndef ", 1)]
+    check("開工檢查真的呼叫了規則檔副本那一行",
+          "_rules_copy_line(repo)" in _blk,
+          "block_cloud 裡找不到呼叫")
+
+    _spec2 = _ilu.spec_from_file_location("_cbs_probe", ROOT / "tools" / "check_before_start.py")
+    _cbs = _ilu.module_from_spec(_spec2)
+    _spec2.loader.exec_module(_cbs)
+    with tempfile.TemporaryDirectory() as td:
+        base = Path(td)
+        repo = _make_repo(base)
+        _seed_rules(repo)
+        lines = []
+        _orig_out = _cbs.out
+        _cbs.out = lambda s="": lines.append(str(s))
+        try:
+            _cbs._rules_copy_line(repo)
+        finally:
+            _cbs.out = _orig_out
+        txt = "\n".join(lines)
+        check("未登記時開工檢查印得出可直接照做的指令",
+              "--mark-copied" in txt and "從未登記" in txt, txt)
+        check("未登記時不得印成 OK", "[OK]" not in txt, txt)
+
+    # 兩支檔各自寫了一次規則目錄路徑（刻意不 import，見 cloud_backup_hook 的註解）。
+    # 漂移了就沒有東西會叫，所以在這裡對帳。
+    _pcb = (ROOT / "tools" / "push_cloud_backup.py").read_text(encoding="utf-8")
+    check("兩支檔的規則目錄要一致",
+          '".scratch" / "cloud-export"' in _pcb
+          and _h.RULES_SUBDIR == (".scratch", "cloud-export"),
+          str(_h.RULES_SUBDIR))
+
     return passed, failed
 
 

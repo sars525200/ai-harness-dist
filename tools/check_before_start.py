@@ -350,6 +350,44 @@ def _cloud_remote(repo: Path) -> str:
     return v if isinstance(v, str) else ""
 
 
+def _rules_copy_line(repo: Path) -> None:
+    """報一行「清洗規則檔的副本還新不新鮮」。
+
+    規則檔（`.scratch/cloud-export/`）刻意不進版控、也不在雲端那份裡 ⇒
+    **這台機器壞了，從雲端還原的那份跑不起來清洗工具，再也推不出下一版**。
+    副本存在別處是必要的，而「存了之後再也沒更新」跟鏡像靜默分叉六天同型。
+
+    ⚠ 量的是**登記時間**不是副本內容 —— 副本在密碼管理器或私人雲端，
+    這支程式碰不到。所以 `[OK]` 只代表「你上次說更新過之後，正本沒再動」，
+    不代表副本內容被核對過。
+
+    fail-open：這一行從頭到尾不改 exit code。開工檢查擋住開工，
+    比漏報一個提醒嚴重得多。
+    """
+    try:
+        # 匯入來源是**這支腳本自己所在的目錄**，不是被檢查的 repo：
+        # 工具程式碼跟 check_before_start 綁在一起，跟受檢對象無關。
+        # 寫成 repo/tools 的話，檢查別的 repo 時就靜靜地 import 不到。
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import cloud_backup_hook as h
+        state, files, why = h.rules_copy_state(repo)
+    except Exception as e:
+        out("    [!] 規則檔副本新鮮度算不出來（%s）—— 沒有答案，不是沒問題" % e)
+        return
+    if state == "no_rules":
+        out("    [!] 清洗規則檔不在（%s）—— 推送工具會拒跑" % why)
+    elif state == "never":
+        out("    [!] 清洗規則檔**從未登記過副本** —— 這台壞了就再也推不出下一版。"
+            "另存到別處後跑：py -3 tools/cloud_backup_hook.py --mark-copied")
+        out("        （規則檔不進版控也不在雲端那份裡，這是刻意的："
+            "它的左半邊就是要清掉的那些字串）")
+    elif state == "stale":
+        out("    [!] 清洗規則檔副本**可能過期** —— %s：%s" % (why, "、".join(files)))
+        out("        更新副本後跑：py -3 tools/cloud_backup_hook.py --mark-copied")
+    else:
+        out("    [OK] 清洗規則檔副本已登記（%s；登記的是時間不是內容）" % why)
+
+
 def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
     """雲端備份新鮮度。回「有沒有落後或失敗」。
 
@@ -364,6 +402,7 @@ def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
     if not url:
         return False
     out("    ── 雲端備份（清洗複製品，%s）" % url)
+    _rules_copy_line(repo)
     last = repo / "state" / "cloud_backup_last.json"
     lock = repo / "state" / "cloud_backup.lock"
     failed = repo / "state" / "cloud_backup_failed.txt"

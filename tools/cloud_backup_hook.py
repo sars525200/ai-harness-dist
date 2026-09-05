@@ -53,7 +53,76 @@ from pathlib import Path
 HARNESS_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BACKEND = HARNESS_ROOT / "tools" / "push_cloud_backup.py"
 LOCK_STALE_SECONDS = 15 * 60
+
+# 清洗規則檔的所在。**刻意不 import push_cloud_backup**：那支在 import 時就會
+# 重設編碼、且正被別條線改著。兩邊各寫一次的漂移風險由
+# tests/test_cloud_backup_hook.py 的「兩支檔的規則目錄要一致」那條擋。
+RULES_SUBDIR = (".scratch", "cloud-export")
+# 這幾個檔不在版控、也不在雲端那份裡（規則檔的左半邊就是要清掉的字串，
+# commit 進來等於把敏感清單公開列出）⇒ **這台機器壞了，從雲端還原的那份
+# 跑不起來清洗工具，再也推不出下一版**。所以副本存在別處是必要的，
+# 而「存了之後就再也沒更新」跟鏡像靜默分叉六天是同一個死法。
+RULES_FILES = ("replace-rules.txt", "mailmap.txt", "shape-allowlist.txt")
+COPIED_MARK = "cloud_export_copied_at.txt"
 MAX_ROUNDS = 3          # HEAD 一直動就一直追是無底洞；三輪追不上就留給下一次 commit
+
+
+def rules_copy_state(root: Path) -> tuple[str, list, str]:
+    """規則檔副本新鮮度。回 `(狀態, 相關檔名, 說明)`。
+
+    狀態四種，**刻意分開**：
+
+      ``no_rules``   規則目錄不在 —— 推送工具本來就會拒跑，不是副本的問題。
+      ``never``      從未登記過副本 —— 這不是「過期」，是「根本沒有」。
+                     合成同一種的話，還沒開始做會長得像已經做完。
+      ``stale``      正本有檔比登記時間新 ⇒ 副本少了那幾條規則。
+      ``fresh``      登記時間晚於所有正本。
+
+    ⚠ 這裡量的是**登記時間**不是副本內容 —— 副本在密碼管理器或私人雲端，
+    這支程式碰不到它。所以它證明不了副本真的被更新過，只證明
+    「你上次說更新過之後，正本又動了」。這個限制要講出來，
+    不然 `[OK]` 會被讀成「副本內容已核對」。
+    """
+    rules = root.joinpath(*RULES_SUBDIR)
+    if not rules.is_dir():
+        return "no_rules", [], "規則目錄不在 %s" % rules
+    mark = root / "state" / COPIED_MARK
+    present = [f for f in RULES_FILES if (rules / f).is_file()]
+    if not mark.is_file():
+        return "never", present, "從未登記過副本"
+    try:
+        marked = mark.stat().st_mtime
+    except OSError as e:
+        return "never", present, "登記檔讀不到（%s）" % e
+    newer = [f for f in present if (rules / f).stat().st_mtime > marked]
+    when = datetime.fromtimestamp(marked).strftime("%Y-%m-%d %H:%M:%S")
+    if newer:
+        return "stale", newer, "登記於 %s，之後這幾個正本又改過" % when
+    return "fresh", present, "登記於 %s，之後正本沒再動過" % when
+
+
+def do_mark_copied(root: Path) -> int:
+    """人把副本另存到別處之後，蓋一個時間戳。"""
+    rules = root.joinpath(*RULES_SUBDIR)
+    if not rules.is_dir():
+        print("拒絕登記：規則目錄不在 %s —— 沒有正本可登記" % rules)
+        return 2
+    missing = [f for f in RULES_FILES if not (rules / f).is_file()]
+    if missing:
+        print("拒絕登記：正本缺 %s —— 登記一份不完整的副本比不登記更糟"
+              % "、".join(missing))
+        return 2
+    state = root / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    mark = state / COPIED_MARK
+    mark.write_text(
+        "副本另存登記於 %s\n"
+        "登記的是時間不是內容 —— 這支程式碰不到你存副本的地方。\n"
+        "涵蓋：%s\n" % (now_iso(), "、".join(RULES_FILES)),
+        encoding="utf-8")
+    print("已登記：%s" % mark)
+    print("涵蓋 %s" % "、".join(RULES_FILES))
+    return 0
 
 
 def now_iso() -> str:
@@ -223,6 +292,8 @@ def main() -> int:
     g.add_argument("--spawn", action="store_true", help="立刻回，背景跑一輪")
     g.add_argument("--run", action="store_true", help="前景跑一輪")
     g.add_argument("--status", action="store_true", help="印最後一次結果")
+    g.add_argument("--mark-copied", action="store_true",
+                   help="把清洗規則檔另存到別處之後，蓋一個登記時間戳")
     ap.add_argument("--root", help="repo 根（預設是這支所在的 harness repo）")
     ap.add_argument("--backend", help="推送工具路徑（測試用假的換掉；預設 tools/push_cloud_backup.py）")
     a = ap.parse_args()
@@ -232,6 +303,8 @@ def main() -> int:
         return do_spawn(root, backend)
     if a.run:
         return do_run(root, backend)
+    if a.mark_copied:
+        return do_mark_copied(root)
     return do_status(root)
 
 
