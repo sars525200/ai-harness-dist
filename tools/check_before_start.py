@@ -471,18 +471,21 @@ def _cfg_str(repo: Path, key: str) -> str:
 
 
 def _memory_offline_line(repo: Path) -> None:
-    """報一行「桌面那份離線包還跟不跟得上記憶 repo」。
+    """報一行「離線那份 bundle 還跟不跟得上記憶 repo」。
 
     記憶有三層：獨立 repo ＋本機 bare 鏡像 ＋離線 `.bundle`。前兩層由 post-commit
     自動同步，**第三層沒有任何東西會更新它** —— 而它存在的唯一理由正是「整台
     機器掛掉」，那個情境下前兩層都不在。
 
-    ⚠ **刻意不自動重產**：離線備份的價值在於人把它帶離這台機器。程式自動重產
-    只會更新桌面那一份，救不了災難情境，還會讓人誤以為離線那份是新的。
+    ⚠ **設定要指向機器之外的那一份**（同步夾／外接碟）。指向本機路徑的話，這裡
+    的 `[OK]` 是在替一份跟主機同生死的檔背書 —— 訊息不寫死位置，因為程式看不出
+    一個路徑到底有沒有同步出去，那件事只有填設定的人知道。
+
+    ⚠ **刻意不自動重產**：程式證明不了那個路徑當下真的通（同步夾可能沒掛載），
     所以這裡只提醒，重做要人自己來。
 
     ⚠ 量的是 bundle 裡的 tip 與記憶 repo 的 HEAD 差幾顆 —— 它證明得了「落後」，
-    證明不了「你真的把它複製到隨身碟了」。那一段跟規則檔副本一樣，程式碰不到。
+    證明不了「那個位置真的在機器之外」。那一段跟規則檔副本一樣，程式碰不到。
 
     fail-open：從頭到尾不改 exit code。
     """
@@ -506,7 +509,8 @@ def _memory_offline_line(repo: Path) -> None:
         out("    [!] 離線包或記憶 repo 的 tip 讀不到 —— 沒有答案，不是沒問題")
         return
     if tip == head:
-        out("    [OK] 離線包 %s 與記憶 repo 相同（是否已複製出去，程式看不到）" % tip[:8])
+        out("    [OK] 離線包 %s 與記憶 repo 相同（那個位置是不是真的在機器之外，程式看不到）"
+            % tip[:8])
         return
     # bundle 的 tip 不在本機歷史裡＝那份離線包來自別條歷史，別當成「落後」
     if run(["git", "-C", str(mem_path), "cat-file", "-e", tip + "^{commit}"])[0] != 0:
@@ -516,7 +520,7 @@ def _memory_offline_line(repo: Path) -> None:
     behind = run(["git", "-C", str(mem_path), "rev-list", "--count", tip + "..HEAD"])[1]
     out("    [!!] 離線包**落後 %s 顆**（包裡 %s，記憶 repo %s）" % (behind, tip[:8], head[:8]))
     out("         重做：git -C \"%s\" bundle create \"%s\" --all" % (mem_path, b_path))
-    out("         做完記得再複製到隨身碟／NAS —— 留在桌面救不了整台機器掛掉")
+    out("         上面那個路徑要在機器之外（同步夾／外接碟）——同一台機器上的第三份救不了整台掛掉")
 
 
 def block_mirror(repo: Path, skip_net: bool) -> bool:
