@@ -217,6 +217,15 @@ REGISTRY = [
         "tools": None,
     },
     {
+        # QUOTA-1：BUDGET-1 看「今天累計」，這條看「五小時／七日那兩個桶燒到幾成」。
+        # 同樣只掛 Stop：配額是帳號層級的，subagent 的用量已經算在同一個桶裡，
+        # 掛 SubagentStop 只會讓同一筆量在一輪內被檢查很多次。
+        "id": "QUOTA-1",
+        "module": "quota1_window_burn",
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         # 只掛 Stop：要提醒的是主 session 這一則快滿了。Subagent 自己的
         # transcript 不是使用者看到的視窗；掛 SubagentStop 會對每個角色各算一次。
         "id": "WIN-1",

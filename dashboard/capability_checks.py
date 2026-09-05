@@ -849,9 +849,17 @@ def _p_budget_ceiling():
     if "BUDGET-1" not in rules:
         return False, "budget1 規則檔存在但沒進 dispatch_config —— 不會被呼叫"
     enforced = not rules.get("BUDGET-1", {}).get("shadow", True)
-    return True, ("BUDGET-1：Stop 掃當日 transcript 算 output token，越線走"
+    # 2026-09-05 補：QUOTA-1 是同一類閘門的視窗粒度版（日總量看不出「93 分鐘燒光一桶」）。
+    # 刻意不新增一個 probe：能力項是「有沒有成本上限閘門」，不是「有幾條」，
+    # 為了讓分子加一而動分母會讓這張表的分數失去意義。
+    win = ""
+    if _read(HOOKS / "rules" / "quota1_window_burn.py"):
+        win = ("；QUOTA-1 另看五小時／七日視窗百分比（讀桌面版官方用量快照）"
+               + ("，enforce 中" if not rules.get("QUOTA-1", {}).get("shadow", True)
+                  else "，shadow 觀察中"))
+    return True, ("BUDGET-1：Stop 掃當日 transcript 算加權配額單位，越線走"
                   "兩段式投遞出 WARN（節流 20 分、一天只講一次）"
-                  + ("，enforce 中" if enforced else "，shadow 觀察中"))
+                  + ("，enforce 中" if enforced else "，shadow 觀察中") + win)
 
 
 # ── ⑦ Verification ───────────────────────────────────────────────────────

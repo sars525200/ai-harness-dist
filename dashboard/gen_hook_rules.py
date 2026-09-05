@@ -66,8 +66,8 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["IDX-1", "EOL-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "WIN-1",
-         "PR-1", "ENC-1", "HTML-1", "EXP-1", "UI-1", "CHK-1", "CTX-1"]
+ORDER = ["IDX-1", "EOL-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "QUOTA-1",
+         "WIN-1", "PR-1", "ENC-1", "HTML-1", "EXP-1", "UI-1", "CHK-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
 DESC = {
@@ -183,6 +183,19 @@ DESC = {
                "hook payload 看不到 token 數——解法不是等平台給，是自己掃當日 transcript 算，"
                "計量層在成本分頁已經做好了。節流 20 分（全掃 176–268ms，dispatch 預算 20–30ms）、"
                "一天只講一次（超標是持續狀態，每輪都講必被無視）",
+    },
+    "QUOTA-1": {
+        "badge": "9/5 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
+        "why": "五小時視窗越 50%／95%、七日視窗越 80%／95% 出 WARN"
+               "（讀桌面版官方用量快照，不自己重建視窗）",
+        "tip": "BUDGET-1 看「今天累計」，這條看「那兩個桶燒到幾成」——"
+               "實測近 7 天五小時桶撞頂 5 次，日總量看不出「93 分鐘燒光一整桶」。"
+               "資料源是 <code>%APPDATA%\\Claude\\plan-usage-history.json</code>（每 15 分鐘一筆），"
+               "所以<b>不重建視窗起點</b>，直接取最新一筆有效樣本。"
+               "三件事決定它會不會變噪音或啞巴：①哨兵過濾（app 重啟的預設值長得像視窗剛重置，"
+               "Phase 3 的錨點就是踩在這上面）②超過 30 分沒更新就閉嘴（過期的百分比看起來像即時值）"
+               "③<b>帶級</b>節流而非「一天一次」（一天爆三次是常態，沿用日守門會漏掉後兩次）。"
+               "⚠ 取樣 15 分＋節流 2 分 ⇒ 最壞晚 17 分鐘、約 14 個百分點，訊息裡會寫出樣本幾分鐘前。",
     },
     "PR-1": {
         "badge": "＋SubagentStop", "on": "<b>Stop · SubagentStop</b>",

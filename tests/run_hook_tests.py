@@ -502,6 +502,7 @@ def main() -> int:
         # 變異腳本本身會改動 live hook、不適合自動跑，但「錨點還在不在」是唯讀的，
         # 拉進來每次跑，漂掉的當下就紅。
         import test_budget1
+        import test_quota1
         import test_win1
         import test_layers
         import test_layer_marks
@@ -599,6 +600,7 @@ def main() -> int:
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
             (test_budget1.run, "BUDGET-1 用量閘門"),
+            (test_quota1.run, "QUOTA-1 配額視窗閘門"),
             (test_win1.run, "WIN-1 合計 input 視窗"),
             (test_roles_topology.run, "角色拓樸產生器"),
             (test_layers.run, "兩層對照產生器"),
