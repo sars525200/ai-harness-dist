@@ -275,6 +275,7 @@ py -3 tools/push_cloud_backup.py --seed-token-baseline   # 只在第一次；檔
 | Q1 | C 類（功能性路徑）要清、要留、還是改成從設定讀？ | user |
 | Q2 | GitHub repo 名稱？（建議 `harness-private`，不要用含公司名的名字） | user |
 | Q3 | `gh` 要不要裝，還是你自己在網頁上建 repo？ | user |
+| Q4 | 散佈 repo 名稱（§7·建議 `ai-harness-dist`，不含公司名；真的要交人那天才建） | user |
 
 ---
 
@@ -293,6 +294,8 @@ py -3 tools/push_cloud_backup.py --seed-token-baseline   # 只在第一次；檔
 - [x] 回寫 `TODOS.md`「harness 跨機同步」列③異地落點（commit `c1499f7`）
 - [x] **接進 post-commit 自動推**（2026-09-04 晚·commit `41c0439`）：見 §6
 - [x] **棘輪判準（第三層）＋變異腳本**（2026-09-06）：拿掉 `<ADMIN-ACCT>==>` 從「兩層都不會紅」變成 FAIL 點名；基準線 7397 條已播；NAS 副本清單加第四檔
+- [x] **6 個新 token 代判進基準線＋手動重推**（2026-09-06 03:12·user 授權代判這一次）：雲端 tip `f0f5395f`、失敗標記已清。上一則待驗「失敗紀錄尾段列 token 清單」**已驗到**：03:03 那輪 `state/cloud_backup_last.json` 的 tail 列出 6 個 token
+- [x] **交人流程寫成 §7**（2026-09-06）：管道裁定＝另開散佈 repo、備份 repo 永遠零協作者。散佈 repo **未建**（現在沒有人要接）；`--remote` 推第二個 repo **未實跑**（§7 待驗）
 - [ ] 換機能用（bootstrap／plugin）：**不在本計畫書**，走 `UNIVERSAL_HARNESS_PLAN.md` 的接線器那條線；本計畫書 §2「仍未解」的三點原封轉過去
 
 > ⚠ 這一節 2026-09-04 白天到晚上之間曾經過期：交接檔與 TODOS 都寫結案，這裡還停在「卡在 gh 登入」。
@@ -327,3 +330,58 @@ py -3 tools/push_cloud_backup.py --seed-token-baseline   # 只在第一次；檔
   真正的教訓是**動共用 repo 前跑 `tools/peek_sessions.py`**，兩邊都沒跑。
 - 規則檔只在這台機器的 `.scratch/cloud-export/`，**不在任何備份裡**。這台壞了，從雲端還原的那份無法再跑
   清洗工具。要不要另存一處（密碼管理器／私人雲端）是 user 的決定，2026-09-04 晚已問、待答。
+
+---
+
+## 7. 交人流程：harness 交給第三方（2026-09-06 裁定·母票 `MEMORY_RESTORE_PLAN.md` T7 Q2／Q3）
+
+> 為什麼要單獨一節：§6 的備份 repo 是**每顆 commit 自動推的即時餵送**（post-commit → 背景重清全歷史 → `push --mirror` 整包覆蓋）。
+> 在那個 repo 加一個 Read 協作者＝他每分鐘拿到最新的一切。今天棘輪（§3 第三層）漏掉一個中文專有名詞，
+> 代價是「私有備份裡有殘留」；加了協作者那一刻變成**秒級外流**。所以 user 2026-09-06 裁定：**散佈與備份拆成兩個 repo**。
+
+### 7.1 三條前提（寫在步驟前面，因為步驟做對了它們仍然成立）
+
+| # | 前提 | 為什麼 |
+|---|---|---|
+| P1 | **交出去就撤不回**。移除協作者只擋「以後」；他手上的 clone 永遠在，GitHub 只會刪他的 fork | git 內容保證不了唯讀（Q2）；能擋的只有「他的改動流不回真相」 |
+| P2 | **備份 repo `ai-harness` 永遠零協作者**。交人一律走散佈 repo | 上面那段：即時餵送 ≠ 散佈管道 |
+| P3 | **只給 harness，不給記憶**。散佈 repo 推的是同一套清洗匯出品，記憶檔本來就不在 repo 裡 | user 2026-09-05 裁定逐字：「不同帳號(別人)只可以讀取不能改寫 只有sars525200 本人可以優化」 |
+
+### 7.2 「tag 還是 clone」不是分岔（交接檔的框架，查完工具實況後作廢）
+
+- tag 與 clone 都是對方機器上的一份拷貝：**都收不回、都看不到他改了什麼**。差別只在「他會不會持續收到更新」，而那由「他在哪個 repo 有 Read」決定，不由 tag 決定。
+- 每次推都重清全歷史再 mirror 覆蓋。**加一條新清洗規則＝全部 commit hash 重寫**，對方的 clone 會跟雲端完全對不上、必須重 clone。這是唯一能傳到對方那裡的「有東西被撤回了」訊號，但他舊拷貝裡的字仍在（P1）。
+- **fork 是唯一看得到、也收得回的漂移**：私有 repo 的 fork 顯示在 `forks_count`，移除協作者時 GitHub 連他的 fork 一起刪。clone 兩者皆無。⇒ **維持 `allow_forking=true`**（2026-09-06 實查現值 true、0 個 fork）；關掉它只會把看得見的那條路堵死、剩下看不見的。
+
+### 7.3 步驟（真的要交人那天照做；`<dist>`＝§4 Q4 定的名字、`<login>`＝對方 GitHub 帳號）
+
+| 步 | 指令／動作 | 誰 |
+|---|---|---|
+| 1 | 定 repo 名（Q4），建私有 repo：`gh repo create sars525200/<dist> --private --description "harness 散佈快照，只讀"` | user 定名、我建 |
+| 2 | 推快照（**手動、不接 post-commit**；同一套 15 項驗證，任一 FAIL 不推）：`py -3 tools/push_cloud_backup.py --push --remote https://github.com/sars525200/<dist>.git` | 我 |
+| 3 | 加協作者、角色 Read（API 名叫 `pull`）：`gh api -X PUT repos/sars525200/<dist>/collaborators/<login> -f permission=pull` | **user 按**（對外動作） |
+| 4 | 登記到 7.4 那張表：誰／何時／角色／給的是哪顆 tip | 我 |
+| 5 | 跑 7.5 驗證，四條全過才算交完 | 我 |
+| 給新版 | 重跑步 2；對方 `git pull`（規則沒改）或重 clone（規則改過、hash 全換） | 我推、對方拉 |
+| 收回 | `gh api -X DELETE repos/sars525200/<dist>/collaborators/<login>` → 7.4 填移除日；**clone 收不回**（P1） | **user 按** |
+
+### 7.4 登記表（一列一人，移除也留列——這是「誰拿過」的唯一紀錄）
+
+| 帳號 | 加入日 | 角色 | 拿到的 tip | 移除日 | 備註 |
+|---|---|---|---|---|---|
+| （尚無） | | | | | 2026-09-06 實查：備份 repo 協作者只有 owner（`admin`）、0 fork |
+
+### 7.5 驗證（每一條都要貼實跑輸出）
+
+| # | 指令 | 必須 |
+|---|---|---|
+| V1 | `gh api repos/sars525200/ai-harness/collaborators --jq 'length'` | `1`（備份 repo 只有 owner·P2） |
+| V2 | `gh api repos/sars525200/<dist>/collaborators --jq '.[]|[.login,.role_name]'` | 除 owner 外每列都是 `read` |
+| V3 | `gh api repos/sars525200/<dist>/collaborators/<login>/permission --jq .permission` | `read` |
+| V4 | `gh api repos/sars525200/<dist> --jq '{private,forks_count}'` | `private:true`；`forks_count` 記下來，之後變了就是有人 fork |
+
+### 7.6 沒做的（不是忘了）
+
+- **沒建散佈 repo、沒實跑 `--remote` 推第二個 repo**：現在沒有人要接。待驗四欄→ 項目＝步 2 對第二個 remote 推得過且雲端 tip 一致／為何沒驗＝repo 不存在／指令＝步 1＋步 2 逐字／誰跑＝交人那天的我。
+- **沒做「V1 自動核對」守門**（例如接進 `tools/check_before_start.py`）：綁後果的判準是「備份 repo 協作者數 ≠ 1 就紅」，寫得出來，但現在它永遠綠。要做就升 S，分支指令：`py -3 tools/check_before_start.py` 加一項讀 V1，變異＝暫時加一個協作者看它紅不紅（要 user 按）。
+- **沒改 §6 的 hook**：散佈 repo 刻意不接自動推，這是設計不是缺口。
