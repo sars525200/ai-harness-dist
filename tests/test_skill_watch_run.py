@@ -95,9 +95,14 @@ def _make_root(root: Path) -> None:
     (root / "SkillViewer").mkdir(parents=True, exist_ok=True)
     # load_config() 只做 json.loads，不驗 schema —— 它純粹是 U-2 的「缺設定拒跑」閘門
     (root / "harness.config.json").write_text("{}", encoding="utf-8")
+    # ⚠ 這張假表要跟真的那張一樣寬（2026-09-05 修）。它原本是四欄，而真表早就是六欄
+    # ——**假資料保存了缺陷當時的形狀**，於是「寫出來的列比表短」在這裡永遠測不到。
+    # 真表的紅是 `test_doc_integrity.py` 在叫，而那條紅被當成「不是我的」放了很久。
     (root / "TODOS.md").write_text(
-        "# 假 TODOS\n\n## 全域·需求\n\n| 項目 | 現況 | 下一步 | 誰 |\n"
-        "|---|---|---|---|\n| 佔位 | 佔位 | 佔位 | 待判斷 |\n",
+        "# 假 TODOS\n\n## 全域·需求\n\n"
+        "| 項目 | 現況 | 下一步 | 誰 | 分類 | 優先 |\n"
+        "|---|---|---|---|---|---|\n"
+        "| 佔位 | 佔位 | 佔位 | 待判斷 | 工具 | 中 |\n",
         encoding="utf-8")
     # 2026-09-04：基準搬進 `state\`（票 10），清冊留在 SkillViewer。
     # 兩個檔各造一份——只造清冊的話，`compare()` 會因為找不到基準而拒跑，
@@ -222,6 +227,90 @@ def test_writes_land_in_tmp_and_real_files_untouched() -> None:
           f"被碰到的：{moved} —— 注入縫沒接上，這正是 test_contract_units:383 記的那次假綠")
 
 
+_TODOS_HEAD = (
+    "## 全域·需求\n\n"
+    "| 項目 | 現況／為何還沒做 | 下一步（逐字指令或動作） | 誰 | 分類 | 優先 |\n"
+    "|---|---|---|---|---|---|\n"
+    "| 既有的一列 | 現況 | 下一步 | 我 | 工具 | 中 |\n")
+
+
+def _write_todos(tmp, head=_TODOS_HEAD):
+    p = tmp / "TODOS.md"
+    p.write_text(head, encoding="utf-8")
+    return p
+
+
+def test_append_todo_row_width_matches_the_table() -> None:
+    r"""寫進待辦表的那一列，欄數必須跟那張表一樣寬。
+
+    **為什麼要有這一條**（2026-09-05 修）：`append_todo()` 原本把欄數寫死成四格
+    （項目／現況／下一步／誰），而那張表已經是六欄（多了「分類」「優先」）
+    ⇒ **每一次排程都往表裡寫一列短的**，`test_doc_integrity.py` 從此永遠紅著一條。
+
+    危險的不是那一列難看，是**永遠紅的閘門沒有人在讀**：這條紅被三則不同的對話
+    各跌過一次、每一則都判定「不是我的」，沒有人往上追到寫入端。
+
+    另外釘住「分類」不得留白：`test_todos.py` 有一條會點名空白的分類欄，
+    補成六欄卻留白只是把紅從這個閘門換到另一個閘門。
+    「優先」則相反——留白在那張表就是「請接手的人自己推導」，是合法的。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        saved = dict(_path_consts())
+        try:
+            m._set_paths(tmp)
+            _write_todos(tmp)
+            wrote = m.append_todo("新項目 A", "現況 A", "下一步 A")
+            check("有寫進去", wrote)
+            rows = [ln for ln in (tmp / "TODOS.md").read_text(encoding="utf-8")
+                    .splitlines() if ln.startswith("|")]
+            new = [r for r in rows if "新項目 A" in r]
+            check("找得到新寫的那一列", len(new) == 1, f"找到 {len(new)} 列")
+            if new:
+                cells = [c.strip() for c in new[0].split("|")[1:-1]]
+                check("新列的欄數與表頭相同（6 欄）", len(cells) == 6,
+                      f"只有 {len(cells)} 欄：{cells}")
+                if len(cells) == 6:
+                    check("分類欄不得留白", bool(cells[4]), f"分類＝{cells[4]!r}")
+                    check("優先欄留白（這支判不出優先度，留白＝請接手的人推導）",
+                          cells[5] == "", f"優先＝{cells[5]!r}")
+            # 去重仍然有效——補欄位不該把既有行為改掉
+            check("同一個項目不重複寫", m.append_todo("新項目 A", "x", "y") is False)
+        finally:
+            for k, v in saved.items():
+                setattr(m, k, v)
+
+
+def test_append_todo_refuses_when_column_count_changes() -> None:
+    r"""表格多一欄時**拒寫並報錯**，不補空格湊數。
+
+    猜著填等於製造一列語意錯誤的資料，而那比不寫更難發現；
+    排程跑失敗會叫，靜默寫一列短的不會——那正是這次修掉的病。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        saved = dict(_path_consts())
+        try:
+            m._set_paths(tmp)
+            _write_todos(tmp, _TODOS_HEAD
+                         .replace("| 分類 | 優先 |", "| 分類 | 優先 | 新欄 |")
+                         .replace("|---|---|---|---|---|---|",
+                                  "|---|---|---|---|---|---|---|")
+                         .replace("| 我 | 工具 | 中 |", "| 我 | 工具 | 中 | x |"))
+            try:
+                m.append_todo("新項目 B", "現況 B", "下一步 B")
+                check("欄數不符時要拒寫", False, "竟然寫進去了")
+            except m.RunError as exc:
+                check("欄數不符時要拒寫", True)
+                check("錯誤訊息說得出是幾欄對幾欄",
+                      "7" in str(exc) and "6" in str(exc), str(exc)[:120])
+            body = (tmp / "TODOS.md").read_text(encoding="utf-8")
+            check("拒寫時一個字都沒動", "新項目 B" not in body)
+        finally:
+            for k, v in saved.items():
+                setattr(m, k, v)
+
+
 def test_zero_behaviour_change() -> None:
     r"""票 07 的判準是「行為零改動」——這一條就是它的證據。
 
@@ -309,6 +398,8 @@ def run(verbose: bool = True):
     global _passed, _failed, _details
     _passed, _failed, _details = 0, 0, []
     for fn in (test_zero_behaviour_change,
+               test_append_todo_row_width_matches_the_table,
+               test_append_todo_refuses_when_column_count_changes,
                test_skillmd_matches_actual_first_run_behaviour,
                test_set_paths_covers_every_path_const,
                test_writes_land_in_tmp_and_real_files_untouched,

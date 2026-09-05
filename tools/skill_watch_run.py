@@ -399,8 +399,29 @@ def _esc(text: str) -> str:
     return text.replace("|", r"\|").replace("\n", " ")
 
 
-def append_todo(row_item: str, row_status: str, row_next: str, who: str = "待判斷") -> bool:
-    """在「全域·需求」表末尾加一列。已存在同樣項目就不重複加。回傳是否真的寫了。"""
+def _table_width(lines: "list[str]", start: int, end: int) -> int:
+    r"""從表格的分隔列（`|---|---|…`）數出這張表有幾欄。數不出來回 0。
+
+    ⚠ **欄數一定要從表本身讀，不能寫死**（2026-09-05 修）：原本這支直接組
+    `| 項目 | 現況 | 下一步 | 誰 |` 四格，而那張表 2026 年某次加了「分類」「優先」
+    變成六欄 ⇒ **每一次排程都往表裡寫一列短的**，`test_doc_integrity.py` 從此
+    永遠紅著一條。而永遠紅的閘門沒有人在讀，這條紅被三則不同的對話各跌過一次、
+    每一則都判定「不是我的」——沒有人往上追到寫入端。
+    """
+    for i in range(start, end):
+        s = lines[i].strip()
+        if s.startswith("|") and set(s) <= set("|-: \t") and "-" in s:
+            return len([c for c in s.split("|")[1:-1]])
+    return 0
+
+
+def append_todo(row_item: str, row_status: str, row_next: str, who: str = "待判斷",
+                kind: str = "工具") -> bool:
+    """在「全域·需求」表末尾加一列。已存在同樣項目就不重複加。回傳是否真的寫了。
+
+    `kind` 填「分類」欄。**這一欄不得留白**——`test_todos.py` 會點名空白的分類欄
+    （留白的是「優先」，那一欄留白代表「請接手的人自己推導」，是合法的）。
+    """
     if not TODOS_PATH.exists():
         raise RunError(f"找不到 {TODOS_PATH}")
     # `newline=""` 讀進來才保得住原始行尾；預設的 universal newlines 會把 CRLF
@@ -432,8 +453,20 @@ def append_todo(row_item: str, row_status: str, row_next: str, who: str = "待�
     if any(row_item in lines[i] for i in range(start, end)):
         return False
 
+    # 六欄＝項目／現況／下一步／誰／分類／優先。「優先」刻意留白：這支判不出優先度，
+    # 留白在那張表就是「請接手的人自己推導」。
+    cells = [_esc(row_item), _esc(row_status), _esc(row_next), who, _esc(kind), ""]
+    width = _table_width(lines, start, end)
+    if width != len(cells):
+        # **拒寫，不補空格湊數**：欄數變了代表那張表多了一個這支不知道意義的欄位，
+        # 猜著填等於製造一列語意錯誤的資料，而那比不寫更難發現。
+        # 排程跑失敗會叫；靜默寫一列短的不會（那正是這次要修掉的病）。
+        raise RunError(
+            f"「全域·需求」表現在是 {width or '?'} 欄，這支只組得出 {len(cells)} 欄"
+            f"（項目／現況／下一步／誰／分類／優先）——欄位定義變了就不猜，拒寫。"
+            f"要新增欄位請同步改 {__file__} 的 append_todo()。")
     eol = "\r\n" if lines[last_row].endswith("\r\n") else "\n"
-    row = f"| {_esc(row_item)} | {_esc(row_status)} | {_esc(row_next)} | {who} |{eol}"
+    row = "| " + " | ".join(cells) + " |" + eol
     lines.insert(last_row + 1, row)
     with open(TODOS_PATH, "w", encoding="utf-8", newline="") as f:
         f.write("".join(lines))
