@@ -412,8 +412,17 @@ plugin 拿得走 W1 的兩條 junction ＋ W10 裡 12 條指令路徑改寫。
 **那 18 條紅逐條歸因**（沒有一條是「清洗弄壞了東西」）：
 * 約 8 條＝`harness.config.json` 還是 `--init` 範本態（`currentProject` 指向 `D:\你的專案`）
   ⇒ **正是 W2 第二步要填的東西，fail-closed 照設計運作**。
-* 2 條＝跨樹污染的證據：clone 裡跑的檢查看到了**本機**的 `QUOTA-1` 與**本機**的 `backup` remote
-  ⇒ **B4 那 5 處寫死 `STATE_DIR`／根目錄的字面值是真的會漏過去的**，不是理論風險。
+* 2 條＝跨樹污染的證據：clone 裡跑的檢查看到了**本機**的 `QUOTA-1` 與**本機**的 `backup` remote。
+  ⚠ **2026-09-05 訂正·歸因錯了**（另一則 session 指出，已實查證實）：這不是 `STATE_DIR`，
+  是 `tests\` 自己寫死 `HOOKS_DIR = r"D:\Patrick-AI\.ai-harness\hooks"` 並 `sys.path.insert`
+  ——`tests/run_hook_tests.py:37`、`tests/smoke_real_git.py:26`、`tests/test_hook_encoding.py:26`、
+  `tests/test_r1_python_blocks.py:38-39` 共 5 處。
+  ⇒ **在 clone／worktree 裡跑全套，它 import 的是主目錄的 hooks，印出來的綠燈是主目錄的綠燈。**
+  ⇒ 因此上面「clone 跑回歸網 1705/1723」這個數字**證明力要打折**：凡是 import hooks 的測試
+  驗的都是主目錄那份，不是 clone 那份。**「還原路徑可行」的結論仍然成立**——它靠的是
+  上表的逐檔 blob 比對（506=506、行尾差 0、26 支全是 1 行換 1 行、佔位符不在執行邏輯裡），
+  那一段與測試無關。但「新機全綠」這件事**目前驗不到**，要等這 5 處改成從自身位置推。
+  記票在 `TODOS.md`（另一則 session 開的，優先高）。
 * 其餘＝環境差異（暫存夾在 C 槽、`pythonw` 情境、文件新鮮度）。
 
 ⇒ **W2 的 `--init` 實跑過了**：會產範本、並明講「範本裡的路徑是假的，直接跑會被存在性檢查擋下」。
