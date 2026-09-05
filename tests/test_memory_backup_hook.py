@@ -191,6 +191,70 @@ def run():
         check("--quiet 時失敗仍回 0（備份問題不該讓 commit 看起來失敗）",
               r.returncode == 0, "exit=%d" % r.returncode)
 
+    # ── 8. 開工檢查的「離線包過期」那一行 ────────────────────────────────
+    #     前兩層備份由 post-commit 自動同步，離線那份沒有 —— 沒有提醒就等於
+    #     「說明檔裡寫了隔一段時間重做」，而那從來沒有人會做。
+    import importlib.util as _ilu
+    _spec = _ilu.spec_from_file_location("_cbs_probe", ROOT / "tools" / "check_before_start.py")
+    _cbs = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_cbs)
+
+    def offline_lines(root: Path) -> str:
+        got: list[str] = []
+        orig = _cbs.out
+        _cbs.out = lambda s="": got.append(str(s))
+        try:
+            _cbs._memory_offline_line(root)
+        finally:
+            _cbs.out = orig
+        return "\n".join(got)
+
+    def harness_with(base: Path, mem, bundle) -> Path:
+        root = base / "h2"
+        root.mkdir(parents=True, exist_ok=True)
+        cfg = {"schema": 1}
+        if mem is not None:
+            cfg["memoryRepo"] = str(mem)
+        if bundle is not None:
+            cfg["memoryOfflineBundle"] = str(bundle)
+        (root / "harness.config.json").write_text(
+            json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+        return root
+
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d)
+        mem = make_memory_repo(base)
+        bundle = base / "mem.bundle"
+
+        # 沒設定：整段不該印任何東西（別的機器不用這條線）
+        txt = offline_lines(harness_with(base, None, None))
+        check("沒設定離線包時整段不印（不是每台機器都做這層）", txt.strip() == "", txt)
+
+        # 設定了但檔案不在＝完全沒有離線備份，必須是最強的那級
+        txt = offline_lines(harness_with(base, mem, bundle))
+        check("離線包不存在時要喊，而且喊得夠大聲", "[!!]" in txt and "不存在" in txt, txt)
+        check("離線包不存在時要給可直接照做的重做指令",
+              "bundle create" in txt, txt)
+
+        # 做了 bundle：與記憶 repo 同一顆 ⇒ OK
+        subprocess.run(["git", "-C", str(mem), "bundle", "create", str(bundle), "--all"],
+                       capture_output=True)
+        txt = offline_lines(harness_with(base, mem, bundle))
+        check("離線包跟得上時報 OK", "[OK]" in txt, txt)
+        # ⚠ 這一行證明得了「落後幾顆」，證明不了「你真的複製出去了」。
+        #    寫死在訊息裡，免得 [OK] 被讀成「離線備份已完成」。
+        check("OK 也要講清楚它證明不了什麼（有沒有複製出去）",
+              "程式看不到" in txt, txt)
+
+        # 記憶前進一顆 ⇒ 必須轉成落後
+        (mem / "later.md").write_text("- 之後才寫的記憶\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(mem), "add", "-A"], capture_output=True)
+        subprocess.run(["git", "-C", str(mem), "commit", "-q", "-m", "later"],
+                       capture_output=True)
+        txt = offline_lines(harness_with(base, mem, bundle))
+        check("記憶前進之後要報離線包落後", "落後 1 顆" in txt, txt)
+        check("落後時同樣要給重做指令", "bundle create" in txt, txt)
+
     return passed, fails
 
 

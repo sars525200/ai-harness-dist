@@ -457,6 +457,68 @@ def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
 
 
 
+def _cfg_str(repo: Path, key: str) -> str:
+    """從 harness.config.json 讀一個字串設定；讀不到就回空字串＝這台沒設。"""
+    cfg = repo / "harness.config.json"
+    if not cfg.is_file():
+        return ""
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return ""
+    v = data.get(key)
+    return v.strip() if isinstance(v, str) else ""
+
+
+def _memory_offline_line(repo: Path) -> None:
+    """報一行「桌面那份離線包還跟不跟得上記憶 repo」。
+
+    記憶有三層：獨立 repo ＋本機 bare 鏡像 ＋離線 `.bundle`。前兩層由 post-commit
+    自動同步，**第三層沒有任何東西會更新它** —— 而它存在的唯一理由正是「整台
+    機器掛掉」，那個情境下前兩層都不在。
+
+    ⚠ **刻意不自動重產**：離線備份的價值在於人把它帶離這台機器。程式自動重產
+    只會更新桌面那一份，救不了災難情境，還會讓人誤以為離線那份是新的。
+    所以這裡只提醒，重做要人自己來。
+
+    ⚠ 量的是 bundle 裡的 tip 與記憶 repo 的 HEAD 差幾顆 —— 它證明得了「落後」，
+    證明不了「你真的把它複製到隨身碟了」。那一段跟規則檔副本一樣，程式碰不到。
+
+    fail-open：從頭到尾不改 exit code。
+    """
+    mem = _cfg_str(repo, "memoryRepo")
+    bundle = _cfg_str(repo, "memoryOfflineBundle")
+    if not mem or not bundle:
+        return          # 這台機器沒設這條線，不是問題
+    out("    ── 記憶離線包")
+    mem_path, b_path = Path(mem).expanduser(), Path(bundle).expanduser()
+    if not (mem_path / ".git").exists():
+        out("    [!] 記憶 repo 不在 %s —— 沒有答案，不是沒問題" % mem_path)
+        return
+    if not b_path.is_file():
+        out("    [!!] 離線包**不存在**（%s）—— 記憶只剩同一台機器上的兩份" % b_path)
+        out("         重做：git -C \"%s\" bundle create \"%s\" --all" % (mem_path, b_path))
+        return
+    head = _rev(mem_path, "rev-parse", "HEAD")
+    rc, heads = run(["git", "bundle", "list-heads", str(b_path)])
+    tip = heads.split()[0] if rc == 0 and heads.split() else ""
+    if not head or not tip:
+        out("    [!] 離線包或記憶 repo 的 tip 讀不到 —— 沒有答案，不是沒問題")
+        return
+    if tip == head:
+        out("    [OK] 離線包 %s 與記憶 repo 相同（是否已複製出去，程式看不到）" % tip[:8])
+        return
+    # bundle 的 tip 不在本機歷史裡＝那份離線包來自別條歷史，別當成「落後」
+    if run(["git", "-C", str(mem_path), "cat-file", "-e", tip + "^{commit}"])[0] != 0:
+        out("    [!!] 離線包 tip %s **記憶 repo 裡沒有這顆** —— 來自別台機器或已分叉，"
+            "先確認再覆蓋" % tip[:8])
+        return
+    behind = run(["git", "-C", str(mem_path), "rev-list", "--count", tip + "..HEAD"])[1]
+    out("    [!!] 離線包**落後 %s 顆**（包裡 %s，記憶 repo %s）" % (behind, tip[:8], head[:8]))
+    out("         重做：git -C \"%s\" bundle create \"%s\" --all" % (mem_path, b_path))
+    out("         做完記得再複製到隨身碟／NAS —— 留在桌面救不了整台機器掛掉")
+
+
 def block_mirror(repo: Path, skip_net: bool) -> bool:
     """回「有沒有任何 remote 沒跟上」。只報告，不改變 exit code 的既有契約。"""
     out("[4] 備份鏡像新鮮度")
@@ -529,6 +591,7 @@ def block_mirror(repo: Path, skip_net: bool) -> bool:
 
     if block_cloud(repo, head, skip_net):
         stale = True
+    _memory_offline_line(repo)
     return stale
 
 
