@@ -179,7 +179,7 @@ py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py --append-history
 - **不改 harness 自己的計畫書**，只讀它們當作「內容的去處」。
 - 判準、分岔與踩雷史在 `D:\Patrick-AI\.ai-harness\CONTEXT_HEALTH_PLAN.md`；
   這份 skill 只編排步驟，**規則本體不在這裡**。
-- **量測結果寫 `D:\Patrick-AI\.ai-harness\CONTEXT_HEALTH_MEASUREMENTS.md`，不要寫進計畫書。**
+- **量測結果寫 `CONTEXT_HEALTH_MEASUREMENTS.md`（`<harness>\CONTEXT_HEALTH_MEASUREMENTS.md`），不要寫進計畫書。**
   計畫書受 PR-1 覆核閘門管轄，每量一次就改它一次會讓「重算 hash」變成反射動作，
   而那正是偽造憑證的唯一動作（`hooks/rules/pr1_plan_review_marker.py` 檔頭）。
   **實際踩過**：append 一節量測紀錄就把 Stop 閘門觸發了。

@@ -829,13 +829,27 @@ _KNOWN_U1_DEBT_MD = {
     # 修掉它反而會讓其他 52 處失去展開依據。
     "global/hub/00-preamble.md": 1,
     # 以下四支屬 B-4（共用 14 支）範圍，B-3 明文不得改（R2-8），B-4 已結案。
-    # ⚠ 其中至少兩處是**內容本身**不是指路，換掉會毀掉那段的意思：
-    #   `adversarial-review` 有兩行在示範「正斜線寫法讀得到且不報錯、反斜線才擋得住」，
-    #   那兩個字面值就是那一課的證據；`session-workflow` 那行是刻意的雙形並列
-    #   （反引號內只要有磁碟機代號就掉出 `PATH_RE`，寫絕對路徑會拿掉機器兜底）。
-    #   ⇒ 這四支要不要改是一個**新的決定**，不是順手清一清。
-    "skills/adversarial-review/SKILL.md": 9,
-    "skills/context-health/SKILL.md": 6,
+    # 2026-09-04 逐處判「指路還是內容」後清過一輪：只有 `adversarial-review` 的
+    # 7 處指令列示例（都在 ```text 圍欄裡，不被任何機器兜底讀取）與
+    # `context-health:182`（純散文指路、無機器依賴）換成 `<harness>` 佔位符。
+    # 留下的 10 處都各有一個機器兜底依賴那個**字面值**，換掉會讓兜底靜默失效：
+    #   `adversarial-review:119/120` 在示範「正斜線寫法讀得到且不報錯、反斜線才擋得住」，
+    #   那兩個字面值就是那一課的證據，不是指路。
+    #   `context-health:37/38/39/150` 是 `tests/test_context_health_skill.py` 的
+    #   V-14 零件盤點與 dry-run 機制唯一的輸入來源——`_referenced_scripts()` 只認
+    #   指令列裡 `[A-Za-z]:\\` 開頭的絕對路徑，換成 `<harness>` 會讓那支測試找不到
+    #   任何可 dry-run 的腳本、V-14 整層失去驗證力（**實測踩過**：換完後
+    #   `test_component_inventory`／`test_missing_component_is_detected` 雙雙變 FAIL）。
+    #   `context-health:180`、`design-spec:10`、`design-spec:79`、`session-workflow:13`
+    #   的絕對路徑是 `eval/check_contracts.py` 的 `PATH_RE`（已補吃 `:`／`\`）唯一抓得到
+    #   的契約項——換成 `<harness>` 會被 `PLACEHOLDER_RE`（`<[^>]+>`）判定跳過，契約數
+    #   靜默減少（牴觸「不得靜默下降」）。**實測踩過**：`context-health:180`／
+    #   `design-spec:10` 一度改寫成「裸檔名＋`<harness>` 佔位符」雙形，看似補回一個
+    #   可抽取項，但檔內別處（`context-health:56`、`design-spec:14`）早有同一裸檔名
+    #   的引用，新裸檔名被 `seen` 集合去重、淨損 1 項（`eval/run_all.py` 前後對帳才
+    #   抓到，兩支各從 13→12、8→7）；改回原絕對路徑才復原。
+    "skills/adversarial-review/SKILL.md": 2,
+    "skills/context-health/SKILL.md": 5,
     "skills/design-spec/SKILL.md": 2,
     "skills/session-workflow/SKILL.md": 1,
 }
