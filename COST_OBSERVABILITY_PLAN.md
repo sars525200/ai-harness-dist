@@ -429,3 +429,59 @@ hook 輸入的 `model` 欄**只有 `SessionStart` 有、且不保證給**（官�
 
 2026-09-05 21:00：對照表落檔，**未選任何一項**。
 2026-09-05 21:20：5.4c 補實測，候選③改向「主 session 錯配提醒」，等 user 選形狀。下一步是逐項讓 user 用選擇題選要不要進 Phase 5。
+
+## Phase 5 候選②實測：hook 與便箋不是兇手（2026-09-05 21:50）
+
+### 量法與它的界線
+
+唯讀掃 `~/.claude/projects/*/*.jsonl` 近 2 天（5 個 transcript、510 個 user 回合）＋
+`state/events.*.ndjson` 近 7 天（1,018 個事件檔、17,609 筆）。
+token 用「字元/3.3」估（中英混排；`字元/4` 對中文低估約 3 倍，`SKILL_WATCH_PLAN` §18.8 記過）——**是估值不是實測**。
+
+⚠ **第一版量出「system-reminder 0」，是量測自己壞了不是真的 0**：過濾條件只認 `"user"`／`"assistant"` 兩種列，
+而平台把注入內容存成**獨立的 `attachment` 型別列**（本則 transcript 就有 206 筆）。
+「先證明它會紅」在這裡的形態是：**0 這個結果本身就是紅燈**，因為肉眼看得到 system-reminder 存在。
+
+### 我們自己的 hook：近 7 天注入 189 次，每次一則短警告
+
+| 事件 | 近 7 天次數 |
+|---|---|
+| PreToolUse | 9,923 |
+| PostToolUse | 1,191 |
+| Stop | 509 |
+| SubagentStop | 341 |
+| **UserPromptSubmit（＝便箋投遞）** | **189** |
+
+`hooks/dispatch.py:532` 起：`UserPromptSubmit` **只有在有待送便箋時才寫 `additionalContext`**，
+其餘一律 `return 0` 不輸出。官方口徑「Context cost: Zero, unless the hook returns additional context」
+⇒ **11,964 次 dispatch 裡只有 189 次真的進了 context**，每次是一則短警告（數百字元）。
+
+**⇒ 候選②（hook 每回合重跑＋便箋來回投遞）被數字推翻。** 我原本的假設是錯的。
+官方 issue #50998 講的 `hook_success` 附件累積，在本機資料裡沒有對應的量體。
+
+### 真正在累積的是什麼（近 2 天，依每筆大小排）
+
+| 平台附件 | 筆數 | 每筆 ≈tok | 說明 |
+|---|---|---|---|
+| **prompt_snapshot** | 8 | **33,561** | 系統提示快照。開場／`/clear` 各寫一次，之後每回合以快取讀取重付 |
+| skill_listing | 4 | 5,189 | skill 描述清單 |
+| instructions | 4 | 3,918 | 指令層 |
+| nested_memory | 6 | 1,606 | 記憶檔 |
+| deferred_tools_delta | 4 | 1,277 | 延後載入的工具清單 |
+| agent_listing_delta | 4 | 1,094 | 角色清單 |
+| total_tokens_reminder | **415** | 28 | 每回合都有，但一則 28 tok |
+| output_style | **420** | 15 | 每回合都有，但一則 15 tok |
+
+每回合真正新增的內容裡，**工具輸入輸出合計 35.7%**（`tool_result` 21.7%＋`tool_use` 14.0%），
+一般文字只有 3.1%。這與社群 context-analyzer 的說法（tool I/O 佔 context 大宗）方向一致。
+
+### 判定
+
+1. **不要拆 hook**：省不到。11,964 次執行只換來 189 次注入，成本已經接近下限。
+2. **每回合固定重付的是 `prompt_snapshot` 的 3.3 萬 tokens**，`context-health` 量的
+   CLAUDE.md／MEMORY.md 只是其中 `nested_memory` 那 1,606 ⇒ **健檢的分母錯了**。
+3. 可省的排序變成：①降低開場快照（skill 清單、工具清單、指令層）②減少工具輸出量體
+   ③`/clear` 換題（官方建議，零成本）。**①的把手在平台不在我們**，②③才是自己動得了的。
+
+**沒找到的**：`attachment` 列是否等同「每回合重送」——transcript 只記「寫過一次」，
+重送與否要靠 `/context` 或 `/usage` 的分類佔用才能證實，**本輪未跑**。
