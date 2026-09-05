@@ -245,6 +245,12 @@ def run():
         #    寫死在訊息裡，免得 [OK] 被讀成「離線備份已完成」。
         check("OK 也要講清楚它證明不了什麼（有沒有複製出去）",
               "程式看不到" in txt, txt)
+        # ⚠ 2026-09-05：user 看著這一行問「離線包是什麼？是 MIS 那個專案嗎」。
+        #    每天印給他看的字看不出裡面裝什麼 ⇒ 標題要講內容，OK 行要報檔數。
+        check("標題要看得出裡面裝什麼，不能只寫「離線備份」",
+              "工作筆記" in txt, txt)
+        check("OK 行要報檔數（fixture 只有 MEMORY.md 一個）",
+              "1 個記憶檔" in txt, txt)
 
         # 記憶前進一顆 ⇒ 必須轉成落後
         (mem / "later.md").write_text("- 之後才寫的記憶\n", encoding="utf-8")
@@ -254,6 +260,10 @@ def run():
         txt = offline_lines(harness_with(base, mem, bundle))
         check("記憶前進之後要報離線包落後", "落後 1 顆" in txt, txt)
         check("落後時同樣要給重做指令", "bundle create" in txt, txt)
+        # ⚠ 落後時**兩個檔數都要印**：只印現在的會被讀成「包裡就是這麼多」，
+        #    而那正是這一行要警告的反面。
+        check("落後時要分開報「現在幾個」與「包裡幾個」",
+              "記憶檔 2 個、包裡 1 個" in txt, txt)
 
     return passed, fails
 

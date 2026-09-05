@@ -470,8 +470,25 @@ def _cfg_str(repo: Path, key: str) -> str:
     return v.strip() if isinstance(v, str) else ""
 
 
+def _mem_file_count(mem_path: Path, rev: str) -> str:
+    """記憶 repo 在 `rev` 這顆上有幾個檔。算不出來回空字串（fail-open）。
+
+    存在的理由是**名字看不出內容**：「離線備份」四個字不會讓人知道裡面是
+    Claude 的工作筆記，2026-09-05 user 就直接問了「那是 MIS 專案嗎」。
+    印出檔數是最便宜的補救 —— 一行字裡多四個字，就從「某種包」變成「某些檔」。
+    """
+    rc, txt = run(["git", "-C", str(mem_path), "ls-tree", "-r", "--name-only", rev])
+    if rc != 0:
+        return ""
+    return str(len([ln for ln in txt.splitlines() if ln.strip()]))
+
+
 def _memory_offline_line(repo: Path) -> None:
-    """報一行「離線那份 bundle 還跟不跟得上記憶 repo」。
+    """報一行「離線那份記憶備份還跟不跟得上記憶 repo」。
+
+    ⚠ **訊息裡不准只寫「離線包」**：2026-09-05 user 看著這一行問「離線包是什麼？
+    是 MIS 那個專案嗎」—— 每天印給他看的字，他看不出裡面裝什麼。所以標題帶一句
+    「Claude 在這個專案累積的工作筆記」，`[OK]` 帶檔數。
 
     記憶有三層：獨立 repo ＋本機 bare 鏡像 ＋離線 `.bundle`。前兩層由 post-commit
     自動同步，**第三層沒有任何東西會更新它** —— 而它存在的唯一理由正是「整台
@@ -493,32 +510,39 @@ def _memory_offline_line(repo: Path) -> None:
     bundle = _cfg_str(repo, "memoryOfflineBundle")
     if not mem or not bundle:
         return          # 這台機器沒設這條線，不是問題
-    out("    ── 記憶離線包")
+    out("    ── 記憶離線備份（Claude 在這個專案累積的工作筆記）")
     mem_path, b_path = Path(mem).expanduser(), Path(bundle).expanduser()
     if not (mem_path / ".git").exists():
         out("    [!] 記憶 repo 不在 %s —— 沒有答案，不是沒問題" % mem_path)
         return
     if not b_path.is_file():
-        out("    [!!] 離線包**不存在**（%s）—— 記憶只剩同一台機器上的兩份" % b_path)
+        out("    [!!] 離線備份**不存在**（%s）—— 記憶只剩同一台機器上的兩份" % b_path)
         out("         重做：git -C \"%s\" bundle create \"%s\" --all" % (mem_path, b_path))
         return
     head = _rev(mem_path, "rev-parse", "HEAD")
     rc, heads = run(["git", "bundle", "list-heads", str(b_path)])
     tip = heads.split()[0] if rc == 0 and heads.split() else ""
     if not head or not tip:
-        out("    [!] 離線包或記憶 repo 的 tip 讀不到 —— 沒有答案，不是沒問題")
+        out("    [!] 離線備份或記憶 repo 的 tip 讀不到 —— 沒有答案，不是沒問題")
         return
     if tip == head:
-        out("    [OK] 離線包 %s 與記憶 repo 相同（那個位置是不是真的在機器之外，程式看不到）"
-            % tip[:8])
+        # 檔數在這個分支才印得準：tip 就是 HEAD，數 repo 等於數包裡的
+        n = _mem_file_count(mem_path, "HEAD")
+        out("    [OK] 離線備份 %s 與記憶 repo 相同%s"
+            "（那個位置是不是真的在機器之外，程式看不到）"
+            % (tip[:8], ("，%s 個記憶檔" % n) if n else ""))
         return
-    # bundle 的 tip 不在本機歷史裡＝那份離線包來自別條歷史，別當成「落後」
+    # bundle 的 tip 不在本機歷史裡＝那份離線備份來自別條歷史，別當成「落後」
     if run(["git", "-C", str(mem_path), "cat-file", "-e", tip + "^{commit}"])[0] != 0:
-        out("    [!!] 離線包 tip %s **記憶 repo 裡沒有這顆** —— 來自別台機器或已分叉，"
+        out("    [!!] 離線備份 tip %s **記憶 repo 裡沒有這顆** —— 來自別台機器或已分叉，"
             "先確認再覆蓋" % tip[:8])
         return
     behind = run(["git", "-C", str(mem_path), "rev-list", "--count", tip + "..HEAD"])[1]
-    out("    [!!] 離線包**落後 %s 顆**（包裡 %s，記憶 repo %s）" % (behind, tip[:8], head[:8]))
+    # 落後時**分開報兩個檔數**：只印一個會讓人以為包裡就是這麼多
+    n_now, n_pkg = _mem_file_count(mem_path, "HEAD"), _mem_file_count(mem_path, tip)
+    gap = ("，記憶檔 %s 個、包裡 %s 個" % (n_now, n_pkg)) if (n_now and n_pkg) else ""
+    out("    [!!] 離線備份**落後 %s 顆**（包裡 %s，記憶 repo %s%s）"
+        % (behind, tip[:8], head[:8], gap))
     out("         重做：git -C \"%s\" bundle create \"%s\" --all" % (mem_path, b_path))
     out("         上面那個路徑要在機器之外（同步夾／外接碟）——同一台機器上的第三份救不了整台掛掉")
 
