@@ -792,7 +792,7 @@ Cursor 端**沒有裝這支 skill**（`~\.cursor\skills-cursor\` 只有內建 25
 
 ### 15.7 Cursor 端勘查回報（2026-08-25，閘門解除）
 
-問卷：`D:\IT-department\.scratchesearch\cursor-skill-sharing-probe.md`。Cursor 端回報結論
+問卷：`D:\IT-department\.scratch\research\cursor-skill-sharing-probe.md`。Cursor 端回報結論
 **可共用**，本地已複驗。要點：
 
 | 題 | 回報 | 對本計畫的影響 |
@@ -800,7 +800,7 @@ Cursor 端**沒有裝這支 skill**（`~\.cursor\skills-cursor\` 只有內建 25
 | A-1/A-2 | Cursor 官方掃描路徑含 `~\.claude\skills\`（相容層）；`skills-cursor` 是內建保留區、官方明文禁止放使用者 skill | **不必再建 junction**，現有那條就是共用管道 |
 | A-3 | 兩邊 `SKILL.md` SHA-256 相同 = 同一份檔 | 不會漂 |
 | B-4/B-6 | `session-workflow` **已在** Cursor 的自動清單；`cursor-adapter.mdc:13` 那句路由**有實際效力**（它照著去 Read 了） | 路由不是空文字 |
-| **C-7/C-8** | **全域 `CLAUDE.md` 對 Cursor 不是 always-loaded**；Cursor 自動載入的只有專案 `CLAUDE.md` ＋ `cursor-adapter.mdc`。`~\.cursorules\*.mdc` 確認沒注入 | **搬步驟進 skill 對 Cursor 是加強不是削弱**——它本來就沒在付 §3 的 token |
+| **C-7/C-8** | **全域 `CLAUDE.md` 對 Cursor 不是 always-loaded**；Cursor 自動載入的只有專案 `CLAUDE.md` ＋ `cursor-adapter.mdc`。`~\.cursor\rules\*.mdc` 確認沒注入 | **搬步驟進 skill 對 Cursor 是加強不是削弱**——它本來就沒在付 §3 的 token |
 | E-13 | `disable-model-invocation` Cursor 同樣支援，有旗標的（`wayfinder`／`to-tickets`）都不在自動清單 | ⇒ **本支禁加該旗標**，已寫進 SKILL.md 邊界節 |
 | E-12 | `ui-rules` 現在沒有 `paths:`，**無法重現** 8/25「只會藏、開了檔也不加回」那次實測 | 該結論**降級為待重驗**，不再當既定事實 |
 

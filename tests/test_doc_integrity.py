@@ -119,7 +119,41 @@ def check_text(text: str, label: str = "<text>") -> "list[str]":
             m = _SCAR_DOUBLE_SPACE.search(s)
             fails.append(f"{label}：第 {n} 行中文之間有連續空格「{m.group(0)}」—— "
                          f"中間本來有東西")
+    # ⑤ 表格列被切成兩段：後半段不以管線開頭 ⇒ 它根本不算表格列，
+    #    欄數判準（②）看不到它，產生器也當散文跳過。2026-09-03 在 TODOS 撞到，
+    #    2026-09-05 在 WORKFLOW_5STAGE_PLAN.md 找到第二處。
+    for n, frag in split_row_hits(text):
+        fails.append(f"{label}：第 {n} 行不以管線開頭卻緊貼在表格列後面 —— "
+                     f"「{frag}」。一列被切斷時就是這個形狀，"
+                     f"而它不算表格列，欄數判準看不到")
+
     return fails
+
+
+def split_row_hits(text: str) -> "list[tuple[int, str]]":
+    """找被切成兩段的表格列：後半段不以管線開頭，緊貼在一個表格列後面。
+
+    這一型**欄數判準抓不到**——後半段根本不算表格列，所以它不在 `_table_rows`
+    裡；產生器同樣直接當散文跳過，連「欄位數不對」都不會抱怨。畫面上看不出來。
+
+    合法的段落一定會先空一行再開新內容，所以「前一行是表格列、這一行是非空
+    的非表格行」就是斷列。HTML 註解例外：計畫書用它標範圍標記，會緊貼表格。
+    """
+    out = []
+    lines = text.split("\n")
+    fence = False
+    for i, l in enumerate(lines):
+        if l.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if fence or i == 0:
+            continue
+        st = l.strip()
+        if not st or l.startswith("|") or st.startswith("<!--"):
+            continue
+        if lines[i - 1].startswith("|"):
+            out.append((i + 1, l[:60]))
+    return out
 
 
 def check_file(p: Path) -> "list[str]":
@@ -174,6 +208,22 @@ def selftest() -> "tuple[int, list[str]]":
     expect("變異③：一列的反引號落單 → 紅",
            _CLEAN.replace("走 `Edit` 工具", "走 `Edit 工具"), True, "奇數")
 
+    # 變異⑥：一列被切成兩段（票 114 的形狀）。後半段不以管線開頭，
+    # 所以它**不是表格列** —— 欄數判準看不到它，得靠斷列判準。
+    _SPLIT = _CLEAN.replace(
+        "| 乙 | 不要走 heredoc（會被吃跳脫） | 你 |",
+        "| 乙 | 不要走 heredoc\negister_session_title_hook.py 的後半 | 你 |")
+    expect("變異⑥：表格列被切成兩段 → 紅", _SPLIT, True, "緊貼在表格列後面")
+
+    # 反向對照：表格後空一行再開新段落是**合法的**，不得誤報。
+    # 少了這條，斷列判準大可以「任何表格後的文字都紅」來作弊。
+    expect("表格後空一行再開段落不判紅",
+           _CLEAN + "\n這是表格之後的正常段落。\n", False)
+
+    # 反向對照：HTML 註解緊貼表格是計畫書的既有寫法，不得誤報。
+    expect("HTML 註解緊貼表格不判紅",
+           _CLEAN.rstrip("\n") + "\n<!-- REVIEW_SCOPE_IGNORE_END -->\n", False)
+
     # 變異④：括號內容被吃光
     expect("變異④：空的全形括號 → 紅",
            _CLEAN.replace("（會被吃跳脫）", "（）"), True, "空的全形括號")
@@ -213,6 +263,50 @@ def selftest() -> "tuple[int, list[str]]":
     return passed, failed
 
 
+_SWEEP_SKIP = ("node_modules", ".claude/worktrees", ".scratch/",
+               "session-archive", ".git/", "dashboard/vendor")
+
+
+def sweep_targets() -> "list[Path]":
+    """全 harness 的 .md（扣掉不屬於本 repo 內容的目錄）。"""
+    out = []
+    for f in sorted(HARNESS.rglob("*.md")):
+        rel = f.relative_to(HARNESS).as_posix()
+        if any(x in rel + "/" for x in _SWEEP_SKIP):
+            continue
+        out.append(f)
+    return out
+
+
+def sweep_eaten(paths) -> "list[str]":
+    """全域掃「內容被靜默吃掉」的兩型：裸 CR 與斷列。
+
+    只掃這兩條、不掃疤痕判準（空括號／連續空格）：那兩條在計畫書裡會打到
+    **示範用的字面值** —— 票文引用「被吃掉之後長什麼樣」的樣本時，
+    唯一能轉綠的路是刪掉那段說明，而刪掉之後那張票就講不清楚它在講什麼。
+
+    這兩條擴大範圍前先量過：92 個 .md 零命中 ⇒ 擴大是免費的，不會種下
+    一片長期常駐的紅（長期常駐的紅等於沒有紅）。
+    """
+    fails = []
+    for p in paths:
+        try:
+            text = io.open(p, encoding="utf-8", newline="").read()
+        except Exception as exc:
+            fails.append(f"{p.name}：讀不到（{exc}）—— 讀不到不算通過")
+            continue
+        rel = p.relative_to(HARNESS).as_posix()
+        bare = text.count("\r") - text.count("\r\n")
+        if bare:
+            idx = text.index("\r")
+            near = text[max(0, idx - 40):idx].replace("\n", "⏎")
+            fails.append(f"{rel}：出現 {bare} 個裸 CR —— 路徑裡的反斜線 r "
+                         f"被當成歸位字元了。第一個在「…{near}」之後")
+        for n, frag in split_row_hits(text):
+            fails.append(f"{rel}：第 {n} 行不以管線開頭卻緊貼在表格列後面 —— 「{frag}」")
+    return fails
+
+
 def run() -> "tuple[int, list[str]]":
     """給 run_hook_tests.py 呼叫：自檢 ＋ 真實文件掃描。"""
     passed, failed = selftest()
@@ -230,6 +324,22 @@ def run() -> "tuple[int, list[str]]":
         else:
             passed += 1
             print(f"  ok   {name} 表格完整、無跳脫疤痕")
+
+    # 全 harness 掃「內容被靜默吃掉」的兩型。TODOS 之外的檔原本完全沒有守門，
+    # 而第二處實例正好就在守備範圍外的計畫書裡。
+    targets = sweep_targets()
+    if not targets:
+        failed.append("全域掃描零目標 —— 零目標不算通過")
+    else:
+        sw = sweep_eaten(targets)
+        if sw:
+            failed.extend(sw)
+            print(f"  FAIL 全域掃描（{len(targets)} 個 .md，{len(sw)} 項）")
+            for d in sw[:5]:
+                print(f"       {d}")
+        else:
+            passed += 1
+            print(f"  ok   全域掃描（{len(targets)} 個 .md 無裸 CR、無斷列）")
     return passed, failed
 
 
