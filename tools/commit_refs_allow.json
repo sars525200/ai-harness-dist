@@ -26,6 +26,12 @@
       "where": "skills/_meta/PROVENANCE.md:21",
       "reason": "`to-tickets` 的 **upstream** subtree（mattpocock/skills）。那是上游 repo 的物件 —— 本地從來沒有 clone 過上游、只 copy 過內容 ⇒ **永遠不會在本地**。`tools/local_edits.py` 已把「這一支只能對匯入 commit、不能對真 upstream」明記在產出的表裡。",
       "decided_on": "2026-08-27"
+    },
+    {
+      "value": "08d06eb2",
+      "where": "CLOUD_BACKUP_PLAN.md:252、TODOS.md:93",
+      "reason": "雲端異地備份（`github.com/sars525200/ai-harness`）**第一次推上去時的 tip**。那份是清洗過的複製品：clone 一份、重寫內容與 commit metadata 再推，本機歷史全程未被改寫 ⇒ **兩份歷史刻意分叉、識別碼完全不同**，這顆物件從來沒有在本地存在過，也永遠不會。（user 2026-09-04 裁定「雲端的才清洗，本地的不動」；新舊對照表在 `.scratch/cloud-export/commit-map-20260904.txt`，不進版控。）⚠ 同理，往後任何寫進文件的雲端 tip 都是這一類 —— 不要用 `git log` 去查真值代入，那會查到另一份歷史的東西。",
+      "decided_on": "2026-09-05"
     }
   ]
 }

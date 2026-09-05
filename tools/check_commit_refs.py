@@ -58,7 +58,10 @@ TOKEN_RE = re.compile(r"`([0-9a-f]{7,40})`")
 #:   選這個方向是因為誤報的代價比較大：這支的價值全在「報出來的都是真的」，
 #:   一旦開始有假警報，下一次真的斷線就會被當成又一個假警報。
 #:   要收更緊得逐 token 判斷上下文，那需要更多實例才知道判準長什麼樣。
-CONTEXT_SKIP = ("session", "sha256", "sha-256", "本線")
+# ⚠ "sha8" 是 2026-09-05 補的：`user-rules-reconcile.md` 那張表有一欄就叫 SHA8，
+# 記的是**貼進去的內容摘要**不是 commit。三個檔各引用它一次，全都在講「這一欄」，
+# 三處都被誤判成 git hash（其中兩處的行文本身就在說它是誤判）。
+CONTEXT_SKIP = ("session", "sha256", "sha-256", "sha8", "本線")
 
 
 def load_allow() -> dict:

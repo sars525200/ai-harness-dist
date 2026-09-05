@@ -61,8 +61,21 @@ check("tab-todo" in nav.split('id="sys-menu"')[1] if 'id="sys-menu"' in nav else
 check("select(saved && panels[saved] ? saved : 'workflow'" in html
       or "saved === 'overview') saved = 'workflow'" in html,
       "預設頁是工作流效益（舊 overview 會改走 workflow）")
-check("技術決策時間軸" not in html and "D 槽工作區" not in html,
-      "總覽的決策時間軸與 D 槽工作區已刪")
+# ⚠ 要先挖掉待辦注入區（2026-09-05 修）。原本直接在整份 html 上找這個字串，
+# 於是**票文裡引用這個路徑**就把判準打紅了——實際上看板並沒有把美術庫說明塞進來，
+# 那三處全在 `<!-- TODOS_START -->` 與 `<!-- TODOS_END -->` 之間，是登記簿的內容。
+# 唯一能讓舊寫法轉綠的路是刪掉票文裡那句話，而刪掉之後那張票就講不清楚它在講什麼。
+# 同一個陷阱 test_doc_integrity 的判準④已經踩過一次並寫在註解裡。
+_ti, _tj = html.find("<!-- TODOS_START"), html.find("<!-- TODOS_END -->")
+_outside = (html[:_ti] + html[_tj:]) if (_ti != -1 and _tj > _ti) else html
+check(_ti != -1 and _tj > _ti,
+      "待辦注入區的 marker 還在（挖不掉就等於整份都在掃，判準會被票文打紅）")
+check("dashboard/visual-lib/" not in _outside,
+      "美術庫說明不塞進看板 HTML（待辦注入區之外）")
+# 同形（票 57 ③）：這兩個也是裸子字串比對，只要有票文提到就會被打紅。
+# 現在還沒紅不代表安全 —— 它是**潛伏的**，等哪天有人在登記簿寫到這兩個詞才炸。
+check("技術決策時間軸" not in _outside and "D 槽工作區" not in _outside,
+      "總覽的決策時間軸與 D 槽工作區已刪（待辦注入區之外）")
 check("COST_PANEL_START" in html and "ROLES_TOPOLOGY_START" in html
       and "WORKFLOW_COMPLIANCE_START" in html and "PROGRESS_CHART_START" in html,
       "四塊產生器 marker 仍各在")
@@ -75,7 +88,6 @@ check(html.find("id=\"panel-obs\"") < html.find("COST_PANEL_START") and html.fin
 check('id="disp-n"' in html and "stmt-recon" in html, "派工頁有對帳表")
 check('id="role-kpis"' in html and 'id="skill-kpis"' in html, "角色／Skill 頁有 KPI 條")
 check(".stmt-head{" in html, "帳頭 CSS 與 class 同名（否則畫面有格無樣式）")
-check("dashboard/visual-lib/" not in html, "美術庫說明不塞進看板 HTML")
 for tab_id, ctrl, key in tabs:
     check(ctrl in panel_ids, "%s 的 aria-controls=%s 有對應 panel" % (tab_id, ctrl))
     check(labelled.get(ctrl) == tab_id, "%s 的 aria-labelledby 回指 %s" % (ctrl, tab_id))
