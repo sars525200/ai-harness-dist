@@ -147,6 +147,23 @@ SHAPE_SAFE = {
     "users.noreply.github.com", "example.com", "example.org", "example.net",
     "localhost", "10.0.0.0", "127.0.0.1", "0.0.0.0",
 }
+# 允許拿去做子字串比對的最短長度。四個字以下的片段命中率高到等於萬用字元。
+SUBSTR_FLOOR = 4
+
+# 整條路徑從**歷史**丟棄，不是替換內容。
+#
+# 為什麼需要這個能力（2026-09-05 稽核雲端那份時量到）：替換規則只換得掉
+# **識別字**，換不掉**業務內容**。看板 html 是產生器把各專案的待辦逐字灌進去的
+# 產物，於是公司名、員工姓名、部門、授權清單全都跟著進了這個 repo 的歷史。
+# 實測：公司中文名 350 次、某位員工姓名 138 次，**100% 出自這一個檔**；
+# 主機代號 1557 次裡也有 1306 次在它裡面。把公司名換成佔位符之後，
+# 「某某技術的某某反映某功能開不起來」這句話還是完整留著 —— 換名字沒有用。
+#
+# 丟掉的代價接近零：這個檔現行版本早已 gitignore，留在歷史裡的只是它被忽略
+# 之前的殘骸，備份它沒有任何還原價值。
+DROP_PATHS = [
+    "dashboard/harness-dashboard.html",
+]
 
 
 def blob_dump(repo: Path) -> str:
@@ -200,13 +217,39 @@ def read_tree(repo: Path) -> dict:
 
 
 def shape_hits(data: str, pats: list) -> dict:
-    """用形狀認出可疑值，扣掉白名單。回 {類別: sorted(可疑值)}。"""
-    safe = set(SHAPE_SAFE) | load_allowlist()
+    """用形狀認出可疑值，扣掉白名單。回 {類別: sorted(可疑值)}。
+
+    白名單有兩種用法，**不可混用**（2026-09-05 修一個實測到的破口）：
+
+      逐字比對 `safe_exact` —— 人工白名單記的是「使用者路徑裡帳號名那一段」，
+        例如假路徑用的單字母。它只該在整串相等時放行。
+      子字串比對 `safe_substr` —— 只收網域與替換後的佔位符，這兩類本來就以
+        片段形式出現在更長的值裡（`12345+n@users.noreply.github.com`）。
+
+    混用的後果實測過：人工白名單裡兩個單字元項目（截斷的統計 key、假路徑的 x）
+    一旦進了子字串比對，**任何含該字元的信箱與使用者路徑都被靜默放行** ——
+    對照組驗過，不含那兩個字元的同形值正常報警。這一層的存在理由正是
+    「規則清單漏一條時的兜底」，破在這裡等於兜底層對一大片值不存在。
+    """
+    allow = load_allowlist()
+    placeholders = set()
     for _, new in pats:
         v = new.strip()
         if v:
-            safe.add(v)
-            safe.add(v.lstrip("<").rstrip(">"))
+            placeholders.add(v)
+            placeholders.add(v.lstrip("<").rstrip(">"))
+
+    safe_exact = set(SHAPE_SAFE) | allow | placeholders
+    safe_substr = set(SHAPE_SAFE) | placeholders
+
+    # 短值當子字串＝萬用字元。拒跑而不是自己濾掉 —— 濾掉會讓「規則寫錯」
+    # 變成一次靜默的放寬，正是這個破口原本的形狀。
+    too_short = sorted(s for s in safe_substr if len(s) < SUBSTR_FLOOR)
+    if too_short:
+        die(f"子字串白名單有過短的值：{too_short}\n"
+            f"      少於 {SUBSTR_FLOOR} 字的值當子字串比對等於萬用字元。\n"
+            f"      帳號名那類短值請放 shape-allowlist.txt（那份走逐字比對）。")
+
     out = {}
     for name, rx in SHAPES.items():
         bad = set()
@@ -214,9 +257,9 @@ def shape_hits(data: str, pats: list) -> dict:
             val = m.group(0)
             # 使用者路徑只看帳號名那一段；佔位符（<...>）算已清
             probe = m.group(1) if rx.groups else val
-            if probe.startswith("<") or probe in safe:
+            if probe.startswith("<") or probe in safe_exact:
                 continue
-            if any(s in val for s in safe):
+            if any(s in val for s in safe_substr):
                 continue
             bad.add(val if not rx.groups else probe)
         if bad:
@@ -269,6 +312,20 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
               f"規則檔沒涵蓋到的殘留：{found}")
     else:
         ok = False
+
+    # V-B3 丟棄路徑：整條歷史都不該進備份。
+    #      每一條都配一個對照組 —— 先證明它在清洗前真的在，那個 0 才是清掉的
+    #      結果而不是「路徑打錯所以本來就掃不到」。打錯路徑會靜默全綠。
+    for p in DROP_PATHS:
+        was_there = bool(run(["git", "-C", str(pristine), "log", "--all",
+                              "--oneline", "--", p]).strip())
+        check(f"丟棄路徑在清洗前確實存在（對照組）：{p}", was_there,
+              "清洗前就找不到這條路徑 ⇒ 多半是路徑寫錯，下面那個 0 不算數")
+        if was_there:
+            left_hist = run(["git", "-C", str(export), "log", "--all",
+                             "--oneline", "--", p]).strip()
+            check(f"丟棄路徑已從歷史整條移除：{p}", not left_hist,
+                  f"仍有 {len(left_hist.splitlines())} 顆 commit 留著它")
 
     # V-C commit metadata（`git grep` 掃不到這一層，最容易漏）
     ids = run(["git", "-C", str(export), "log", "--all", "--format=%ae%n%ce"])
@@ -384,6 +441,14 @@ def main() -> int:
 
         print("[2/4] 清洗（只動複製品）")
         cmd = fr + ["--replace-text", str(RULES_FILE), "--force"]
+        if DROP_PATHS:
+            for p in DROP_PATHS:
+                cmd += ["--path", p]
+            cmd += ["--invert-paths"]      # 保留「不在清單上」的路徑
+            # 只動過被丟棄路徑的 commit 會變成空的。filter-repo 預設把空 commit
+            # 剪掉，commit 數就會對不上清洗前快照 —— 而「commit 數一致」正是這裡
+            # 最靠得住的一條「沒弄丟東西」判準，不能讓它變成預期內的紅。
+            cmd += ["--prune-empty=never"]
         if mailmap:
             cmd += ["--mailmap", str(mailmap)]
         run(cmd, cwd=str(export))
