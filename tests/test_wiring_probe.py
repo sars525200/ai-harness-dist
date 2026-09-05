@@ -169,13 +169,28 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
         (full / "m.md").write_text("m", encoding="utf-8")
         empty = tmp / "empty"
         empty.mkdir()
+        # 2026-09-05：記憶目錄空的是**正常狀態**（user 裁定記憶不跨機器延續）。
+        # 兩種形狀各測一個，而且**都要是空的** —— 這一條守的正是「空了不准紅」。
+        mem_enc = tmp / ".claude" / "projects" / "D--x" / "memory"
+        mem_enc.mkdir(parents=True)
+        mem_repo = tmp / "someproj" / ".aimemory"
+        mem_repo.mkdir(parents=True)
         settings = {"permissions": {"additionalDirectories": [str(full), str(empty),
+                                                              str(mem_enc), str(mem_repo),
                                                               str(tmp / "missing")]}}
         res = M.probe_p5(settings, None)
         by = {r.title: r.code for r in res}
         case("P5 空目錄要紅",
              by.get(str(empty)) == FAIL,
-             "Claude 會自建空的 memory 目錄，只驗存在會綠；得到 %r" % by.get(str(empty)))
+             "非記憶目錄空掉代表 clone 沒到位，只驗存在會綠；得到 %r" % by.get(str(empty)))
+        case("P5 記憶目錄空的要綠（projects\\…\\memory）",
+             by.get(str(mem_enc)) == OK,
+             "記憶不跨機器延續 ⇒ 新機那幾條永遠是空的；要求非空會變成一條沒有終點的"
+             "紅燈，verdict() 永遠印不出「裝好了」。得到 %r" % by.get(str(mem_enc)))
+        case("P5 記憶目錄空的要綠（repo 裡的 .aimemory）",
+             by.get(str(mem_repo)) == OK,
+             "另一種記憶目錄形狀（IT-department／MIS-install 用 junction 接過去）；"
+             "得到 %r" % by.get(str(mem_repo)))
         case("P5 非空要綠", by.get(str(full)) == OK, "得到 %r" % by.get(str(full)))
         case("P5 不存在要紅", by.get(str(tmp / "missing")) == FAIL,
              "得到 %r" % by.get(str(tmp / "missing")))

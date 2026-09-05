@@ -14,7 +14,7 @@ r"""接線探針（P1–P11）——【核心層】
   P2   live 每條 hook command **裡的實體檔**存在（不是整段字串）
   P3   harness.config 指向真專案（**不是 `--init` 範本態**）
   P4   hook 自己讀的 STATE_DIR 是本機真目錄且**實際寫得進去**
-  P5   additionalDirectories 每一條存在且**非空**
+  P5   additionalDirectories 每一條存在；**記憶目錄以外**還要非空
   P6   live CLAUDE.md 與 `global/CLAUDE.md` **內容相同**（非空不算數）
   P7   agents／skills 目錄**列得出來且非空**（P1 之外的另一把尺）
   P8   Cursor 側三態分開（已接上／裝了沒接上／沒裝）
@@ -246,11 +246,34 @@ def _foreign_account(dst) -> bool:
     return len(d) > len(home) - 1 and d[:len(home) - 1] == home[:-1] and d[len(home) - 1] != home[-1]
 
 
-def probe_p5(settings: dict, source: Path | None) -> list[Result]:
-    """additionalDirectories 每一條存在且非空。
+def _is_memory_dir(p: Path) -> bool:
+    """這一條是不是「記憶目錄」——空的算正常，不算失聯。
 
-    「存在」不算數：新機使用者名相同時 Claude 會自建空的 projects\\…\\memory，
-    只驗存在照樣綠，而記憶其實整批不在。
+    兩種形狀（本機實際存在的就這兩種）：
+      · `~\\.claude\\projects\\<編碼過的專案路徑>\\memory`
+      · 專案 repo 裡的 `.aimemory\\`（IT-department／MIS-install 用 junction 接過去）
+
+    ⚠ `tools/wire_machine.py` 有一份**目的不同**的相近判斷（「哪些不存在的目錄准我
+      無中生有」，只認前一種）。新增記憶目錄形狀時**兩邊都要改** —— 只改一處不會報錯。
+    """
+    name = p.name.lower()
+    if name == ".aimemory":
+        return True
+    norm = str(p).replace("/", "\\").lower()
+    return name == "memory" and "\\.claude\\projects\\" in norm
+
+
+def probe_p5(settings: dict, source: Path | None) -> list[Result]:
+    """additionalDirectories 每一條存在；記憶目錄以外還要非空。
+
+    「存在」對**非記憶目錄**不算數：新機那些條目是靠改寫舊機那份得到的，
+    指到一個空殼子代表 clone 沒到位，而它與「裝好了」在畫面上同形。
+
+    ⚠ **記憶目錄空的是正常狀態**（user 2026-09-05 裁定：記憶不跨機器延續；
+      換機要一致的是工作流程／技能／規範／hook／沙箱，不是記憶內容）。
+      原本一律要求非空 ⇒ 新機那幾條會**永久紅**，`verdict()` 永遠印不出「裝好了」
+      —— 那不是守住了什麼，那是一條沒有終點的紅燈，會訓練人忽略整份報告。
+      所以改成分開判：記憶目錄只驗存在，其餘照舊要非空。
     規格另要求「逐條對得上舊機那份的改寫來源」——那需要舊機那份當輸入（--source）；
     沒給時**明說沒驗**，不靜默跳過。
     """
@@ -271,7 +294,11 @@ def probe_p5(settings: dict, source: Path | None) -> list[Result]:
         except OSError as exc:
             out.append(Result(FAIL, "P5", title, f"列不出來：{exc}"))
             continue
-        if empty:
+        if empty and _is_memory_dir(p):
+            out.append(Result(OK, "P5", title,
+                              "記憶目錄，**空的是正常的** —— 記憶不跨機器延續"
+                              "（user 2026-09-05），這一條只驗存在"))
+        elif empty:
             out.append(Result(FAIL, "P5", title, "存在但**是空的** —— 這正是「只驗存在」會放過的形狀"))
         else:
             out.append(Result(OK, "P5", title, "存在且非空"))
@@ -764,10 +791,12 @@ def _module_abs_assigns(root: Path, subdir: "str | None" = None
         if set(py.relative_to(root).parts) & set(_SCAN_SKIP_DIRS):
             continue
         try:
-            # ⚠ 一定要壓掉 `SyntaxWarning`：`ast.parse` 會替**被掃的那支檔**發警告
-            # （現況 `tests\test_ctx1.py` 有兩處 invalid escape），而警告印出來的是
-            # `<unknown>:202` —— 掃描器把別人的問題印成自己的、還指不出是哪一支檔。
-            # 回歸網每跑一次就多兩行看不懂的雜訊，久了就沒有人在讀輸出了。
+            # ⚠ 一定要壓掉 `SyntaxWarning`：`ast.parse` 會替**被掃的那支檔**發警告，
+            # 而警告印出來的位置是 `<unknown>:202` —— 掃描器把別人的問題印成自己的、
+            # 還指不出是哪一支檔。回歸網每跑一次就多兩行看不懂的雜訊，
+            # 久了就沒有人在讀輸出了。
+            # （2026-09-05 當下的來源是 `tests\test_ctx1.py` 的兩處 invalid escape，
+            #  已同日修掉；這一行留著是因為**下一支寫錯跳脫的檔還是會走到這裡**。）
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", SyntaxWarning)
                 tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
@@ -827,13 +856,11 @@ def _hardcoded_state_dirs(root: "Path | None" = None) -> "list[tuple[str, str]]"
 # 只有 1 個（`SPIKE_DIR`）叫得出當時想得到的名字，其餘是
 # `_HOOKS`／`_DASH`／`_TOOLS`／`state`。**放寬名字集合抓不到它們，換軸才抓得到。**
 # 豁免要動就會出現在 diff 裡，這是它比「數量棘輪」強的地方——棘輪允許拿一個換一個。
-_SELFREF_EXEMPT: "tuple[tuple[str, str], ...]" = (
-    ("tests/mutations/",
-     "變異腳本刻意指向正本（它的工作就是改主目錄那一份再改回來），"
-     "而且是手動跑的開發工具、不在回歸網的執行路徑上。"
-     "⚠ 能力上限：豁免是整個前綴 ⇒ 這個目錄裡新長出來的自指寫死看不見。"
-     "改成自推的票開在 TODOS.md（2026-09-05）"),
-)
+# **現況是空的**（2026-09-05 當日清空）。原本掛著 `tests/mutations/`（29 支腳本、59 處），
+# 同日全部改成從 `__file__` 推並**逐支實跑驗過**，豁免因此拿掉。
+# 機制留著不刪：下一次真的要豁免時，它會是一筆看得見的 diff，而且下面兩條測試會逼人
+# 寫出理由、並檢查那個前綴在 repo 裡真的有對象（**豁免留著卻沒有對象＝一張沒人在看的清單**）。
+_SELFREF_EXEMPT: "tuple[tuple[str, str], ...]" = ()
 
 
 def _exempt_selfref(rel: str) -> "str | None":

@@ -27,21 +27,38 @@ r"""對接線探針做變異，確認 test_wiring_probe.py 真的會叫。
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\tools\wiring_probe.py"
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_wiring_probe.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "tools", "wiring_probe.py")
+TEST = os.path.join(_ROOT, "tests", "test_wiring_probe.py")
 
 MUTATIONS = [
     ("P1 的 samefile 退化成 exists()",
      "            same = os.path.samefile(live, real)",
      "            same = live.exists()"),
+    # 2026-09-05：錨點從 `if empty:` 換成 `elif empty:` —— 記憶目錄的例外插在它前面。
     ("P5 拿掉「空目錄要紅」",
-     "        if empty:",
+     "        elif empty:",
+     "        elif False:"),
+    # 同日新增。放寬記憶目錄那個例外是**這次唯一的判準退化來源**：
+    # 它一旦把所有目錄都認成記憶目錄，「空的也算正常」就吃掉整條非空判準，
+    # 而畫面上看起來只是多了一行「空的是正常的」——與通過同形。
+    ("P5 的記憶目錄例外放寬成「每一條都算記憶目錄」",
+     '    if name == ".aimemory":',
+     "    if True:"),
+    # 反方向的那一條：**拿掉**例外 ⇒ 新機的空記憶目錄回到永久紅。
+    # 兩條一起才釘得住這個例外「不多不少」——只有放寬那條的話，
+    # 把例外整個刪掉照樣全綠，等於這次的改動沒有任何測試在守。
+    ("P5 拿掉記憶目錄的空目錄例外（新機回到永久紅）",
+     "        if empty and _is_memory_dir(p):",
      "        if False:"),
     ("P9 拿掉 backup remote 檢查",
      '    if "backup" not in names:',
@@ -126,6 +143,9 @@ MUTATIONS = [
 EXPECT = {
     "P1 的 samefile 退化成 exists()": "P1 指到別的目錄要紅",
     "P5 拿掉「空目錄要紅」": "P5 空目錄要紅",
+    "P5 的記憶目錄例外放寬成「每一條都算記憶目錄」": "P5 空目錄要紅",
+    "P5 拿掉記憶目錄的空目錄例外（新機回到永久紅）":
+        "P5 記憶目錄空的要綠（projects\\…\\memory）",
     "P9 拿掉 backup remote 檢查": "P9 有 repo 但沒 backup remote 要紅",
     "P10 的 filecmp 退化成「檔案存在就算」": "P10 內容不同要紅（不是只看檔名）",
     "P11 拿掉「清冊裡不該有 baselines」": "P11 清冊裡還留著 baselines 要紅",

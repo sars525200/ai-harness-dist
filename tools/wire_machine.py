@@ -285,7 +285,11 @@ def w10_settings(log: Log, src: Path, pairs) -> "dict | None":
 
     # 不存在的目錄分兩種，混在一起處理會出事：
     #   ① `~\.claude\projects\<專案>\memory`——新機本來就不會有，接線器**建它**，
-    #      內容則靠記憶還原那條線補；空的由探針 P5 的「非空」去紅，不在這裡擋。
+    #      **而且建完就是空的、那是最終狀態**：記憶不跨機器延續（user 2026-09-05 裁定，
+    #      見 `MEMORY_RESTORE_PLAN.md` D4），換機要一致的是工作流程／技能／規範／
+    #      hook／沙箱。探針 P5 對記憶目錄只驗存在，不要求非空。
+    #      ⚠ 這裡的判斷與 `wiring_probe._is_memory_dir()` **目的不同**（那邊是「空的算不算
+    #        正常」，還認 `.aimemory`）。新增記憶目錄形狀時兩邊都要改，只改一處不會報錯。
     #   ② 其他（專案根、額外授權目錄）——**不能無中生有**，擋下要人先健檢來源。
     memory_like, cannot_invent = [], []
     for d in (new_json.get("permissions") or {}).get("additionalDirectories", []):
@@ -307,8 +311,8 @@ def w10_settings(log: Log, src: Path, pairs) -> "dict | None":
         if log.apply:
             for p in memory_like:
                 p.mkdir(parents=True, exist_ok=True)
-        log.did("W10", "建 %d 個記憶目錄（**是空的**——內容要另外還原，"
-                       "探針 P5 的「非空」會一直紅到還原為止）" % len(memory_like))
+        log.did("W10", "建 %d 個記憶目錄（**是空的，而且那是最終狀態**——記憶不跨機器"
+                       "延續，探針 P5 對記憶目錄只驗存在）" % len(memory_like))
 
     if LIVE_SETTINGS.exists():
         try:
