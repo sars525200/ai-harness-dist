@@ -35,19 +35,32 @@ commit metadata 裡的公司信箱。這些東西**不能交給雲端服務商**
 掃不到就中止 —— 那代表判準壞了，這時候的 0 不算數。
 （2026-09-04 手動跑第一輪時，規則漏了單獨的 `examplecorp`，正是驗證抓到的。）
 
-## 這支自己被驗過什麼（2026-09-04·變異測試）
+## 三層判準各抓什麼（一層不夠，兩層也不夠）
 
-| 變異 | 預期 | 實測 |
-|---|---|---|
-| 規則檔不存在 | 拒跑，不得靜默跳過 | ✅ 拒跑並印出格式說明 |
-| 規則含 repo 裡不存在的字串 | 對照組轉紅（判準壞了） | ✅ FAIL，點名該樣式 |
-| 拿掉 `<USER>==>` 那條規則 | 清單判準看不到，**形狀判準要抓到** | ✅ FAIL，點名 `<USER>` |
-| 白名單清空 | 判準本身還活著，報出全部命中 | ✅ FAIL，列出 8 個 |
+| 層 | 掃什麼 | 抓得到 | 抓不到 |
+|---|---|---|---|
+| 清單 | 規則檔左半邊 | 規則有寫的 | 規則漏掉的（清單就是規則檔本身） |
+| 形狀 | 私有 IP／email／使用者路徑 | 規則漏掉但有形狀的 | 沒有形狀的任意字串 |
+| 棘輪 | 英數 token 減去基準線 | **規則漏掉、且從沒被人判過的字串** | 中文、以及基準線播種時就漏掉的 |
 
-⚠ **已知限制，不要當成做完了**：拿掉 `<ADMIN-ACCT>==>` 那條規則時，**兩層判準都不會紅**。
-   `<ADMIN-ACCT>` 是任意字串、沒有形狀，形狀判準認不出它；清單判準的清單又正是規則檔本身。
-   ⇒ **「規則漏了一個沒有形狀的字串」這件事，這支抓不到。** 有形狀的（IP／email／
-   使用者路徑）抓得到，沒形狀的（帳號名／機器名／公司名）只能靠人維護規則檔。
+棘輪是 2026-09-06 加的：拿掉 `<ADMIN-ACCT>==>` 那條規則，前兩層照樣全綠——`<ADMIN-ACCT>`
+是任意字串、沒有形狀，清單判準的清單又正是規則檔本身。改「全量專有名詞白名單」
+實測不可行（三種英數樣式合起來 7000+ 個獨特 token，要人逐項判），所以改成
+**棘輪**：基準線＝播種當時 repo 裡所有 token 扣掉規則涵蓋的，之後**只判新的**
+（最近 40 顆 commit 每顆新 token 中位數 1、最高 30）。每個新 token 要人二選一：
+敏感 → 進 `replace-rules.txt`；無害 → 貼進 `token-baseline.txt` 並寫理由。
+
+## 這支自己被驗過什麼（`tests/mutations/mutate_push_cloud_backup.py`）
+
+八條變異，全部跑在規則目錄的暫存副本上，正本一個 byte 不動。含：規則檔不存在
+要拒跑、規則含不存在字串要對照組轉紅、拿掉 `<USER>==>` 要形狀層抓到、白名單清空
+要報全部命中、**拿掉 `<ADMIN-ACCT>==>` 要棘輪層抓到並點名**、基準線不存在要 FAIL 不是
+跳過、基準線含規則左半邊要 FAIL、基準線少一條要點名那條。
+
+⚠ **仍然抓不到的，不要當成做完了**：
+   ① **中文專有名詞**（公司名、人名）——中文連續字有 10 萬個獨特 token，沒有可用的
+      自動判準，只能靠人維護規則檔。交人之後外流代價最高的正是這一類。
+   ② **播種基準線時就漏掉的**——基準線等於相信播種當天的人工稽核，當時漏的它永遠不叫。
    加新規則時請一併想：這個東西如果漏了，有沒有東西會叫？沒有的話就只剩人。
 """
 from __future__ import annotations
@@ -69,7 +82,18 @@ HARNESS_ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = HARNESS_ROOT / ".scratch" / "cloud-export"
 RULES_FILE = RULES_DIR / "replace-rules.txt"
 MAILMAP_FILE = RULES_DIR / "mailmap.txt"
+BASELINE_FILE = RULES_DIR / "token-baseline.txt"
 CONFIG_FILE = HARNESS_ROOT / "harness.config.json"
+
+
+def configure_rules_dir(d: Path) -> None:
+    """把規則目錄整組指到別處。**只給變異測試用**：它要在暫存副本上拿掉規則、
+    清空白名單、刪基準線，正本一個 byte 都不能動。"""
+    global RULES_DIR, RULES_FILE, MAILMAP_FILE, BASELINE_FILE
+    RULES_DIR = Path(d).resolve()
+    RULES_FILE = RULES_DIR / "replace-rules.txt"
+    MAILMAP_FILE = RULES_DIR / "mailmap.txt"
+    BASELINE_FILE = RULES_DIR / "token-baseline.txt"
 
 
 def die(msg: str, code: int = 1):
@@ -149,6 +173,75 @@ SHAPE_SAFE = {
 }
 # 允許拿去做子字串比對的最短長度。四個字以下的片段命中率高到等於萬用字元。
 SUBSTR_FLOOR = 4
+
+# ── 棘輪判準：第三道，抓「沒形狀、規則又漏掉」的字串 ──────────────────────
+#
+# 2026-09-06 實測：拿掉 `<ADMIN-ACCT>==>` 那條規則，前兩層 11 項照樣全綠。帳號名、
+# 機器名、公司名沒有形狀可認。「全量專有名詞白名單」也走不通——三種英數樣式
+# 聯集在這個 repo 有 7000+ 個獨特 token，要人逐項判等於「永遠紅的守門」。
+#
+# 所以改成棘輪：基準線記「播種那天 repo 裡所有 token，扣掉規則涵蓋的」；之後
+# 每次清洗只把**不在基準線、也不被規則涵蓋**的 token 列出來並拒推。人對每一個
+# 二選一：敏感 → 進規則檔；無害 → 貼進基準線並寫理由。最近 40 顆 commit 每顆
+# 新 token 中位數 1、最高 30，維護得動。
+#
+# ⚠ 這一層抓不到中文（中文連續字有 10 萬個獨特 token，沒有可用判準），也抓不到
+#   播種那天就漏掉的——基準線等於相信播種當天的人工稽核。
+TOKEN_RX = re.compile(
+    r"\b[a-z][a-z0-9]{5,}\b"                       # 小寫英數 ≥6：帳號名、公司代號
+    r"|\b[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+\b"  # 含連字號：機器名、專案代號
+    r"|\b[A-Z][A-Z0-9-]{2,}\b")                     # 全大寫 ≥3：縮寫、部門代號
+
+
+# 純十六進位 ≥7 字＝commit hash。它有形狀、不可能是帳號名或公司名，而文件裡
+# 每引用一顆 commit 就多一個——留著會讓每次備份都要人判一串 hash。綁形狀排除，不綁名字。
+HEX_RX = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def tokens(data: str) -> set:
+    return {t for t in TOKEN_RX.findall(data) if not HEX_RX.match(t)}
+
+
+def covered_by_rules(tok: str, needles: list) -> bool:
+    """這個 token 會不會被清洗規則換掉。filter-repo 是子字串替換，所以規則字串
+    是它的子字串就算涵蓋——但短於 SUBSTR_FLOOR 的規則不算，理由同上面那條。"""
+    for n in needles:
+        if tok == n or (len(n) >= SUBSTR_FLOOR and n in tok):
+            return True
+    return False
+
+
+def load_token_baseline():
+    """回 set；**檔案不存在回 None**，呼叫端要把它報成 FAIL 而不是當成空集合——
+    空集合會把 7000 個 token 全列成新的，None 才說得出「你還沒播種」。"""
+    if not BASELINE_FILE.is_file():
+        return None
+    out = set()
+    for raw in BASELINE_FILE.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            out.add(line)
+    return out
+
+
+def seed_token_baseline(pristine_data: str, pats: list) -> int:
+    """播種基準線。**已存在就拒跑**：重新播種等於把現在 repo 裡的一切放行，
+    那正是「靠一條指令讓它變綠」的形狀。要加項目請手動逐條貼、附理由。"""
+    if BASELINE_FILE.exists():
+        die(f"基準線已存在：{BASELINE_FILE}\n"
+            f"      重新播種＝把現在 repo 裡的所有 token 一次放行。要加項目請手動貼進去並寫理由；\n"
+            f"      真的要重建就先自己把檔案搬走。")
+    needles = [old for old, _ in pats]
+    keep = sorted(t for t in tokens(pristine_data) if not covered_by_rules(t, needles))
+    head = [
+        "# 棘輪判準的基準線。每一行是一個「已判定無害」的 token；不在這裡、也不被規則涵蓋的 token 會讓清洗拒推。",
+        f"# 播種：{len(keep)} 個，來源＝播種當時全歷史 blob，扣掉規則左半邊涵蓋的。",
+        "# ⚠ 之後加進來的每一行都在關掉一次警報——先看上下文，再貼，寫理由。",
+        "# ⚠ 這裡不准出現規則檔左半邊的字串：出現了清洗會 FAIL（那等於放行要清的字）。",
+        "",
+    ]
+    BASELINE_FILE.write_text("\n".join(head + keep) + "\n", encoding="utf-8")
+    return len(keep)
 
 # 整條路徑從**歷史**丟棄，不是替換內容。
 #
@@ -275,6 +368,7 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
     加減判準時無聲說謊，而它印的正是「我驗了幾項」這個最不該騙人的數字。
     """
     verify.n_checks = 0
+    verify.failures = []
     ok = True
     needles = [old for old, _ in pats]
 
@@ -284,6 +378,7 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
         print(f"  {'ok  ' if passed else 'FAIL'} {name}" + (f"\n       {detail}" if detail and not passed else ""))
         if not passed:
             ok = False
+            verify.failures.append((name, detail))
 
     print("     （倒出所有 blob 中…）")
     pristine_data = blob_dump(pristine)
@@ -312,6 +407,34 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
               f"規則檔沒涵蓋到的殘留：{found}")
     else:
         ok = False
+
+    # V-B4 棘輪判準：**不看形狀**，抓「規則漏掉、又沒被人判過」的 token。
+    #      對照組：至少一條規則左半邊要在 token 集合裡，否則 tokenizer 壞了、綠不算數。
+    #      基準線不存在＝FAIL，不是跳過；基準線含規則左半邊＝FAIL，那是放行要清的字。
+    tk = tokens(pristine_data)
+    live = [n for n in needles if n in tk]
+    check("棘輪判準在未清洗的複製品上抓得到（對照組）", bool(live),
+          "沒有任何一條規則左半邊被 tokenizer 認出來 ⇒ 它壞了，它的綠不算數")
+    if not live:
+        ok = False
+    else:
+        baseline = load_token_baseline()
+        check("token 基準線存在", baseline is not None,
+              f"找不到 {BASELINE_FILE}\n"
+              f"       先跑：py -3 tools/push_cloud_backup.py --seed-token-baseline")
+        if baseline is not None:
+            poisoned = sorted(t for t in baseline if covered_by_rules(t, needles))
+            check("基準線不含規則左半邊（放行了要清的字）", not poisoned,
+                  f"這些同時在基準線與規則裡：{poisoned[:8]}")
+            # 規則右半邊（佔位符）本來就是「換完該長這樣」的值，不算新 token。
+            ph = tokens(" ".join(new for _, new in pats))
+            fresh = sorted(t for t in tk
+                           if t not in baseline and t not in ph
+                           and not covered_by_rules(t, needles))
+            check(f"沒有未判定的新 token（棘輪判準·基準線 {len(baseline)} 條）", not fresh,
+                  f"{len(fresh)} 個新 token，每個都要人二選一（敏感→規則檔；無害→基準線）：\n"
+                  f"       " + "\n       ".join(fresh[:20])
+                  + (f"\n       …另 {len(fresh) - 20} 個" if len(fresh) > 20 else ""))
 
     # V-B3 丟棄路徑：整條歷史都不該進備份。
     #      每一條都配一個對照組 —— 先證明它在清洗前真的在，那個 0 才是清掉的
@@ -409,10 +532,15 @@ def main() -> int:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", action="store_true", help="只清洗＋驗證，不推")
     g.add_argument("--push", action="store_true", help="驗證全過才推")
+    g.add_argument("--seed-token-baseline", action="store_true",
+                   help="播種棘輪判準的基準線（已存在就拒跑）")
     ap.add_argument("--remote", help="雲端 URL（不給就讀 harness.config.json 的 cloudBackupRemote）")
     ap.add_argument("--keep", action="store_true", help="保留工作目錄供檢查")
+    ap.add_argument("--rules-dir", help="規則目錄改指別處（只給變異測試用，正本不動）")
     args = ap.parse_args()
 
+    if args.rules_dir:
+        configure_rules_dir(Path(args.rules_dir))
     if not (HARNESS_ROOT / ".git").exists():
         die(f"{HARNESS_ROOT} 不是 git repo")
     pats = load_patterns()
@@ -424,6 +552,7 @@ def main() -> int:
     print(f"本機快照  HEAD={head[:12]}  未提交={dirty} 個檔（未提交的東西不會進備份）")
     print(f"規則      {len(pats)} 條，來源 {RULES_FILE}")
     print(f"mailmap   {'有' if mailmap else '無'}")
+    print(f"基準線    {'有' if BASELINE_FILE.is_file() else '無（棘輪判準會 FAIL）'}")
 
     work = Path(tempfile.mkdtemp(prefix="cloudbak-"))
     export = work / "export.git"
@@ -438,6 +567,13 @@ def main() -> int:
             for ref in run(["git", "-C", str(repo), "for-each-ref",
                             "--format=%(refname)", "refs/remotes"]).split():
                 run(["git", "-C", str(repo), "update-ref", "-d", ref])
+
+        if args.seed_token_baseline:
+            print("[2/2] 播種棘輪基準線（從未清洗的複製品全歷史撈 token）")
+            n = seed_token_baseline(blob_dump(pristine), pats)
+            print(f"  已寫入 {n} 個 token → {BASELINE_FILE}")
+            print("  接著跑 --check：播種後應該 0 個新 token；有的話是這段期間別的 session 又 commit 了。")
+            return 0
 
         print("[2/4] 清洗（只動複製品）")
         cmd = fr + ["--replace-text", str(RULES_FILE), "--force"]
@@ -455,6 +591,11 @@ def main() -> int:
 
         print("[3/4] 驗證")
         if not verify(export, pristine, HARNESS_ROOT, pats):
+            # 背景推的失敗紀錄只留輸出最後 8 行；FAIL 若在前段、細節（例如棘輪
+            # 列出的 token）就會被截掉。所以收尾再印一次，讓最後幾行就是原因。
+            print("\n  ── FAIL 摘要 ──")
+            for name, detail in verify.failures:
+                print(f"  ✗ {name}" + (f"\n    {detail}" if detail else ""))
             die("驗證沒過 —— **不推**。上面 FAIL 的那幾條要先修規則檔再重跑。", 2)
         print(f"  —— {verify.n_checks} 項全過")
 

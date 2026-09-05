@@ -262,7 +262,9 @@ def run():
         _seed_rules(repo)
         st, files, why = _h.rules_copy_state(repo)
         check("齊全未登記：回 never", st == "never", "%s %s" % (st, why))
-        check("齊全未登記：列得出涵蓋哪些檔", len(files) == 3, str(files))
+        # 對照清單長度、不寫死 3：2026-09-06 加第四個檔時這裡就紅過一次，
+        # 寫死的數字在加減檔時會無聲說謊。
+        check("齊全未登記：列得出涵蓋哪些檔", len(files) == len(_h.RULES_FILES), str(files))
 
         # 登記之後 fresh
         r = _run(repo, be, "--mark-copied")

@@ -62,7 +62,9 @@ RULES_SUBDIR = (".scratch", "cloud-export")
 # commit 進來等於把敏感清單公開列出）⇒ **這台機器壞了，從雲端還原的那份
 # 跑不起來清洗工具，再也推不出下一版**。所以副本存在別處是必要的，
 # 而「存了之後就再也沒更新」跟鏡像靜默分叉六天是同一個死法。
-RULES_FILES = ("replace-rules.txt", "mailmap.txt", "shape-allowlist.txt")
+# 2026-09-06 加 token-baseline.txt：棘輪判準的基準線，不在就整支 --check 紅。
+# 它跟其他三個一樣不進版控 ⇒ 副本缺它，還原後的那台推不出下一版。
+RULES_FILES = ("replace-rules.txt", "mailmap.txt", "shape-allowlist.txt", "token-baseline.txt")
 COPIED_MARK = "cloud_export_copied_at.txt"
 MAX_ROUNDS = 3          # HEAD 一直動就一直追是無底洞；三輪追不上就留給下一次 commit
 
