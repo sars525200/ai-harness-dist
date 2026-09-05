@@ -339,3 +339,93 @@ Phase 3 的關鍵數字「本機 10:54:40→12:27:33、fh 0%→96%、93 分鐘�
   這是刻意的設計（§0 已論證比例偏離不該叫），但代表它只在有人主動開看板時才有用。
 - **每回合脈絡大小沒有日彙總**：WIN-1 看單回合，但「今天平均每回合背 209K」這種數字
   才解釋得了 cache read 為什麼是大宗。
+
+## Phase 5 候選（2026-09-05 外查回來的對照表·**尚未選，逐項讓 user 決定**）
+
+來源：研究員①官方文件（39 次工具呼叫）、研究員②社群（45 次），交接檔 `.scratch/handoff/20260905-token-saving-research.md`。
+本節只做「對到本 repo 已有什麼」，不下決定。三欄判定：**可借鑑**＝別人做了我們沒有／**已有**＝本 repo 有等價物／**不適用**＝查了但不能用。
+官方頁：`code.claude.com/docs/en/{costs,prompt-caching,context-window,hooks,sub-agents,statusline,model-config,monitoring-usage,agent-view}`。
+
+### 5.0 一個先講的新數字（本則 `explain-usage` 實測）
+
+**開場第一回合脈絡 65,652 tokens**（system prompt＋工具清單＋skill 描述清單＋CLAUDE.md＋記憶＋輸出風格），之後每回合以快取讀取重付。
+`context-health` 量的常駐層是 18KB≈6k ⇒ **健檢只量得到房租的 1/10**，其餘 9/10（工具清單、skill 描述、MCP）沒有任何量測。
+官方 `/context` 能分類列出這 65k 的組成（未跑）。
+
+### 5.1 三個儀表缺口 × 外查結果
+
+| 缺口 | 外查找到什麼 | 本 repo 已有 | 判定 |
+|---|---|---|---|
+| A 並行 session 計數 | 官方 `claude agents --json` 列同機 session（cwd／state／pid，**無 token 數**）；≥2.1.224 有 registration files＋`/list-agents`（Windows 原生未提）；社群 Stargx/claude-code-dashboard 用 chokidar tail 全部 jsonl 列 session 狀態、**沒人做「數字化＋告警」** | `tools/check_before_start.py` §[1] 已用 jsonl 最後寫入時間判「熱」session（本則實跑：活著 2、熱 2）——**雛形已有，只差進看板與告警** | **已有雛形**，可借 `claude agents --json` 當第二資料源交叉 |
+| B 模型配比超標會叫 | 官方 statusline stdin 有 `rate_limits.five_hour/seven_day.used_percentage`，**沒有 Opus 專屬欄**；Usage-Monitor `--once` 用 exit code 0/10/11 給排程接告警；**沒有現成「Opus 佔比告警」** | 成本看板「成本與 mix」分頁看得到 94.8%；BUDGET-1 有告警管線 | **可借鑑 exit-code 形狀**，比例本身要自己從 jsonl 依 model 算（已在算） |
+| C 每回合脈絡日彙總 | 官方 statusline `context_window.current_usage`（含 cache_read）；OpenTelemetry `claude_code.token.usage`（依 type／model／`query_source`=main·subagent·auxiliary／skill.name 歸因）；社群 manavgup/context-analyzer 用 hook 寫 SQLite＋dashboard（賣點「tool I/O 佔 context >60%、30% 五回合內變死重」）；Genie-J/cc-healthcheck 量常駐層＋快取命中率＋system-reminder 注入次數（0★，新） | WIN-1 單回合；`20260905-quota-burn.md` 一次性算出 209k | **可借鑑**：OTel 歸因欄位是官方的、最穩；context-analyzer 的「哪些 tool 輸出變死重」是我們沒量過的維度 |
+
+### 5.2 路由迴圈四候選 × 外查結果
+
+| 候選 | 官方怎麼說 | 對到本 repo | 判定 |
+|---|---|---|---|
+| ①工作流反覆讀同一批檔 | 快取三層（系統→專案脈絡→對話），讀檔是對話層**追加**、不破快取；成本＝「每回合重送完整對話」；官方明寫建議 **CLAUDE.md 的流程細節搬到 skill 按需載入**；compact 時 skill 本體重注入每支上限 5,000 tokens、skill 描述清單不重載 | 五階段工作流全文在全域 `CLAUDE.md` §3（每回合付）；`session-workflow` skill 已存在但規則本體仍在 CLAUDE.md | **可借鑑**：§3 本體搬進 skill、CLAUDE.md 只留一行指路——這正是 `context-health` 該做的瘦身方向，但只動得到 6k 那一層 |
+| ②hook 每回合重跑＋便箋投遞 | stdout 進 context 的只有 `UserPromptSubmit`／`SessionStart`／`UserPromptExpansion`／`PostModelSwitch`；`additionalContext` 以 system-reminder 注入、>10,000 字元存檔只給預覽；官方：「Context cost: Zero, unless the hook returns additional context」。**issue #50998**（closed as not planned）：每次 Bash 產生約 3 個 `hook_success` 附件、全部在後續每回合重送，148 分鐘線性長到 661k。**cross-session message 送到閒置 session 會開新回合送全脈絡**（`crossSessionInbound: hold` 可擋） | 本 repo hook 走 `hooks/dispatch.py`，`UserPromptSubmit` 每回合跑；便箋投遞用的正是 cross-session message | **可驗證**：在 jsonl 數 system-reminder／hook 附件筆數與位元組，量出 hook 到底佔每回合多少；`crossSessionInbound: hold` 是零成本可試的開關 |
+| ③Opus 做 Sonnet 的活 | 官方無配額倍數數字（只寫「meaningfully more」；第三方一致說 Opus≈10+ 倍 Sonnet）；`opusplan`＝規劃 Opus 執行 Sonnet **但每次切換破快取重付全部 input**；`CLAUDE_CODE_SUBAGENT_MODEL` 可全域設 subagent 模型；**Explore 自 2.1.198 起繼承主對話模型**（不再固定 Haiku） | §4.2 目標 4:6、實測 94.8%；角色 frontmatter 有 `model` 欄 | **已有機制、沒生效**：Explore 繼承主模型這條表示「主 session 開 Opus 時所有內建 Explore 都是 Opus」，與角色 frontmatter 無關 |
+| ④其他 | **subagent／compact 的快取 TTL 固定 5 分鐘**，主對話 1 小時（用到 usage credits 後也降 5 分鐘）；**閒置 >5 分鐘整個 cache 失效**（#51218：900k context 一句話吃掉五小時桶 20%）；**不同 cwd 的 session 互不共享快取**；MEMORY.md 只載前 200 行或 25KB；`/usage` v2.1.251+ 有 `Prompt cache (main)` 命中率與 miss 原因；`CLAUDE_CODE_PROMPT_CACHE_TTL`／`subagentPromptCacheTtl`（v2.1.242+）可調 | 6 個 session 交錯閒置正是 #51218 的形狀；三個專案三個 cwd 各自暖快取 | **可借鑑**：先開 `/usage` 看 miss 原因（免費）；TTL 設定要先查本機版本 |
+
+### 5.3 現成品能不能直接裝
+
+| 工具 | 做什麼 | 判定 |
+|---|---|---|
+| ccusage（18.4k★） | 五小時桶、`--json`、statusline、依模型拆 | **不適用當儀表**：不算並行 session；訂閱制「桶用量而非美元」的 statusline 需求 #658 被 closed as not planned；`blocks --live` 已移除 |
+| Claude-Code-Usage-Monitor（8.7k★） | 讀 jsonl、P90 估上限、`--once` exit code 告警 | 可借 exit-code 形狀；**不計並行、不分模型門檻** |
+| manavgup/context-analyzer | hook→SQLite→dashboard，跨 session 散點 | **最接近缺口 C**，但是另一套 hook 與 DB，要評估與本 repo hook 共存 |
+| Genie-J/cc-healthcheck | 常駐層 token、快取命中率、system-reminder 次數、JSON 輸出 | 0★ 新專案；量的維度與 `context-health` 重疊、多了命中率與注入次數 |
+| ohugonnot/claude-code-statusline | 讀官方 `rate_limits`，fallback 打未公開 oauth usage 端點 | **不適用**：無 Windows |
+| claude.ai 技能市集（`SearchSkills` 六組關鍵字） | — | **0 筆** |
+
+### 5.4 沒找到的（兩位研究員合併，必填）
+
+- 官方 Opus:Sonnet 配額倍數的數字——只有第三方。
+- 官方「hook 每回合累積 token 成本」的量化——無；#50998 的 11 項提案無一採納，社群解法只有「拆 hook」。
+- 缺口 A「數字化並行 session 並告警」——沒有任何現成工具；「掃 jsonl mtime 排除自身」的 statusline 做法來源頁 403 未能驗證。
+- 缺口 B「Opus 佔比超標主動叫」——無現成品，官方 rate_limits 也無 Opus 欄。
+- 「Sonnet 當主 session」的實測百分比——只有經驗談。
+- env-vars 頁原文（`CLAUDE_CODE_MAX_OUTPUT_TOKENS`／`MAX_THINKING_TOKENS`）——頁面過長被截斷。
+- awesome-claude-code 的監控分類清單——首頁抓不到。
+- 官方 API 讀五小時配額的端點——無公開文件，只有 statusline JSON 一條路。
+
+### 5.4b 本機版本對照（`claude --version` 2026-09-05 實查＝**2.1.247**）
+
+| 官方功能 | 門檻 | 本機 |
+|---|---|---|
+| Explore 繼承主對話模型（候選③） | ≥2.1.198 | **已生效**——主 session 開 Opus 時內建 Explore 全是 Opus |
+| `subagentPromptCacheTtl` 可調 | ≥2.1.242 | 可用 |
+| `/usage` 的 `Prompt cache (main)` 命中率與 miss 原因 | ≥2.1.251 | **還沒有**，差 4 個小版 |
+| 同機 session registration files／`/list-agents` | ≥2.1.224 | 版本夠，但 Windows 原生未提，要實測 |
+
+### 5.4c 候選③被數字推翻一半（2026-09-05 21:20 實測，唯讀掃 `~/.claude/projects/**/*.jsonl` 近 7 天，加權讀 0.1／寫 2／輸出 5）
+
+| 類別 | 模型 | 佔比 | 回合 |
+|---|---|---|---|
+| 主 session | Opus | **71.5%** | 374 |
+| 主 session | Sonnet | 13.2% | 62 |
+| 主 session | Fable | 6.3% | 37 |
+| subagent | Fable | 4.3% | 16 |
+| subagent | Sonnet | 2.5% | 25 |
+| subagent | Opus | **1.7%** | 12 |
+
+**Opus 之內 97.7% 是主 session，subagent 只佔 2.3%。** ⇒ 「subagent 預設 Sonnet」這條槓桿幾乎搬不動 Opus 佔比——我在 21:10 的推薦是錯的，數字出來就撤。
+真正的量體是**主 session 開 Opus 的 374 回合**；§4.2「預設 Sonnet、M 級才升」的規則存在，實況是反的。
+Fable（最貴層，§4.2 目標 <5%）合計 **10.6%**，本則自己就在上面。
+
+**官方能不能「自動依難度換模型」**（`sub-agents`／`hooks` 頁 2026-09-05 查）：
+- subagent 模型解析順序＝**派工時的 `model` 參數 → 角色 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 主對話模型**。所以「判斷難度」的人是派工的主 session，本來就有這個把手，缺的是紀律不是機制。
+- **沒有任何 hook 能改模型**：`PreModelSwitch` 只能擋、`PostModelSwitch` 只能觀察；`PreToolUse` 不能改 tool input。
+- 主 session 的模型只有人用 `/model` 或 `opusplan`（規劃 Opus 執行 Sonnet，**每次切換破快取重付全部 input**）能換。
+- 官方明寫：沒有依任務難度或卡住自動換模型的機制。
+
+⇒ 可做的形狀只剩「**偵測錯配、提醒人切**」：自我宣告的 `規模 L/S/M` 是每個任務都已經產出的難度訊號，對上當前模型就能判「L/S 用 Opus」或「M 用 Sonnet」。
+hook 輸入的 `model` 欄**只有 `SessionStart` 有、且不保證給**（官方原文）；`Pre/PostModelSwitch` 給 `from_model`／`to_model`。
+但每個 hook 都拿到 `transcript_path`，jsonl 裡每則 assistant 訊息都帶 `model` ⇒ `UserPromptSubmit` 讀最後一則就知道當前模型，不必另外追蹤。宣告的規模欄本 repo 的成本歸因已在機器讀。
+
+### 5.5 狀態
+
+2026-09-05 21:00：對照表落檔，**未選任何一項**。
+2026-09-05 21:20：5.4c 補實測，候選③改向「主 session 錯配提醒」，等 user 選形狀。下一步是逐項讓 user 用選擇題選要不要進 Phase 5。

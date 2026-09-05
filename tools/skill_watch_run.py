@@ -275,15 +275,35 @@ def assert_neutral_cwd() -> None:
     """中性目錄必須是**執行期斷言**，不是註解裡的一次性人工查核（覆核 N-11）。
 
     `HARNESS_ROOT` 是 hook 與規則的開發現場。哪天為了測 hook 在這裡建了
-    `.claude\\settings.json` 並掛上 `Stop`，F-9 的整個前提就無聲失效——
+    `.claude\\settings.json` 並掛上任何事件，F-9 的整個前提就無聲失效——
     每次跑都會在 harness repo 觸發那個 hook，而註解仍寫著「實查無 .claude＝中性」。
     （原始情境是排程每晚跑；改成手動後頻率降低，但踩到時的後果一樣。）
+
+    ⚠ 判準是「**settings 宣告了 hooks**」，不是「目錄存在」（SKILL_WATCH_PLAN §19）。
+    2026-09-05 實況：平台自己會在 `<harness>\\.claude\\` 寫 `scheduled_tasks.lock` 與
+    `worktrees\\`（不在版控、刪了會再建），原本的 `.exists()` 從此每次拒跑、基準停住。
+    威脅模型從來就是 hook；目錄只是它的容器。設定檔壞掉一樣拒跑——證不出中性就不跑。
     """
-    if (HARNESS_ROOT / ".claude").exists():
-        raise RunError(
-            f"{HARNESS_ROOT}\\.claude 出現了——F-9 的「中性目錄」前提失效。"
-            "這個目錄可能已掛上 hook，在此跑 claude -p 會觸發它。"
-            "請改用其他中性目錄，或確認該設定不含 Stop hook 後調整本斷言。")
+    cdir = HARNESS_ROOT / ".claude"
+    if not cdir.exists():
+        return
+    seen = sorted(p.name for p in cdir.iterdir())
+    for fname in ("settings.json", "settings.local.json"):
+        f = cdir / fname
+        if not f.exists():
+            continue
+        try:
+            cfg = json.loads(f.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise RunError(
+                f"{f} 讀不出合法 JSON（{exc}）——證不出它沒掛 hook，F-9 拒跑。") from exc
+        hooks = cfg.get("hooks") if isinstance(cfg, dict) else None
+        if hooks:
+            events = ", ".join(sorted(hooks)) if isinstance(hooks, dict) else str(hooks)
+            raise RunError(
+                f"{f} 宣告了 hooks（{events}）——在此跑 claude -p 會觸發它，"
+                "F-9 的「中性目錄」前提失效。請先把 hook 移出 harness 根目錄的 .claude。")
+    print(f"[F-9] {cdir} 存在但無 hook（內容：{', '.join(seen) or '空'}）→ 視為中性")
 
 
 def capture_headless(budget: float) -> list[str]:

@@ -316,6 +316,7 @@ def run(verbose: bool = True):
                test_toggle_gate_refuses_platform_without_capture_impl,
                test_skillmd_documents_toggle_gate,
                test_skillmd_report_spec_covers_what_the_tool_prints,
+               test_neutral_cwd_assertion_targets_hooks_not_directory,
                selftest_toggle_gate):
         try:
             fn()
@@ -552,6 +553,54 @@ def test_skillmd_report_spec_covers_what_the_tool_prints() -> None:
         check("工具若仍說「本機沒有」，必須同時印出但書",
               "不等於" in src,
               "3 支已實證的假陽性：doctor（內建指令）／verify／batch（打 / 補得出來）")
+
+
+def test_neutral_cwd_assertion_targets_hooks_not_directory() -> None:
+    r"""F-9 斷言要量的是「有沒有宣告 hook」，不是「有沒有那個資料夾」（SKILL_WATCH_PLAN §19）。
+
+    2026-09-05 實況：平台自己在 `<harness>\.claude\` 寫了 `scheduled_tasks.lock`（不在版控、
+    刪了會再建），原斷言只看 `.exists()` ⇒ 從此每次 exit 2、基準停在 09-03。
+    docstring 寫的威脅模型是「settings 掛上 Stop」，判準卻是目錄存在——與 §18 ⑩ 同型。
+
+    五案例；**b 是今天的現場，在改斷言之前必紅**（這一條就是「先證明它會紅」）。
+    c 放任何事件都該擋（headless 跑起來哪個 hook 都可能觸發，不只 Stop）。
+    """
+    saved = dict(_path_consts())
+    cases = (
+        ("a 沒有 .claude", None, None, False),
+        ("b 只有平台鎖檔（今天的現場）", "scheduled_tasks.lock", '{"pid":1}', False),
+        ("c settings 宣告 Stop hook", "settings.json",
+         '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}]}}', True),
+        ("d settings 無 hooks", "settings.json", '{"permissions":{"allow":[]}}', False),
+        ("e settings 不是合法 JSON", "settings.local.json", '{"hooks":', True),
+    )
+    try:
+        for label, fname, body, expect_raise in cases:
+            with tempfile.TemporaryDirectory() as td:
+                tmp = Path(td)
+                if fname:
+                    (tmp / ".claude").mkdir()
+                    (tmp / ".claude" / fname).write_text(body, encoding="utf-8")
+                m._set_paths(tmp)
+                buf, real = io.StringIO(), sys.stdout
+                sys.stdout = buf
+                try:
+                    m.assert_neutral_cwd()
+                    raised, msg = False, ""
+                except m.RunError as exc:
+                    raised, msg = True, str(exc)
+                finally:
+                    sys.stdout = real
+                check(f"F-9 {label}：{'拒跑' if expect_raise else '放行'}", raised == expect_raise,
+                      f"raised={raised} msg={msg[:80]}")
+                if label.startswith("c"):
+                    check("F-9 c：訊息點名事件（Stop）", "Stop" in msg, msg[:120])
+                if label.startswith("b") and not raised:
+                    check("F-9 b：放行時要印出看到了什麼，不能沉默",
+                          "scheduled_tasks.lock" in buf.getvalue(), buf.getvalue()[:120])
+    finally:
+        for k, v in saved.items():
+            setattr(m, k, v)
 
 
 if __name__ == "__main__":

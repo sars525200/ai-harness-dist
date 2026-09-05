@@ -299,3 +299,82 @@ ccusage 有 7/148 個 session 對不上（它少算）、sonnet-5 優惠價未�
 | ⏳ 待做 | 票 09 規模 × 派工強度第一版要存哪些欄位 | issues/09 |
 | ✅ 已完成 | 票 10 cost_panel 的語料範圍與宣告偵測口徑 | 單一真相；未標記 6.5%→1.2% |
 <!-- REVIEW_SCOPE_IGNORE_END -->
+
+## §9 MOD-1 模型錯配提醒（2026-09-05 開·**計畫段·等逐項同意才動程式**）
+
+### 9.1 現況（實測，非推論）
+
+近 7 天加權用量（唯讀掃 `~/.claude/projects/**/*.jsonl`，讀 0.1／寫 2／輸出 5）：
+
+| 類別 | 模型 | 佔比 | 回合 |
+|---|---|---|---|
+| 主 session | Opus | **71.5%** | 374 |
+| 主 session | Sonnet | 13.2% | 62 |
+| 主 session | Fable | 6.3% | 37 |
+| subagent | Fable | 4.3% | 16 |
+| subagent | Sonnet | 2.5% | 25 |
+| subagent | Opus | 1.7% | 12 |
+| 主 session | Haiku | 0.5% | 2 |
+
+**Opus 之內 97.7% 是主 session。** 全域 `settings.json` 的 `model` 一直是 `opus[1m]`
+⇒ 每一則新對話開場就是 Opus，§4.2「預設 Sonnet、M 級才升」從來沒有承載體，
+只寫在散文裡。**2026-09-05 21:35 已改成 `sonnet[1m]`**（兩份副本：`~\.claude\settings.json`
+與 `global/settings.json`，JSON 皆驗過）。Fable 合計 10.6%，§4.2 目標 <5%。
+
+### 9.2 官方可行性（2026-09-05 查 `sub-agents`／`hooks` 官方頁）
+
+- **沒有任何 hook 能換模型**：`PreModelSwitch` 只能擋、`PostModelSwitch` 只能觀察、
+  `PreToolUse` 不能改 tool input。官方明寫沒有依難度或卡住自動換模型的機制。
+- subagent 模型解析順序：**派工時的 `model` 參數 → 角色 frontmatter → `CLAUDE_CODE_SUBAGENT_MODEL` → 主對話模型**。
+  ⇒ 判斷難度的人本來就是派工的主 session，把手已經有，缺的是紀律。
+- 主 session 只有人用 `/model` 或 `opusplan` 能換（後者每次切換破快取重付全部 input）。
+- hook 輸入的 `model` 欄**只有 `SessionStart` 有、且不保證給**；但每個 hook 都拿到
+  `transcript_path`，jsonl 每則 assistant 訊息都帶 `model` ⇒ 讀最後一則就是當前模型。
+
+⇒ **能做的只有「偵測錯配、提醒人切」**，不能自動換。名字叫 MOD-1。
+
+### 9.3 做法
+
+新增 `hooks/rules/mod1_model_scale_match.py`，`UserPromptSubmit`（走現有 `dispatch.py`，不新增 hook 佈線）：
+
+1. 從 `transcript_path` 反向讀最後一則 assistant 訊息的 `message.model` → 當前模型家族。
+2. 從本輪 assistant 文字取宣告的 `規模` 欄。**正則不自己寫**——沿用
+   `dashboard/gen_workflow_compliance.py:174` 的 `scale`，比照 DECL-1 的做法各留一份
+   ＋測試驗逐字相同（`hooks/` 不 import `dashboard/`）。
+3. 判準（只有兩種錯配會講，其餘沉默）：
+   - `規模 L` ＋ Opus／Fable → 「輕量任務用重模型」
+   - `規模 M` ＋ Sonnet／Haiku → 「大型任務用輕模型」
+   - `規模 待定`／無宣告 → **沉默**（DECL-1 已經在管沒宣告這件事，不重複叫）
+4. `warn` 不 `block`。訊息帶「現在是什麼、宣告是什麼、建議切成什麼」三段。
+5. **同一則對話同一個方向只講一次**（比照 BUDGET-1 的去重，但 key 是 `session_id + 方向`，
+   不是「一天一次」——換方向要能再講）。
+
+### 9.4 驗證（動工前寫好）
+
+`tests/test_mod1.py`，每條都要答得出「怎麼證明它會紅」：
+
+| 案例 | 輸入 | 期望 |
+|---|---|---|
+| a | 規模 L ＋ model=claude-opus-5 | WARN，訊息含「L」與「Opus」 |
+| b | 規模 M ＋ model=claude-sonnet-5 | WARN，方向相反 |
+| c | 規模 M ＋ model=claude-opus-5 | 沉默（這是對的配置） |
+| d | 規模 待定 | 沉默 |
+| e | 無宣告 | 沉默（交給 DECL-1） |
+| f | transcript 讀不到 | 沉默，**不猜模型**（比照 QUOTA-1 資料源不新鮮就閉嘴） |
+| g | 同一 session 第二次同方向 | 只講一次 |
+| h | 正則與 `gen_workflow_compliance.py` 逐字相同 | 一邊改了另一邊沒跟 → 紅 |
+
+跑 `py -3 tests/test_mod1.py` ＋ `py -3 tests/run_hook_tests.py` 回歸網不掉，
+再用 `hooks/` 既有的假 payload 機制端到端餵一次。
+
+### 9.5 不做什麼
+
+- 不自動換模型（官方做不到，硬做就是假承載體）。
+- 不管 subagent 的模型（占 Opus 2.3%，量體不值得）。
+- 不擋（BLOCK）——錯配不是錯誤，是取捨，人有權選。
+
+### 9.6 狀態
+
+- 2026-09-05 21:35：預設值已改（見 9.1）。**MOD-1 本體＝計畫段，一行程式都還沒寫，等 user 逐項同意。**
+- 待驗：預設值改動要**開一則新對話**才看得到效果（本則已在 Opus 上，不受影響）；
+  七天後對帳看 Opus 佔比有沒有從 71.5% 掉下來。誰跑：user 開新對話時自然驗到。

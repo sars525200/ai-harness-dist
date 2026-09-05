@@ -1275,3 +1275,56 @@ user 回報 `debug`／`deep-research`／`design-sync`／`run-skill-generator` **
 規則沒有承載體（⑦）、指路指錯（⑧）、探針釘在會變的字串上（⑨）、
 **判準本身測的是另一件事**（⑩）。**每一次都是 user 看了輸出覺得不對才挖出來的，
 沒有一次是測試先發現的。**
+
+## 19. F-9 中性目錄斷言過度攔截（2026-09-05 · 省 token 研究線撞到 · M 級計畫段）
+
+### 19.1 現況（實查，非推論）
+
+- 2026-09-05 20:45 手動跑 `skills/skill-watch/run.py` → **exit 2**，訊息「`<harness>\.claude` 出現了——F-9 的中性目錄前提失效」。
+- `<harness>\.claude\` 內容：`scheduled_tasks.lock`（124 bytes，2026-09-04 00:16，內容是某 session 的 pid／sessionId）＋空目錄 `worktrees\`（2026-09-03 00:05）。
+  **無 `settings.json`、無 `settings.local.json`、無任何 hook**。兩樣都是**平台自己寫的**，不在版控、不是人建的。
+- `tools/skill_watch_run.py:282` 的 `assert_neutral_cwd()` 只做 `(HARNESS_ROOT / ".claude").exists()`——它自己的 docstring 寫的威脅模型是「建了 `settings.json` 並掛上 `Stop`」，但判準量的是目錄存不存在。
+  ⇒ 與 §18 ⑩ 同型：**判準測的是另一件事**。而且這次是平台常態行為觸發，不是人違規。
+- 同一支已有 `settings_files()`（`:229`）把 `HARNESS_ROOT\.claude\settings*.json` 列進 JSON 合法性檢查，hook 感知的檢查應該放在它旁邊，不是另起一套路徑。
+- 基準 `SkillViewer/platform_skills.json` 停在 2026-09-03。**不修就永遠 exit 2、`_p_skill_watch_alive` 轉紅**。
+
+**附帶發現（另開票，不在本節修）**：harness `CLAUDE.md` 明寫「禁止在本 repo 建 `.claude/`，`discover_projects()` 會把地基誤認成部門專案」。
+實查 `dashboard/gen_layers.py:255` 判準正是 `(child / ".claude").is_dir()`，`scanRoots=['D:\Patrick-AI']` ⇒ **看板現在應已把 `.ai-harness` 列成一個專案**（未開 8099 驗）。落點 `TODOS.md` 全域·需求表。
+
+### 19.2 目標與非目標
+
+- 目標：斷言只在 **`<harness>\.claude\settings.json`／`settings.local.json` 宣告了非空 `hooks`** 時拒跑（任何事件都算——headless 跑起來哪個 hook 都可能觸發，不只 Stop）；JSON 壞掉也拒跑（證不出中性）。
+  目錄存在但沒有設定檔、或設定檔沒有 hooks → **放行並印一行看到了什麼**，不沉默。
+- 非目標：不刪 `.claude\`（平台會再建）；不改中性目錄的位置；不動 `discover_projects()`。
+
+### 19.3 做法
+
+1. `assert_neutral_cwd()` 改成：對 `[settings.json, settings.local.json]` 逐個 `json.loads`；壞 JSON → `RunError`；`hooks` 非空 → `RunError` 並列出事件名；否則 `print("[F-9] … 存在但無 hook（內容：<檔名清單>）→ 視為中性")`。
+2. docstring 同步改寫威脅模型那段，把「目錄存在＝失效」訂正成「宣告 hook＝失效」。
+3. 錯誤訊息末句「或確認該設定不含 Stop hook 後調整本斷言」刪掉——那句是給這一次的人看的，修完就沒有讀者。
+
+### 19.4 驗證（動工前寫好）
+
+新增 `tests/test_skill_watch_run.py::test_neutral_cwd_assertion_targets_hooks_not_directory`，用 `m._set_paths(tmp)` 注入 root，五個案例：
+
+| 案例 | tmp 裡放什麼 | 期望 |
+|---|---|---|
+| a | 沒有 `.claude\` | 放行 |
+| b | `.claude\scheduled_tasks.lock` 只有鎖檔（＝今天的現場） | 放行 — **這一條在改之前必紅**，就是「先證明它會紅」 |
+| c | `settings.json` 含 `{"hooks":{"Stop":[…]}}` | `RunError` 且訊息含 `Stop` |
+| d | `settings.json` 含 `{"permissions":{}}` 無 hooks | 放行 |
+| e | `settings.json` 不是合法 JSON | `RunError` |
+
+順序：先加測試跑一次看 b 紅 → 改程式 → 全綠 → `py -3 tests\run_hook_tests.py` 回歸網不掉 → **真跑 `skills/skill-watch/run.py`** 到 exit 0、基準前進到 09-05、講基準日期。
+
+### 19.5 狀態
+
+- 2026-09-05 20:55：計畫段寫好，等 user 點頭。
+- 2026-09-05 21:10：**user 點頭，已做**。順序照 19.4：
+  - 先加測試跑一次：**b、d 兩案例紅**（46 通過／2 失敗）——證明它會紅。
+  - 改 `assert_neutral_cwd()`（`tools/skill_watch_run.py`）：逐檔 `json.loads` `settings.json`／`settings.local.json`，壞 JSON 或 `hooks` 非空 → `RunError`（訊息點名事件）；否則印 `[F-9] … 存在但無 hook（內容：…）→ 視為中性`。
+  - 重跑：**49 通過／0 失敗**；平台開關測試 34／0。
+  - 回歸網 `tests/run_hook_tests.py`：**1909／1911**，2 條失敗是「接線探針 P9 標記過期」，與本次兩個檔無關（**未在 HEAD 上反證**——工作區另有別條線 6 個未 commit 的 `hooks/*.py`，無法乾淨切回去比）。
+  - 真跑 `skills/skill-watch/run.py`：**exit 0**，印出 `[F-9] … 內容：scheduled_tasks.lock, worktrees → 視為中性`；headless 基準 2026-08-24（16 支）→ 現在 16 支，無變動；官方文件新增 1 項 `workflow-authoring`。
+- 沒做的：`.claude\` 目錄本身沒動（平台會再建）；看板 `discover_projects()` 誤認問題另在 `TODOS.md` 記票。
+- 測試裡一個弱點要講：c 案例的「訊息點名 Stop」在改之前也綠（舊訊息恰好含 "Stop hook" 字樣），它守的是新訊息格式、不是舊 bug。b、d 才是紅線。
