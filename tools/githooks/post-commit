@@ -33,6 +33,21 @@ if [ -f "$ROOT/tools/cloud_backup_hook.py" ]; then
     $PY "$ROOT/tools/cloud_backup_hook.py" --spawn 2>&1 | head -2 >&2 || true
 fi
 
+# ── 記憶備份（2026-09-05 加）──────────────────────────────────────────────
+# Claude Code 的記憶檔在使用者目錄、不在任何 repo 裡 —— 換機器就沒了，而且不會有
+# 提示。2026-09-05 盤點時 harness 自己那份是零備份。
+#
+# 它走**獨立的 repo**（位置寫在 harness.config.json 的 memoryRepo），刻意不接進
+# 這個 repo：這個 repo 每次 commit 都自動推雲端，記憶不該上去。走獨立 repo 是為了
+# 「根本沒有那條路」，而不是靠某個設定擋著 —— 靠設定擋的東西，改錯了不會有人知道。
+#
+# 一輪 1 秒內（本機小 repo 的 commit ＋ push），所以前景跑，不需要背景與鎖。
+# 沒設定就安靜跳過；設定了卻壞掉會落 state/memory_backup_failed.txt。
+if [ -f "$ROOT/tools/memory_backup_hook.py" ]; then
+    if command -v py >/dev/null 2>&1; then MPY="py -3"; else MPY="python3"; fi
+    $MPY "$ROOT/tools/memory_backup_hook.py" --run --quiet >/dev/null 2>&1 || true
+fi
+
 git remote | grep -qx backup || exit 0
 
 ERR=$(git push -q backup --all 2>&1)
