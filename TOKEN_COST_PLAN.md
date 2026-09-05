@@ -244,6 +244,47 @@ user 另外自己想到、也**不列入本檔新增項**的：雲端快取、�
 
 ## §8 狀態
 
+### 8.1 已施作（2026-09-06，commit `ed7bc5a`）
+
+| 動了什麼 | 為什麼是這個值 | 落點 |
+|---|---|---|
+| 刪掉「起頭切 Opus、收尾切回 Sonnet」，改成**開場選定並全程用它** | 實測前綴 17.3 萬時，一個任務切兩次＝該則總量的 19.6% | `global/CLAUDE.md` §4.2＋hub 副本＋`~\.claude\CLAUDE.md` 三份同步 |
+| 新增「對話長度是最大的成本」一條 | cache_read 實測 53.6%，是最大單一項 | 同上 |
+| `effortLevel` **high → medium** | output 實測 32.4%，thinking 算 output | `global/settings.json`＋`~\.claude\settings.json` 兩份，改後過 `json.loads`、鍵數 14 不變 |
+| 新增 `tools/token_usage_breakdown.py` | 量測要能重跑，不能只留在對話裡 | harness `tools/` |
+
+**為什麼敢兩項一起動**（user 選「兩個一起做」，我原本標了歸因風險，這裡撤回）：
+兩項落在逐字檔的**不同欄位**——對話長度動的是 `cache_read_input_tokens`，
+effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後分得開**，
+不構成「同時變多項就分不出誰起的作用」那一型。
+
+### 8.2 沒做的
+
+- **B 批全部沒裝**（`bashOutputMaxChars`／兩個 cache TTL／`CLAUDE_CODE_SUBAGENT_MODEL`／
+  `skillListingMaxDescChars`）。理由：先看這兩項的效果，且 B-4 卡在 §5 陷阱 1 未驗。
+- **C 批只落實 C-1**：手工 token 對照表**從未實際存在**（全 repo grep 只命中本檔），
+  所以「退休」等於「不要新建」，改用 `tools/token_usage_breakdown.py` 與 `/usage` 歸因。
+  C-2～C-5 未動。
+- **§5 陷阱 1 未驗**，B-4 因此不得裝。
+
+### 8.3 待驗清單（四欄齊全）
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| §4.2 新規則與 `effortLevel` 是否生效 | 【官方明文】設定檔每則對話開場重讀；CLAUDE.md 中途改**不生效**，要等 `/clear` 或重啟 | 開一則新對話，跑 `py -3 tools/token_usage_breakdown.py -n 3`，比對 output 佔比是否從 32.4% 下降 | 我（下一則） |
+| §5 陷阱 1：環境變數是否蓋掉 skill frontmatter 的 model | 需要看 `/tasks` 面板，桌面版這則看不到 | 設 `CLAUDE_CODE_SUBAGENT_MODEL=haiku`，派一個 frontmatter 寫高階模型的角色，開 `/tasks` 看實際模型 | user |
+| `/usage` 有沒有「依技能／子代理／MCP」歸因區塊 | 桌面版不接終端機型斜線指令 | 終端機跑 `claude`，進去打 `/usage` | user |
+| 介面選單切 Sonnet 後的效果 | 只有 user 能操作選單 | 切完開新對話不碰選單，跑同一支腳本比對 | user 切、我量 |
+
+### 8.4 基準線（下次對照用這組）
+
+本則對話 `7f3bfeb7` 前 100 回合、全 `claude-opus-5`、`effortLevel: high`：
+`cache_read` 53.6%／`output` 32.4%／`cache_write` 14.0%，最大前綴 173,089。
+
+---
+
+## §9 原始狀態欄
+
 - **2026-09-06 立案。§1 的數字全部是本機實測，§4／§5 的依據全部標了等級。**
 - **未動工。** 未經 user 逐項討論前不改任何規則、不裝任何旋鈕。
 - 前置阻塞：`MODEL_ROUTING_PLAN.md` §9.15（介面選單切 Sonnet，只有 user 能做）。
