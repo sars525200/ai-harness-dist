@@ -350,6 +350,51 @@ def _cloud_remote(repo: Path) -> str:
     return v if isinstance(v, str) else ""
 
 
+_GITHUB_URL_RE = re.compile(
+    r"github\.com[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$")
+
+
+def _collab_count_line(url: str, skip_net: bool) -> bool:
+    """報一行「雲端備份 repo 的協作者數是不是只有 owner」。回「有沒有異常」。
+
+    存在的理由：`CLOUD_BACKUP_PLAN.md` §7 P2 裁定**備份 repo 永遠零協作者**——
+    散佈第三方一律走另開的 repo，不能圖方便直接在備份 repo 加 Read。這個裁定
+    只寫在文件裡沒有東西會守住它：文件不會在有人手滑加了協作者時叫出來。
+
+    只認 github.com 的 URL（這條線目前只服務這一種遠端）；解析不出來就不是
+    這支程式能查的範圍，靜默跳過而不是硬猜。
+
+    fail-open：`gh` 不存在、沒登入、離線、API 讀不到，一律印「沒有答案」
+    不算異常——這條線抓的是「有沒有人加了協作者」，不是「gh 能不能用」，
+    兩件事的失敗不該互相冒充。
+    """
+    m = _GITHUB_URL_RE.search(url)
+    if not m:
+        return False
+    if skip_net:
+        out("    -- 協作者數 --no-vm → 跳過")
+        return False
+    owner, name = m.group(1), m.group(2)
+    rc, txt = run(["gh", "api", "repos/%s/%s/collaborators" % (owner, name),
+                   "--jq", "length"], timeout=SSH_TIMEOUT)
+    if rc != 0 or not txt.strip().isdigit():
+        out("    [!] 協作者數讀不到（%s）—— 沒有答案，不是沒問題"
+            % (txt.strip()[:80] or "gh 不存在或未登入"))
+        return False
+    count = int(txt.strip())
+    if count <= 1:
+        out("    [OK] 協作者數 %d（只有 owner）" % count)
+        return False
+    _, who = run(["gh", "api", "repos/%s/%s/collaborators" % (owner, name),
+                  "--jq", r"[.[].login] | join(\", \")"], timeout=SSH_TIMEOUT)
+    out("    [!!] 協作者數 %d（應該只有 owner 1 人）—— %s"
+        % (count, who.strip() or "讀不到名單"))
+    out("         這個備份 repo 不該有協作者（§7 P2）。要交人走另開的散佈 repo，"
+        "不是在這裡加人：gh api -X DELETE repos/%s/%s/collaborators/<login>"
+        % (owner, name))
+    return True
+
+
 def _rules_copy_line(repo: Path) -> None:
     """報一行「清洗規則檔的副本還新不新鮮」。
 
@@ -403,6 +448,7 @@ def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
         return False
     out("    ── 雲端備份（清洗複製品，%s）" % url)
     _rules_copy_line(repo)
+    collab_bad = _collab_count_line(url, skip_net)
     last = repo / "state" / "cloud_backup_last.json"
     lock = repo / "state" / "cloud_backup.lock"
     failed = repo / "state" / "cloud_backup_failed.txt"
@@ -421,7 +467,7 @@ def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:
     cloud_tip = str(data.get("cloud_tip", ""))
     ok = bool(data.get("ok"))
     at = data.get("at", "?")
-    stale = False
+    stale = collab_bad
     if not ok:
         out("    [!!] 最後一輪 %s **失敗**（exit %s）—— 見 state/cloud_backup_failed.txt"
             % (at, data.get("exit")))

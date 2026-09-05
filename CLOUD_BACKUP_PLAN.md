@@ -383,5 +383,19 @@ py -3 tools/push_cloud_backup.py --seed-token-baseline   # 只在第一次；檔
 ### 7.6 沒做的（不是忘了）
 
 - **沒建散佈 repo、沒實跑 `--remote` 推第二個 repo**：現在沒有人要接。待驗四欄→ 項目＝步 2 對第二個 remote 推得過且雲端 tip 一致／為何沒驗＝repo 不存在／指令＝步 1＋步 2 逐字／誰跑＝交人那天的我。
-- **沒做「V1 自動核對」守門**（例如接進 `tools/check_before_start.py`）：綁後果的判準是「備份 repo 協作者數 ≠ 1 就紅」，寫得出來，但現在它永遠綠。要做就升 S，分支指令：`py -3 tools/check_before_start.py` 加一項讀 V1，變異＝暫時加一個協作者看它紅不紅（要 user 按）。
 - **沒改 §6 的 hook**：散佈 repo 刻意不接自動推，這是設計不是缺口。
+
+### 7.7 V1 自動核對已接進 `check_before_start.py`（2026-09-06）
+
+`[4]` 備份鏡像那段現在會自己查 V1，不必記得手動跑：`_collab_count_line()` 對雲端備份 URL 打
+`gh api repos/<owner>/<repo>/collaborators --jq length`，count ≤ 1 印 `[OK]`，> 1 印 `[!!]` 並點名
+是誰、附刪除指令。**只對 github.com 的 URL 生效**、`--no-vm` 會跳過（那是網路呼叫）、`gh` 失敗或
+沒登入一律 fail-open 印「沒有答案」——那條線抓的是「有沒有人加了協作者」，不是「gh 能不能用」，
+兩種失敗不能長得一樣，否則守門會被自己的雜訊淹沒。
+
+**驗證**（不動正式 repo，用假的 `gh` 換掉——理由同 §3「工具自己被驗過什麼」對真推的處理）：
+`tests/test_check_before_start_collab.py` 5 案例、11 條斷言全 PASS，含變異證明：拿掉紅色判準
+（`count <= 1` 改成 `count <= 100`）→ 3 條斷言轉紅，點名「count=3：算異常」「訊息點名」「查了名單」；
+還原後全線復綠。真實跑一次 `py -3 tools/check_before_start.py`（無 `--no-vm`）對現在的備份 repo
+印 `[OK] 協作者數 1（只有 owner）`，`--no-vm` 印跳過、不打網路；exit code 不受影響（本來就是
+fail-open 不擋開工的既有契約）。
