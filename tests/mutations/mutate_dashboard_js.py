@@ -14,15 +14,22 @@ r"""對看板**內嵌 JS／CSS** 做變異，確認 test_layers 與 test_cost_pa
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.shell.html"
-TESTS = [r"D:\Patrick-AI\.ai-harness\tests\test_layers.py",
-         r"D:\Patrick-AI\.ai-harness\tests\test_cost_panel.py"]
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "dashboard", "harness-dashboard.shell.html")
+# ⚠ 這兩條在**清單的項目裡**，沒有自己的名字 ⇒ `_selfref_abs_paths()` 的硬判定
+#   看不到它們（只收有名字的指派，理由見 `tools/wiring_probe.py`）。
+#   也就是說：寫回絕對路徑不會有任何東西叫，只能靠人工複查。
+TESTS = [os.path.join(_ROOT, "tests", "test_layers.py"),
+         os.path.join(_ROOT, "tests", "test_cost_panel.py")]
 
 
 def read():

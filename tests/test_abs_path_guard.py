@@ -65,7 +65,7 @@ B4 在 2026-09-05 把 `hooks\` 三處與回歸網五處的寫死絕對路徑拆�
 ## 刻意不涵蓋的
 
 - **`tests\mutations\` 底下那 59 處**：明列豁免，票開在 `TODOS.md`。
-  25 支腳本、其中兩支是別條線的在製品，而它們是手動跑的開發工具、
+  **29 支**腳本（實掃數，原票寫的 25 是估的），它們是手動跑的開發工具、
   不在回歸網的執行路徑上。**豁免是整個前綴 ⇒ 那個目錄裡新長出來的看不見。**
 - **沒有名字的常數**：dict 的值、tuple 的項。硬判定只收有名字的指派，
   否則全 repo 約 60 條「印給人看」的說明字串會湧進來、守門永遠紅著沒人看。
@@ -154,14 +154,18 @@ def _cases(M):
              not any("橫幅.py" in f for f, _l, _n, _v in hits),
              "湧入：%r" % (hits,))
 
-        # ── 6. 豁免只吃前綴，不得擴大 ──────────────────────
+        # ── 6. tests/ 底下沒有任何角落是免驗的 ──────────────
+        # 2026-09-05 當日改過一次：原本 `tests/mutations/` 掛著前綴豁免，
+        # 同日 29 支全部改成自推並逐支實跑驗過，豁免拿掉 ⇒ 這裡改成兩個目錄都要抓到。
+        # 留著這兩條的理由不變：**豁免一旦長大就沒有東西擋得住它**，
+        # 而豁免長大不會報錯，只會讓守門愈守愈少。
         _write(root / "tests" / "mutations" / "mutate_假的.py",
                'TARGET = r"%s"\n' % (root / "hooks" / "x.py"))
         _write(root / "tests" / "test_不該被豁免.py",
                'D = r"%s"\n' % (root / "dashboard"))
         hits = M._selfref_abs_paths(root)
-        case("豁免涵蓋 tests/mutations/",
-             not any("mutate_假的.py" in f for f, _l, _n, _v in hits))
+        case("tests/mutations/ 底下的自指寫死要抓到（豁免已拿掉）",
+             any("mutate_假的.py" in f for f, _l, _n, _v in hits))
         case("豁免不得擴大到整個 tests/",
              any("test_不該被豁免.py" in f for f, _l, _n, _v in hits),
              "豁免吃掉了 tests/ 根底下的檔 —— 那正是這次要守的六處所在")
@@ -177,6 +181,12 @@ def _cases(M):
 
     # ── 8. 豁免清單不得留下空頭條目 ──────────────────────────
     # 豁免留著卻沒有對象＝一張沒有人在看的清單，下次有人擴大它時沒有阻力。
+    # ⚠ **空清單本身不是綠燈也不是紅燈**，所以要有一條 case 明說它現在是空的——
+    #   否則「豁免被清空」與「這個迴圈一條都沒跑到」在輸出上完全同形（少兩條而已）。
+    case("豁免清單目前是空的（有人加回來時下面兩條會開始檢查）",
+         len(M._SELFREF_EXEMPT) == 0,
+         "現有 %d 條：%r" % (len(M._SELFREF_EXEMPT),
+                            [p for p, _w in M._SELFREF_EXEMPT]))
     for prefix, why in M._SELFREF_EXEMPT:
         target = _ROOT / prefix.replace("/", "\\")
         case("豁免條目 %r 在 repo 裡真的有對象" % prefix, target.exists())

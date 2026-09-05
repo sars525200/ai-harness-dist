@@ -17,14 +17,18 @@ r"""對**計畫書實跑節的數字**做變異，確認 test_wiring_probe.py �
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-PLAN = r"D:\Patrick-AI\.ai-harness\UNIVERSAL_HARNESS_PLAN.md"
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_wiring_probe.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PLAN = os.path.join(_ROOT, "UNIVERSAL_HARNESS_PLAN.md")
+TEST = os.path.join(_ROOT, "tests", "test_wiring_probe.py")
 
 # 四元組：(說明, 要動哪個檔, 錨點, 換成什麼)。被測物是文件，不是程式。
 MUTATIONS = [

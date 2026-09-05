@@ -195,7 +195,7 @@ def test_state_write_failure_is_not_fatal(tmpdir):
 
 
 def test_file_path_beats_cwd(tmpdir):
-    """8. 被改的檔案決定基準，不是 session 在哪開的。
+    r"""8. 被改的檔案決定基準，不是 session 在哪開的。
 
     在 A 專案的 session 裡改 B 專案的 CLAUDE.md 是常態。拿 cwd 推專案名的話
     會去比 A 的基準——2026-08-28 這條規則第一次真的開口就是這樣報錯的
@@ -218,7 +218,7 @@ def test_file_path_beats_cwd(tmpdir):
 
 
 def test_cwd_fallback_for_memory_file(tmpdir):
-    """8b. 記憶檔的路徑推不出專案名，只能靠 cwd —— 這是 cwd 後備唯一的用武之地。
+    r"""8b. 記憶檔的路徑推不出專案名，只能靠 cwd —— 這是 cwd 後備唯一的用武之地。
 
     MEMORY.md 住在 `~\.claude\projects\d--IT-department\memory\`：
     父目錄叫 `memory`、再上一層是**編碼過**的 `d--IT-department`（不等於專案名

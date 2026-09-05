@@ -13,14 +13,18 @@ r"""對 PR-1 的「程式碼區塊不算宣告」邏輯做變異，確認 pr1_14
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\pr1_plan_review_marker.py"
-RUNNER = r"D:\Patrick-AI\.ai-harness\tests\run_hook_tests.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "hooks", "rules", "pr1_plan_review_marker.py")
+RUNNER = os.path.join(_ROOT, "tests", "run_hook_tests.py")
 
 
 def read():

@@ -17,13 +17,20 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-# ⚠ 這四個一律寫成**字面字串**，不要改成 os.path.join 組出來的——
-# `test_mutation_anchors.py` 用 `ast` 讀常數（不執行本檔），組出來的它讀不到，
-# 於是「錨點還在不在」那一層會看不見這支，而畫面上不會有任何訊息。
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_checks_failopen.py"
-TARGET = r"D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py"
-LAYERS = r"D:\Patrick-AI\.ai-harness\rulefile\check_layers.py"
-RATCHET = r"D:\Patrick-AI\.ai-harness\tests\checks_failopen_ratchet.json"
+# ⚠ **上面那條「一律寫成字面字串」的禁令 2026-09-05 已作廢**（原文：
+#   「不要改成 os.path.join 組出來的，`test_mutation_anchors.py` 讀不到」）。
+#   那句話當時是對的，但它換來的代價是**每一支變異腳本都得寫死 harness 的絕對路徑**。
+#   同日已改成讓錨點層自己折得動 `os.path.join`／`dirname`／`abspath`／`normpath`
+#   與 `__file__`，所以逐段寫法讀得到，禁令的前提不存在了。
+#   ⚠ **只有逐段的形式讀得到**：`os.path.join(_ROOT, r"rulefile\x.py")` 折不出來，
+#   要寫成 `os.path.join(_ROOT, "rulefile", "x.py")`。
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TEST = os.path.join(_ROOT, "tests", "test_checks_failopen.py")
+TARGET = os.path.join(_ROOT, "rulefile", "check_bloat.py")
+LAYERS = os.path.join(_ROOT, "rulefile", "check_layers.py")
+RATCHET = os.path.join(_ROOT, "tests", "checks_failopen_ratchet.json")
 
 
 def read(path):

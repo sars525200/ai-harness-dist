@@ -14,14 +14,18 @@ r"""對 `contract.is_push_to_remote()` 做變異，確認 test_contract_units �
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\hooks\contract.py"
-RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_contract_units.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "hooks", "contract.py")
+RUNNER = os.path.join(_ROOT, "tests", "test_contract_units.py")
 
 
 def read():

@@ -6,14 +6,18 @@
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\gen_hook_rules.py"
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_hook_rules.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "dashboard", "gen_hook_rules.py")
+TEST = os.path.join(_ROOT, "tests", "test_hook_rules.py")
 
 
 def read():

@@ -17,6 +17,7 @@ r"""對「登記簿分類欄漏填守門」做變異，確認 test_todos 真的�
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
@@ -24,8 +25,11 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
 NL = chr(10)
-TARGET = r"D:\Patrick-AI\.ai-harness\dashboard\gen_todos.py"
-RUNNER = r"D:\Patrick-AI\.ai-harness\tests\test_todos.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "dashboard", "gen_todos.py")
+RUNNER = os.path.join(_ROOT, "tests", "test_todos.py")
 
 
 def read():

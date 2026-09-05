@@ -12,26 +12,32 @@ r"""對接線器做變異，確認 test_wire_machine.py 真的會叫。
 ② 最長前綴退成最短前綴；③ `--apply` 撞到擋下不停手、繼續往下寫。
 **退得回去而測試轉紅，才證明新的那一層真的在守東西**；退不回去只證明錨點沒對到。
 
-⚠ 這支自己的可攜性缺陷（已記票，2026-09-05）：
-`TARGET`／`TEST` 是寫死的絕對路徑——這是全部二十九支變異腳本共通的形狀，
-而錨點守門 `test_mutation_anchors.py` 直接拿它去 `os.path.exists()`。
-**換一台機器，第一個壞掉的就是「證明換機工具有測試」的這支**。
-沿用既有寫法是為了不製造第二套真相；放寬要連帶決定「哪些絕對路徑是合法的」，
-那是新判準不是小改，不在補測試這一輪做。
+⚠ ~~這支自己的可攜性缺陷（已記票，2026-09-05）：`TARGET`／`TEST` 是寫死的絕對路徑~~
+**已於同日結案**：29 支全部改成從 `__file__` 推。當初記票時說的
+「放寬要連帶決定哪些絕對路徑是合法的，那是新判準不是小改」是對的——
+新判準確實做出來了（`tools/wiring_probe.py` 的 `_selfref_abs_paths()`：
+看「這行字串裡有沒有這一顆 harness 的路徑」，不看變數叫什麼），
+連帶把錨點守門也改成折得動 `os.path.join`。
+留下的那句仍然成立：**換一台機器，第一個壞掉的會是「證明換機工具有測試」的這支**——
+所以這支的路徑不准再寫回絕對值。
 
 ⚠ 這支打不到的東西：**探針本身的判準**（那是 `mutate_wiring_probe.py`），
 以及**改寫完那些 hook 真的跑不跑得起來**（那是探針 P2，不是接線器的責任）。
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TARGET = r"D:\Patrick-AI\.ai-harness\tools\wire_machine.py"
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_wire_machine.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "tools", "wire_machine.py")
+TEST = os.path.join(_ROOT, "tests", "test_wire_machine.py")
 
 # 錨點寫成「逐行常數用 + 串起來」而不是三引號：錨點守門用 ast 折字串，
 # 折得出來的形狀只有字面值、模組層常數、以及兩者的 `+`。

@@ -15,8 +15,11 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-DISPATCH = r"D:\Patrick-AI\.ai-harness\hooks\dispatch.py"
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_warn_channel.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DISPATCH = os.path.join(_ROOT, "hooks", "dispatch.py")
+TEST = os.path.join(_ROOT, "tests", "test_warn_channel.py")
 
 
 def read():

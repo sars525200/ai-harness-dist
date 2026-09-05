@@ -16,7 +16,10 @@ import sys
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-SRC = r"D:\Patrick-AI\.ai-harness\dashboard\harness-dashboard.html"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SRC = os.path.join(_ROOT, "dashboard", "harness-dashboard.html")
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERIFY = os.path.join(os.path.dirname(HERE), "test_dashboard_structure.py")
 

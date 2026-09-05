@@ -11,20 +11,25 @@ CTX-1 動態載入 `resident_budget.py`、不再自己存一份，但**收斂後
 ⚠ 會**暫時改動活的 hook 檔**（CTX-1），跑完立刻還原並比對雜湊。
 與 `mutate_enc1.py` 同一種做法，所以同樣**不掛進自動流程**。
 
-⚠ 常數改成字面字串，`test_mutation_anchors.py` 用 ast 讀（不執行本檔），
-組出來的路徑它讀不到。
+⚠ **「常數要寫成字面字串」那句 2026-09-05 已作廢**：錨點層同日改成也折得動
+`os.path.join`／`dirname`／`abspath`／`normpath` 與 `__file__`，所以常數改成
+從本檔位置推（不再寫死 harness 絕對路徑）。逐段寫，不要把整段路徑塞進一個字面值。
 """
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
 
-TEST = r"D:\Patrick-AI\.ai-harness\tests\test_resident_budget.py"
-TARGET = r"D:\Patrick-AI\.ai-harness\hooks\rules\ctx1_resident_budget.py"
-RB = r"D:\Patrick-AI\.ai-harness\rulefile\resident_budget.py"
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TEST = os.path.join(_ROOT, "tests", "test_resident_budget.py")
+TARGET = os.path.join(_ROOT, "hooks", "rules", "ctx1_resident_budget.py")
+RB = os.path.join(_ROOT, "rulefile", "resident_budget.py")
 
 
 def read(path):

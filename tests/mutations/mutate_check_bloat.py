@@ -15,17 +15,23 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-# ⚠ `TARGET` 必須是**字串常數**，不能寫成 `ROOT / "..."`：
-# `tests/test_mutation_anchors.py` 用 AST 找 `ast.Constant` 型的賦值來認出被測檔，
-# 寫成 Path 運算它就看不到 → 這支變異腳本不會被納入錨點檢查，
-# 於是「錨點漂掉」這件事再也沒人守（第一版就是這樣寫的，主套件當場擋下）。
-TARGET = r"D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py"
-TESTS = r"D:\Patrick-AI\.ai-harness\tests\test_check_bloat.py"
+# ⚠ **上面那條「必須是字串常數」的禁令 2026-09-05 已作廢**（原文：
+#   「不能寫成 `ROOT / "..."`，`test_mutation_anchors.py` 只找 `ast.Constant`」）。
+#   那句話當時是對的，代價是每一支變異腳本都得寫死 harness 的絕對路徑。
+#   同日已把錨點層改成也折得動 `os.path.join`／`dirname`／`abspath`／`normpath`。
+#   ⚠ **`pathlib` 的 `/` 運算仍然折不動**——禁令解除的只有 `os.path.*` 這一種，
+#   而且 join 的每一段都要是字面字串。
+# 從本檔位置推（2026-09-05·B4 續）：原本寫死 harness 絕對路徑，
+# 換機或在 clone 裡跑會去改主目錄那一份。
+_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TARGET = os.path.join(_ROOT, "rulefile", "check_bloat.py")
+TESTS = os.path.join(_ROOT, "tests", "test_check_bloat.py")
 
 
 def read() -> str:
