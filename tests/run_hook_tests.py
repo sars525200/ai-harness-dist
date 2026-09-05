@@ -550,6 +550,7 @@ def main() -> int:
         import test_reviewer_config
         import test_backup_global_config
         import test_wiring_probe
+        import test_wire_machine
         import test_gen_rule_hub
         import test_session_title
         import test_push_cloud_title
@@ -596,6 +597,12 @@ def main() -> int:
             # 探針把「存在／非空」當成「已改寫／已 restore」。三種靜默失效與「裝好了」
             # 同形——junction 指到別處、hook command 打空、記憶目錄是空的。
             (test_wiring_probe.run, "接線探針 P1／P2／P5／P9／P10／P11（存在≠接好了）"),
+            # 上面那支守「探針會不會在該紅的時候紅」，這支守**接線器會不會在該擋的時候擋**。
+            # 接線器 09-05 寫好、模擬新機跑過一次，但一條測試都沒有——而那次抓到的
+            # 兩個 bug 都只有「第一次接一台新機器」才撞得到，且**都不報錯**：
+            # 前綴規則串連套用寫出雙重套疊的路徑、全新機器 `~\.claude` 還不存在。
+            # 所以這支用假 harness 樹＋假家目錄跑子行程，不是在本機直接呼叫函式。
+            (test_wire_machine.run, "接線器 W1–W10（冪等／撞到擋下停手／預設不寫）"),
             (test_gen_rule_hub.run, "規則中繼產生器（audience／針標／冪等）"),
             (test_session_title.run, "對話標題自動命名（三事件分工／雲端請求組法）"),
             (test_push_cloud_title.run, "推雲端標題的憑證續命（過期自動換發／防遞迴）"),
