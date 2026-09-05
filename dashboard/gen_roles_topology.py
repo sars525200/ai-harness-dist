@@ -126,7 +126,11 @@ BUILTIN = [
      # `subagent_type: "Plan"`，而 reviewer_config.json 決定用哪個工具／模型／強度跑它。
      # 設定屬於「誰去做這件事」，所以入口放在那個人身上，不另開一個分頁區塊。
      "skillConfig": {"skill": "adversarial-review", "label": "對抗式覆核 · 審查者",
-                     "file": r"D:\Patrick-AI\.ai-harness\reviewer\reviewer_config.json",
+                     # 2026-09-05·B4 續：原本寫死絕對路徑。這條會被畫進看板當「開檔」
+                     # 的入口，換機之後那顆按鈕指的是原機那一份。
+                     # ⚠ 路徑在 dict 的值裡 ⇒ `wiring_probe` 的自指守門**看不到這一行**
+                     #   （硬判定只收有名字的指派，理由見該檔）。改壞了沒有東西會叫。
+                     "file": str(HARNESS_ROOT / "reviewer" / "reviewer_config.json"),
                      "modal": "rv-modal"}},
     {"name": "Explore", "tools": "全部工具，除 Agent／Edit／Write／NotebookEdit",
      "desc": "唯讀廣度搜尋，讀片段而非整檔。定位程式碼用，不做審查或稽核。",

@@ -110,7 +110,13 @@ def _clean(s: str) -> str:
 # 閘門都管不到路徑），所以這是唯一能說明「它到底走了多遠」的資料。
 _ROOTS = [
     (re.compile(r"(?i)^[a-z]:[\\/]it-department"), "d:\\IT-department"),
-    (re.compile(r"(?i)^[a-z]:[\\/]\.ai-harness"), "D:\\Patrick-AI\\.ai-harness"),
+    # 2026-09-05·B4 續：標籤原本寫死絕對路徑，改成從本檔位置推。
+    # ⚠ **同時修掉這一條的錨點**：原本錨在「磁碟機後第一段」（`^[a-z]:[\\/]\.ai-harness`），
+    #   而 repo 2026-09-02 就搬進 `Patrick-AI\` 容器目錄了 ⇒ 這條規則從那天起
+    #   **一次都沒命中過**，harness 自己的路徑全被歸進「其他絕對路徑」。
+    #   下一條（MIS）同日改成不錨在第一段、還留了註解說明理由，這一條漏改。
+    #   只換標籤不換錨點的話，這一行會變成「看起來修好了、但那個分支永遠走不到」。
+    (re.compile(r"(?i)[\\/]\.ai-harness(?:[\\/]|$)"), str(_HARNESS_ROOT)),
     # 2026-09-02 改名＋收進容器目錄：新舊名都要認得，舊 transcript 存的是舊路徑。
     # 不錨在磁碟機後第一段——repo 已經不在根層了，錨死會全部認不出來。
     (re.compile(r"(?i)[\\/](?:mis-install|ai-projects)(?:[\\/]|$)"), "D:\\Patrick-AI\\MIS-install"),
