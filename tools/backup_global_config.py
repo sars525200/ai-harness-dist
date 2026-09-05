@@ -292,6 +292,23 @@ def _shrink_blocked(name: str, src: str, dst: str, force: bool) -> bool:
     return True
 
 
+def _would_shrink(rec: str, live: str, repo: str) -> int:
+    """照這個建議做的話，目的端會少幾行（不會少就回 0）。
+
+    報告與閘門是兩段各自獨立的程式碼。閘門擋的是**寫入**，建議是**報告**算的，
+    兩邊各自成立時就會出現 2026-08-27 那個形狀：報告說 --restore，
+    人照著打，工具才說擋下來。而收工 SOP 步驟 4.0 每次都會遞這句建議。
+    """
+    if rec == "restore":
+        src, dst = repo, live
+    elif rec == "backup":
+        src, dst = live, repo
+    else:
+        return 0
+    d = _net_delta(src, dst)
+    return -d if d < 0 else 0
+
+
 def cmd_report(only=None) -> int:
     print(f"live ：{GLOBAL_DIR}")
     print(f"repo ：{DEST_DIR}")
@@ -309,6 +326,11 @@ def cmd_report(only=None) -> int:
                 "tie": "mtime 分不出，不要猜；看 diff 再挑旗標",
                 "merge": "⚠ 兩邊各有對方沒有的內容，需人合併 —— 兩個旗標都會刪東西",
             }[rec]
+            # 建議與閘門必須說同一件事。閘門擋的是寫入、建議是另一段程式碼算的，
+            # 兩者各自成立時人會照著建議打下去才知道被擋 —— 而收工 SOP 每次都遞這句。
+            shrink = _would_shrink(rec, live, repo)
+            if shrink:
+                hint += "；⚠ 但這個方向會讓目的端少 %d 行，寫入會被擋（要蓋加 --force）" % shrink
         else:
             hint = ""
         live_sz = f"{os.path.getsize(live):,} bytes" if os.path.exists(live) else "—"

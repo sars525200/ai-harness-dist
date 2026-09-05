@@ -146,6 +146,12 @@ def run() -> tuple[int, list]:
         base = Path(td)
         live, repo = base / "live", base / "repo"
         _seed(live, repo, "A\nB\nC\n", "A\n", repo_newer=True)
+        # 報告與閘門必須說同一件事。票 82：「閘門擋的是寫入不是建議 ⇒ 人照著
+        # 建議打下去才會知道被擋」，而收工 SOP 步驟 4.0 每次都會遞這句建議。
+        rep = _run(live, repo, "--check")
+        check("來源較短：報告先警告這個建議會被擋",
+              "會被擋" in rep.stdout and "少 2 行" in rep.stdout, rep.stdout)
+
         rst = _run(live, repo, "--restore")
         check("來源較短：拒跑 exit 2", rst.returncode == 2, "got %s" % rst.returncode)
         check("來源較短：說出少幾行", "少 2 行" in rst.stdout, rst.stdout)
