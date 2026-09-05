@@ -176,7 +176,7 @@ user 另外自己想到、也**不列入本檔新增項**的：雲端快取、�
 | C-1 | **停做手工 token 對照表**，改用內建歸因 | 【官方明文】`/usage` 在 Pro/Max/Team/Enterprise 會給**依技能／子代理／外掛／個別 MCP 分列**的佔比，加上快取未命中次數與**推測原因**，以及超過 10% miss 的行為旗標 | 對照表可退休 | 需確認本帳號方案等級看得到歸因區塊 |
 | C-2 | 派工優先用「繼承主對話前綴」的方式 | 【官方明文】`fork` 直接繼承 parent 整段前綴，第一輪就吃到快取；一般 subagent 前綴不同、必須自己暖機 | 子代理冷啟動成本降低 | fork 不適合要獨立視角的對抗式覆核 |
 | C-3 | 長 log／大檔先用 hook 或指令過濾再進對話 | 【官方明文】官方舉例：一份長 log 從數萬 token 降到數百 | 效果大 | hook 要寫要維護，寫錯會漏內容 |
-| C-4 | 能用 CLI 就不要掛 MCP server | 【官方明文】建議用 `gh`／`aws`／`gcloud` 取代對應 MCP；`/mcp` 停用不用的 | 【第三方實測】一顆沒用到的 MCP 白吃 18.3k token（9.2% context）；7 顆共吃 67,300 token | 停用＝那些工具當場不能用。⚠ 註：官方後來推出 MCP Tool Search（deferred 載入），此數字可能已過期 |
+| C-4 | 能用 CLI 就不要掛 MCP server | 【官方明文】建議用 `gh`／`aws`／`gcloud` 取代對應 MCP；`/mcp` 停用不用的 | 【第三方實測】一顆沒用到的 MCP 白吃 18.3k token（9.2% context）；7 顆共吃 67,300 token | 停用＝那些工具當場不能用。⚠ 註：官方後來推出 MCP Tool Search（deferred 載入），此數字可能已過期。**【本機實測·2026-09-06】查證結果：不適用。**`settings.json`（兩份）與 `.claude.json` 各專案的 `mcpServers` 欄位全部是空 `{}`——本機沒有掛任何使用者自訂 MCP server。對話裡看到的 `claude-in-chrome`／`mcp-registry`／`scheduled-tasks`／`ccd_session_mgmt`／`ccd_directory`／design-sync 連結器是桌面版 App 內建一級功能，不在任何我能編輯的設定檔裡，要關只能 user 去 App 的 Settings › Connectors 手動操作。**這條從可施作清單移除。** |
 | C-5 | 減少背景耗量 | 【官方明文】goal check-in 每個 goal 最多 3 次背景檢查，可用 `CLAUDE_CODE_GOAL_CHECKIN_MINUTES=0` 關；排程任務**每次觸發都送整包 context** | 未量化 | 關掉就沒有背景提醒 |
 
 ---
@@ -214,6 +214,11 @@ user 另外自己想到、也**不列入本檔新增項**的：雲端快取、�
 
 ⚠ **前置條件**：`MODEL_ROUTING_PLAN.md` §9.15 的「介面選單切 Sonnet」尚未執行。
 在那件事完成前裝任何旋鈕，量到的變化都無法歸因。**這是硬性排序，不是建議。**
+
+**【2026-09-06 更新】user 已切選單，前置條件解除**（user 口頭確認，未經 `/tasks` 或其他工具驗證選單實際狀態——這是本回合唯一的資料來源）。
+⚠ 但「整體」列的規則沒有跟著解除：A-1／`effortLevel: medium` 的效果本回合稍早驗證仍是「疑似生效，未定案」（見交接檔 2026-09-06 追加段落），
+**選單切換本身也還沒量過一週**。三個變數（不換模型規則、effortLevel、選單切 Sonnet）目前疊在一起，
+**現在裝任何 B 批項目＝第四個變數疊上去，之後更分不出誰起作用**。
 
 ---
 
