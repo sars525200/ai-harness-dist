@@ -250,7 +250,7 @@
     "anthropic-skills:schedule": "user-invocable-only"
   },
   "outputStyle": "PM-Challenger",
-  "effortLevel": "high",
+  "effortLevel": "medium",
   "theme": "dark",
   "switchModelsOnFlag": false,
   "crossSessionInbound": "hold",
