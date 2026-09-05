@@ -65,10 +65,13 @@ sys.dont_write_bytecode = True
 # `traceback` 刻意不在頂層 import：`-X importtime` 實測它連同相依的 `_colorize`
 # 要 20.2 ms，佔 dispatch 整包 import 成本（34.5 ms）的六成，而它只在
 # `_log_error` 的例外路徑用得到 —— 正常路徑每次都白付。
-from contract import ALLOW, BLOCK, HookContext, record_delivered
+from contract import ALLOW, BLOCK, STATE_DIR, HookContext, record_delivered
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
-STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
+# `STATE_DIR` 從 contract 來（2026-09-05·B4）：這裡原本寫死 D 槽絕對路徑，
+# 換機／雲端 clone 上每次 `_log_error` 與事件記錄都寫進一個不存在的目錄，
+# 而寫檔失敗是被吞掉的 ⇒ 閘門看起來在跑，實際上什麼都沒留下。
+# 仍是模組層名字：多支測試靠 `dispatch.STATE_DIR = tmp` 改指臨時目錄。
 CONFIG_PATH = os.path.join(HOOKS_DIR, "dispatch_config.json")
 _ERR_LOG_MAX = 256 * 1024   # 單一錯誤 log 上限；超過就輪替成 `.1`
 

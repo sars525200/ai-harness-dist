@@ -33,7 +33,10 @@ for _stream in (sys.stdout, sys.stderr):
     except Exception:
         pass
 
-STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
+# 從 contract 取（2026-09-05·B4）：這裡原本寫死 D 槽絕對路徑，換機後這支會
+# 掃一個不存在的目錄、印出「0 筆事件」——而 0 筆在這張報表上長得像「很乾淨」，
+# 不像「找錯地方」。仍是模組層名字：test_hook_rules 靠改它指到臨時目錄。
+from contract import STATE_DIR
 
 
 def _split_stem(stem: str) -> tuple[str, str]:

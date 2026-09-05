@@ -53,11 +53,15 @@ import io
 import json
 import os
 
-from contract import allow, warn
+from contract import STATE_DIR, allow, warn
 
 RULE_ID = "DISP-1"
 
-_STATE_DIR = r"D:\Patrick-AI\.ai-harness\state"
+# 從 contract 取（2026-09-05·B4）：這裡原本寫死 D 槽絕對路徑，換機後
+# `_load_state()` 讀不到就回空 dict、`_save_state()` 寫不進去也被吞掉
+# ⇒ 派工紀律的計數永遠從零開始，規則等於**永遠不會提醒**，而且不報錯。
+# 仍是模組層名字：test_disp1 靠改它指到臨時目錄。
+_STATE_DIR = STATE_DIR
 _STATE_PATH = os.path.join(_STATE_DIR, "dispatch_discipline_state.json")
 
 # 見 docstring：41 個真實 session 量出來的雙峰之間。

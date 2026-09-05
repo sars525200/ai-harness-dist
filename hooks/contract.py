@@ -370,6 +370,13 @@ def bypassed(message: str) -> Verdict:
 _STATE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "state")
 
+# 公開別名（2026-09-05·B4）：`dispatch`／`report`／規則模組原本各自寫死
+# `r"D:\Patrick-AI\.ai-harness\state"`，換一台機器就會**靜默寫失敗**——
+# 每支 hook 每次都寫不進去，而 hook 的失敗路徑是 fail-open，畫面上什麼都不會說。
+# 這裡從本檔位置推，是全 hooks 唯一的 state 目錄真相；要用的人 import 這個名字。
+# 舊名 `_STATE_DIR` 保留：本檔內部與多支測試都直接綁它。
+STATE_DIR = _STATE_DIR
+
 
 def _delivered_path(session_id: str) -> str:
     return os.path.join(_STATE_DIR, f"delivered_notes.{session_id}.json")
