@@ -150,7 +150,6 @@
     ],
     "defaultMode": "auto",
     "additionalDirectories": [
-      "\\tmp",
       "~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
       "C:\\itportal-redirect",
       "~/.claude/projects/d--IT-department/memory",
@@ -165,7 +164,7 @@
       "D:\\Patrick-AI\\.ai-harness"
     ]
   },
-  "model": "opus[1m]",
+  "model": "sonnet[1m]",
   "hooks": {
     "SessionEnd": [
       {

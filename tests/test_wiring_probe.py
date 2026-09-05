@@ -700,6 +700,88 @@ def _cases(M) -> "list[tuple[str, bool, str]]":
              "判不出來不給綠")
         case("P4 原始碼不存在要紅", M.FAIL in codes(M.probe_p4(tmp / "沒這支.py")))
 
+    # ── 13b. P4：B4 拆掉之後的兩種形狀（2026-09-05）──────────────
+    # 舊判準只認「dispatch.py 裡一行絕對路徑字面值」。B4 把 STATE_DIR 改成
+    # contract.py 從 __file__ 推之後那行不存在了 ⇒ **修好反而變紅**（當天實際發生）。
+    # 現在分三態：寫死／推導／判不出。這三條就是拿來擋「退回只認一種形狀」。
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "hooks").mkdir()
+
+        derived = ("import os\n"
+                   "_STATE_DIR = os.path.join(\n"
+                   "    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'state')\n"
+                   "STATE_DIR = _STATE_DIR\n")
+        (tmp / "hooks" / "contract.py").write_text(derived, encoding="utf-8")
+        kind, val = M._state_dir_resolved(tmp)
+        case("P4 認得出「從 __file__ 推」這個形狀", kind == "推導",
+             "B4 之後的正常形狀；不認得的話修好反而變紅")
+        case("P4 推導出來的值是那顆 harness 的 state",
+             Path(val) == (tmp / "state"),
+             "值要自己算，不能 import（import 會拉起整包 hook）")
+
+        (tmp / "hooks" / "壞掉的.py").write_text(
+            'STATE_DIR = r"D:\\舊機\\.ai-harness\\state"\n', encoding="utf-8")
+        kind2, _ = M._state_dir_resolved(tmp)
+        case("P4 有人把絕對路徑寫回來要抓到", kind2 == "寫死",
+             "B4 的回歸守門：拆完之後要有人盯著它不要再長回來")
+        case("P4 抓得到是哪一支檔寫死的",
+             any("壞掉的.py" in f for f, _ in M._hardcoded_state_dirs(tmp)),
+             "只說「有人寫死」而不說哪一支，等於要人自己再找一次")
+
+        (tmp / "hooks" / "壞掉的.py").unlink()
+        (tmp / "hooks" / "contract.py").write_text("STATE_DIR = 某個函式()\n",
+                                                   encoding="utf-8")
+        kind3, _ = M._state_dir_resolved(tmp)
+        case("P4 兩種形狀都對不上時要說「判不出」", kind3 == "判不出",
+             "不給綠，但也不誣賴它是寫死的 —— 兩者的下一步不一樣")
+
+    # ── 13c. P9：失敗標記是歷史紀錄，不是判定（2026-09-05）────────
+    # post-commit 的標記只有「下次 commit 推成功」才會被刪 ⇒ 手動 push 修好之後
+    # 它會繼續躺在那裡說謊。check_before_start [4] 早就是這個態度，而探針原本
+    # 把標記當判定 ⇒ 同一台機器兩套真相，且往「永遠紅」的方向錯。
+    # 一個跟事實不符的紅燈，會訓練人以後忽略它。
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "state").mkdir()
+        (tmp / "state" / "mirror_sync_failed.txt").write_text("失敗", encoding="utf-8")
+
+        real_root, real_git = M.HARNESS_ROOT, M._git
+        try:
+            M.HARNESS_ROOT = tmp
+
+            def fake_git(remote_head):
+                # `probe_p9` 開頭就會因為「沒有 backup remote」提早 return，
+                # 所以假的 _git 要把前面幾問也答完，才走得到標記那一條。
+                def _f(*a):
+                    if a[0] == "remote" and len(a) == 1:
+                        return 0, "backup\n"
+                    if a[0] == "remote":
+                        return 0, "C:/假的/鏡像.git"
+                    if a[0] == "rev-parse":
+                        return 0, "aaaaaaaa\n"
+                    if a[0] == "ls-remote":
+                        return 0, remote_head + "\tHEAD\n"
+                    return 0, ""
+                return _f
+
+            def mark_result():
+                return [r for r in M.probe_p9() if r.title == "最後一次推送成功"]
+
+            M._git = fake_git("aaaaaaaa")
+            got = mark_result()
+            case("P9 標記過期（實查已追平）不算紅",
+                 bool(got) and got[0].code != M.FAIL,
+                 "手動 push 之後標記不會自動消失，判紅等於逼人忽略紅燈")
+
+            M._git = fake_git("bbbbbbbb")
+            got = mark_result()
+            case("P9 標記還在**且實查也對不上**要紅",
+                 bool(got) and got[0].code == M.FAIL,
+                 "這才是真的沒備份；放寬到這裡就等於把 P9 關掉")
+        finally:
+            M.HARNESS_ROOT, M._git = real_root, real_git
+
     # ── 14. P6：live 與 repo 內容不同要紅（非空不算數）──────────
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)

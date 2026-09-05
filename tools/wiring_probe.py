@@ -422,25 +422,37 @@ def probe_p9() -> list[Result]:
     else:
         out.append(Result(OK, "P9", "post-commit 已安裝", str(live_hook)))
 
-    mark = HARNESS_ROOT / "state" / "mirror_sync_failed.txt"
-    if mark.exists():
-        out.append(Result(FAIL, "P9", "最後一次推送成功",
-                          f"失敗標記還在：{mark}（檔案存在＝最後一次推送是失敗的）"))
-    else:
-        out.append(Result(OK, "P9", "最後一次推送成功", "無失敗標記"))
-
+    # ⚠ 順序不能顛倒：**先實查鏡像，再判標記**。
+    #   `post-commit` 的失敗標記只有「下一次 commit 推成功」才會被刪 ⇒ 手動 push 修好之後
+    #   它會繼續躺在那裡說謊。`check_before_start.py` [4] 早就是這個態度（真相以逐 remote
+    #   實查為準、標記只當歷史紀錄），而這裡原本把標記當判定 ⇒ **同一台機器兩套真相**，
+    #   而且是往「永遠紅」的方向錯——一個跟事實不符的紅燈，會訓練人以後忽略它。
+    #   2026-09-05 實際踩到：手動 force push 追平鏡像後，探針仍判紅。
     rc_l, local = _git("rev-parse", "HEAD")
     rc_r, remote_head = _git("ls-remote", "backup", "HEAD")
+    in_sync = False
     if rc_l != 0 or rc_r != 0:
         out.append(Result(FAIL, "P9", "鏡像 HEAD 與本機相同",
                           f"讀不到（local rc={rc_l}, remote rc={rc_r}）：{remote_head[:120]}"))
     else:
         rhead = remote_head.split()[0] if remote_head.split() else ""
-        if rhead == local.strip():
+        in_sync = bool(rhead) and rhead == local.strip()
+        if in_sync:
             out.append(Result(OK, "P9", "鏡像 HEAD 與本機相同", local.strip()[:12]))
         else:
             out.append(Result(FAIL, "P9", "鏡像 HEAD 與本機相同",
                               f"本機 {local.strip()[:12]}、鏡像 {rhead[:12] or '(空)'} —— 分岔或沒推上去"))
+
+    mark = HARNESS_ROOT / "state" / "mirror_sync_failed.txt"
+    if not mark.exists():
+        out.append(Result(OK, "P9", "最後一次推送成功", "無失敗標記"))
+    elif in_sync:
+        out.append(Result(OK, "P9", "最後一次推送成功",
+                          f"有失敗標記但**實查鏡像已追平** ⇒ 標記過期（手動 push 不會清它）。"
+                          f"真相以實查為準，同 check_before_start [4]；要清就刪 {mark}"))
+    else:
+        out.append(Result(FAIL, "P9", "最後一次推送成功",
+                          f"失敗標記還在，**而且實查也對不上** ⇒ 這顆 commit 沒有備份：{mark}"))
     return out
 
 
@@ -693,6 +705,70 @@ def _state_dir_literal(src: "Path | None" = None) -> "str | None":
     return None
 
 
+def _hardcoded_state_dirs(root: "Path | None" = None) -> "list[tuple[str, str]]":
+    r"""全 `hooks\` 裡還有沒有人把 `STATE_DIR` 指派成**絕對路徑字面值**。
+
+    這是 B4 的回歸守門：2026-09-05 之前 `dispatch`／`report`／規則模組各自寫死
+    `r"D:\...\state"`，換機就靜默寫失敗。拆成 `contract.py` 從自身位置推之後，
+    **要有人盯著它不要再長回來**——不然下一次有人「順手」寫一行就退回去了。
+    """
+    import ast
+    base = (root or HARNESS_ROOT) / "hooks"
+    hits: list[tuple[str, str]] = []
+    for py in sorted(base.rglob("*.py")):
+        try:
+            tree = ast.parse(py.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if not any(n.lstrip("_") == "STATE_DIR" for n in names):
+                continue
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                v = node.value.value
+                if len(v) > 2 and (v[1:3] == ":\\" or v[1:3] == ":/"):
+                    hits.append((str(py.relative_to(base.parent)), v))
+    return hits
+
+
+def _state_dir_resolved(root: "Path | None" = None) -> "tuple[str, str]":
+    r"""`STATE_DIR` 現在**實際**會是什麼，以及它是怎麼來的。
+
+    回 `(來源, 值)`，來源三選一：
+
+    * ``"寫死"``——某支 hook 直接指派絕對路徑字面值（B4 的舊形狀）。
+    * ``"推導"``——`hooks/contract.py` 從 `__file__` 推（2026-09-05·B4 之後的形狀）。
+      **不 import**：import 會拉起整包 hook（插 sys.path、讀設定、可能寫檔），
+      探針不該帶那種副作用。改成讀原始碼確認「RHS 裡有 `__file__`」，值自己算。
+    * ``"判不出"``——兩種形狀都對不上。這時不給綠，但也不誣賴它是寫死的。
+    """
+    import ast
+    hard = _hardcoded_state_dirs(root)
+    if hard:
+        return "寫死", hard[0][1]
+
+    contract = (root or HARNESS_ROOT) / "hooks" / "contract.py"
+    if not contract.is_file():
+        return "判不出", ""
+    try:
+        tree = ast.parse(contract.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return "判不出", ""
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if not any(n.lstrip("_") == "STATE_DIR" for n in names):
+            continue
+        uses_file = any(isinstance(n, ast.Name) and n.id == "__file__"
+                        for n in ast.walk(node.value))
+        if uses_file:
+            return "推導", str((contract.resolve().parent.parent / "state"))
+    return "判不出", ""
+
+
 def probe_p4(src: "Path | None" = None) -> list[Result]:
     r"""hook 自己讀的狀態目錄是本機真目錄，而且**實際寫得進去**。
 
@@ -704,22 +780,44 @@ def probe_p4(src: "Path | None" = None) -> list[Result]:
     而舊路徑在新機上通常不存在 ⇒ 每個 hook 每次都靜默寫失敗。
     """
     out = []
-    lit = _state_dir_literal(src)
     title = "hook 的 STATE_DIR"
-    if lit is None:
-        return [Result(FAIL, "P4", title, "抽不出 STATE_DIR 的字面值 —— 判不出來就不給綠")]
-
+    # 2026-09-05 改：原本只認「`dispatch.py` 裡一行絕對路徑字面值」。B4 拆完之後
+    # 那行不存在了，探針抽不到就判紅 ⇒ **修好反而變紅**。現在兩種形狀都認，
+    # 而且把「寫死」與「判不出」分開——判不出來一樣不給綠，但不誣賴它是寫死的。
     want = (HARNESS_ROOT / "state").resolve()
+
+    if src is not None:
+        # 指定來源＝在檢查**某一份特定原始碼**（舊機那支、或測試餵的假檔）。
+        # 這條路徑維持原語意：抽得出字面值就比它指到哪，抽不出來就不給綠。
+        # 「寫死」在這裡不是罪名——要看的是它指對了沒有。
+        lit = _state_dir_literal(src)
+        if lit is None:
+            return [Result(FAIL, "P4", title, "抽不出 STATE_DIR 的字面值 —— 判不出來就不給綠")]
+        val, why = lit, lit
+    else:
+        # 沒指定＝檢查**這一顆 harness 現在的實況**，這時才管形狀。
+        kind, val = _state_dir_resolved()
+        if kind == "判不出":
+            return [Result(UNVERIFIED, "P4", title,
+                           "既不是寫死的字面值、也找不到 contract.py 從 __file__ 推的那一行 "
+                           "—— **判不出來就不給綠**（但這不等於它是壞的）")]
+        if kind == "寫死":
+            extra = "".join("\n            %s: %s" % (f, v) for f, v in _hardcoded_state_dirs())
+            return [Result(FAIL, "P4", title,
+                           "**有人把它寫死成絕對路徑**（B4 已於 2026-09-05 拆掉，這是長回來了）"
+                           + extra)]
+        why = f"由 contract.py 自身位置推得：{val}"
+
     try:
-        got = Path(lit).resolve()
+        got = Path(val).resolve()
     except OSError:
-        got = Path(lit)
+        got = Path(val)
     if got != want:
         out.append(Result(FAIL, "P4", title,
-                          f"指向 {lit} —— 這一顆 harness 的狀態目錄是 {want}。"
-                          "那行是寫死的絕對路徑，換機器後每個 hook 每次都靜默寫失敗"))
+                          f"指向 {val} —— 這一顆 harness 的狀態目錄是 {want}。"
+                          "換機器後每個 hook 每次都靜默寫失敗"))
         return out
-    out.append(Result(OK, "P4", title, lit))
+    out.append(Result(OK, "P4", title, why))
 
     if not got.is_dir():
         out.append(Result(FAIL, "P4", "狀態目錄存在", f"不存在：{got}"))

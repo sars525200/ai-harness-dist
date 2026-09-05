@@ -363,6 +363,101 @@ bare 鏡像（W4／W5）、Cursor 複本（W6）、CLAUDE.md 與 output-styles �
 ⇒ **「plugin 替代不了 hook 絕對路徑」這句正式被推翻**，不再是文件推論而是實跑。
 plugin 拿得走 W1 的兩條 junction ＋ W10 裡 12 條指令路徑改寫。
 
+**接線器本體已實作並在模擬新機上端到端跑過（2026-09-05）**：`tools/wire_machine.py`。
+預設只印計畫（`--apply` 才動手），冪等，撞到 `[擋下]` 在 `--apply` 模式**就地停手**。
+路徑改寫**不自動推導判準**——`--map 舊=新` 由人給，不給則由 `--source` 與本機差異算候選並印出來；
+探針 `wiring_probe.py` 獨立驗它（寫的人與驗的人共用推導的話，P5 會變恆真）。
+
+**兩把尺都跑過**：
+* 已接好的本機：全 `[已是]`、0 處改寫 ⇒ **冪等成立**。
+* 模擬新機（雲端 clone 當 harness 根、暫存夾當家目錄、本機 live 當 `--source`）：
+  一路跑到底、落下對照表，**接著探針判 `28 OK／8 FAIL／1 SKIP`⇒ 拒絕印「裝好了」**。
+
+⚠ **「在已接好的機器上跑」什麼都證明不了**——本檔以下兩個 bug 在本機測 100 次都不會出現，
+是模擬新機第一次跑就當場撞到的：
+
+| 撞到的 | 形狀 | 已修 |
+|---|---|---|
+| **前綴規則串連套用** | 兩條規則各掃一次全字串 ⇒ 第二條吃掉第一條的**結果**。舊家目錄 `C:\Users\<我>`、新 harness 落在 `C:\Users\<我>\…\clone` 時，`D:\舊\dashboard` 先變成新 harness 路徑、整條再被家目錄規則換一次 ⇒ 產出雙重套疊的怪路徑。**不報錯，只靜默寫錯** | ✅ 改成單趟由左而右掃描、最長前綴勝、**跳過來源不重掃替換結果** |
+| **全新機器 `~\.claude` 還不存在** | `mklink` 回「系統找不到指定的路徑」。已接好的機器上那個資料夾早就在，所以這條路從來沒被走過 | ✅ 建 junction 前先建上層目錄 |
+
+**模擬新機那 8 條紅，逐條都是真的**（沒有一條是誤判）：
+
+| 探針 | 紅在哪 | 是誰的工項 |
+|---|---|---|
+| **P4** | `hooks/dispatch.py` 的 `STATE_DIR` 寫死 `D:\Patrick-AI\.ai-harness\state` ⇒ **新機上每個 hook 每次都靜默寫失敗** | **B4·接線器修不了，要改程式**。這是換機真正的最後一道牆 |
+| P5 ×4 | 4 個記憶目錄「存在但空的」 | 記憶還原是另一條線（獨立 repo ＋ 離線包）。接線器只負責把目錄建出來 |
+| P5 | 「逐條對得上舊機」紅：`D:\…\.ai-harness` 與 `…\cloudclone` **共同尾段 0 段** | 模擬造成的，但揭露一條真限制：**新機的 harness 資料夾要沿用同一個名字**，改名就會紅 |
+| P9 | 沒有 `backup` remote | 沒給 `--mirror`；給了就會建 |
+| P11 | `state\skill_watch_baselines.json` 不存在 | 該檔 gitignore ⇒ 新 clone 一定沒有，而 `--capture` 開頭就 `load_doc()`、檔不在就拒跑 ⇒ **新機永遠建不了基準**。見 `SKILL_WATCH_PLAN.md` 票 10 |
+
+⇒ **結論：接線器做完，新機仍然不能用。** 還差三件，且都不在接線器範圍內：
+① **B4 拆 `STATE_DIR` 字面值**（最硬的一件，不修＝閘門在新機全部啞掉）
+② 記憶內容還原 ③ skill-watch 基準在新機的建立入口。
+
+**還原路徑實跑（2026-09-05·user 已裁定新機走「GitHub 上清洗過的那份」）**：
+過去只寫過「雲端那份能還原內容」，**從來沒有人真的還原過一次**。這次走完，結論是**可行**。
+做法：`git clone --depth 1` 到暫存夾，與本機 **HEAD 對 HEAD** 逐檔比 blob（不比工作區——
+第一次比到了另一則對話未提交的 QUOTA-1，差點誤判成「雲端少了東西」）。
+
+| 量到的 | 數字 |
+|---|---|
+| 追蹤檔數 | 506 = 506，**沒有一支檔消失** |
+| 只有行尾不同 | **0 支**（`.gitattributes` 那條修得住） |
+| 內容不同 | **26 支**，且**每一支都是 1 行換 1 行**（`-N +N` 對稱）⇒ 清洗是**替換**不是刪除 |
+| 其中執行期檔 | **7 支**：`dashboard/capability_checks.py`、`dashboard/harness-dashboard.shell.html`、`global/settings.json`、`hooks/rules/r4_server_dbpath.py`、`rulefile/bloat_snapshot.json`、`tools/githooks/post-commit`、`tools/push_cloud_backup.py` |
+| 這 7 支的替換位置 | **全部落在註解／docstring／看板文案／量測快照的鍵**，**沒有一處在會被執行的邏輯裡**；唯一有功能的是 `global/settings.json` 裡 3 條 `ssh <VM-HOST>` 權限白名單，而那台 VM 已被 user 2026-09-02 否決 |
+| clone 裡跑整套回歸網 | **1705 / 1723**（本機同一套是 1878/1878——分母不同是因為未提交的 QUOTA-1 只在本機） |
+
+**那 18 條紅逐條歸因**（沒有一條是「清洗弄壞了東西」）：
+* 約 8 條＝`harness.config.json` 還是 `--init` 範本態（`currentProject` 指向 `D:\你的專案`）
+  ⇒ **正是 W2 第二步要填的東西，fail-closed 照設計運作**。
+* 2 條＝跨樹污染的證據：clone 裡跑的檢查看到了**本機**的 `QUOTA-1` 與**本機**的 `backup` remote
+  ⇒ **B4 那 5 處寫死 `STATE_DIR`／根目錄的字面值是真的會漏過去的**，不是理論風險。
+* 其餘＝環境差異（暫存夾在 C 槽、`pythonw` 情境、文件新鮮度）。
+
+⇒ **W2 的 `--init` 實跑過了**：會產範本、並明講「範本裡的路徑是假的，直接跑會被存在性檢查擋下」。
+
+⚠ **本輪另外量到、會改變 W10 形狀的三件**：
+1. **12 條路徑改寫裡有 6 條在版控檔裡**（`agents/harness-auditor.md`、`agents/project-auditor.md`、
+   `agents/sync-checker.md` 的 frontmatter，各 2 條）。新機改它們 ⇒ `git status` 永遠髒；
+   commit 上去 ⇒ 舊機壞掉。**定案（2026-09-05）：接受「髒」，但要是「已申報的髒」**——
+   接線器把它改寫的每一行落進 W10 本來就要求的對照表，開工檢查／探針拿對照表核對；
+   **對得上＝已知，對不上＝真漂移**。不採 `--skip-worktree`（它會把真漂移一起藏掉）。
+2. **`additionalDirectories` 13 條裡已經有 5 條是 `~/` 可攜寫法**（`global/settings.json` 那份），
+   而 live 那份是展開後的絕對路徑 ⇒ **這 5 條不需要改寫**，W10 只要處理 D 槽那 6 條 ＋ `C:\itportal-redirect`。
+3. ⛔ **探針目前永遠紅在一個垃圾項**：`additionalDirectories` 有一條 `\tmp`，該目錄不存在 ⇒
+   `wiring_probe` 恆為 `FAIL 1`，**永遠印不出「裝好了」**。一個永遠紅的燈等於沒有燈。
+   清掉它要動 live 設定，**待 user 點頭**。
+
+**安裝路徑 spike（2026-09-05·實跑非推測·CLI 2.1.247）**：上一段第一項「沒驗安裝」已補。
+在隔離設定目錄（`CLAUDE_CONFIG_DIR` 指向暫存夾）做最小 marketplace ＋ plugin，
+**live 設定與 `~\.claude\plugins\` 全程未被寫入**（事後實查：`extraKnownMarketplaces` 0 命中、
+`installed_plugins.json` 不存在、`claude plugin list` 仍為空）。
+
+| 問題 | 結果 |
+|---|---|
+| 本機目錄能不能當 marketplace | ✅ 能。`claude plugin marketplace add <路徑>` 收成 `"source": "directory"`，**不必對外發布** |
+| 裝一次會不會常駐 | ✅ 會。`install --scope user` 之後，**不帶 `--plugin-dir`** 開新對話，plugin 的 `SessionStart` 照樣觸發 |
+| 改 repo 會不會即時生效 | ✅ 會。`${CLAUDE_PLUGIN_ROOT}` 展開成**來源目錄**（不是 `plugins/cache/<mkt>/<名>/<版>/` 那份複本）；改來源 `hooks.json`、**不升版號、不跑 `plugin update`**，下一則就生效 ⇒ **C3「兩份樹」對 directory 來源不成立**（cache 那份是死的） |
+| 並存的順序 | ✅ 量到了：**user 層先、plugin 後**（兩次量測一致，相隔約 26ms），互不壓掉 |
+| **只把 `settings.json` 帶過去夠不夠** | ❌ **不夠，而且它會騙人**。全新設定目錄只放 `settings.json`（內含 `extraKnownMarketplaces` ＋ `enabledPlugins: {"…": true}`）⇒ plugin **完全沒載入**、只有 user 層 hook 觸發，`plugin list` 印「No plugins installed」，**沒有任何警告**。`enabledPlugins` 那個 `true` 是純粹的謊 |
+
+⚠ **由此新增兩條換機工項**（原本沒有）：
+① 新機必須另外跑一次 `claude plugin install`——就是本節下面說「官方沒寫」的那個「安裝後執行一次」機制，
+   **它同樣適用於 plugin 自己**；
+② marketplace 的來源是**絕對路徑**且寫在 `settings.json` 裡 ⇒ **照樣要改寫**。
+⇒ **「plugin 消滅路徑改寫」不成立**，正確說法是 **12 條變 1 條，另加一道會說謊的設定狀態**。
+⇒ 若採 plugin，探針必須驗「hook 真的觸發過」，**不得只讀 `enabledPlugins`**（讀它＝讀那個謊）。
+
+**這次仍未驗（不要當成驗過了）**：
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| 已安裝的 plugin 其 `PreToolUse` 會不會觸發 | 隔離設定目錄沒有登入態，工具跑不起來；複製 `.credentials.json` 進隔離夾被權限閘門擋下 | 在**已登入**的設定目錄裝上 spike plugin 後跑 `claude -p "Run the bash command: echo ok" --allowedTools Bash --max-turns 3`，再看標記檔有沒有 `plugin-PreToolUse` | 我（需 user 同意動 live 或放行認證複製） |
+| 衝突時誰贏、順序在其他事件是否一致 | 只量到 `SessionStart` 一個事件 | 同上，比對標記檔裡 user／plugin 兩列的先後與筆數 | 我 |
+| 來源目錄消失時是否 fail-closed | 搬移來源目錄的 `mv` 被權限閘門擋下 | 把 marketplace 來源目錄改名後跑 `claude plugin list` 與一則新對話，看是否報錯或靜默略過 | 我 |
+
 **spike 沒有回答的（不要當成一起驗過了）**：
 
 * **驗的是 `--plugin-dir`（單則對話的旗標），不是安裝**。換機真正要的是裝一次就常駐，
