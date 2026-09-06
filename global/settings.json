@@ -251,6 +251,7 @@
   },
   "outputStyle": "PM-Challenger",
   "effortLevel": "medium",
+  "promptCacheTtl": "1h",
   "subagentPromptCacheTtl": "1h",
   "theme": "dark",
   "switchModelsOnFlag": false,

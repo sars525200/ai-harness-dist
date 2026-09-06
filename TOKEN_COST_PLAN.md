@@ -260,10 +260,12 @@ user 另外自己想到、也**不列入本檔新增項**的：雲端快取、�
 | 介面選單切 Sonnet（`MODEL_ROUTING_PLAN.md` §9.15 前置條件） | 解開 B 批的硬性排序前提 | user 操作選單，口頭確認（未經 `/tasks` 或其他工具驗證選單實際狀態） |
 | C-4（能用 CLI 就不掛 MCP）查證：**不適用** | `settings.json`（兩份）與 `.claude.json` 各專案 `mcpServers` 全部是空 `{}`，本機沒有自訂 MCP server 可停用 | 從可施作清單移除，附查證依據於本表格 C-4 列 |
 | **B-2**：`subagentPromptCacheTtl` **未設 → `"1h"`** | 官方明文子代理預設 5 分鐘快取，主對話 1 小時；本機實測子代理各燒 47k–99k token 全部冷啟動 | `global/settings.json`＋`~\.claude\settings.json` 兩份，改後過 `json.loads`、鍵數 14→15 |
+| **B-3**：`promptCacheTtl` **未設 → `"1h"`** | 官方明文訂閱制在額度內本來就是 1h，這項只鎖死「超額後靜默掉回 5m」的降級行為，正常情況無副作用 | `global/settings.json`＋`~\.claude\settings.json` 兩份，改後過 `json.loads`、鍵數 15→16，兩份僅 `additionalDirectories` 路徑寫法（`~/...` vs 展開路徑）不同，其餘欄位逐一比對相符 |
 
-⚠ **B-2 是在三個未量完效果的變數（不換模型規則、`effortLevel: medium`、選單切 Sonnet）疊加之上再裝的第四項**——
+⚠ **B-2／B-3 是在三個未量完效果的變數（不換模型規則、`effortLevel: medium`、選單切 Sonnet）疊加之上再裝的第四、第五項**——
 user 明確選擇接受這個代價（「疊加變數，現在就裝」），**不是符合 §6「每批只裝一項、量一週再裝下一項」的施作**。
-下次量到效果時，四個變數的作用無法個別歸因，只能看整體方向。
+下次量到效果時，五個變數的作用無法個別歸因，只能看整體方向。B-3 本身風險極低（純安全網，非額度內無行為差異），
+不額外增加需要歸因的維度，但仍計入「已疊加變數數量」供未來對照時提醒自己樣本不純淨。
 
 **為什麼敢兩項一起動**（user 選「兩個一起做」，我原本標了歸因風險，這裡撤回）：
 兩項落在逐字檔的**不同欄位**——對話長度動的是 `cache_read_input_tokens`，
@@ -272,8 +274,9 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 
 ### 8.2 沒做的
 
-- **B 批只裝了 B-2**（`bashOutputMaxChars`／`promptCacheTtl`／`CLAUDE_CODE_SUBAGENT_MODEL`／
-  `skillListingMaxDescChars` 仍未裝）。理由：B-4 卡在 §5 陷阱 1 未驗；B-1／B-3／B-5 未排優先序，先不動。
+- **B 批裝了 B-2、B-3**（`bashOutputMaxChars`／`CLAUDE_CODE_SUBAGENT_MODEL`／
+  `skillListingMaxDescChars` 仍未裝）。理由：B-4 卡在 §5 陷阱 1 未驗；B-1 要先訂截斷閾值、
+  B-5 本機技能描述僅 2,539 字元、性價比低，兩項先不動。
 - **C 批只落實 C-1，C-4 查證後標不適用**：手工 token 對照表**從未實際存在**（全 repo grep 只命中本檔），
   所以「退休」等於「不要新建」，改用 `tools/token_usage_breakdown.py` 與 `/usage` 歸因。
   C-4 查了本機 `mcpServers` 全空，沒東西可停，從可施作清單移除。C-2／C-3／C-5 未動。
@@ -290,6 +293,7 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 | B-2：`subagentPromptCacheTtl: 1h` 是否真的生效、有沒有降低子代理冷啟動成本 | 設定改在本則對話中途，**settings.json 是否每則對話開場才重讀，本則尚未跨過這個邊界** | 新對話派一個會冷啟動的角色，跟 §1.3 記錄的「四個角色各燒 47k–99k」數字比對，看是否下降 | 我（下一則） |
 | §5 陷阱 1：`CLAUDE_CODE_SUBAGENT_MODEL` 蓋掉 frontmatter 的 model | **2026-09-06 user 裁定擱置**：曾短暫寫進兩份 `settings.json` 的 `env`（未跨過對話邊界生效、未實際驗到），user 決定先不驗，已移除 | 開新對話，設 `CLAUDE_CODE_SUBAGENT_MODEL=haiku`，`Agent` 派 `locator`（frontmatter `model: sonnet`，不必改檔），開 `/tasks` 面板看它實際跑 sonnet 還是 haiku，**驗完不論結果都要移除環境變數** | user 開新對話派、user 看 `/tasks` |
 | B-4 | 因 §5 陷阱 1 未驗，**維持不可裝** | 同上 | 同上 |
+| B-3：`promptCacheTtl: 1h` 是否有實際效果（相對於訂閱制原本額度內就是 1h 的基準行為） | 純安全網設定，正常情況下（未超額）**理論上無可觀測差異**——只有超額掉回 5m 時才會看出差別，短期內不易驗到 | 需要一段時間的使用量資料佐證是否曾經超額掉回 5m，短期無法驗；長期可對照 `/usage` 額度紀錄與同期是否有 cache_write 異常升高 | 我（長期觀察，非下一則） |
 
 ### 8.4 基準線（下次對照用這組）
 
