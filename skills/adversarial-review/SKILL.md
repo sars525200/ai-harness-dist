@@ -142,6 +142,18 @@ agent -p --mode ask --trust --workspace <隔離沙箱> --model <slug> "<單行 p
 
 抓 exit code 時不要把管線末端工具的狀態當成 CLI 狀態。
 
+9. **額度不足自動降級**（2026-09-06 user 裁決）：`_rN_raw.txt` 含 `ActionRequiredError`、
+   `out of usage` 或 `Increase limits` 字樣，視為帳號級額度用盡——**不是模型專屬**，
+   2026-09-06 同帳號下 `cursor-grok-4.6-high` 與 `-medium` 兩個檔位回的是同一則錯誤。
+   不重試同一 slug、不停下來問人，直接改用 `--model auto` 重跑同一輪（ask 與沙箱不變）。
+   - 降級後，步驟 8 回報必須明講一句「本輪已降級為 `auto`，非設定檔原定
+     `cursor-grok-4.6-high`，跨模型族審查獨立性可能打折」，不得只把模型名字放進
+     欄位讓人自己推斷。
+   - `auto` 仍失敗（同款錯誤字樣或非零 exit）→ 降級鏈到底，停下來問人，
+     不再往下猜其他 slug。
+   - Codex CLI 本機未安裝（`--check` 已確認會印「未裝」），**不列入這條降級鏈**；
+     要不要裝是人的決定，不是這條規則自動觸發的事。
+
 ## 3b. `claude-code` 執行規則（Cursor 作者）
 
 ```text
