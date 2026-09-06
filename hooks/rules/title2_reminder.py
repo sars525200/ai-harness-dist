@@ -38,11 +38,31 @@ matcher 恢復」）——兇手是「無範圍限制」，不是「PreToolUse �
 不是重新發明判準——沿用 `session_archive.py` 已經在用的 import 慣例
 （cross-module 引用 `hooks/` 底下的私有函式，這個 repo 本來就這樣做）。
 
-【核心層】判準只看 payload 與 transcript 內容，不寫死任何專案路徑。
+## 升級（2026-09-06，轉正式後抽查）
+
+轉正式後第一個真實 WARN（session `87c830f8`，19:18:53）之後，同一個 session
+繼續跑了至少 3 輪工具呼叫，標題始終沒被改——而這個 session 在 shadow 期就已經
+是 6 次連續 WARN 0 次照做。**不是送不到（`PreToolUse` 已保證同輪送達），是送到
+了也被跳過**，所以不比照 ESC-1 加「送達確認」（那解的是送不到的問題，這裡不
+成立），而是加「同一個 session 連續被跳過幾次」的計數：達到門檻就在訊息最前面
+加一句更硬的提醒，原本「組好的標題參考」句子照樣保留在後面。
+
+**維持 WARN、不改 BLOCK**：標題只是側欄好不好認，不是正確性問題，這條界線沒
+變——加重的是詞句，不是攔操作。
+
+門檻定 3 次：87c830f8 的第 3 次 WARN 出現在 18:25（距第 1 次僅 2 分鐘），已經
+是明確訊號，不必等到第 6 次才出聲。標題一旦被改掉（`existing` 不再是佔位名）
+就把該 session 的計數歸零——這是「有沒有改」的訊號，不是「宣告了幾次」。
+
+【核心層】判準只看 payload 與 transcript 內容，不寫死任何專案路徑。state 檔
+按 `session_id` 計數，換一個部門一樣成立。
 """
 from __future__ import annotations
 
+import json
+import os
 import re
+import time
 
 from contract import allow, iter_turn_assistant_texts, warn
 
@@ -51,6 +71,16 @@ import session_title as _T
 RULE_ID = "TITLE-2"
 
 _PLATFORM_DEFAULT_RE = re.compile(r"^pc-[a-z0-9]+-[a-z]+-[a-z]+$", re.I)
+
+# 連續幾次 WARN 都沒被接著改名，才在訊息前面加重詞句。
+_ESCALATE_AT = 3
+
+# U-1：不寫死絕對路徑，從本檔位置往上推三層＝harness 根（同 ESC-1 的推法）。
+_HARNESS_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+STATE_PATH = os.path.join(_HARNESS_ROOT, "state", "title2_state.json")
+
+# state 裡的 session_id 留多久（同 ESC-1，角色/對話一直在生，不修剪會無限長大）。
+_STATE_TTL_DAYS = 14
 
 
 def _turn_transcript_path(ctx) -> str:
@@ -105,16 +135,77 @@ def applies(ctx) -> bool:
     return bool(_declared_title(ctx))
 
 
+# ── 連續未改名計數（同一 session 內）──────────────────────────────────
+# 不照抄 ESC-1 的「pending/done」兩桶：那解的是「送達了沒」，這裡送達已經
+# 保證，只需要一個單純的計數器 + 最後判定時間，供 TTL 修剪用。
+def _load_state() -> dict:
+    try:
+        with open(STATE_PATH, encoding="utf-8-sig") as fh:
+            data = json.load(fh)
+    except Exception:
+        return {}
+    return dict(data) if isinstance(data, dict) else {}
+
+
+def _save_state(state: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
+        tmp = f"{STATE_PATH}.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False)
+        os.replace(tmp, STATE_PATH)
+    except Exception:
+        pass  # fail-open：記不住最壞是不升級，不值得讓 hook 爆掉
+
+
+def _prune(state: dict, cutoff: str) -> dict:
+    return {k: v for k, v in state.items() if (v or {}).get("last", "") >= cutoff}
+
+
+def _bump_count(session_id: str) -> int:
+    """該 session 的連續 WARN 次數 +1 並存檔，回傳新的次數。"""
+    if not session_id:
+        return 1  # 沒有 session_id 就不追蹤，每次都當第一次（不升級）
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    cutoff = time.strftime("%Y-%m-%dT%H:%M:%S",
+                           time.localtime(time.time() - _STATE_TTL_DAYS * 86400))
+    state = _prune(_load_state(), cutoff)
+    count = int((state.get(session_id) or {}).get("count", 0)) + 1
+    state[session_id] = {"count": count, "last": now}
+    _save_state(state)
+    return count
+
+
+def _reset_count(session_id: str) -> None:
+    """偵測到標題已經被改掉（不再是佔位名）→ 該 session 的連續計數歸零。"""
+    if not session_id:
+        return
+    state = _load_state()
+    if session_id in state:
+        state.pop(session_id, None)
+        _save_state(state)
+
+
 def check(ctx):
     declared = _declared_title(ctx)
     if not declared:
         return allow()
+    session_id = getattr(ctx, "session_id", "") or ""
     existing = _existing_title(ctx)
     if not _is_placeholder(existing):
+        _reset_count(session_id)
         return allow()
-    return warn(
+
+    count = _bump_count(session_id)
+    message = (
         "TITLE-1（global/hub/21-title-claude.md）：這一輪的自我宣告已經確定任務"
         "範圍，但這則對話的標題還是%s。該呼叫 set_session_title 改名了——"
         "組好的標題參考：「%s」。"
         % (("預設值「%s」" % existing) if existing else "從未命名過", declared)
     )
+    if count >= _ESCALATE_AT:
+        message = (
+            "⚠️ 這是本則對話第 %d 次提醒——前面都沒有照做，請現在就呼叫 "
+            "set_session_title。\n" % count
+        ) + message
+    return warn(message)

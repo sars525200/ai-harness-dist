@@ -24,9 +24,10 @@ _RULE = os.path.join(_ROOT, "hooks", "rules", "title2_reminder.py")
 
 
 class _Ctx:
-    def __init__(self, msg, transcript_path=""):
+    def __init__(self, msg, transcript_path="", session_id=""):
         self.last_assistant_message = msg
         self.transcript_path = transcript_path
+        self.session_id = session_id
 
 
 _DECL = (
@@ -121,6 +122,35 @@ def run() -> "tuple[int, list]":
         p6 = _write_transcript(td, ["隨便聊聊，沒有宣告"], custom_title=None)
         ctx6 = _Ctx("隨便聊聊，沒有宣告", p6)
         check("沒有宣告時 applies=False", not m.applies(ctx6))
+
+        # 7) 同一 session 連續 3 次 WARN 都沒改名 → 第 3 次起訊息加重
+        #    （87c830f8 實測第 3 次距第 1 次僅 2 分鐘，門檻定 3）
+        old_state_path = m.STATE_PATH
+        m.STATE_PATH = os.path.join(td, "title2_state.json")
+        try:
+            sid = "s-escalate"
+            p7 = _write_transcript(td, [_DECL], custom_title=None)
+            v7a = m.check(_Ctx(_DECL, p7, session_id=sid))
+            check("第 1 次不加重", "第 1 次" not in v7a.message and "⚠️" not in v7a.message,
+                  repr(v7a.message))
+            v7b = m.check(_Ctx(_DECL, p7, session_id=sid))
+            check("第 2 次不加重", "⚠️" not in v7b.message, repr(v7b.message))
+            v7c = m.check(_Ctx(_DECL, p7, session_id=sid))
+            check("第 3 次加重", "⚠️" in v7c.message and "第 3 次" in v7c.message,
+                  repr(v7c.message))
+            check("加重後仍保留組好的標題參考", declared_ref := m._T._declared_task([_DECL], "") in v7c.message,
+                  repr(v7c.message))
+
+            # 8) 改名之後計數歸零：下一次漏做重新從第 1 次算，不接著累加
+            composed7 = m._T._declared_task([_DECL], "")
+            p8 = _write_transcript(td, [_DECL], custom_title=composed7)
+            v8 = m.check(_Ctx(_DECL, p8, session_id=sid))
+            check("改名成功那輪不叫", not v8.message, repr(v8.message))
+            p9 = _write_transcript(td, [_DECL], custom_title=None)
+            v9 = m.check(_Ctx(_DECL, p9, session_id=sid))
+            check("歸零後下一次不加重", "⚠️" not in v9.message, repr(v9.message))
+        finally:
+            m.STATE_PATH = old_state_path
 
     return passed, failed
 
