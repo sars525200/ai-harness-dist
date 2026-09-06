@@ -6,7 +6,8 @@
 
 ## 狀態
 
-**Execute 階段，Phase 1 規則已實作並通過 4 情境驗證，尚未接上正式站**。
+**Phase 1 已完成並曾接上正式站；Phase 2（`ONB-2`）已取代 `ONB-1` 上線，`shadow: true`
+觀察中**——狀態細節見下方「Phase 2 設計」章節的「狀態」小節，這裡只留 Phase 1 的歷史記錄。
 
 - `ONB-1` 規則（`hooks/rules/onb1_sessionstart_notice.py`）已寫完，REGISTRY／
   直接投遞通道（`hooks/dispatch.py`）已接、`dispatch_config.json` 已登記
@@ -158,15 +159,21 @@ SessionStart 開場偵測到「還沒接上」時，直接呼叫 `generate_rules
    直接執行，沒理由留著只印文字的舊版一起跑，否則同一次 SessionStart 可能印兩則
    意思重複的訊息）——這件事本身也該讓使用者確認，見分岔 j。
 
-### 待決分岔
+### 待決分岔——2026-09-07 使用者已定案（全部照傾向）
 
-| 分岔 | 選項 | 傾向 | 理由 |
-|---|---|---|---|
-| (f) `generate_map.py` 前提不足時的安靜低品質輸出，要不要補守門 | 兩支都是「前提不足就不自動執行，退回 Phase 1 純提醒」／只加給 `generate_map.py`／兩支都不加（維持現狀） | 兩支都退回純提醒 | 跟 Phase 1 已經驗證過的安全預設一致（「唯讀提醒」比「自動寫出品質不明的檔案」風險低一個量級）；`generate_map.py` 現在的行為是「安靜產出、沒人知道品質差」，這比「乾脆不做」更危險——會讓一份爛檔案永久卡住 `_already_onboarded()` 判準，之後沒有任何機制會再提醒 |
-| (g) 產出檔要不要加機制化「未審核」標記 | 加 HTML 註解 marker＋一條新守門規則檢查「有沒有人手動改過但沒清掉 marker」／只加 marker 不加守門／兩者都不加（只靠現有免責聲明文字） | 只加 marker，不加守門 | 加 marker 成本低（兩支產生器各改一行範本），能讓使用者一眼看出「這是機器生的」；守門規則是額外一層基礎建設，且「有沒有人手動改過」這個判準本身容易誤報（正常編輯合法內容也會觸發），先上最小可行版本，之後真的有需要再談 |
-| (h) 併發寫入要不要加鎖 | 比照 `session_scan.py` 的 `O_CREAT`/`O_EXCL` 模式加鎖／不加鎖 | 加鎖 | 這不是假設性風險——研究找到 harness 自己至少 3 處因為同一類問題（同一資源被多 session 同時碰）而各自修過鎖或分檔；已有現成模式可抄，工程成本低，不加鎖等於明知道會撞還不設護欄 |
-| (i) 失敗（`generate_rules.py` `exit 1`）時要不要通知使用者 | 失敗時退回印 Phase 1 那種純文字提醒（等於部分失敗有 fallback）／靜默、下次 session 再試一次／換一種措辭明確告知「自動接上失敗，需要人工檢查 PROJECT_CONTEXT.md」 | 退回 Phase 1 純文字提醒 | 靜默重試會讓使用者永遠不知道「為什麼這個專案一直沒接上」；退回既有的 Phase 1 訊息不需要新寫措辭，且已經驗證過陳述句合格，不會被判成 prompt injection |
-| (j) `ONB-1`／`ONB-2` 要共存還是 `ONB-2` 取代 `ONB-1` | 共存（兩則訊息都可能印）／`ONB-2` 取代 `ONB-1`（`ONB-1` 下線或改成 `ONB-2` 內部失敗時的 fallback） | `ONB-2` 取代，`ONB-1` 原地保留當分岔 (f)(i) 的 fallback 訊息來源 | 同一次開場印兩則意思重複的訊息會被判成噪音；但 `ONB-1` 已經驗證過的措辭剛好是分岔 (f)(i) 需要的「退回純提醒」內容，不必重寫，只是呼叫路徑從「一定印」改成「`ONB-2` 判斷該退回時才印」 |
+| 分岔 | 決定 |
+|---|---|
+| (f) `generate_map.py`／`generate_rules.py` 前提不足或失敗時 | **兩支都退回印 Phase 1 純提醒**，不強行寫出檔案 |
+| (g) 產出檔要不要加「未審核」標記 | **只加 marker，不加守門規則** |
+| (h) 併發寫入要不要加鎖 | **加鎖**，比照 `session_scan.py` 的 `O_CREAT`/`O_EXCL` 模式 |
+| (i) 失敗時要不要通知使用者 | 已併入 (f)——退回純提醒本身就是通知 |
+| (j) `ONB-1`／`ONB-2` 關係 | **`ONB-2` 取代**成為 SessionStart 掛載的規則；`ONB-1` 模組保留但不再獨立掛事件，其訊息文字被 `ONB-2` 當 fallback 引用 |
+
+**Execute 階段發現的追加設計（不是新分岔，是把決定落地時必須解決的技術細節）**：
+
+- **`_already_onboarded()` 的 OR 語意在 Phase 2 底下是個缺口**：Phase 1 用「AGENTS.md **或** CODE_MAP.md 任一存在」當「別再煩他」的判準，這對純提醒沒問題；但 Phase 2 要**兩份都自動寫出**，若只有一份寫成功（例如 `generate_rules.py` 成功、`generate_map.py` 中途噴未預期例外），OR 判準會誤判成「已完成」，另一份永久沒人補。
+  **做法**：`ONB-2` 自己的「已完成」判準改成 **AND**（兩份都存在才算完成），且用獨立的成功紀錄檔（`onb2_autoconfig_done.json`）而不是共用 `onb1_notice_seen.json`——後者維持原意「純提醒講過一次」，語意不能混用。
+- **`generate_map.py` 沒有明確的「前提不足」訊號**（它幾乎不會 `exit` 非 0），所以「退回純提醒」這個判準不能靠它自己的回傳值。**做法**：重用 `generate_rules.py` 已有的前提檢查（`PROJECT_CONTEXT.md` 要有合法 `rules-content` JSON 區塊＋合法 keywords 檔）當**兩支共用的單一閘門**——檢查不過，兩支都不呼叫，直接退回純提醒；檢查過了才依序呼叫兩支。
 
 ### 驗證方式（草案，動工前定案）
 
@@ -182,17 +189,66 @@ SessionStart 開場偵測到「還沒接上」時，直接呼叫 `generate_rules
 - **不誤傷 Phase 1 的既有驗證**：`tests/test_hook_rules.py`、`tests/mutations/
   mutate_warn_channel.py` 全數重跑一次，確認新規則沒有讓既有回歸網變紅。
 
+### 驗證結果（2026-09-07，實跑，不是推測）
+
+上面五項全部真跑過，不是靠 code review 信過去：
+
+- **隔離腳本**（直接 import `rules.onb2_sessionstart_autoconfig`，跟 `dispatch.py`
+  同一種載入方式，monkeypatch `_is_shadow()` 避免碰共用的 `dispatch_config.json`
+  ——當時另有 3 個 session 同時在改這個 repo，不能去動共用設定檔）跑了 4 個情境，
+  全過：前提不足退回提醒（第二次同專案不重講）、前提充足寫出兩份檔案且都帶
+  marker（且事後 `applies()` 正確回 False、硬呼叫 `check()` 也不重寫）、
+  shadow=True 完全不動檔案、鎖被佔用時乾淨讓步＋鎖釋放後恢復正常。
+- **這輪測試親自抓到兩個會讓 `ONB-2` 上線後永遠靜默失效的 bug**（都在跑隔離腳本
+  時發現，不是code review 猜到的）：
+  1. 規則檔內 `import onb1_sessionstart_notice` 是裸 import——`dispatch.py`
+     用 `importlib.import_module("rules.onb2_...")` 這種套件路徑載入時完全
+     解析不到這個名字，會直接炸例外；`dispatch.py` 的外層 try/except 是
+     fail-open（吞例外、當作放行），後果是 **`ONB-2` 一旦上線，每次都在
+     `check()` 第一行就死，卻長得跟「正常判定成 allow」一模一樣，不會有任何
+     錯誤訊息**——這比「查得到但邏輯有 bug」嚴重得多，是「整條規則生下來就是
+     死的」。改成 `from . import onb1_sessionstart_notice`。
+  2. shadow 判斷原本擺在函式尾端，只擋得住最後 `warn()` 訊息送不送出去，
+     擋不住往前呼叫產生器寫真實檔案這個副作用——跟 `ONB-1` 當初「shadow 期
+     誤把觀察也算進『講過了』」是同一種 bug class，但這次的副作用是寫檔案，
+     代價高得多。已搬到 `check()` 最前面，任何檔案系統動作之前，並補了對應
+     的隔離測試（shadow=True 情境）當回歸網。
+- **既有回歸網**：`tests/run_hook_tests.py` 全跑（2029 案例），沒有因為這批改動
+  新增任何一條真失敗——修完前有兩條是我自己造成的（分層標註漏標
+  `onb2_sessionstart_autoconfig.py`、`dashboard/gen_hook_rules.py` 缺
+  `DESC["ONB-2"]`），已當場補上；剩下 3 條失敗（`tools/setup_new_pc_gui.py`
+  的新 D:\ 路徑債、`HND-2`/`HND-3` 缺敘述、`MODEL_ROUTING_PLAN.md` 等文件裡
+  引用的 jsonl session id 被誤判成 git hash）逐一核對過都跟本次改動無關，
+  是其他並行 session 的在製品或既有債務，沒有動它們。
+
+**還沒驗到、需要真實 session 重啟才能驗**：SessionStart 開場時 `dispatch.py`
+真的把 `ONB-2` 排進 REGISTRY 並實際呼叫到（隔離腳本繞過了 `dispatch.py` 本身
+的事件比對與 REGISTRY 走訪邏輯，只驗證規則模組自己的判斷）——這條落在下方
+「待驗清單」。
+
 ### 狀態
 
-**Design 階段，待分岔 (f)(g)(h)(i)(j) 定案，尚未寫任何 `ONB-2` 程式碼。**
+**Execute 階段收斂完成，隔離驗證通過，已分批 commit。**
+`ONB-2`（`shadow: true`）取代 `ONB-1` 掛上 `global/settings.json` 既有的
+`SessionStart`→`dispatch.py` 綁定（沒有新增 hook 掛載點，沿用既有的）。
+`ONB-1` 模組保留、不再獨立掛 `SessionStart`。正式站升 `shadow: false` 待下一輪
+明確請示使用者，不在本次自動做。
 
 ## 沒做的
 
 **本計畫書範圍外，明確排除**：
 
-- Phase 2 分岔定案前的實際程式碼——待下方決定後才動工。
+- Phase 2 的正式站 shadow 轉正——本次刻意停在 `shadow: true`，轉正是下一個
+  獨立的使用者決定，不在這次一起做掉。
 
-**已完成**：`global/settings.json` 與 `~/.claude/settings.json` 已接上 `SessionStart`，
-`ONB-1` 已轉正式（`shadow: false`）。
+**已完成**：`global/settings.json` 與 `~/.claude/settings.json` 已接上 `SessionStart`；
+`ONB-2` 已取代 `ONB-1` 成為實際掛載的規則（`shadow: true`，觀察中）；四項隔離
+情境全過；`dashboard/gen_hook_rules.py` 已補 `DESC["ONB-2"]`。
 
-**還沒驗到**：見上方「待驗清單」四項，全部需要真實 session 重啟才能驗，不是本次對話能跑的指令。
+**還沒驗到**：`ONB-2` 在真實 SessionStart 開場（透過 `dispatch.py` 本身，不是
+繞過它直接呼叫規則模組）確實被觸發到——四欄如下。
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| `ONB-2` 透過真實 `dispatch.py` REGISTRY 走訪被叫到 | 本次對話沒有重啟 session，隔離腳本繞過了 `dispatch.py` 的事件比對邏輯 | 在一個帶 `.claude/PROJECT_CONTEXT.md`（缺 `AGENTS.md`／`CODE_MAP.md`）的新目錄開一個新 session，檢查 `state/events.<session_id>.ndjson` 裡有沒有 `{"rule_id": "ONB-2"}` 的 `applies`/`decision` 記錄 | 使用者下一次在符合前提的真實專案開新 session 時 |
+| 正式站 `shadow: false` 轉正 | 使用者尚未被問過、也還沒有真實專案跑過至少一輪 shadow 觀察 | （待決）——見下方待辦 | 使用者下一輪明確回答後才動 |
