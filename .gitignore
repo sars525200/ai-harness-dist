@@ -59,3 +59,14 @@ session-archive/
 # 不該再進版控。live 側（~/.claude）的同名備份不在這個 repo 裡，不受這條影響。
 global/*.bak.*
 global/output-styles/*.bak.*
+
+# setup_new_pc_gui.py 打包成 exe 的產物與暫存輸入（tools/setup_new_pc_gui.py 交接檔
+# .scratch/handoff/20260907-new-pc-installer.md）。build/、dist/ 是 PyInstaller 產物，
+# .spec 是它重跑時自動產生的規格檔；tools/settings.json 是打包前從個人機器
+# ~/.claude/settings.json 複製過來給 --add-data 用的暫存輸入，帶 116 條權限規則與
+# 12 個工作目錄 = 公司專案結構，絕不進版控，打包完就該刪掉。
+tools/setup_new_pc_gui.spec
+tools/settings.json
+build/
+dist/
+*.exe
