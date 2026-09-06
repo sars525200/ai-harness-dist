@@ -20,26 +20,159 @@ ALLOW = "ALLOW"
 BLOCK = "BLOCK"
 WARN = "WARN"
 
-# 一輪對話最多往回讀多少 transcript bytes。長 session 的 jsonl 可以到數十 MB，
-# 而 Stop 每輪都觸發——全檔讀會讓 hook 延遲隨對話長度線性惡化。
+# ---------------------------------------------------------------------------
+# transcript 掃描：兩種問題、兩種讀法（2026-09-07 改寫，見 TRANSCRIPT_SCAN_PLAN.md）
+# ---------------------------------------------------------------------------
+#
+# 規則問 transcript 的問題有兩種，範圍不一樣，混用同一支讀法就會出事：
+#
+#   turn 級    「這一輪做了什麼」   → 檔尾即可，但**必須讀到輪次起點為止**
+#   session 級 「這則對話做過 X 嗎」 → 整則，看不全時要回「不知道」
+#
+# 舊制只有一支固定 2MB 的檔尾讀法，兩種問題都用它，兩邊都出過事：
+#
+#   ① 輪次起點落在窗外 → `_find_turn_start` 回 None → `iter_turn_*` 三支一起回
+#      None → PR-1／DECL-1／DECL-2／AWC-1／HND-3／IDX-1／TITLE-2 **同一輪全部
+#      靜默放行**。實測 `state/failopen.ndjson` 累計 685 次（2026-09-07，已濾掉
+#      source=test），2026-09-06 單日 220 次，且只有 PR-1 會留紀錄，另外六條
+#      連一筆 log 都沒有。`TODOS.md:93` 於 09-01 登記時是 66 次，六天漲 10 倍。
+#   ② session 級的 EXP-1／LEARN-1 把「窗內沒看到」答成「沒有」，長對話裡誤判。
+#
+# 所以現在是：turn 級**找不到起點就逐級擴窗直到整檔**（成本只在真的很長的那
+# 幾輪付），session 級**直接讀整檔**、超過上限就回 None（不知道，呼叫端 fail-open）。
+
+# turn 級第一次嘗試的窗。絕大多數輪次遠小於這個數，一次就命中。
 _TRANSCRIPT_TAIL_BYTES = 2_000_000
 
+# 第一次找不到輪次起點時逐級擴窗。`None` ＝ 整檔（最後一手）。
+# **這是修正 ① 的關鍵**：舊制到此就放棄，而放棄的代價是七條規則同時失效。
+_TURN_WINDOW_STEPS = (8_000_000, 32_000_000, None)
 
-def _tail_lines(transcript_path: str) -> "list[str] | None":
-    """只讀 transcript 檔尾 `_TRANSCRIPT_TAIL_BYTES`，回行陣列；讀不到回 None。"""
+# session 級掃描的上限。**語意與 `_TRANSCRIPT_TAIL_BYTES` 相反**：那個是「為了
+# 省時間刻意只看一段」，這個是「看不全就不給答案」——超過就回 None，不回片段。
+# 片段的「沒找到」不足以推論「沒有」，那正是 ② 的成因。
+_SESSION_SCAN_MAX_BYTES = 20_000_000
+
+# 一次 hook 事件＝一個獨立 process（`dispatch.py` 的 `sys.exit(main())`，
+# `main()` 只讀一次 stdin）⇒ module 級快取的壽命剛好是一次事件，不會跨事件讀到
+# 舊內容。**為什麼需要它**：`dispatch.py` 對這幾支零快取，一次 Stop 裡
+# learn1／decl1／decl2／esc1／win1×2／title2 會各讀一次同一個檔，
+# 實測單次讀 2MB 要 4–10ms ⇒ 同一份資料被付了六次以上。
+_SCAN_CACHE: dict = {}
+
+
+def _clear_scan_cache() -> None:
+    """清掉掃描快取。正式路徑用不到（process 就活一次事件），測試要用。"""
+    _SCAN_CACHE.clear()
+
+
+def _read_window(transcript_path: str, nbytes: "int | None"):
+    """讀檔尾 `nbytes`（`None` ＝ 整檔）。
+
+    回 `(lines, truncated)`；讀不到回 `None`。
+    `truncated` ＝ 這次沒有讀到檔頭，也就是「還有更前面的內容沒看到」。
+
+    ⚠ **快取 key 帶 (size, mtime)，不是只有路徑**（2026-09-07 被自己的回歸網打臉
+    才補上）：原版只用路徑，理由是「一個 process 只活一次事件、期間檔案不會被
+    改寫」。這在正式路徑成立，但那是**沒有守門的假設**——`tests/test_exp1.py`
+    每個案例都往同一個 `t.jsonl` 重寫不同內容，於是第二個案例之後全部讀到第一份，
+    三條 EXP-1 正向案例一起轉紅。**而在正式路徑上，同型的錯會安靜地發生**：
+    這整件工作要修的就是「拿看不全／看錯的資料當答案」，快取不能自己再犯一次。
+    一次 `os.stat` 是微秒級，省下的是 4–10ms 的讀＋解碼，這筆划算。
+    """
+    try:
+        st = os.stat(transcript_path)
+        stamp = (st.st_size, st.st_mtime_ns)
+    except OSError:
+        stamp = None
+    key = ("win", transcript_path, nbytes, stamp)
+    if key in _SCAN_CACHE:
+        return _SCAN_CACHE[key]
     try:
         with open(transcript_path, "rb") as fh:
             fh.seek(0, os.SEEK_END)
             size = fh.tell()
-            start = max(0, size - _TRANSCRIPT_TAIL_BYTES)
+            start = 0 if nbytes is None else max(0, size - nbytes)
             fh.seek(start)
             data = fh.read()
     except Exception:
+        _SCAN_CACHE[key] = None
         return None
     lines = data.decode("utf-8", errors="replace").splitlines()
     if start > 0 and lines:
         lines = lines[1:]  # 檔尾切片的第一行大機率被截半，丟掉
-    return lines
+    out = (lines, start > 0)
+    _SCAN_CACHE[key] = out
+    return out
+
+
+def _tail_lines(transcript_path: str) -> "list[str] | None":
+    """只讀 transcript 檔尾 `_TRANSCRIPT_TAIL_BYTES`，回行陣列；讀不到回 None。
+
+    **這支回答的是 turn 級以外的「檔尾就夠」的問題**（ESC-1 的增量掃描、
+    WIN-1 的反向找最後一次）。要問「這一輪」請用 `_turn_lines`，
+    要問「這則對話」請用 `session_lines` —— 用錯的症狀都是靜默失效。
+    """
+    got = _read_window(transcript_path, _TRANSCRIPT_TAIL_BYTES)
+    return None if got is None else got[0]
+
+
+def session_lines(transcript_path: str) -> "list[str] | None":
+    """整份 transcript 的行陣列 —— session 級問題（「這則對話做過 X 嗎」）用這支。
+
+    **回 None 代表「判斷不出來」，不是「這則對話沒有」** —— 呼叫端必須 fail-open。
+    兩種情形回 None：
+
+    - 讀不到檔（路徑空、不存在、權限）
+    - 檔案大於 `_SESSION_SCAN_MAX_BYTES`：只看得到片段，而片段的「沒找到」
+      推論不出「沒有」。**這裡刻意不回片段** —— 回片段就會再犯一次 ② 那個錯，
+      而且下一個人看不出來它只看了一部分。
+    """
+    if not transcript_path:
+        return None
+    try:
+        if os.path.getsize(transcript_path) > _SESSION_SCAN_MAX_BYTES:
+            return None
+    except OSError:
+        return None
+    got = _read_window(transcript_path, None)
+    return None if got is None else got[0]
+
+
+def _turn_lines(transcript_path: str):
+    """回 `(lines, turn_start)` —— 「這一輪」的行陣列與起點索引；判斷不出來回 None。
+
+    先用 `_TRANSCRIPT_TAIL_BYTES`；**找不到輪次起點就照 `_TURN_WINDOW_STEPS`
+    逐級擴窗，最後一級是整檔**。已經讀到檔頭還找不到，才是真的「不知道」。
+
+    為什麼不是把 `_TRANSCRIPT_TAIL_BYTES` 直接調大：擴窗的成本只在「這一輪
+    真的吐了超過 2MB」時才付，而那是少數；直接調大則是每一輪都付。
+    """
+    if not transcript_path:
+        return None
+    try:
+        st = os.stat(transcript_path)
+        stamp = (st.st_size, st.st_mtime_ns)
+    except OSError:
+        stamp = None
+    key = ("turn", transcript_path, _TRANSCRIPT_TAIL_BYTES, stamp)
+    if key in _SCAN_CACHE:
+        return _SCAN_CACHE[key]
+
+    result = None
+    for nbytes in (_TRANSCRIPT_TAIL_BYTES,) + _TURN_WINDOW_STEPS:
+        got = _read_window(transcript_path, nbytes)
+        if got is None:
+            break
+        lines, truncated = got
+        idx = _find_turn_start(lines)
+        if idx is not None:
+            result = (lines, idx)
+            break
+        if not truncated:
+            break  # 已經看到檔頭了還找不到 → 真的沒有，別再擴
+    _SCAN_CACHE[key] = result
+    return result
 
 
 def _find_turn_start(lines: "list[str]") -> "int | None":
@@ -80,17 +213,15 @@ def iter_turn_tool_uses(transcript_path: str) -> "list[dict] | None":
         項目（第一個 block type="tool_result"）。從檔尾往回找，第一個
         「真人訊息」就是這一輪的起點。
 
-    只讀檔尾 _TRANSCRIPT_TAIL_BYTES；若在這段裡找不到明確的輪次起點，
-    一律回 None——寧可放棄判斷，也不要拿「上一輪的工具呼叫」當本輪的證據。
+    走 `_turn_lines`：檔尾窗不夠就自動擴窗到整檔（2026-09-07 改；舊制在窗內
+    找不到起點就直接放棄，實測讓七條規則同時靜默失效 685 次）。**讀到檔頭仍
+    找不到明確的輪次起點才回 None**——寧可放棄判斷，也不要拿「上一輪的工具
+    呼叫」當本輪的證據。
     """
-    if not transcript_path:
+    got = _turn_lines(transcript_path)
+    if got is None:
         return None
-    lines = _tail_lines(transcript_path)
-    if lines is None:
-        return None
-    turn_start = _find_turn_start(lines)
-    if turn_start is None:
-        return None  # 找不到輪次起點 → 判斷不出來，不猜
+    lines, turn_start = got
 
     out: list[dict] = []
     for line in lines[turn_start:]:
@@ -124,14 +255,10 @@ def iter_turn_assistant_texts(transcript_path: str) -> "list[str] | None":
     只收 `type="text"` 的 block：`thinking` 不是講給使用者聽的話，
     `tool_use` 的參數也不是宣告 —— 收進來只會製造誤報。
     """
-    if not transcript_path:
+    got = _turn_lines(transcript_path)
+    if got is None:
         return None
-    lines = _tail_lines(transcript_path)
-    if lines is None:
-        return None
-    turn_start = _find_turn_start(lines)
-    if turn_start is None:
-        return None  # 找不到輪次起點 → 判斷不出來，不猜
+    lines, turn_start = got
 
     out: list[str] = []
     for line in lines[turn_start:]:
@@ -160,14 +287,10 @@ def turn_user_text(transcript_path: str) -> "str | None":
     刻意與 `iter_turn_tool_uses` 共用同一套輪次邊界判定（往回找第一個真人訊息），
     不另寫一份掃描 —— 兩份 copy 遲早會對「哪裡算一輪」有不同答案。
     """
-    if not transcript_path:
+    got = _turn_lines(transcript_path)
+    if got is None:
         return None
-    lines = _tail_lines(transcript_path)
-    if lines is None:
-        return None
-    idx = _find_turn_start(lines)
-    if idx is None:
-        return None
+    lines, idx = got
     try:
         obj = json.loads(lines[idx])
     except Exception:

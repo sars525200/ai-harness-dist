@@ -389,6 +389,18 @@ def main() -> int:
         print(f"  {'PASS' if not unit_failed else 'FAIL'}  contract 共用函式單元測試"
               f"（{unit_passed}/{unit_passed + len(unit_failed)}）")
 
+        # transcript 掃描層（2026-09-07）。分開一支是因為它守的性質不同：
+        # 上面那支守「共用函式的判定對不對」，這支守「**看得到的範圍對不對**」。
+        # 範圍錯掉時判定邏輯完全正常，七條規則一起安靜地放行 —— 實測 685 次。
+        import test_contract_scan
+        scan_passed, scan_failed = test_contract_scan.run()
+        unit_passed += scan_passed
+        unit_failed.extend(scan_failed)
+        for detail in scan_failed:
+            failed.append(("contract 掃描層", detail))
+        print(f"  {'PASS' if not scan_failed else 'FAIL'}  contract transcript 掃描層"
+              f"（{scan_passed}/{scan_passed + len(scan_failed)}）")
+
         # 角色層閘門（agent-scoped hook，不進 REGISTRY）。掛在總入口是因為
         # 孤兒測試等於沒有測試 —— 改 gate 的人不會知道要去跑另一支檔案。
         import test_agent_gate

@@ -81,7 +81,7 @@ import os
 import re
 import time
 
-from contract import _tail_lines, allow, iter_turn_assistant_texts, warn
+from contract import allow, iter_turn_assistant_texts, session_lines, warn
 
 import session_title as _T
 
@@ -164,11 +164,15 @@ def _norm_tool(name: str) -> str:
 def _session_asked_or_skipped(transcript_path: str):
     """這則對話有沒有問過學習說明、或使用者已經講過「照做就好」。
 
-    True／False 是判定；None 是讀不到 transcript（呼叫端要當 fail-open）。
+    True／False 是判定；None 是判斷不出來（呼叫端要當 fail-open）。
+
+    ⚠ **走 `session_lines` 不是 `_tail_lines`**（2026-09-07 改）：問的是
+    「**這則對話**有沒有問過」，整則範圍。舊制只讀檔尾 2MB ⇒ 對話前段問過的
+    那次被擠出窗外就回 `False`，然後這條在人剛問完之後提醒他「整段對話沒有
+    問過」。而它一則只提醒一次、提醒完就 `_mark_recorded`，**錯過的那次不會
+    再有第二次機會講對**。
     """
-    if not transcript_path:
-        return None
-    lines = _tail_lines(transcript_path)
+    lines = session_lines(transcript_path)
     if lines is None:
         return None
 

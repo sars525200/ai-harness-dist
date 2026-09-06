@@ -37,7 +37,7 @@ import json
 import os
 import re
 
-from contract import _tail_lines, allow, block
+from contract import allow, block, session_lines
 
 RULE_ID = "EXP-1"
 
@@ -128,10 +128,18 @@ def _is_yes(text: str) -> bool:
 
 
 def _session_consent(transcript_path: str):
-    """這則對話有沒有同意做說明頁。None＝判斷不出來。"""
-    if not transcript_path:
-        return None
-    lines = _tail_lines(transcript_path)
+    """這則對話有沒有同意做說明頁。None＝判斷不出來。
+
+    ⚠ **走 `session_lines` 不是 `_tail_lines`**（2026-09-07 改）：這問的是
+    「**這則對話**有沒有點過頭」，是整則範圍的問題。舊制只讀檔尾 2MB，
+    人在對話前段點的頭一旦被擠出窗外，這裡就回 `False`——而 `False` 的意思是
+    「確定沒同意」，於是 `check()` 直接 BLOCK。**人明明點過頭卻被擋**，
+    且訊息會叫他「先用選擇題問」，他問了也還是被擋。
+
+    實測（2026-09-07）：前一則對話裡目標事件距檔尾 1.97 MB，只剩 20–30 KB
+    餘裕。`session_lines` 看不全時回 None，`check()` 據此 fail-open。
+    """
+    lines = session_lines(transcript_path)
     if lines is None:
         return None
 

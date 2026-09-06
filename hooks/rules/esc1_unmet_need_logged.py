@@ -144,6 +144,13 @@ def _agent_reports(transcript_path: str) -> dict:
     純字串的行當成真人訊息，而背景 agent 的完成通知正是那個形狀（實測 87 行、
     `isMeta` 全為 False）⇒ 輪次邊界會被非人類事件切開。去重按 agentId 不按輪次，
     所以不去踩它。
+
+    **也刻意不改用 `session_lines`（2026-09-07 覆核後保留現狀，不是漏改）**：
+    EXP-1／LEARN-1 那兩支換成整檔掃，是因為它們問的是「這則對話有沒有做過 X」
+    ——沒看到就會答錯。這一支不是：它是**增量＋有狀態**，`esc1_state.json`
+    按 `agentId` 去重，早於檔尾窗的回報幾乎必然在更早的輪次就已經處理過了。
+    而這一支**每個 Stop 都跑**，改成整檔掃等於每輪付 15–42ms（實測）去換一個
+    「單一輪次內湧入超過 2MB 且其中夾著沒處理過的角色回報」的情境。不划算。
     """
     lines = _tail_lines(transcript_path)
     if not lines:
