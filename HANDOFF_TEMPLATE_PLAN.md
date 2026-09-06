@@ -134,9 +134,41 @@ AWC-1 的實測已證明攔不住這一輪。`tests/test_hnd3_closing_snippet.py
 `test_registry_and_shadow` 同步改期望值。跟 HND-2 那次一樣，代價是還沒看過
 真實情境下的假陽性率。
 
+## 監控方法（2026-09-06 補）——查有沒有誤擋不要用手動 grep
+
+跳過觀察期不等於不驗，只是驗證從「先觀察再上線」搬到「上線後盯 would-block
+清單」。**這個 repo 本來就有現成工具能查，不用手動翻 `state/events.*.ndjson`**：
+
+```
+py -3 hooks/report.py
+```
+
+看兩個地方：①`findings/applies` 那張表裡 `HND-2`／`HND-3` 那兩列——`findings`
+是非 ALLOW 判定次數，`applies` 是規則被評估到的次數（分母）；②「Would-block
+清單」區塊裡 `[HND-2]`／`[HND-3]` 那兩節，逐筆列出 `ENFORCE`（真的擋了，
+`shadow: false` 之後才算數）／`SHADOW`（只是記錄不擋）／`BYPASS`，附
+session、時間、command、完整 message——**這就是判斷「擋得對不對」要看的
+第一手資料**，不用再手動 `grep state/events.*.ndjson`。這個 log schema 與
+「findings 是分子、applies 是分母」的讀法是 `HARNESS_PLAN.md` D17／D18 已經
+定好的通用約定，HND-2/HND-3 沿用即可，不必另立一套。
+
+⚠ `HARNESS_PLAN.md` D18 定的轉正式雙門檻是「時間窗 3–5 天且命中次數 ≥ 5」；
+HND-2/HND-3 是 user 知情下跳過這個門檻直接轉正式的（見上方轉正式紀錄），
+所以現在 `py -3 hooks/report.py` 量到的樣本數還沒到位——**看到 findings 數字
+小不是異常，是本來就還在補樣本**，除非看到 `ENFORCE` 那筆的 message 內容跟
+實際情境對不上（誤擋），才需要動作。
+
+**2026-09-06 18:20 查證快照**（供下一個接手者參考，不是最終結論）：HND-2
+`findings=5／applies=29`、HND-3 `findings=2／applies=34`。逐筆看過 Would-block
+清單裡的 `ENFORCE` 記錄——HND-2 一筆是交接檔 `task` 欄位留空被擋、4 秒後補上
+內容重試就過關；HND-3 一筆是動過交接檔但回覆結尾沒附收尾片段被擋、下一輪
+補上就過關。兩筆都是「擋下來 → 立刻自行修正 → 沒卡住流程」，**目前沒看到
+誤擋**，但兩條各自都只有 1 筆真實 `ENFORCE` 樣本，離 D18 的門檻還很遠，
+不能就此結案。
+
 ## 待驗清單（四欄齊全，空白＝沒驗過）
 
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| HND-2 轉正式後，正常工作流程存交接檔會不會被誤擋——**只有一筆自我驗證的實例，跳過了觀察期** | 觀察期被跳過，還沒看過多種真實存檔情境 | 接下來幾天正常用 `tools/new_handoff.py` 建交接檔、正常編輯幾輪，留意有沒有合法存檔被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-2"` 改回 `{"shadow": true}` 觀察，不要急著調鬆判準 | user／下一則的我 |
-| HND-3 轉正式後，正常收尾（結尾本來就有 fenced code block）會不會被誤判成沒有——**同樣只跳過觀察期，沒驗過真實情境** | 觀察期被跳過 | 接下來幾輪正常動交接檔並在結尾附收尾片段，留意有沒有被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-3"` 改回 `{"shadow": true}` 觀察 | user／下一則的我 |
+| HND-2 轉正式後，正常工作流程存交接檔會不會被誤擋——**只有一筆自我驗證的實例，跳過了觀察期** | 觀察期被跳過，還沒看過多種真實存檔情境；2026-09-06 18:20 快照只有 1 筆真實 `ENFORCE` 樣本，離 D18 門檻（≥5 筆）還遠 | `py -3 hooks/report.py`，看 `HND-2` 的 `findings/applies` 是否持續累積，逐筆讀 Would-block 清單裡 `[HND-2] BLOCK` 的 `ENFORCE` 記錄，message 跟當下情境對不上才算誤擋；真的誤擋就把 `dispatch_config.json` 的 `"HND-2"` 改回 `{"shadow": true}` 觀察，不要急著調鬆判準 | user／下一則的我 |
+| HND-3 轉正式後，正常收尾（結尾本來就有 fenced code block）會不會被誤判成沒有——**同樣只跳過觀察期，沒驗過真實情境**；2026-09-06 18:20 快照只有 1 筆真實 `ENFORCE` 樣本 | 觀察期被跳過，樣本數同上未達門檻 | `py -3 hooks/report.py`，看 `HND-3` 的 `findings/applies`，逐筆讀 Would-block 清單裡 `[HND-3] BLOCK` 的 `ENFORCE` 記錄；真的誤擋就把 `dispatch_config.json` 的 `"HND-3"` 改回 `{"shadow": true}` 觀察 | user／下一則的我 |
