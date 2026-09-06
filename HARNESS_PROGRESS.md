@@ -89,7 +89,7 @@
 - ⬜ 跑 `/doctor` 取官方精簡建議（人工掃過沒找到可砍的架構描述型內容，但未實跑）
 - ✅ ~~`permissions.allow` 白名單收斂~~ → **2d 已做（187→115）**。但要記住結論：收益是衛生不是安全
   （allow 管「要不要問」、hook 閘門管「擋不擋」，兩者獨立），所以**不要再想著繼續收緊**
-- ⬜ 無 `AGENTS.md`（若要建，應以 `@AGENTS.md` import 單一實體，不維護兩份）
+- ✅ ~~無 `AGENTS.md`~~ → **2026-09-06 裁定不做**：harness 根目錄產 `AGENTS.md` 撞 `COLLAB_HANDOFF.md:41`／`cursor-adapter.mdc:13` 現行禁令，理由見 `.scratch/rules-and-map/map.md` Decisions so far。原本「應以 `@AGENTS.md` import 單一實體」的做法保留給 IT-department／MIS-install 兩個部門（編碼規則產生器票 01/04/05），跟 harness 自己無關
 
 ---
 

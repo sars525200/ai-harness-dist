@@ -21,14 +21,20 @@
 
 ## 狀態
 
-規劃中，五張決策票尚未關閉。
+規劃中，票 01／02／03 已關閉（2026-09-06）。**代碼地圖產生器已經是真的可執行 skill**
+（`skills/code-map-generator/`，票 03 動工時發現規格只有草稿才回頭寫成程式），對 harness
+本身實跑兩次驗證冪等，`CODE_MAP.md` 已落在 harness 根目錄。編碼規則產生器
+（`code-rules-generator`）**還只有草案，沒有寫成程式**——票 04／05 動工時一樣會撞到同一個
+落差，屆時要一併考慮是否先寫成真程式。
+**票 04（IT-department）動工前有一個前置依賴**：需先請該部門在 `PROJECT_CONTEXT.md` 補一段
+`dev-prod-sync` 結構化區塊（草案值已備好，見票 02 決策票），才能讓 DEV/PROD 內容一致性檢查生效。
 
 <!-- REVIEW_SCOPE_IGNORE_START -->
 | 狀態 | 項目 | 說明 |
 |---|---|---|
-| ⏳ 待做 | 票 01 編碼規則產生器 skill 規格 | `.scratch/rules-and-map/decisions/01-rules-generator-spec.md` |
-| ⏳ 待做 | 票 02 代碼地圖產生器 skill 規格 | `.scratch/rules-and-map/decisions/02-code-map-generator-spec.md` |
-| ⏳ 待做 | 票 03 harness 本身套用（阻塞於 01、02） | `.scratch/rules-and-map/decisions/03-apply-harness.md` |
-| ⏳ 待做 | 票 04 IT-department 套用（阻塞於 01、02） | `.scratch/rules-and-map/decisions/04-apply-it-department.md` |
-| ⏳ 待做 | 票 05 MIS-install 套用（阻塞於 01、02） | `.scratch/rules-and-map/decisions/05-apply-mis-install.md` |
+| ✅ 已解 | 票 01 編碼規則產生器 skill 規格（2026-09-06 定案，草案未寫成程式） | `.scratch/rules-and-map/decisions/01-rules-generator-spec.md`；草案見 `.scratch/rules-and-map/prototypes/ticket-01/` |
+| ✅ 已解 | 票 02 代碼地圖產生器 skill 規格（2026-09-06 定案，含 round4 遺留 K/O 關閉；已轉正為真程式） | `.scratch/rules-and-map/decisions/02-code-map-generator-spec.md`；程式見 `skills/code-map-generator/` |
+| ✅ 已解 | 票 03 harness 本身套用（2026-09-06，實跑代碼地圖產生器兩次驗證冪等） | `.scratch/rules-and-map/decisions/03-apply-harness.md`；產出見根目錄 `CODE_MAP.md` |
+| ⏳ 待做 | 票 04 IT-department 套用（阻塞解除；動工前先補 `dev-prod-sync` 區塊＋編碼規則產生器要不要先轉正為真程式） | `.scratch/rules-and-map/decisions/04-apply-it-department.md` |
+| ⏳ 待做 | 票 05 MIS-install 套用（阻塞解除） | `.scratch/rules-and-map/decisions/05-apply-mis-install.md` |
 <!-- REVIEW_SCOPE_IGNORE_END -->

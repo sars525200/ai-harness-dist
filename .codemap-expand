@@ -1,0 +1,10 @@
+# 代碼地圖產生器（skills/code-map-generator）展開清單——一行一個相對路徑。
+# 展開是遞迴但只認這裡列出的路徑：列了 global 才會走進 global/ 底下，
+# 再列 global/hub 才會繼續展開 hub/ 裡的規則模組——不會因為列了子路徑就自動展開父路徑。
+# 票 03（harness 套用）明講要涵蓋 global/hub／skills／agents／hooks 這四個目錄。
+global
+global/hub
+skills
+agents
+hooks
+hooks/rules

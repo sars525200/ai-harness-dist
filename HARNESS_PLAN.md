@@ -160,7 +160,7 @@ git 原生機制三個維度全勝 hook：
 | `D:\IT-deploy-tmp` | 2026-06-25 舊 clone | — | — | — | **殘留待清** |
 | `D:\OnikVR`、`D:\_歸檔` | VR payload／歷史封存 | — | — | — | 不納入 |
 
-**八元件**：① Runtime 🟢｜② Rules 🟢（無 AGENTS.md）｜③ Memory 🟢 最強項｜④ Tools 🟡 兩 MCP 未授權｜⑤ **Hooks 🔴 0 個**｜⑥ Sandbox 🔴｜⑦ Evaluation 🟡 有工具沒閘門｜⑧ Observability 🟡 人可讀機不可讀
+**八元件**：① Runtime 🟢｜② Rules 🟢（無 AGENTS.md——**2026-09-06 裁定不做**：harness 根目錄產 `AGENTS.md` 撞 `COLLAB_HANDOFF.md:41`／`cursor-adapter.mdc:13` 現行禁令，理由見 `.scratch/rules-and-map/map.md` Decisions so far；IT-department／MIS-install 兩個部門各自的 `AGENTS.md` 由編碼規則產生器票 01/04/05 處理，跟這裡的裁定無關）｜③ Memory 🟢 最強項｜④ Tools 🟡 兩 MCP 未授權｜⑤ **Hooks 🔴 0 個**｜⑥ Sandbox 🔴｜⑦ Evaluation 🟡 有工具沒閘門｜⑧ Observability 🟡 人可讀機不可讀
 
 **核心問題**：規則品質不是問題，**規則的執行方式**才是。60 條硬規則全靠「叫模型記得」，於是週期性再犯。54KB permission 白名單膨脹＝policy 層缺席的代償。
 
@@ -340,7 +340,7 @@ state：append-only、session-scoped、24 小時過期清理。
 | **1.5** | **permission 白名單收斂**：54KB 逐條命令 → pattern 集。⚠ **不是撤除**（白名單管「要不要問」、hook 管「違不違規」，正交；撤掉會增加提問） | Phase 1 |
 | 2 | AI-Projects 建 `.claude\` 接共用層 + 記憶庫納管 | 附-A、Phase 1 |
 | 3 | Evaluation runner | Phase 1 架構 |
-| 4 | ② AGENTS.md ＋ ④ MCP ＋ ⑧ tool-trace／cost | Phase 2、3 |
+| 4 | ~~② AGENTS.md~~（**2026-09-06 裁定不做**——harness 自己不產出 `AGENTS.md`，理由同上；見 `.scratch/rules-and-map/map.md`）＋ ④ MCP ＋ ⑧ tool-trace／cost | Phase 2、3 |
 
 ---
 
