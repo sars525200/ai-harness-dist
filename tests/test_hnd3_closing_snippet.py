@@ -273,10 +273,10 @@ def test_registry_and_shadow():
            '"id": "HND-3"' in disp and "hnd3_handoff_closing_snippet" in disp)
     cfg = json.load(open(os.path.join(HOOKS, "dispatch_config.json"), encoding="utf-8"))
     _check("dispatch_config 有 HND-3", "HND-3" in cfg.get("rules", {}))
-    # 2026-09-06：跟 HND-2（user 當場跳過觀察期）不同，這條沒有被要求跳過，
-    # 沿用本 repo「新規則先上 shadow: true 觀察」的預設慣例。
-    _check("HND-3 先上 shadow: true 觀察",
-           cfg["rules"].get("HND-3", {}).get("shadow") is True)
+    # 2026-09-06：先上 shadow: true 觀察，同一則對話裡 user 看過設計＋測試後
+    # 決定比照 HND-2，當場跳過觀察期直接轉正式。
+    _check("HND-3 已轉正式（enforce，不是 shadow）",
+           cfg["rules"].get("HND-3", {}).get("shadow") is False)
 
 
 def run():

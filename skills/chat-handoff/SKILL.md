@@ -126,12 +126,12 @@ plan_sections: 無          # 要讀哪幾節，例如 "§4, §7"；plan 是「�
 回覆最後一行放檔案路徑，以及「請你打 `/clear` 後把上面那句貼進新對話」。
 
 **第 3 點從 2026-09-06 起有強制力**：`hooks/rules/hnd3_handoff_closing_snippet.py`
-（HND-3）在 Stop 時查——這一輪只要 Write／Edit／MultiEdit 動過
-`.scratch/handoff/*.md`（不含 `archive/`），回覆結尾沒有一段完整的 fenced code
-block 就 BLOCK，逼這一輪補上才能結束。判準只看格式事實（結尾是不是一個
-```……``` 區塊），不猜語意——原因跟 `AWC-1`（`hooks/rules/awc1_choices_check.py`）
-同一套：字面偵測「像不像在收尾」永遠有下一種寫法繞得過去。上線先 `shadow: true`
-觀察，見 `dispatch_config.json`。
+（HND-3，已轉正式，`shadow: false`）在 Stop 時查——這一輪只要 Write／Edit／
+MultiEdit 動過 `.scratch/handoff/*.md`（不含 `archive/`），回覆結尾沒有一段
+完整的 fenced code block 就 BLOCK，逼這一輪補上才能結束。判準只看格式事實
+（結尾是不是一個 ```……``` 區塊），不猜語意——原因跟 `AWC-1`
+（`hooks/rules/awc1_choices_check.py`）同一套：字面偵測「像不像在收尾」永遠
+有下一種寫法繞得過去。
 
 ## 4. 結案（事情做完之後回來做的）
 

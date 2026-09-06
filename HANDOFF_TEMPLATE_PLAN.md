@@ -119,8 +119,24 @@ plan_sections: 無          # 要讀哪幾節，例如 "§4, §7"；plan 是「�
 `"HND-2": {"shadow": true}` 改成 `false`，`tests/test_hnd2_frontmatter.py`
 的 `test_registry_and_shadow` 同步改期望值。
 
+## 追加：HND-3（2026-09-06，同一則對話）
+
+user 反映「交接技能最後產出的可複製文字有時候有有時候沒有」——chat-handoff
+§3 第 3 點只是文件說明，零強制力。新增
+[`hooks/rules/hnd3_handoff_closing_snippet.py`](hooks/rules/hnd3_handoff_closing_snippet.py)：
+Stop＋BLOCK，這一輪動過交接檔、回覆結尾沒有 fenced code block 就擋，跟
+`AWC-1` 同構（含雙重防迴圈）；理由是 WARN 在 Stop 上下一輪才送達，8/28 對
+AWC-1 的實測已證明攔不住這一輪。`tests/test_hnd3_closing_snippet.py`
+14 案全綠，含手動變異證明測試有效。
+
+**同樣被 user 當場要求跳過觀察期**：先上 `shadow: true`，同一則對話問過
+「接下來呢」後 user 選「現在就把 HND-3 也轉正式」，已改成 `shadow: false`，
+`test_registry_and_shadow` 同步改期望值。跟 HND-2 那次一樣，代價是還沒看過
+真實情境下的假陽性率。
+
 ## 待驗清單（四欄齊全，空白＝沒驗過）
 
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| 轉正式後，正常工作流程存交接檔會不會被誤擋——**只有一筆自我驗證的實例，跳過了觀察期** | 觀察期被跳過，還沒看過多種真實存檔情境 | 接下來幾天正常用 `tools/new_handoff.py` 建交接檔、正常編輯幾輪，留意有沒有合法存檔被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-2"` 改回 `{"shadow": true}` 觀察，不要急著調鬆判準 | user／下一則的我 |
+| HND-2 轉正式後，正常工作流程存交接檔會不會被誤擋——**只有一筆自我驗證的實例，跳過了觀察期** | 觀察期被跳過，還沒看過多種真實存檔情境 | 接下來幾天正常用 `tools/new_handoff.py` 建交接檔、正常編輯幾輪，留意有沒有合法存檔被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-2"` 改回 `{"shadow": true}` 觀察，不要急著調鬆判準 | user／下一則的我 |
+| HND-3 轉正式後，正常收尾（結尾本來就有 fenced code block）會不會被誤判成沒有——**同樣只跳過觀察期，沒驗過真實情境** | 觀察期被跳過 | 接下來幾輪正常動交接檔並在結尾附收尾片段，留意有沒有被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-3"` 改回 `{"shadow": true}` 觀察 | user／下一則的我 |
