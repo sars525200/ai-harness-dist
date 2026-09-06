@@ -14,8 +14,8 @@ r"""產生看板 Skill 清冊：目錄有幾支、表就有幾列。
 ## 口徑（2026-08-25 已決）
 
 - **列**＝`config.iter_skill_paths()`（全域 + 專案、junction 去重）。零目標拒跑。
-- **L4 標題**＝`eval/acceptance.json` ＋ SKILL.md mtime。不跑 L2（最多 120s，
-  不能進 Stop 熱路徑）。
+- **L4 標題**＝`eval/acceptance.json` ＋ bundle 內容雜湊（判定式借 `check_acceptance.judge`，
+  本檔不複製）。不跑 L2（最多 120s，不能進 Stop 熱路徑）。
 - **表格狀態**：未納版控 → 未上線；L4 有效 → 已驗收；其餘 → 待實跑。
 - **敘述**：`DESC` 是編輯內容。缺的用 SKILL.md `description`，「什麼時候」寫
   「見 SKILL.md」。多出來的 DESC key（目錄裡沒有）拒跑。
@@ -164,10 +164,15 @@ def _fm_description(text: str) -> str:
 
 
 def _load_ledger() -> dict:
+    """回 (台帳, 內容雜湊, 判定函式) —— 判定式**不在本檔複製**，見 `_l4` 註解。"""
     if str(EVAL_DIR) not in sys.path:
         sys.path.insert(0, str(EVAL_DIR))
     import check_acceptance as acc  # noqa: WPS433
-    return acc.load_ledger(), acc.skill_mtimes()
+    led = acc.load_ledger()
+    hashes = acc.skill_hashes()
+    # 舊制記錄的遷移由 CLI 那邊寫檔；看板唯讀，只在記憶體裡沿用同一套判準。
+    acc.migrate_legacy(led, hashes)
+    return led, hashes, acc.judge
 
 
 def _git_tracked_names(repo: Path, prefix: str) -> set[str]:
@@ -190,14 +195,10 @@ def _git_tracked_names(repo: Path, prefix: str) -> set[str]:
     return names
 
 
-def _l4(name: str, mt: float, rec: dict | None) -> tuple[str, str]:
-    if not rec:
-        return "未驗收", "從未記錄過實跑"
-    if abs(float(rec.get("file_mtime") or 0) - mt) > 1:
-        return "已過期", "驗收後 SKILL.md 又被改過"
-    if rec.get("result") != "pass":
-        return "未通過", "上次結果：%s" % rec.get("result")
-    return "有效", rec.get("verified_at") or rec.get("note") or ""
+# ⚠ 這裡原本抄了一份 L4 判定式。2026-09-07 判定從 mtime 換成內容雜湊時，那份副本會
+# **靜默失效**（讀不到 `file_mtime` → 一律回 0 → 全部顯示已過期），而看板照樣產得出來、
+# 不報錯。判定式現在只有一份，在 `eval/check_acceptance.py:judge()`，由 `_load_ledger()`
+# 帶回來用。要改判準改那一處。
 
 
 def collect() -> list[dict]:
@@ -215,7 +216,7 @@ def collect() -> list[dict]:
 
     harness_tracked = _git_tracked_names(HARNESS, "skills")
     proj_tracked = _git_tracked_names(_cfg.PROJECT_ROOT, ".claude/skills")
-    ledger, mtimes = _load_ledger()
+    ledger, hashes, judge_l4 = _load_ledger()
 
     rows = []
     n_fallback = 0
@@ -235,7 +236,7 @@ def collect() -> list[dict]:
         group = d.get("group") or ("global" if in_global else "other")
         tracked = name in (harness_tracked if in_global else proj_tracked)
         rec = ledger.get(name)
-        l4, l4_why = _l4(name, mtimes.get(name, 0), rec)
+        l4, l4_why = judge_l4(name, rec, hashes.get(name, ""))
         if not tracked:
             chip, chip_k, note = "block", "未上線", "未納版控·只在本機"
         elif l4 == "有效":
@@ -299,7 +300,8 @@ def build_html(rows: list[dict], n_fallback: int) -> str:
         "        <h4>觸發機制與狀態欄怎麼判的</h4>\n"
         "        <p>觸發靠模型判讀語意（機率性），代價高的規則另在 CLAUDE.md §8 留一行索引句兜底。</p>\n"
         "        <p>skill 檔案放進目錄就能被觸發，<b>沒有部署這一關</b>——"
-        "所以這裡的「上線」是指版控狀態。L4 只讀 <code>acceptance.json</code> 與檔案 mtime，"
+        "所以這裡的「上線」是指版控狀態。L4 只讀 <code>acceptance.json</code> 與 bundle 內容雜湊"
+        "（改動時間不算數，clone 或 checkout 不會誤判過期），"
         "不跑 L2 契約檢查（那條最多 120 秒，不在這頁熱路徑）。</p>\n"
         "        <ul>\n"
         '          <li><span class="chip pass">已驗收</span>L4 台帳有效：實跑通過且之後檔案沒被改。</li>\n'

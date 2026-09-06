@@ -6,6 +6,7 @@
     "verified_at": "2026-08-25T20:44:16"
   },
   "chat-handoff": {
+    "content_hash": "83d858ecbfcb94088c9ea340dfe6c105f669007aaf44c2943b1247fdfeb2accf",
     "file_mtime": 1788709592.0299206,
     "note": "實跑：本 session 154k 觸發 WIN-1，真的用 new_handoff.py 建 20260907-spawn-task-card-rule.md 並走完 3 換則三件事（狀態句/未完成主線只留一件/建議第一句）。新增的 spawn_task 二選一條款有被實際用到：兩項本則不做的發現都彈成建議卡而非留在檔裡佔位。實跑當場抓到工具缺陷：slug 只留英數字元，中文任務名塌成 handoff（已彈卡 task_7f253052）。",
     "result": "pass",
@@ -24,6 +25,7 @@
     "verified_at": "2026-08-26T23:50:29"
   },
   "domain-modeling": {
+    "content_hash": "d5908c18c98647f2e5ee7576a14a627dce7be7ad7e6350fc7711425745b4cf25",
     "file_mtime": 1787418221.698695,
     "note": "B-4 第 11 列實跑：依審查者設計拆 A/B 兩半跑，三個地雷逐條避開；A 半唯讀對真材料",
     "result": "pass",
