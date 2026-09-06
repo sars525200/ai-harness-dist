@@ -206,8 +206,11 @@ def test_registry_and_shadow():
            '"id": "HND-2"' in disp and "hnd2_frontmatter_contract" in disp)
     cfg = json.load(open(os.path.join(HOOKS, "dispatch_config.json"), encoding="utf-8"))
     _check("dispatch_config 有 HND-2", "HND-2" in cfg.get("rules", {}))
-    _check("HND-2 目前是 shadow（觀察期，未轉正式擋）",
-           cfg["rules"].get("HND-2", {}).get("shadow") is True)
+    # 2026-09-06：user 決定跳過觀察期直接轉正式（只看過一筆自我驗證的實例，
+    # 是他知情下的選擇，不是這條規則的預設路徑——參見
+    # HANDOFF_TEMPLATE_PLAN.md「狀態」節的紀錄）。
+    _check("HND-2 已轉正式（enforce，不是 shadow）",
+           cfg["rules"].get("HND-2", {}).get("shadow") is False)
 
 
 def run():

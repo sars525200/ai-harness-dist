@@ -99,8 +99,8 @@ plan_sections: 無          # 要讀哪幾節，例如 "§4, §7"；plan 是「�
 
 - **已核可、已實作、測試全綠**：
   - [`hooks/rules/hnd2_frontmatter_contract.py`](hooks/rules/hnd2_frontmatter_contract.py)
-    ＋ `dispatch.py`／`dispatch_config.json` 註冊（**目前 `shadow: true`**，
-    只觀察不擋——見下方「待驗清單」的轉正式條件）。
+    ＋ `dispatch.py`／`dispatch_config.json` 註冊——**`shadow: false`，已轉正式**
+    （見下方轉正式紀錄）。
   - [`tools/new_handoff.py`](tools/new_handoff.py)：互動式落骨架，兩套 `--type`。
   - [`skills/chat-handoff/SKILL.md`](skills/chat-handoff/SKILL.md)：§0～§2 改寫，
     frontmatter 契約與兩套骨架並列。
@@ -109,9 +109,18 @@ plan_sections: 無          # 要讀哪幾節，例如 "§4, §7"；plan 是「�
 - **沒做的（刻意）**：14 份現行交接檔**沒有回填** frontmatter——這條規則只管
   新寫入，不追溯存量（同 HND-1 的「一次性大清倉是已知失敗模式」教訓）。
 
+## 轉正式紀錄（2026-09-06）
+
+原設計是先 `shadow: true` 觀察一段時間再轉正式（本 repo「每條規則自己的
+畢業儀式」慣例）。**user 2026-09-06 當場決定跳過觀察期**，看過一筆自我驗證
+的實例（`.scratch/handoff/20260906-handoff-template-format.md` 通過 HND-2）
+就直接要求轉正式——這是他知情下的選擇，代價與建議選項的差異已在對話中
+講明，不是這條規則的預設路徑。已把 `dispatch_config.json` 的
+`"HND-2": {"shadow": true}` 改成 `false`，`tests/test_hnd2_frontmatter.py`
+的 `test_registry_and_shadow` 同步改期望值。
+
 ## 待驗清單（四欄齊全，空白＝沒驗過）
 
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
-| HND-2 轉正式（`shadow: false`）前的觀察期夠不夠、有沒有誤報 | 剛上線，還沒有真實 dispatch 資料可看 | 觀察一段時間後查 `state/` 下 HND-2 的判定紀錄（若有記錄機制）或直接手動測幾次真實存檔情境，確認沒有誤 BLOCK 合法檔，再把 `dispatch_config.json` 的 `"HND-2": {"shadow": true}` 改成 `false` | 下一則的我或 user |
-| 轉正式後，正常工作流程存交接檔會不會被誤擋 | 需要轉正式後才看得到 | 轉正式當天用 `tools/new_handoff.py` 建一份、正常編輯幾輪，確認 Edit／Write 都不會被誤擋 | 下一則的我 |
+| 轉正式後，正常工作流程存交接檔會不會被誤擋——**只有一筆自我驗證的實例，跳過了觀察期** | 觀察期被跳過，還沒看過多種真實存檔情境 | 接下來幾天正常用 `tools/new_handoff.py` 建交接檔、正常編輯幾輪，留意有沒有合法存檔被誤擋；真的誤擋就先把 `dispatch_config.json` 的 `"HND-2"` 改回 `{"shadow": true}` 觀察，不要急著調鬆判準 | user／下一則的我 |
