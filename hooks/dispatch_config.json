@@ -3,6 +3,9 @@
     "HND-1": {
       "shadow": false
     },
+    "HND-2": {
+      "shadow": true
+    },
     "DB-1": {
       "shadow": false
     },

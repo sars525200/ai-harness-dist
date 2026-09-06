@@ -129,6 +129,15 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # HND-2：擋「交接檔 frontmatter 五欄不齊全」。必須 Pre + BLOCK——
+        # 跟 EXP-1 同一個形狀，Post／Stop 時格式已經漂了才擋沒有意義。
+        # 只擋 `.scratch/handoff/` 底下、非 `archive/` 的 .md（applies() 判斷）。
+        "id": "HND-2",
+        "module": "hnd2_frontmatter_contract",
+        "events": {"PreToolUse"},
+        "tools": {"Write", "Edit", "MultiEdit"},
+    },
+    {
         # ENC-1 是目前唯一掛 PostToolUse 的規則。理由：它驗的是「寫進去之後
         # 磁碟上實際長什麼樣」（NUL／BOM／行尾），那些東西 PreToolUse 拿到的
         # 字串裡根本不存在。這也是整套 harness 第一次用「結果」而非「意圖」當判準。
