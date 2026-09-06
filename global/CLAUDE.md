@@ -1,5 +1,5 @@
 <!-- GENERATED FILE. Do not edit. -->
-<!-- Edit global/hub/ then: py -3 tools/gen_rule_hub.py -->
+<!-- Edit global/hub/ then: py -3 <harness>\tools\gen_rule_hub.py -->
 
 
 # 工作方式（跨專案通用·全域層）
