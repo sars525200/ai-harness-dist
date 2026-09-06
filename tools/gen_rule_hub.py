@@ -31,7 +31,7 @@ LAYERS_PY = HARNESS / "dashboard" / "gen_layers.py"
 
 GENERATED_HEADER = (
     "<!-- GENERATED FILE. Do not edit. -->\n"
-    "<!-- Edit global/hub/ then: py -3 tools/gen_rule_hub.py -->\n"
+    "<!-- Edit global/hub/ then: py -3 <harness>\\tools\\gen_rule_hub.py -->\n"
 )
 
 AUDIENCES = frozenset({"all", "claude", "cursor"})
