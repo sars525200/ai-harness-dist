@@ -133,7 +133,7 @@ py -3 -X utf8 D:\Patrick-AI\.ai-harness\rulefile\check_prose_blocks.py --json # 
 
 - **動之前先看檔頭有沒有 `<!-- GENERATED FILE -->`。** 有 → 那份是產出檔，改它會被下次
   產生器重生蓋掉；去改它指名的源頭（例如 `global/hub/*.md`），改完跑對應產生器
-  （例如 `py -3 tools/gen_rule_hub.py`）重生，再部署到 live 路徑。專案自己的
+  （例如 `py -3 <harness>\tools\gen_rule_hub.py`）重生，再部署到 live 路徑。專案自己的
   `CLAUDE.md`／`MEMORY.md` 說法可能沒跟上（2026-09-03 實測：harness 自己的 CLAUDE.md
   說「產生器上線前過渡仍改 global/CLAUDE.md」，但那份檔案當時已經是產出檔）——**檔頭的
   標記比專案說明文件準，兩者矛盾時信檔頭**。
