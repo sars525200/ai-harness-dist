@@ -257,6 +257,13 @@ user 另外自己想到、也**不列入本檔新增項**的：雲端快取、�
 | 新增「對話長度是最大的成本」一條 | cache_read 實測 53.6%，是最大單一項 | 同上 |
 | `effortLevel` **high → medium** | output 實測 32.4%，thinking 算 output | `global/settings.json`＋`~\.claude\settings.json` 兩份，改後過 `json.loads`、鍵數 14 不變 |
 | 新增 `tools/token_usage_breakdown.py` | 量測要能重跑，不能只留在對話裡 | harness `tools/` |
+| 介面選單切 Sonnet（`MODEL_ROUTING_PLAN.md` §9.15 前置條件） | 解開 B 批的硬性排序前提 | user 操作選單，口頭確認（未經 `/tasks` 或其他工具驗證選單實際狀態） |
+| C-4（能用 CLI 就不掛 MCP）查證：**不適用** | `settings.json`（兩份）與 `.claude.json` 各專案 `mcpServers` 全部是空 `{}`，本機沒有自訂 MCP server 可停用 | 從可施作清單移除，附查證依據於本表格 C-4 列 |
+| **B-2**：`subagentPromptCacheTtl` **未設 → `"1h"`** | 官方明文子代理預設 5 分鐘快取，主對話 1 小時；本機實測子代理各燒 47k–99k token 全部冷啟動 | `global/settings.json`＋`~\.claude\settings.json` 兩份，改後過 `json.loads`、鍵數 14→15 |
+
+⚠ **B-2 是在三個未量完效果的變數（不換模型規則、`effortLevel: medium`、選單切 Sonnet）疊加之上再裝的第四項**——
+user 明確選擇接受這個代價（「疊加變數，現在就裝」），**不是符合 §6「每批只裝一項、量一週再裝下一項」的施作**。
+下次量到效果時，四個變數的作用無法個別歸因，只能看整體方向。
 
 **為什麼敢兩項一起動**（user 選「兩個一起做」，我原本標了歸因風險，這裡撤回）：
 兩項落在逐字檔的**不同欄位**——對話長度動的是 `cache_read_input_tokens`，
@@ -265,11 +272,11 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 
 ### 8.2 沒做的
 
-- **B 批全部沒裝**（`bashOutputMaxChars`／兩個 cache TTL／`CLAUDE_CODE_SUBAGENT_MODEL`／
-  `skillListingMaxDescChars`）。理由：先看這兩項的效果，且 B-4 卡在 §5 陷阱 1 未驗。
-- **C 批只落實 C-1**：手工 token 對照表**從未實際存在**（全 repo grep 只命中本檔），
+- **B 批只裝了 B-2**（`bashOutputMaxChars`／`promptCacheTtl`／`CLAUDE_CODE_SUBAGENT_MODEL`／
+  `skillListingMaxDescChars` 仍未裝）。理由：B-4 卡在 §5 陷阱 1 未驗；B-1／B-3／B-5 未排優先序，先不動。
+- **C 批只落實 C-1，C-4 查證後標不適用**：手工 token 對照表**從未實際存在**（全 repo grep 只命中本檔），
   所以「退休」等於「不要新建」，改用 `tools/token_usage_breakdown.py` 與 `/usage` 歸因。
-  C-2～C-5 未動。
+  C-4 查了本機 `mcpServers` 全空，沒東西可停，從可施作清單移除。C-2／C-3／C-5 未動。
 - **§5 陷阱 1 未驗**，B-4 因此不得裝。
 
 ### 8.3 待驗清單（四欄齊全）
@@ -279,7 +286,8 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 | §4.2 新規則與 `effortLevel` 是否生效 | 【官方明文】設定檔每則對話開場重讀；CLAUDE.md 中途改**不生效**，要等 `/clear` 或重啟 | 開一則新對話，跑 `py -3 tools/token_usage_breakdown.py -n 3`，比對 output 佔比是否從 32.4% 下降 | 我（下一則） |
 | §5 陷阱 1：環境變數是否蓋掉 skill frontmatter 的 model | 需要看 `/tasks` 面板，桌面版這則看不到 | 設 `CLAUDE_CODE_SUBAGENT_MODEL=haiku`，派一個 frontmatter 寫高階模型的角色，開 `/tasks` 看實際模型 | user |
 | `/usage` 有沒有「依技能／子代理／MCP」歸因區塊 | 桌面版不接終端機型斜線指令 | 終端機跑 `claude`，進去打 `/usage` | user |
-| 介面選單切 Sonnet 後的效果 | 只有 user 能操作選單 | 切完開新對話不碰選單，跑同一支腳本比對 | user 切、我量 |
+| 介面選單切 Sonnet 後的效果 | 只有 user 能操作選單，且選單狀態本身沒工具可查證 | 切完開新對話不碰選單，跑同一支腳本比對 | user 切、我量 |
+| B-2：`subagentPromptCacheTtl: 1h` 是否真的生效、有沒有降低子代理冷啟動成本 | 設定改在本則對話中途，**settings.json 是否每則對話開場才重讀，本則尚未跨過這個邊界** | 新對話派一個會冷啟動的角色，跟 §1.3 記錄的「四個角色各燒 47k–99k」數字比對，看是否下降 | 我（下一則） |
 
 ### 8.4 基準線（下次對照用這組）
 
