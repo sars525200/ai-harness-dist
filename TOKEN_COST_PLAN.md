@@ -288,11 +288,8 @@ effort 動的是 `output_tokens`。同一支腳本一次跑出兩欄，**事後�
 | `/usage` 有沒有「依技能／子代理／MCP」歸因區塊 | 桌面版不接終端機型斜線指令 | 終端機跑 `claude`，進去打 `/usage` | user |
 | 介面選單切 Sonnet 後的效果 | 只有 user 能操作選單，且選單狀態本身沒工具可查證 | 切完開新對話不碰選單，跑同一支腳本比對 | user 切、我量 |
 | B-2：`subagentPromptCacheTtl: 1h` 是否真的生效、有沒有降低子代理冷啟動成本 | 設定改在本則對話中途，**settings.json 是否每則對話開場才重讀，本則尚未跨過這個邊界** | 新對話派一個會冷啟動的角色，跟 §1.3 記錄的「四個角色各燒 47k–99k」數字比對，看是否下降 | 我（下一則） |
-| §5 陷阱 1（進行中）：`CLAUDE_CODE_SUBAGENT_MODEL=haiku` 暫時寫進兩份 `settings.json`（2026-09-06），**同樣要等新對話才生效** | 這則設定改了但還沒跨過對話邊界 | 開新對話，`Agent` 派 `locator`（frontmatter `model: sonnet`，不必改檔），開 `/tasks` 面板看它實際跑 sonnet 還是 haiku | user 開新對話派、user 看 `/tasks` |
-
-⚠ **這是暫時性改動，驗完必須立刻拿掉**——不拿掉＝全機所有子代理永久降到 haiku，
-違反 §4.2「skill frontmatter 的 model／effort 只准往上調」。驗證結果出來後的下一個動作
-一律是「把 `CLAUDE_CODE_SUBAGENT_MODEL` 從兩份 `settings.json` 的 `env` 移除」，不分驗證結果是哪一種。
+| §5 陷阱 1：`CLAUDE_CODE_SUBAGENT_MODEL` 蓋掉 frontmatter 的 model | **2026-09-06 user 裁定擱置**：曾短暫寫進兩份 `settings.json` 的 `env`（未跨過對話邊界生效、未實際驗到），user 決定先不驗，已移除 | 開新對話，設 `CLAUDE_CODE_SUBAGENT_MODEL=haiku`，`Agent` 派 `locator`（frontmatter `model: sonnet`，不必改檔），開 `/tasks` 面板看它實際跑 sonnet 還是 haiku，**驗完不論結果都要移除環境變數** | user 開新對話派、user 看 `/tasks` |
+| B-4 | 因 §5 陷阱 1 未驗，**維持不可裝** | 同上 | 同上 |
 
 ### 8.4 基準線（下次對照用這組）
 
