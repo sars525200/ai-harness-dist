@@ -34,11 +34,13 @@ type: 流程
 自我宣告寫完就建檔，不必等人開口，也不必等對話變長。**L 級不建**（單點工作，
 建了只是垃圾）。
 
-**用 `tools/new_handoff.py` 建，不要手打**（2026-09-06 起）：
+**用 `<harness>\tools\new_handoff.py` 建，不要手打**（2026-09-06 起；2026-09-06 補：舊版寫
+裸相對路徑 `tools/new_handoff.py`，只有在 harness repo 自己底下才找得到，換到別的專案 cwd 會直接
+`No such file or directory`——工具本身認 git repo root、不寫死路徑，錯的是這裡的呼叫範例）：
 
 ```
-py -3 tools/new_handoff.py --task "<任務名>" --type task
-py -3 tools/new_handoff.py --task "<任務名>" --type research \
+py -3 <harness>\tools\new_handoff.py --task "<任務名>" --type task
+py -3 <harness>\tools\new_handoff.py --task "<任務名>" --type research \
     --plan <計畫書路徑> --sections "§4, §7"
 ```
 
@@ -139,7 +141,7 @@ MultiEdit 動過 `.scratch/handoff/*.md`（不含 `archive/`），回覆結尾�
 - **檢查它的指路還成不成立**：搬過家的函式、已作廢的「新對話建議第一句」。
   原文不要刪 —— 只加狀態、劃掉作廢的段落。
 
-搬進歸檔區用 `py -3 tools/archive_handoff.py`（不加旗標只印計畫，`--move` 才真搬；
+搬進歸檔區用 `py -3 <harness>\tools\archive_handoff.py`（不加旗標只印計畫，`--move` 才真搬；
 只搬已標結案的，不刪檔）。
 
 **完成判準**：磁碟上有那份 md、帶著 `status` 欄；S／M 級的進度日誌段數 ≥ 走過的階段數；
