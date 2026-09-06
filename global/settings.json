@@ -232,7 +232,8 @@
     ]
   },
   "env": {
-    "CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT": "1"
+    "CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
   },
   "skillOverrides": {
     "code-review": "user-invocable-only",
