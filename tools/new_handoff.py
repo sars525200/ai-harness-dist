@@ -152,7 +152,7 @@ def main() -> int:
     ap.add_argument("--root", default="")
     a = ap.parse_args()
 
-    root = a.root or _repo_root(_HERE)
+    root = a.root or _repo_root(os.getcwd())
     if not root:
         print("找不到 repo 根目錄——拒跑，不猜路徑")
         return 2
