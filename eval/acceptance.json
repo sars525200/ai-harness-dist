@@ -6,10 +6,10 @@
     "verified_at": "2026-08-25T20:44:16"
   },
   "chat-handoff": {
-    "file_mtime": 1787697428.8264902,
-    "note": "B-4 第 1 列實跑：寫 .scratch/handoff/20260826-chat-handoff-probe.md，五欄齊、gitignore 命中 .scratch/；探針已刪未 commit",
+    "file_mtime": 1788709592.0299206,
+    "note": "實跑：本 session 154k 觸發 WIN-1，真的用 new_handoff.py 建 20260907-spawn-task-card-rule.md 並走完 3 換則三件事（狀態句/未完成主線只留一件/建議第一句）。新增的 spawn_task 二選一條款有被實際用到：兩項本則不做的發現都彈成建議卡而非留在檔裡佔位。實跑當場抓到工具缺陷：slug 只留英數字元，中文任務名塌成 handoff（已彈卡 task_7f253052）。",
     "result": "pass",
-    "verified_at": "2026-08-26T23:50:28"
+    "verified_at": "2026-09-07T00:01:46"
   },
   "context-health": {
     "file_mtime": 1787750048.7657182,
