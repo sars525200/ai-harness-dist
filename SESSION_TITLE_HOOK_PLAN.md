@@ -60,9 +60,14 @@
   regex 都會波及**所有**工具呼叫（含 Cursor CLI 那條路）。matcher 改動必須小範圍
   測試（先在 `.claude/settings.local.json` 或個人分支驗證，A/B 比照 2026-08-28
   那次的驗法：改前後各跑一次 Cursor CLI 觸發，確認沒有被擋）。
-- **待決**：`tool_input` 裡標題欄位的確切鍵名——`set_session_title` 是官方內建
-  MCP 工具，目前沒有查到它的 `tool_input` schema 文件，動工前需要一次實際呼叫、
-  印出 payload 來確認欄位名。**這是新的未知數，不是本輪已排除的兩個之一**。
+- **待決（2026-09-06 已排除，不必真的呼叫一次去印 payload）**：`tool_input`
+  的欄位名——這則對話稍早用 `ToolSearch` 載入過這個工具的完整定義
+  （`mcp__ccd_session_mgmt__set_session_title`），它的 `parameters` schema
+  逐字是 `{session_id, title, _consent}` 三個欄位（`_consent` 是平台自己設的，
+  不是模型填的）。`PreToolUse` 的 `tool_input` 就是呼叫時填的參數，所以背景
+  程式要讀的欄位是 `tool_input["title"]`——**不必冒風險去真的觸發一次呼叫、
+  也不必碰 `settings.json`** 就能確認，這件事本來就是已公開的工具定義，不是
+  執行期才決定的隱藏欄位。
 
 ## 4. 驗證方式
 
@@ -83,8 +88,12 @@
       `dashboard/gen_hook_rules.py` 的 `DESC["TITLE-2"]` 已補
 - [ ] **提案 C shadow 觀察期**：跑滿 3 則真實對話（不是測試）後回報 WARN 次數 vs
       實際漏改名次數，再決定轉正式（`dispatch_config.json` 改 `"shadow": false`）
-- [ ] 提案 B 的 `tool_input` schema 先查證（尚未開始）
-- [ ] 提案 B matcher 改動＋Cursor CLI A/B 驗證（尚未開始）
+- [x] 提案 B 的 `tool_input` schema 先查證（2026-09-06：讀既有工具定義即可確認
+      是 `{session_id, title}`，不必真的觸發呼叫）
+- [ ] 提案 B matcher 改動＋Cursor CLI A/B 驗證——**2026-09-06 user 決定先不做**：
+      查完 `tool_input` 欄位名（`{session_id, title}`）之後，動 `settings.json`
+      這一步本身沒有急迫性（現況只是「少一次手動推雲端」的小不便），先讓
+      提案 C 跑滿 shadow 觀察期再回頭評估要不要做這一步
 - [x] 順手修的文件漂移（與本次改動直接相關，非全面稽核）：
       `HARNESS_PROGRESS.md` 兩處「20 條」規則計數更新為「23 條」，
       新增的「0 shadow」/「僅 IDX-1 shadow」敘述改成「IDX-1／TITLE-2 兩個 shadow」
