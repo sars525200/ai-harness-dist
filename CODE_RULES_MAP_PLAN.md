@@ -21,20 +21,22 @@
 
 ## 狀態
 
-規劃中，票 01／02／03 已關閉（2026-09-06）。**代碼地圖產生器已經是真的可執行 skill**
-（`skills/code-map-generator/`，票 03 動工時發現規格只有草稿才回頭寫成程式），對 harness
-本身實跑兩次驗證冪等，`CODE_MAP.md` 已落在 harness 根目錄。編碼規則產生器
-（`code-rules-generator`）**還只有草案，沒有寫成程式**——票 04／05 動工時一樣會撞到同一個
-落差，屆時要一併考慮是否先寫成真程式。
-**票 04（IT-department）動工前有一個前置依賴**：需先請該部門在 `PROJECT_CONTEXT.md` 補一段
-`dev-prod-sync` 結構化區塊（草案值已備好，見票 02 決策票），才能讓 DEV/PROD 內容一致性檢查生效。
+**票 01～05 全數關閉（2026-09-06）。** 兩支 skill 都已是真程式：`code-map-generator`
+（票 03 動工時發現規格只有草稿才回頭寫成程式）與 `code-rules-generator`（票 04 動工前發現
+規格只定案「輸出六標題」、沒定案「怎麼從部門文件挖內容」，補問使用者後定案「新增結構化
+`rules-content` fenced block，機械組裝，不做語意抽取」，同一批寫成 `skills/code-rules-generator/`）。
+harness、IT-department、MIS-install 三個目標都已實跑代碼地圖產生器；IT-department、
+MIS-install 兩個目標都已實跑編碼規則產生器，產出真實 `AGENTS.md`。
+IT-department 的 `dev-prod-sync` 前置依賴已補上（`PROJECT_CONTEXT.md`「雙目錄同步」節），
+一致性檢查已生效（實跑 0 警告，即目前 DEV/PROD 三個同步檔確實一致）。
+「以後新建專案自動配置」仍明確排除，留到下一個 effort。
 
 <!-- REVIEW_SCOPE_IGNORE_START -->
 | 狀態 | 項目 | 說明 |
 |---|---|---|
-| ✅ 已解 | 票 01 編碼規則產生器 skill 規格（2026-09-06 定案，草案未寫成程式） | `.scratch/rules-and-map/decisions/01-rules-generator-spec.md`；草案見 `.scratch/rules-and-map/prototypes/ticket-01/` |
+| ✅ 已解 | 票 01 編碼規則產生器 skill 規格（2026-09-06 定案；票 04 動工前補問擷取機制後轉正為真程式） | `.scratch/rules-and-map/decisions/01-rules-generator-spec.md`；程式見 `skills/code-rules-generator/` |
 | ✅ 已解 | 票 02 代碼地圖產生器 skill 規格（2026-09-06 定案，含 round4 遺留 K/O 關閉；已轉正為真程式） | `.scratch/rules-and-map/decisions/02-code-map-generator-spec.md`；程式見 `skills/code-map-generator/` |
 | ✅ 已解 | 票 03 harness 本身套用（2026-09-06，實跑代碼地圖產生器兩次驗證冪等） | `.scratch/rules-and-map/decisions/03-apply-harness.md`；產出見根目錄 `CODE_MAP.md` |
-| ⏳ 待做 | 票 04 IT-department 套用（阻塞解除；動工前先補 `dev-prod-sync` 區塊＋編碼規則產生器要不要先轉正為真程式） | `.scratch/rules-and-map/decisions/04-apply-it-department.md` |
-| ⏳ 待做 | 票 05 MIS-install 套用（阻塞解除） | `.scratch/rules-and-map/decisions/05-apply-mis-install.md` |
+| ✅ 已解 | 票 04 IT-department 套用（補 `dev-prod-sync` 前置依賴＋兩支產生器皆實跑） | `.scratch/rules-and-map/decisions/04-apply-it-department.md`；產出見該 repo 根目錄 `AGENTS.md`／`CODE_MAP.md`（尚未 commit，見票內「沒做的」） |
+| ✅ 已解 | 票 05 MIS-install 套用（無 DEV/PROD 結構，僅套用編碼規則＋代碼地圖兩支） | `.scratch/rules-and-map/decisions/05-apply-mis-install.md`；產出見該 repo 根目錄 `AGENTS.md`／`CODE_MAP.md`（尚未 commit，見票內「沒做的」） |
 <!-- REVIEW_SCOPE_IGNORE_END -->
