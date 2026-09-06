@@ -329,14 +329,22 @@ def classify(name: str, mode: str, files: str) -> str:
     return _KIND_TASK
 
 
-def compose(kind: str, name: str, stage: str, progress: str) -> str:
+def compose(kind: str, name: str, stage: str, progress: str, sid: str = "") -> str:
     """把原料組成標題。分類標記固定在最前面 —— 側欄會截尾巴，
-    所以最該一眼看到的東西必須放最前。"""
+    所以最該一眼看到的東西必須放最前。
+
+    `sid` 給了就組成 TITLE-1 現行格式的【分類·短id】（只取前 8 碼，完整的
+    session id 是 uuid，塞進去會吃光 48 字上限）。**拿不到 id 時退回舊格式**，
+    不要組出空的`【任務·】`——那是一個看起來合法、照抄卻永遠指不到任何一則
+    對話的名字。2026-09-07 補：在此之前閘門把本函式的產出當「組好的標題參考」
+    印給模型照抄，抄到的名字一律少這一段。
+    """
+    mark = "·" + sid[:8] if sid else ""
     if kind == _KIND_CLOSE:
-        return ("【收尾】%s｜收尾" % name)[:_MAX_TITLE]
+        return ("【收尾%s】%s｜收尾" % (mark, name))[:_MAX_TITLE]
     if kind == _KIND_TALK:
-        return ("【討論】%s" % name)[:_MAX_TITLE]
-    parts = ["【任務】" + name]
+        return ("【討論%s】%s" % (mark, name))[:_MAX_TITLE]
+    parts = ["【任務%s】%s" % (mark, name)]
     if stage:
         parts.append(stage)
     if progress:
@@ -561,7 +569,8 @@ def _decl_text(head: str) -> str:
     return next((ln for ln in lines if _looks_like_declaration(ln)), "")
 
 
-def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
+def _declared_task(texts: "list[str] | None", prev_title: str = "",
+                   sid: str = "") -> str:
     """從 assistant 文字裡取自我宣告的任務名；沒有回空字串。
 
     **從後往前找**：§2 允許中途轉向（`任務 舊名→新名`），一輪裡可能有兩次宣告，
@@ -593,7 +602,7 @@ def _declared_task(texts: "list[str] | None", prev_title: str = "") -> str:
             # 抽不出來才退回宣告的字面，總比沒有名字好。
             name = previous_name(prev_title) or name
         return compose(kind, name,
-                       _field(_STAGE_RE, line), _field(_PROGRESS_RE, line))
+                       _field(_STAGE_RE, line), _field(_PROGRESS_RE, line), sid)
     return ""
 
 
@@ -1103,8 +1112,13 @@ def main() -> int:
         # 兩個來源都要：宣告可能寫在最終回覆（payload 拿得到），也可能寫在輪次開頭
         # 的某一則（那則早就 flush 了，掃 transcript 拿得到）。
         prev_title = _recall(session_id)
-        declared = (_declared_task([payload.get("last_assistant_message") or ""], prev_title)
-                    or _declared_task(iter_turn_assistant_texts(path), prev_title))
+        # sid 一併傳進去：這條路（本檔 main）2026-08-28 已退役、現在沒有掛載會走到，
+        # 但標題格式必須只有一份組法——留一條組出舊格式的路，等於埋一個
+        # 「哪天掛回來就靜默產生不合格標題」的洞。
+        declared = (_declared_task([payload.get("last_assistant_message") or ""],
+                                   prev_title, session_id)
+                    or _declared_task(iter_turn_assistant_texts(path),
+                                      prev_title, session_id))
         existing, distance = _last_custom_title(path)
         # 佔位名的守門：**只有「我從來沒替這個 session 命名過」時才給**。
         # 長對話的 custom-title 一旦被推出 _TAIL_SCAN，`existing` 會讀成空 ——

@@ -185,10 +185,17 @@ def _is_stale(existing: str, declared: str) -> bool:
 
 
 def _declared_title(ctx) -> str:
+    """這一輪宣告算出來的標題。
+
+    `session_id` 傳下去是為了讓訊息裡「組好的標題參考」符合 TITLE-1 現行格式
+    【分類·短id】——照抄就是合格的名字。拿不到 id 時 `compose()` 自己會退回
+    舊格式（見該函式），這裡不另外兜底。
+    """
     texts = _turn_texts(ctx)
     if not texts:
         return ""
-    return _T._declared_task(texts, _existing_title(ctx))
+    return _T._declared_task(texts, _existing_title(ctx),
+                             getattr(ctx, "session_id", "") or "")
 
 
 def applies(ctx) -> bool:

@@ -138,7 +138,8 @@ def run() -> "tuple[int, list]":
             v7c = m.check(_Ctx(_DECL, p7, session_id=sid))
             check("第 3 次加重", "⚠️" in v7c.message and "第 3 次" in v7c.message,
                   repr(v7c.message))
-            check("加重後仍保留組好的標題參考", declared_ref := m._T._declared_task([_DECL], "") in v7c.message,
+            check("加重後仍保留組好的標題參考",
+                  m._T._declared_task([_DECL], "", sid) in v7c.message,
                   repr(v7c.message))
 
             # 8) 改名之後計數歸零：下一次漏做重新從第 1 次算，不接著累加
@@ -194,6 +195,22 @@ def run() -> "tuple[int, list]":
                                 custom_title="【任務·abc12345】測試任務｜Execute｜50%")
         v15 = m.check(_Ctx(closing, p15))
         check("收尾沿用原任務名時不叫", not v15.message, repr(v15.message))
+
+        # ── 2026-09-07 補：訊息裡的參考標題要合乎 TITLE-1 現行格式 ─────────
+        # 15) 有 session_id → 參考標題帶【分類·短id】，照抄就是合格的名字
+        p16 = _write_transcript(td, [_DECL], custom_title=None)
+        v16 = m.check(_Ctx(_DECL, p16, session_id="abc12345-da7c-4fa7-98e1-d12d6"))
+        check("參考標題帶短 id",
+              v16.message and "【任務·abc12345】測試任務" in v16.message,
+              repr(v16.message))
+
+        # 16) 拿不到 session_id → 少一段總比組出【任務·】好，且仍要擋
+        p17 = _write_transcript(td, [_DECL], custom_title=None)
+        v17 = m.check(_Ctx(_DECL, p17, session_id=""))
+        check("沒有 session id 時不組出空的短 id 段",
+              v17.message and "【任務·】" not in v17.message
+              and "【任務】測試任務" in v17.message,
+              repr(v17.message))
 
     return passed, failed
 

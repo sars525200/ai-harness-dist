@@ -207,6 +207,27 @@ case("討論只留主題", "討論不需要階段與進度",
 case("收尾固定尾綴", "一眼看出這則已經在收了",
      M.compose("收尾", "收工封存", "Execute", "90"), "【收尾】收工封存｜收尾")
 
+# ── 短 id（2026-09-07 補·TITLE-1 現行格式是【分類·短id】）──────────────
+# 缺這一段的後果：閘門把 compose() 的產出當「組好的標題參考」印給模型照抄，
+# 抄到的名字少一段短 id ⇒ 側欄兩則同名對話分不出是哪一則。
+case("任務帶短 id", "TITLE-1 格式：【分類·短id】名稱｜階段｜進度%",
+     M.compose("任務", "三段式命名", "Execute", "60", "6605c2e7"),
+     "【任務·6605c2e7】三段式命名｜Execute｜60%")
+case("短 id 只取前 8 碼", "完整 session id 是 uuid，塞進去會吃掉 48 字上限",
+     M.compose("任務", "三段式命名", "", "", "6605c2e7-da7c-4fa7-98e1-d12d6f32e061"),
+     "【任務·6605c2e7】三段式命名")
+case("討論也帶短 id", "分類三種都走同一個標記位置，不是只有任務",
+     M.compose("討論", "命名方式討論", "Research", "20", "6605c2e7"),
+     "【討論·6605c2e7】命名方式討論")
+case("收尾也帶短 id", "收尾那一輪同樣要指得出是哪一則",
+     M.compose("收尾", "收工封存", "Execute", "90", "6605c2e7"),
+     "【收尾·6605c2e7】收工封存｜收尾")
+case("沒有 session id 就退回舊格式", "hook 拿不到 id 時寧可少一段，不要組出【任務·】",
+     M.compose("任務", "三段式命名", "Execute", "60", ""),
+     "【任務】三段式命名｜Execute｜60%")
+case("宣告抽取一路帶著短 id", "compose 有了參數也要真的接上去，否則閘門那邊拿到的還是舊的",
+     M._declared_task([_DECL], "", "6605c2e7"), "【任務·6605c2e7】修進出庫同步｜Execute")
+
 # ── decide ────────────────────────────────────────────────────────────────
 case("沒寫過就寫", "第一次命名", M.decide("甲", "", -1), "甲")
 case("同名近尾不重寫", "hook 每輪跑，不擋就是每輪 append 一筆同樣的",
@@ -477,12 +498,14 @@ def e2e():
         _write_transcript(t, _DECL)
 
         rc = _run_hook(t)
+        # 期望值帶「·s-1」＝ `_run_hook` 預設的 session_id 前 8 碼：
+        # 2026-09-07 起 compose() 一律組 TITLE-1 現行格式【分類·短id】。
         results.append(("e2e 寫入", "hook 真的跑得起來並 append",
-                        (rc, _titles(t)), (0, ["【任務】修進出庫同步｜Execute"])))
+                        (rc, _titles(t)), (0, ["【任務·s-1】修進出庫同步｜Execute"])))
 
         rc = _run_hook(t)
         results.append(("e2e 冪等", "第二輪同名且仍在窗口內 → 不該再寫",
-                        (rc, _titles(t)), (0, ["【任務】修進出庫同步｜Execute"])))
+                        (rc, _titles(t)), (0, ["【任務·s-1】修進出庫同步｜Execute"])))
 
         # 撐大檔案把既有標題推出 40KB 安全邊際，模擬長對話
         with open(t, "a", encoding="utf-8", newline="") as fh:
@@ -490,13 +513,14 @@ def e2e():
                                 ensure_ascii=False) + "\n")
         rc = _run_hook(t)
         results.append(("e2e 推遠重寫", "被推出 64KB 窗口就會悄悄退回 ai-title",
-                        (rc, _titles(t)), (0, ["【任務】修進出庫同步｜Execute", "【任務】修進出庫同步｜Execute"])))
+                        (rc, _titles(t)), (0, ["【任務·s-1】修進出庫同步｜Execute",
+                                               "【任務·s-1】修進出庫同步｜Execute"])))
 
         # Stop 觸發時該輪最終回覆還沒 flush 進 transcript（8/26 量到 offset 差 31KB），
         # 只掃檔案會永遠讀到上一輪的宣告 —— payload 這個欄位是唯一拿得到最新宣告的來源。
         rc = _run_hook(t, last_msg=_DECL2)
         results.append(("e2e payload 優先", "只掃 transcript 會讀到舊宣告，名字停在上一輪",
-                        (rc, _titles(t)[-1]), (0, "【討論】雲端會話同步")))
+                        (rc, _titles(t)[-1]), (0, "【討論·s-1】雲端會話同步")))
 
         # bridge id：有 bridge 才該打雲端，純本機的對話一個請求都不該發
         b = os.path.join(d, "bridged.jsonl")
@@ -514,7 +538,7 @@ def e2e():
         _write_transcript(u, _DECL)
         rc = _run_hook(u, event="UserPromptSubmit")
         results.append(("UserPromptSubmit 也寫", "只掛 Stop 會被 CLI 的回寫蓋掉",
-                        (rc, _titles(u)), (0, ["【任務】修進出庫同步｜Execute"])))
+                        (rc, _titles(u)), (0, ["【任務·s-1】修進出庫同步｜Execute"])))
 
         # 不認識的事件不該做事（避免哪天被掛到別的事件上而悄悄亂寫）
         v = os.path.join(d, "other.jsonl")
@@ -532,7 +556,7 @@ def e2e():
                                  "customTitle": "CLI的舊名"}, ensure_ascii=False) + chr(10))
         rc = _run_hook(r, session_id="s-restore", event="PreToolUse")
         results.append(("PreToolUse 補回新名", "CLI 回寫在 UserPromptSubmit 之後，只有這個時機補得到",
-                        (rc, _titles(r)[-1]), (0, "【任務】修進出庫同步｜Execute")))
+                        (rc, _titles(r)[-1]), (0, "【任務·s-restor】修進出庫同步｜Execute")))
         rc = _run_hook(r, session_id="s-restore", event="PreToolUse")
         results.append(("補完就不再寫", "每次工具呼叫都跑，重複寫會讓檔案膨脹",
                         (rc, len(_titles(r))), (0, 3)))
