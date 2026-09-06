@@ -431,10 +431,24 @@ def verify(export: Path, pristine: Path, local: Path, pats: list) -> bool:
             fresh = sorted(t for t in tk
                            if t not in baseline and t not in ph
                            and not covered_by_rules(t, needles))
+            # 主控台只印前 20 個（背景推的紀錄本來就只留最後幾行），但**完整清單
+            # 一定要落檔**：這一條的產出是「人要逐項判定的待辦」，只印前 20 個
+            # 等於把後面那些靜默丟掉，人會以為判完了就重跑（2026-09-07 實測：
+            # 主控台顯示 20＋「另 16 個」，實際 36 個）。
+            dump = ""
+            if fresh:
+                try:
+                    fp = HARNESS_ROOT / "state" / "cloud_new_tokens.txt"
+                    fp.parent.mkdir(parents=True, exist_ok=True)
+                    fp.write_text("\n".join(fresh) + "\n", encoding="utf-8")
+                    dump = f"\n       完整 {len(fresh)} 個已落檔：{fp}"
+                except OSError:
+                    dump = "\n       （完整清單落檔失敗，只剩上面這些）"
             check(f"沒有未判定的新 token（棘輪判準·基準線 {len(baseline)} 條）", not fresh,
                   f"{len(fresh)} 個新 token，每個都要人二選一（敏感→規則檔；無害→基準線）：\n"
                   f"       " + "\n       ".join(fresh[:20])
-                  + (f"\n       …另 {len(fresh) - 20} 個" if len(fresh) > 20 else ""))
+                  + (f"\n       …另 {len(fresh) - 20} 個" if len(fresh) > 20 else "")
+                  + dump)
 
     # V-B3 丟棄路徑：整條歷史都不該進備份。
     #      每一條都配一個對照組 —— 先證明它在清洗前真的在，那個 0 才是清掉的
@@ -627,4 +641,15 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # 這台機器的主控台是 cp950：`✗`／`——` 這類字元在 print 當下就會
+    # UnicodeEncodeError，而它出現的地方正是「印 FAIL 清單」——**驗證失敗的
+    # 訊息本身會再炸一次**，人只看得到 traceback、看不到哪幾條沒過
+    # （2026-09-06 實測，當時 11 個未登記 token 的清單就是這樣被吃掉的）。
+    # errors="replace" 而不是換掉符號：換符號要預測下一個人會用哪個字，
+    # 這裡直接讓輸出層本身不再是失敗點。
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     sys.exit(main())
