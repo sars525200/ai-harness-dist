@@ -20,10 +20,11 @@
   導致 shadow 觀察期就把專案記成「已講過」，等真的轉正式時規則自認講過而不再
   送——使用者一次提醒都收不到。已修（判準見規則檔 docstring），修完重新跑過
   4 情境全部正確。
-- **尚未做**：`global/settings.json`／使用者層級 `~/.claude/settings.json` 都還
-  沒登記 `SessionStart` → `dispatch.py`。**在使用者決定要不要現在接上正式站
-  之前，這條規則在真實 session 裡完全不會被觸發**——就算已提交進 repo 也一樣，
-  這不是自動生效的東西。
+- **已接上正式站（2026-09-07，使用者決定 shadow:false 直接顯示）**：
+  `global/settings.json` 與 `~/.claude/settings.json` 都已登記 `SessionStart` →
+  `dispatch.py`（同步後逐位元組核對過），`dispatch_config.json` 的 `ONB-1` 已改
+  `shadow: false`。**這一則對話（開場時設定檔還沒改）不會受影響**——要等下一次
+  開新 session 才會第一次真的觸發，見下方「待驗清單」。
 
 ## 現況（查證過的事實，不是推測）
 
@@ -88,12 +89,12 @@ Phase 2（真的自動執行產生器）是否要做、怎麼做，留到 Phase 
 | (b) 排除 harness 自己的判斷邏輯 | 寫死 harness 路徑常數／檢查 `CLAUDE.md` 內容特徵／重用 `discover_projects()` | **寫死 harness 根目錄常數（技術決定，非使用者分岔）** | 從規則檔自身位置往上推三層取得 harness 根，跟現有 `esc1_unmet_need_logged.py` 的慣例一致；不重用 `discover_projects()` 是因為那支做的是「掃描找部門專案清單」，跟這裡「單一路徑等值比較」是不同量級的工具，硬套反而多一層依賴 |
 | (c) 規則要不要有「講過一次就不再講」的記憶 | 每次開場都講／只講一次 | **只講一次（使用者 2026-09-06 定）** | 已實作：跨 session 的專案級記憶（`state/onb1_notice_seen.json`），細節與踩雷見規則檔 docstring |
 
-**新增的分岔（Execute 階段浮現，尚未問過使用者）**：
+**新增的分岔（Execute 階段浮現）——2026-09-07 已由使用者決定**：
 
-| 分岔 | 選項 | 傾向 | 理由 |
+| 分岔 | 選項 | 決定 | 理由 |
 |---|---|---|---|
-| (d) 要不要現在接上正式站（`global/settings.json` + 使用者層級設定） | 現在接／先不接繼續 shadow 觀察 | 現在接，但保持 `shadow: true` | 不接上，規則永遠不會被任何真實 session 觸發，Design 時寫的「驗證方式」（IT-department／MIS-install／harness 自己各開一次隔離 session）就永遠驗不到；接上但維持 shadow，可以先讓 `check()`／`applies()` 在真實環境跑，觀察 `state/onb1_notice_seen.json` 有沒有異常增長，同時保證使用者暫時看不到任何提示 |
-| (e) 接上後，正式顯示要用 `shadow: true` 還是 `shadow: false` | 先觀察一段時間再轉正式／現在直接轉正式 | 待使用者定 | 沒有唯讀查證能回答「使用者想不想現在就看到提示」——這是產品層決定，不是技術層 |
+| (d) 要不要現在接上正式站 | 現在接／先不接 | **現在接（使用者定）** | 已完成：`global/settings.json` + `~/.claude/settings.json` 都登記了 `SessionStart` |
+| (e) shadow:true 先觀察／shadow:false 直接顯示 | 見左 | **shadow:false，直接顯示（使用者定）** | 使用者選了風險較高的選項（判準只驗過隔離測試目錄，沒在真實部門專案跑過）——已在回覆裡點出風險，使用者知情選擇 |
 
 ## 驗證方式
 
@@ -103,13 +104,14 @@ Phase 2（真的自動執行產生器）是否要做、怎麼做，留到 Phase 
 - **回歸網**：`tests/test_hook_rules.py`（措辭陳述句守門、dashboard 敘述覆蓋率）、
   `tests/mutations/mutate_warn_channel.py`（WARN 通道變異偵測，錨點已隨
   `dispatch.py` 改動同步更新）全數過。
-- **尚未驗、需要真實環境**（待分岔 d/e 決定後才能排）：
-  - 對 IT-department、MIS-install（已接上）各開一次真實 session，確認不印任何提示。
-  - 對 harness 自己開一次 session，確認不誤傷。
-  - **重開 session 才生效這件事有沒有踩雷**：新增 `SessionStart` event key 到
-    `global/settings.json` 後，*不重開*就先確認舊 session 確實還沒讀到新規則
-    （對照組），再重開一次確認讀到了（實驗組）——避免「以為生效但其實沒生效」
-    被誤判成「規則寫錯」。
+### 待驗清單（2026-09-07，接上正式站但這一則對話本身沒重啟，驗不到）
+
+| 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
+|---|---|---|---|
+| IT-department、MIS-install（已接上規則產生器）開新 session 不誤觸發 | 需要真的重開一個互動 session，不是能在這則對話裡跑的指令 | 分別在 `D:\Patrick-AI\IT-department`、`D:\Patrick-AI\MIS-install` 開一個新的 Claude Code session，觀察開場有沒有印出 ONB-1 的提示（不該有） | 使用者 |
+| harness 自己開新 session 不誤傷 | 同上 | 在 `D:\Patrick-AI\.ai-harness` 開一個新 session，觀察開場不該印出提示 | 使用者 |
+| 一個真的「還沒接上」的部門專案第一次開場會印、且措辭正確 | 手上沒有這種真實專案可用，隔離測試目錄不算「真實環境」 | 找一個有 `PROJECT_CONTEXT.md` 但沒有 `AGENTS.md`/`CODE_MAP.md` 的真實專案開新 session，確認印出提示且呼叫指令正確 | 使用者（或下一位接手者） |
+| `state/onb1_notice_seen.json` 沒有異常增長 | 需要跑過至少一輪真實 session 才有資料可看 | `py -3 -c "import json; print(json.load(open(r'D:\Patrick-AI\.ai-harness\state\onb1_notice_seen.json', encoding='utf-8-sig')))"` | 使用者或下一位接手者 |
 
 ## 沒做的
 
@@ -117,9 +119,7 @@ Phase 2（真的自動執行產生器）是否要做、怎麼做，留到 Phase 
 
 - Phase 2（自動執行產生器，不只是印提示）——等 Phase 1 驗過再談。
 
-**範圍內但還沒做，等使用者決定分岔 d/e**：
+**已完成**：`global/settings.json` 與 `~/.claude/settings.json` 已接上 `SessionStart`，
+`ONB-1` 已轉正式（`shadow: false`）。
 
-- `global/settings.json` 新增 `SessionStart` → `dispatch.py`。
-- 同步到使用者層級 `~/.claude/settings.json`（兩份手動保持一致，非 symlink，
-  本次已核對過目前兩份仍是逐位元組相同）。
-- 上一節列的「尚未驗、需要真實環境」三項。
+**還沒驗到**：見上方「待驗清單」四項，全部需要真實 session 重啟才能驗，不是本次對話能跑的指令。

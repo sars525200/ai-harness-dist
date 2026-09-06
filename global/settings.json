@@ -167,6 +167,16 @@
   "model": "claude-sonnet-5",
   "autoCompactWindow": 300000,
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\hooks\\dispatch.py\""
+          }
+        ]
+      }
+    ],
     "SessionEnd": [
       {
         "matcher": "clear|logout|prompt_input_exit|other",

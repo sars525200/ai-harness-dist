@@ -619,9 +619,10 @@ _KNOWN_U1_DEBT_JSON = {
         r"D:\Patrick-AI\MIS-install\codebase-health-dashboard": 1,
         r"PowerShell(Remove-Item -Recurse -Force C:\:*)": 1,
         r"PowerShell(rm -Recurse -Force C:\:*)": 1,
-        # 六條 hook command。**這六條就是「換機器整批失效」的本體**：
+        # 七條 hook command。**這七條就是「換機器整批失效」的本體**：
         # 路徑不對時 Claude 不會報錯，對話照樣進行，閘門一條都不會跑。
-        r'py -3 "D:\Patrick-AI\.ai-harness\hooks\dispatch.py"': 5,
+        # 2026-09-07：ONB-1 新增 SessionStart → dispatch.py，5 → 6。
+        r'py -3 "D:\Patrick-AI\.ai-harness\hooks\dispatch.py"': 6,
         r'py -3 "D:\Patrick-AI\.ai-harness\hooks\session_archive.py"': 1,
     },
     # ⚠ 這一筆是**閘門自己抓出來的、不是我事先量到的**：
