@@ -526,8 +526,11 @@ def main() -> int:
         import test_skill_roster
         import test_open_in_ide
         import test_decl1
+        import test_decl2_missing_declaration
         import test_disp1
         import test_esc1
+        import test_learn1_shadow
+        import test_title2_reminder
         import test_warn_wording
         import test_progress_chart
         import test_todos
@@ -638,8 +641,11 @@ def main() -> int:
             (test_skill_roster.run, "Skill 清冊產生器"),
             (test_open_in_ide.run, "看板在 IDE 開檔"),
             (test_decl1.run, "DECL-1 宣告欄位"),
+            (test_decl2_missing_declaration.run, "DECL-2 動檔零宣告（shadow）"),
             (test_disp1.run, "DISP-1 派工紀律"),
             (test_esc1.run, "ESC-1 需求登記"),
+            (test_learn1_shadow.run, "LEARN-1 技術任務先問要不要學（shadow）"),
+            (test_title2_reminder.run, "TITLE-2 漏改名提醒"),
             (test_warn_wording.selftest, "WARN 措辭守門自檢"),
             (test_warn_wording.run, "WARN 措辭跨規則守門"),
             (test_mutation_anchors.run, "變異腳本錨點"),
