@@ -134,6 +134,10 @@ def render(root: Path, content: dict, ctx_path: Path, keywords_path: Path) -> st
         "如與來源檔案內容衝突，以來源檔案為準；本檔不重複維護規則本體，只整理既有規則。"
     )
     lines.append(f"<!-- generated-at: {_dt.datetime.now().isoformat(timespec='seconds')} -->")
+    # 2026-09-07（ONB-2）：機械化「未經人審」標記。純文字免責聲明沒辦法被程式判斷，
+    # 這一行是給以後想寫「有沒有人審過」守門的人一個可以 grep 的錨點；判準本身
+    # 不在本次範圍內做（SESSIONSTART_AUTOCONFIG_PLAN.md 分岔 (g)：只加 marker 不加守門）。
+    lines.append("<!-- onb2-status: auto-generated, unreviewed -->")
     return "\n".join(lines) + "\n"
 
 

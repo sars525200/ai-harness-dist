@@ -229,6 +229,8 @@ def render(root: Path, rows: list, warnings: list) -> str:
         "標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。"
     )
     lines.append(f"<!-- generated-at: {_dt.datetime.now().isoformat(timespec='seconds')} -->")
+    # 2026-09-07（ONB-2）：同 generate_rules.py 的機械化「未經人審」標記，理由同注釋。
+    lines.append("<!-- onb2-status: auto-generated, unreviewed -->")
     return "\n".join(lines) + "\n"
 
 
