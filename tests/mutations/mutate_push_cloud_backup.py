@@ -30,6 +30,7 @@ r"""對清洗工具的規則目錄做變異，確認 push_cloud_backup.py 的三
    十輪約 3 分鐘。這是真實執行不是語法檢查，慢是代價。
 """
 import hashlib
+import io
 import os
 import shutil
 import subprocess
@@ -42,6 +43,28 @@ sys.stderr.reconfigure(encoding="utf-8")
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOOL = os.path.join(_ROOT, "tools", "push_cloud_backup.py")
 SRC = os.path.join(_ROOT, ".scratch", "cloud-export")
+# 錨點：這幾條是**工具原始碼裡的訊息文字**，m1~m9 期望它們出現在工具輸出裡。
+# 抽成模組層常數有兩個作用：①函式體與下面的 ANCHORS 引用同一份，改一處就好；
+# ②錨點檢查（tests/test_mutation_anchors.py）讀得到，工具訊息改寫時會當場轉紅。
+# 不含 "FAIL " 前綴 —— 那是跑測時外面加的，工具原始碼裡沒有這五個字。
+# 變異②用的假字串：規則左半邊要「repo 裡真的找不到」，清單對照組才會轉紅。
+# **必須執行期串接**，不能寫成一整段字面值——寫死的話它自己就出現在本檔裡，
+# 而本檔在 repo 內、會被掃進去，於是那條規則的左半邊「找得到」，對照組照樣綠，
+# 這條變異等於沒在測（2026-09-07 實跑抓到；這支從沒被自動跑過所以沒人發現）。
+# 而且串接的**組合結果**必須是 git 歷史裡從沒出現過的字：棘輪播種是掃全歷史
+# blob，舊字串即使今天從工作區拿掉，歷史裡仍在、仍會被播進基準線，接著撞上
+# 「基準線不含規則左半邊」那道檢查——換字時請一併確認 git log -S 查不到。
+FAKE = "qqzz" + "phantom" + "77"
+
+A_NO_RULES = "規則檔不存在"
+A_LIST_CTRL = "清單判準在未清洗的複製品上抓得到"
+A_SHAPE = "全歷史敏感字串已清除（形狀判準"
+A_RATCHET = "沒有未判定的新 token"
+A_BASE_EXISTS = "token 基準線存在"
+A_SEED_FLAG = "--seed-token-baseline"
+A_BASE_CLEAN = "基準線不含規則左半邊"
+A_RESEED = "基準線已存在"
+
 RULES = "replace-rules.txt"
 ALLOW = "shape-allowlist.txt"
 BASE = "token-baseline.txt"
@@ -87,10 +110,17 @@ def drop_baseline_token(d):
 
 # (標籤, 變異函式(dir) -> 期望出現在輸出裡的字串清單, 工具參數)
 def m1(d):
-    os.remove(os.path.join(d, RULES)); return ["規則檔不存在"]
+    os.remove(os.path.join(d, RULES)); return [A_NO_RULES]
 def m2(d):
-    write(d, RULES, read(d, RULES) + "zzqqnotexist99==>X\n")
-    return ["FAIL 清單判準在未清洗的複製品上抓得到", "zzqqnotexist99"]
+    # 2026-09-07 實跑抓到這條變異空轉，兩個原因疊在一起，都是工具後來長出新守門
+    # 而這條沒跟上：
+    #   ① 右半邊原本寫 "X"，工具現在有「子字串白名單不准有過短的值」的拒跑
+    #      （SUBSTR_FLOOR），還沒跑到清單判準就 rc=1 死掉。右半邊改成 ≥4 字——
+    #      這條要測的是「左半邊在 repo 裡不存在」，右半邊是什麼無關。
+    #   ② 假字串本身不能寫成字面值，否則它就存在於 repo 裡、對照組不會紅——
+    #      見 FAKE 的註解。
+    write(d, RULES, read(d, RULES) + FAKE + "==>ZZPLACEHOLDER\n")
+    return ["FAIL " + A_LIST_CTRL, FAKE]
 def m3(d):
     # 09-04 那張手動表寫的是「拿掉 <USER>==>（截斷路徑那條）→ 形狀判準抓到」。
     # 2026-09-06 第一次自動跑就紅了：09-05 把看板 html 整條從歷史丟掉（DROP_PATHS）
@@ -98,20 +128,20 @@ def m3(d):
     # 改成拿掉完整帳號的兩條：只拿 <USER> 那條，<USER> 那條會把它半換成 <USER>n，
     # 形狀層照樣看不到；兩條都拿，完整的使用者路徑才留在匯出品裡給形狀層抓。
     drop_rule(d, "<USER>==>"); drop_rule(d, "<USER>==>")
-    return ["FAIL 全歷史敏感字串已清除（形狀判準", "<USER>"]
+    return ["FAIL " + A_SHAPE, "<USER>"]
 def m4(d):
-    write(d, ALLOW, ""); return ["FAIL 全歷史敏感字串已清除（形狀判準"]
+    write(d, ALLOW, ""); return ["FAIL " + A_SHAPE]
 def m5(d):
-    drop_rule(d, "<ADMIN-ACCT>==>"); return ["FAIL 沒有未判定的新 token", "<ADMIN-ACCT>"]
+    drop_rule(d, "<ADMIN-ACCT>==>"); return ["FAIL " + A_RATCHET, "<ADMIN-ACCT>"]
 def m6(d):
-    os.remove(os.path.join(d, BASE)); return ["FAIL token 基準線存在", "--seed-token-baseline"]
+    os.remove(os.path.join(d, BASE)); return ["FAIL " + A_BASE_EXISTS, A_SEED_FLAG]
 def m7(d):
     write(d, BASE, read(d, BASE) + "<ADMIN-ACCT>\n")
-    return ["FAIL 基準線不含規則左半邊", "<ADMIN-ACCT>"]
+    return ["FAIL " + A_BASE_CLEAN, "<ADMIN-ACCT>"]
 def m8(d):
-    tok = drop_baseline_token(d); return ["FAIL 沒有未判定的新 token", tok]
+    tok = drop_baseline_token(d); return ["FAIL " + A_RATCHET, tok]
 def m9(d):
-    return ["基準線已存在"]
+    return [A_RESEED]
 
 MUTATIONS = [
     ("① 規則檔不存在 → 拒跑", m1, "--check"),
@@ -125,11 +155,64 @@ MUTATIONS = [
     ("⑨ 基準線已存在時重新播種 → 拒跑", m9, "--seed-token-baseline"),
 ]
 
+# 錨點委派表：MUTATIONS 第二欄放的是函式（這支的變異動的是規則資料檔、
+# 不是工具原始碼，換法寫不成一次字串替換），所以錨點另外在這裡對回函式名。
+# tests/test_mutation_anchors.py 讀這張表，逐條確認錨點還在 TOOL 裡；
+# 少寫一條，那一條就會被算成「讀不出錨點」而轉紅，不會靜默漏掉。
+ANCHORS = [
+    ("m1", A_NO_RULES),
+    ("m2", A_LIST_CTRL),
+    ("m3", A_SHAPE),
+    ("m4", A_SHAPE),
+    ("m5", A_RATCHET),
+    ("m6", A_BASE_EXISTS),
+    ("m6", A_SEED_FLAG),
+    ("m7", A_BASE_CLEAN),
+    ("m8", A_RATCHET),
+    ("m9", A_RESEED),
+]
+
+
+# 棘輪 FAIL 時，工具的主控台清單只印前 20 個（排序後），完整清單另外落這個檔。
+# ⑤／⑧ 是「點名某一個 token」的變異：只讀主控台的話，那個 token 排在第 21 名之後
+# 就會被判成「無」而假紅——別的 session 一 commit 進新 token，名次就會推移，
+# 所以這是會隨機發作的假紅（2026-09-07 實際發作過一次，<ADMIN-ACCT> 被擠出前 20）。
+# 這裡把落檔內容一起併進比對字串，讓判定不再取決於名次。
+DUMP = os.path.join(_ROOT, "state", "cloud_new_tokens.txt")
+
+
+def _lines(path):
+    try:
+        with io.open(path, encoding="utf-8", errors="replace") as f:
+            return f.read().splitlines()
+    except OSError:
+        return None
+
+
+def _describe(before, after):
+    if before is None or after is None:
+        return "檔案新增或消失了"
+    if len(after) > len(before) and after[:len(before)] == before:
+        add = after[len(before):]
+        head = " / ".join(x.strip() for x in add if x.strip())[:120]
+        return f"只在尾端新增 {len(add)} 行：{head}"
+    return f"不是純新增（{len(before)} 行 → {len(after)} 行）"
+
 
 def run_tool(rules_dir, mode):
+    try:
+        os.remove(DUMP)          # 先清掉，免得讀到上一輪的殘留
+    except OSError:
+        pass
     r = subprocess.run([sys.executable, "-X", "utf8", TOOL, mode, "--rules-dir", rules_dir],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return r.returncode, (r.stdout or "") + (r.stderr or "")
+    out = (r.stdout or "") + (r.stderr or "")
+    try:
+        with io.open(DUMP, encoding="utf-8") as f:
+            out += "\n---- 完整新 token 清單（落檔）----\n" + f.read()
+    except OSError:
+        pass
+    return r.returncode, out
 
 
 def main():
@@ -138,6 +221,7 @@ def main():
         return 1
     fingerprint = {n: sha(os.path.join(SRC, n)) for n in os.listdir(SRC)
                    if os.path.isfile(os.path.join(SRC, n))}
+    lines0 = {n: _lines(os.path.join(SRC, n)) for n in fingerprint}
 
     work = tempfile.mkdtemp(prefix="mut-cloudbak-")
     all_good = True
@@ -183,7 +267,14 @@ def main():
         tampered = sorted(set(now) ^ set(fingerprint) | {n for n in now if fingerprint.get(n) != now[n]})
 
     if tampered:
-        print(f"⛔ 正本被動到了：{tampered} —— 這支不該碰正本，請自己比對後復原。")
+        # 只報檔名不夠：這個警告 2026-09-06／09-07 各響過一次，兩次都是**別的
+        # session 在同一時間往基準線後面追加已判定的 token**，不是這支洩漏。
+        # 光看檔名分不出來，每次都得人工回頭挖一輪——所以這裡直接說出怎麼變的。
+        print(f"⛔ 正本被動到了：{tampered}")
+        for n in tampered:
+            print("   " + _describe(lines0.get(n), _lines(os.path.join(SRC, n))))
+        print("   「只在尾端新增」幾乎都是別的 session 在追加已判定的 token；"
+              "改到中間或有行消失才是這支漏了，要自己比對後復原。")
         return 1
     print(f"[正本指紋] {len(fingerprint)} 個檔逐 byte 未變 ✓")
     return 0 if all_good else 1

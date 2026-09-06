@@ -28,9 +28,15 @@ sys.stdout.reconfigure(encoding="utf-8")
 MUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mutations")
 
 # 變異腳本用來指被測檔案的變數名。第一個找得到的就是目標。
-_TARGET_NAMES = ("TARGET", "DISPATCH", "SRC")
+_TARGET_NAMES = ("TARGET", "DISPATCH", "TOOL", "SRC")
 # 放變異三元組的清單名。EQUIVALENT 是「已證等價」清單，錨點同樣要維護。
 _LIST_NAMES = ("MUTATIONS", "EQUIVALENT")
+# 錨點委派清單的名字。有些變異腳本的第二欄放的是**函式參照**而不是錨點字串
+# （因為那一條變異要動的是資料檔、不是原始碼，換法沒辦法寫成一次字串替換）。
+# 那種腳本另外用這個清單把「哪個函式 → 哪個錨點」寫成 (函式名, 錨點) 二元組，
+# 錨點本身仍是模組層字串常數，函式體直接引用同一個常數 —— 單一真相，不會漂。
+# 沒有對應委派項的函式參照一律計入「讀不出錨點」，不是靜默放行。
+_DELEGATE_NAME = "ANCHORS"
 
 
 def _read(path: str) -> str:
@@ -128,7 +134,35 @@ def _fold_str(node: ast.AST, consts: dict) -> "str | None":
     return None
 
 
-def _anchor_lists(tree: ast.Module, consts: dict) -> "list[tuple[str, list, int]]":
+def _module_functions(tree: ast.Module) -> set:
+    """模組層定義的函式名。變異清單第二欄若是其中之一，就是委派形狀。"""
+    return {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+
+def _delegated_anchors(tree: ast.Module, consts: dict) -> dict:
+    """讀 ANCHORS：[(函式名, 錨點), ...] → {函式名: [錨點, ...]}。
+
+    折不出字串的項目直接丟掉 —— 呼叫端會因為「查不到這個函式的錨點」
+    把那條變異算成讀不出來，不會變成靜默放行。
+    """
+    out = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.List):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == _DELEGATE_NAME
+                   for t in node.targets):
+            continue
+        for elt in node.value.elts:
+            if not isinstance(elt, ast.Tuple) or len(elt.elts) != 2:
+                continue
+            fn = elt.elts[0]
+            text = _fold_str(elt.elts[1], consts)
+            if isinstance(fn, ast.Constant) and isinstance(fn.value, str) and text:
+                out.setdefault(fn.value, []).append(text)
+    return out
+
+
+def _anchor_lists(tree: ast.Module, consts: dict, funcs=(), delegated=None) -> "list[tuple[str, list, int]]":
     """回傳 [(清單名, [(說明, 錨點字串, 該項的被測檔常數名或 None), ...], 讀不出來的項數), ...]。
 
     兩種形狀：
@@ -162,6 +196,16 @@ def _anchor_lists(tree: ast.Module, consts: dict) -> "list[tuple[str, list, int]
                 per_target, anchor = elt.elts[1].id, elt.elts[2]
             else:
                 per_target, anchor = None, elt.elts[1]
+            # 委派形狀：第二欄是模組層函式名，錨點寫在 ANCHORS 裡。
+            if (isinstance(anchor, ast.Name) and anchor.id in funcs
+                    and isinstance(label, ast.Constant)):
+                got = (delegated or {}).get(anchor.id) or []
+                if got:
+                    for a in got:
+                        items.append((str(label.value), a, per_target))
+                else:
+                    unreadable += 1
+                continue
             text = _fold_str(anchor, consts)
             if isinstance(label, ast.Constant) and text is not None:
                 items.append((str(label.value), text, per_target))
@@ -189,7 +233,8 @@ def run() -> "tuple[int, list[str]]":
 
         consts = _string_assignments(tree, os.path.abspath(script))
         default_target = next((consts[n] for n in _TARGET_NAMES if n in consts), None)
-        lists = _anchor_lists(tree, consts)
+        lists = _anchor_lists(tree, consts, _module_functions(tree),
+                              _delegated_anchors(tree, consts))
         if not lists or all(not items for _, items, _ in lists):
             failures.append(f"{base} 取不到任何錨點 —— 清單名要是 {'／'.join(_LIST_NAMES)}")
             continue
