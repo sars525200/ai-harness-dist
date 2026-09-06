@@ -38,13 +38,31 @@ matcher 恢復」）——兇手是「無範圍限制」，不是「PreToolUse �
 刻意**只**掛進 `dispatch.py` 現有、已經穩定跑一個多月的 `PreToolUse` 清單，
 不新增 `settings.json` 的掛載、不碰 matcher 字串。
 
-## 為什麼只認「佔位名」不認「過期名」
+## 為什麼只認「佔位名」不認「過期名」（第一版，2026-09-07 已被下一段推翻一半）
 
 `_declared_task()` 這一輪組出來的標題如果跟舊標題不同，也可能只是進度數字
 往前跳一格（60% → 70%）——那種差異每一輪都會出現，WARN 會吵到沒人想看。
 第一版只抓「從未命名／還是預設代號／舊格式待命名」這三種真正的漏做，
 先觀察 shadow 期的誤報率，要不要連「過期未更新」也抓再議
 （見 `SESSION_TITLE_HOOK_PLAN.md` 狀態欄）。
+
+## 2026-09-07 補「換題沒改名」：只比名稱段，不比階段與進度
+
+升 BLOCK 當天在真對話裡實測，**閘門在最常走的路徑上一次都沒開火**：桌面版
+`/clear` 產生的新 session，transcript 檔一開頭就繼承了上一則的 `custom-title`
+（實測 7 筆，最後一筆是上一件任務的名字）⇒ `_is_placeholder()` 回 False ⇒
+`check()` 直接 allow。那次 BLOCK 是**手動把標題改成 `New session`** 才觸發到的。
+換句話說「換則接手新任務、標題還掛著上一件」——本 repo 最主要的工作流
+（`global/CLAUDE.md` §4.2 拆短對話換 `/clear`）——完全裸奔。
+
+所以第二個判準補上，但**刻意只比對名稱段**，第一版擔心的吵雜來源全部避開：
+
+- 進度 60% → 70%、階段 Execute → Review：名稱沒變 ⇒ 不開火。
+- 措辭伸縮（「改名閘門」↔「改名閘門升級」）：一方是另一方的子字串 ⇒ 不開火。
+- **user 自己取的標題**（不帶【】分類標記）：`previous_name()` 抽不出名字 ⇒
+  不開火。這條界線不能破——逼 user 改掉他自己取的名字，比漏抓還糟。
+- 【待】／【閒置】：這兩個標記的字面意思就是「還沒有任務／已封存」，一旦這一輪
+  宣告了任務就是漏做，併進 `_is_placeholder()` 一起抓。
 
 ## 重用 `session_title.py` 的既有判斷，不重寫
 
@@ -125,8 +143,11 @@ def _existing_title(ctx) -> str:
     return title
 
 
+_HOLD_MARK_RE = re.compile(r"^【(?:待|閒置)(?:·[^】]*)?】")
+
+
 def _is_placeholder(title: str) -> bool:
-    """從未命名／平台預設代號／舊格式待命名，這三種才算「漏做」。"""
+    """從未命名／平台預設代號／舊格式待命名／【待】【閒置】，這幾種算「漏做」。"""
     stripped = (title or "").strip()
     if not stripped:
         return True
@@ -136,7 +157,31 @@ def _is_placeholder(title: str) -> bool:
         return True
     if _T.is_legacy_idle(stripped):
         return True
+    if _HOLD_MARK_RE.match(stripped):
+        return True
     return False
+
+
+def _norm_name(name: str) -> str:
+    return re.sub(r"\s+", "", name or "")
+
+
+def _is_stale(existing: str, declared: str) -> bool:
+    """標題掛著的是**別的任務**的名字嗎（換題沒改名）。
+
+    只在兩邊都抽得出名稱段時才判——`previous_name()` 對 user 自訂標題
+    （不帶【】分類標記）回空字串，那種標題一律不動（見檔頭）。
+    """
+    old = _norm_name(_T.previous_name(existing))
+    new = _norm_name(_T.previous_name(declared))
+    if not old or not new:
+        return False
+    if old == new:
+        return False
+    # 措辭伸縮／48 字截斷造成的長短差異不算換題。
+    if old in new or new in old:
+        return False
+    return True
 
 
 def _declared_title(ctx) -> str:
@@ -201,24 +246,32 @@ def _reset_count(session_id: str) -> None:
         _save_state(state)
 
 
+_TAIL = ("請先呼叫 mcp__ccd_session_mgmt__set_session_title（不受這條規則攔截）"
+         "改名，才能繼續下一步操作——組好的標題參考：「%s」。")
+
+
 def check(ctx):
     declared = _declared_title(ctx)
     if not declared:
         return allow()
     session_id = getattr(ctx, "session_id", "") or ""
     existing = _existing_title(ctx)
-    if not _is_placeholder(existing):
+
+    if _is_placeholder(existing):
+        head = ("TITLE-1（global/hub/21-title-claude.md）：這一輪的自我宣告已經確定"
+                "任務範圍，但這則對話的標題還是%s。"
+                % (("預設值「%s」" % existing) if existing else "從未命名過"))
+    elif _is_stale(existing, declared):
+        head = ("TITLE-1（global/hub/21-title-claude.md）：這一輪宣告的任務是"
+                "「%s」，但這則對話的標題還掛著上一件任務「%s」——"
+                "`/clear` 換則接手時，新 session 會沿用上一則的標題，改名不會自動發生。"
+                % (_T.previous_name(declared), _T.previous_name(existing)))
+    else:
         _reset_count(session_id)
         return allow()
 
     count = _bump_count(session_id)
-    message = (
-        "TITLE-1（global/hub/21-title-claude.md）：這一輪的自我宣告已經確定任務"
-        "範圍，但這則對話的標題還是%s。請先呼叫 mcp__ccd_session_mgmt__set_session_title"
-        "（不受這條規則攔截）改名，才能繼續下一步操作——"
-        "組好的標題參考：「%s」。"
-        % (("預設值「%s」" % existing) if existing else "從未命名過", declared)
-    )
+    message = head + (_TAIL % declared)
     if count >= _ESCALATE_AT:
         message = (
             "⚠️ 這是本則對話第 %d 次被擋——前面都沒有照做，請現在就呼叫 "

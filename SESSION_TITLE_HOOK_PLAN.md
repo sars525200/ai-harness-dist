@@ -167,6 +167,46 @@ grilling，本檔案外沒有另存 map——問答收斂快，直接收成規�
       escalate 相關 3 條子案例也都還在）。**尚未做**：`eval/run_all.py`／
       `/audit` 全套跑一次；`dashboard/gen_hook_rules.py` 的 `DESC["TITLE-2"]`
       文字仍寫著舊的「WARN」用語，需要跟著改，否則看板描述與實際行為對不上。
+- [x] **BLOCK 真對話實測（2026-09-07 00:08，session `814119d1`）**：
+      **擋得下、訊息讀得懂、改名後立刻放行**。證據：`state/events.814119d1-….ndjson`
+      有一筆 `"rule_id": "TITLE-2", "decision": "BLOCK", "shadow": false,
+      "bypassed": false`；`Bash echo block-test` 回 `PreToolUse:Bash hook error:` ＋
+      完整訊息；呼叫 `set_session_title` 改成正式名後，同一支 Bash 立刻跑得動
+      （計數也照 `_reset_count()` 歸零）。
+      **併發不誤報**：同時段這台機器另有 7 則真實 session 在跑，事件檔全部只有
+      `applies` 沒有 `decision`。
+      **Cursor CLI 沒被誤傷**：用 `run_claude_reviewer.build_cmd()` 的真實 argv
+      （`-p --safe-mode --permission-mode plan --disallowed-tools Edit,Write,NotebookEdit`）
+      實跑一次，exit 0、Bash 正常執行、無攔截訊息；而且 `state/` 底下**找不到**該次
+      子 session 的事件檔 ⇒ 子行程根本沒載入 harness hook（推測是 `--safe-mode`），
+      TITLE-2 碰不到它。**這是觀察到「沒有事件」而非直接證明 safe-mode 關 hook**，
+      要更硬的結論得另外做一次 A/B。
+- [ ] **新缺口：`/clear` 之後閘門完全不開火**（2026-09-07 實測，本次最重要的發現）：
+      桌面版 `/clear` 產生的新 session，transcript 檔一開頭就被寫進 7 筆
+      `custom-title`，最後一筆是**上一個任務的名字**（本次是
+      `【收尾】改名閘門升級`）⇒ `_last_custom_title()` 讀得到值、`_is_placeholder()`
+      回 False ⇒ **check() 直接 allow**。所以「換則接手新任務、標題還掛著舊任務名」
+      這條路徑，TITLE-2 一次都不會開火——而這正是本專案最常走的工作流
+      （`global/CLAUDE.md` §4.2「寧可拆短對話換 `/clear`＋交接檔」）。
+      本次能驗到 BLOCK，是**手動把標題改成 `New session`** 才觸發得到的。
+      這件事把上面「TITLE-2 抓過期未更新留到 2026-09-13 再議」的成本效益改寫了：
+      原本以為過期名只是「進度數字沒跟上」的吵雜案例，實際上最大宗是「換了任務、
+      名字還是上一件」。
+- [x] **補「換題沒改名」判準（2026-09-07，user 當場決定提前做，不等 09-13）**：
+      只比**名稱段**，第一版擔心的吵雜來源逐一避開——進度／階段往前跳不算、
+      措辭伸縮（一方是另一方的子字串）不算、**user 自己取的標題（不帶【】標記）
+      一律不動**。順帶把【待】／【閒置】併進 `_is_placeholder()`（這兩個標記的
+      字面意思就是「還沒有任務」）。
+      連帶修正 `session_title.py` 兩支正規式：`_OURS_RE`／`_TITLE_NAME_RE` 原本
+      要求分類詞後面直接接】，**提案 D 的新格式【任務·短id】全部判成「不是我寫的」**
+      ⇒ `previous_name()` 抽不出名字 ⇒ 收尾那一輪會被誤判成換題。純放寬，不動舊格式。
+      **已驗**：`tests/test_title2_reminder.py` 21/21（新增 8 條，先把兩個新判準
+      拆掉重跑證明它們真的會紅，再信它們的綠）；`tests/run_hook_tests.py` 2007/2013，
+      6 個失敗全部落在本次沒碰的檔（TODOS.md 表格欄數、`gen_hook_rules` 的
+      HND-2／HND-3 缺敘述、`mutate_push_cloud_backup.py` 錨點、skill 引用的 git hash）。
+      **真對話實測**：在同一則對話裡把宣告的任務名換成別的，Bash 當場被擋，訊息
+      同時點名新舊兩個任務名；改名後同一支指令立刻放行。
+      `dashboard/gen_hook_rules.py` 的 `DESC["TITLE-2"]` 已同步改寫。
 - [ ] **尚未 commit**——這則對話結束時 repo 同時有 2 個其他 session 在動
       （`3aacde83…`／`7981cc4e…`），且雲端備份鏡像最後一輪失敗（見 `TODOS.md`
       既有記票，非本次新增問題）。commit 前建議先跑

@@ -152,6 +152,49 @@ def run() -> "tuple[int, list]":
         finally:
             m.STATE_PATH = old_state_path
 
+        # ── 2026-09-07 補：換題沒改名（/clear 繼承上一則標題）─────────────
+        # 9) 標題掛著別的任務名 ＋ 這一輪宣告新任務 → 該叫
+        p10 = _write_transcript(td, [_DECL],
+                                custom_title="【任務·abc12345】別的任務｜Execute｜10%")
+        v10 = m.check(_Ctx(_DECL, p10))
+        check("換題沒改名時 BLOCK", bool(v10.message), repr(v10.message))
+        check("換題訊息點名兩邊的任務名",
+              v10.message and "別的任務" in v10.message and "測試任務" in v10.message,
+              repr(v10.message))
+
+        # 10) 只有進度／階段往前跳 → 不該叫（第一版擔心的吵雜來源）
+        p11 = _write_transcript(td, [_DECL],
+                                custom_title="【任務·abc12345】測試任務｜Research｜10%")
+        v11 = m.check(_Ctx(_DECL, p11))
+        check("只有進度階段不同時不叫", not v11.message, repr(v11.message))
+
+        # 11) 措辭伸縮（一方是另一方的子字串）→ 不該叫
+        p12 = _write_transcript(td, [_DECL],
+                                custom_title="【任務·abc12345】測試｜Execute｜10%")
+        v12 = m.check(_Ctx(_DECL, p12))
+        check("名稱伸縮時不叫", not v12.message, repr(v12.message))
+
+        # 12) user 自己取的標題 ＋ 換題 → 仍然不該叫（這條界線不能破）
+        p13 = _write_transcript(td, [_DECL], custom_title="我自己取的名字")
+        v13 = m.check(_Ctx(_DECL, p13))
+        check("user 自訂標題換題時仍不叫", not v13.message, repr(v13.message))
+
+        # 13) 【待】／【閒置】這兩個標記本身就是「還沒有任務」→ 該叫
+        for mark in ("【待】隨手打的一句話", "【閒置】改名閘門升級"):
+            p14 = _write_transcript(td, [_DECL], custom_title=mark)
+            v14 = m.check(_Ctx(_DECL, p14))
+            check(f"{mark[:4]} 時 BLOCK", bool(v14.message), repr(v14.message))
+
+        # 14) 收尾那一輪：宣告寫「收工封存」，但沿用原任務名 → 不該誤判成換題
+        #     （靠 `previous_name()` 認得新格式【任務·短id】，這次一併放寬）
+        closing = ("模式 DEV ｜ 任務 收工封存 ｜ 任務分類 [測試]\n"
+                   "階段 Review ｜ 規模 S ｜ 進度 100%\n"
+                   "修改檔案 a.py ｜ 修改摘要 收尾\n")
+        p15 = _write_transcript(td, [closing],
+                                custom_title="【任務·abc12345】測試任務｜Execute｜50%")
+        v15 = m.check(_Ctx(closing, p15))
+        check("收尾沿用原任務名時不叫", not v15.message, repr(v15.message))
+
     return passed, failed
 
 
