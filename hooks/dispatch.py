@@ -242,6 +242,16 @@ REGISTRY = [
         "tools": None,
     },
     {
+        # LEARN-1：shadow 觀察「技術任務先問要不要學」有沒有真的漏問
+        # （見該檔檔頭）。刻意不進 dispatch_config.json——預設 shadow=True，
+        # 只記 applies／decision 到 events log，不送達也不影響行為。
+        # 與 DECL-1 同理由只掛 Stop：問不問學習說明是主 session 的紀律。
+        "id": "LEARN-1",
+        "module": "learn1_shadow",
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         "id": "BUDGET-1",
         "module": "budget1_daily_usage",
         # 與 AWC-1 同樣只掛 Stop：subagent 的用量已經算在同一個專案目錄裡，
