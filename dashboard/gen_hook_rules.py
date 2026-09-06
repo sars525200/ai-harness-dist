@@ -209,7 +209,23 @@ DESC = {
                "additionalContext 到不到得了模型，2026-09-06 用 "
                "<code>tests/sessionstart_probe/</code> 實測過（開場第一輪就到，"
                "不必繞 Stop 的兩段式投遞）。跨 session 記「講過了」的狀態，"
-               "第一版誤把 shadow 觀察期也算進「講過了」，已修。",
+               "第一版誤把 shadow 觀察期也算進「講過了」，已修。"
+               "<b>2026-09-07 起不再獨立掛 SessionStart</b>——被 ONB-2 取代，"
+               "模組留著只給 ONB-2 前提不足時引用同一段提醒文字。",
+    },
+    "ONB-2": {
+        "badge": "9/07 新·shadow", "on": "<b>SessionStart</b>",
+        "why": "新專案有 PROJECT_CONTEXT.md 卻缺 AGENTS.md／CODE_MAP.md 至少一份，"
+               "開場自動呼叫產生器接上，前提不足才退回 ONB-1 的純文字提醒",
+        "tip": "「新建專案自動配置」Phase 2，取代 ONB-1 掛上 SessionStart。"
+               "逐檔案判斷完成（存在即不再重寫），兩支產生器共用 "
+               "<code>generate_rules.py</code> 的 exit code 當單一閘門"
+               "（<code>generate_map.py</code> 沒有非 0 的失敗訊號）。"
+               "寫出的 AGENTS.md／CODE_MAP.md 都帶 "
+               "<code>&lt;!-- onb2-status: auto-generated, unreviewed --&gt;</code> "
+               "標記。逐專案鎖比照 <code>hooks/session_scan.py</code> 的 "
+               "O_CREAT|O_EXCL 模式，120 秒逾時接管。動機與分岔見 "
+               "<code>SESSIONSTART_AUTOCONFIG_PLAN.md</code>「Phase 2 設計」。",
     },
     "ENC-1": {
         "badge": "7/30 新·enforce", "on": "<b>PostToolUse</b> Write/Edit/MultiEdit",

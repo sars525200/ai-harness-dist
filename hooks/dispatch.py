@@ -326,14 +326,17 @@ REGISTRY = [
         "tools": None,
     },
     {
-        # ONB-1：新專案（有 PROJECT_CONTEXT.md 但沒有 AGENTS.md/CODE_MAP.md）
-        # 開場提醒一次「還沒接上規則產生器」。只 WARN 不 BLOCK，直接走
-        # additionalContext——tests/sessionstart_probe/（2026-09-06 實測）證實
-        # SessionStart 的 additionalContext 開場第一輪就到得了模型，不是 Stop
-        # 那種「這一輪已結束」的死路，不必繞兩段式投遞。判準與只講一次的設計見
-        # 規則檔 docstring 與 SESSIONSTART_AUTOCONFIG_PLAN.md。
-        "id": "ONB-1",
-        "module": "onb1_sessionstart_notice",
+        # ONB-2：新專案（有 PROJECT_CONTEXT.md 但 AGENTS.md/CODE_MAP.md 至少缺一份）
+        # 開場真的自動呼叫 generate_rules.py／generate_map.py 接上（Phase 2，
+        # 2026-09-07 使用者定案）。只 WARN 不 BLOCK，直接走 additionalContext——
+        # tests/sessionstart_probe/（2026-09-06 實測）證實 SessionStart 的
+        # additionalContext 開場第一輪就到得了模型，不必繞兩段式投遞。
+        # **2026-09-07 取代 ONB-1**：ONB-1 模組保留（前提不足時的純提醒文字被
+        # 這裡直接引用），但不再獨立掛 SessionStart，避免同一次開場印兩則
+        # 意思重複的訊息。判準與待決分岔見規則檔 docstring 與
+        # SESSIONSTART_AUTOCONFIG_PLAN.md「Phase 2 設計」。
+        "id": "ONB-2",
+        "module": "onb2_sessionstart_autoconfig",
         "events": {"SessionStart"},
         "tools": None,
     },

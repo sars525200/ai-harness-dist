@@ -1,5 +1,15 @@
 """ONB-1 —— 新專案第一次開場，還沒接上規則產生器就提醒一次。
 
+## 2026-09-07 現況更新：已從 REGISTRY 的 SessionStart 掛載移除
+
+Phase 2（`ONB-2`，`hooks/rules/onb2_sessionstart_autoconfig.py`）取代本規則成為
+實際掛在 SessionStart 的規則——`ONB-2` 判斷前提不足或產生器失敗時，直接呼叫
+本檔的 `reminder_text()` 印出跟以前一模一樣的純文字提醒，不必重寫措辭。
+本模組保留、`applies()`/`check()` 仍然可以獨立跑（測試與手動除錯都還用得到），
+只是 `hooks/dispatch.py` 的 REGISTRY 不再幫它掛 `SessionStart` 事件，不會再被
+`dispatch()` 自動呼叫。設計動機見 `SESSIONSTART_AUTOCONFIG_PLAN.md`「(j) `ONB-1`／
+`ONB-2` 關係」。
+
 ## 背景
 
 `SESSIONSTART_AUTOCONFIG_PLAN.md`（2026-09-06）——「統一規則地圖」明文排除的
@@ -142,14 +152,12 @@ def _is_shadow() -> bool:
         return True
 
 
-def check(ctx):
-    root = ctx.cwd
-    if not _needs_notice(root):
-        return allow()
-    if not _is_shadow():
-        _mark_seen(root)  # 只有真的會送出去才記「講過了」，shadow 觀察期不算
+def reminder_text(root: str) -> str:
+    """純文字提醒的內容本體。抽成獨立函式是為了讓 `ONB-2` 在前提不足／產生器
+    失敗時可以直接呼叫，不必重寫一份一樣的措辭（措辭紀律見本檔頂端 docstring）。
+    """
     gen_root = _HARNESS_ROOT
-    return warn(
+    return (
         "這個專案有 .claude/PROJECT_CONTEXT.md（或 .cursor/ 版）但根目錄還沒有 "
         "AGENTS.md／CODE_MAP.md，尚未接上 harness 的規則產生器。前提是 "
         "PROJECT_CONTEXT.md 裡要先有 rules-content／dev-prod-sync 結構化區塊"
@@ -159,3 +167,12 @@ def check(ctx):
         f"  py -3 -X utf8 \"{gen_root}\\skills\\code-map-generator\\generate_map.py\" \"{root}\"\n"
         "這則提醒只在第一次偵測到未接上時出現，之後同一個專案不會再重複。"
     )
+
+
+def check(ctx):
+    root = ctx.cwd
+    if not _needs_notice(root):
+        return allow()
+    if not _is_shadow():
+        _mark_seen(root)  # 只有真的會送出去才記「講過了」，shadow 觀察期不算
+    return warn(reminder_text(root))

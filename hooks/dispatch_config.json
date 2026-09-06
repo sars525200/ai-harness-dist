@@ -72,8 +72,8 @@
     "LEARN-1": {
       "shadow": false
     },
-    "ONB-1": {
-      "shadow": false
+    "ONB-2": {
+      "shadow": true
     }
   }
 }
