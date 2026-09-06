@@ -138,6 +138,17 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit"},
     },
     {
+        # HND-3：這一輪動過交接檔，回覆結尾就要有可複製的 fenced code block
+        # （對應 chat-handoff §3「新對話建議第一句」）。跟 AWC-1 同一個形狀：
+        # WARN 在 Stop 上下一輪才送達，攔不住這一輪，必須 BLOCK。
+        # 只掛 Stop、不掛 SubagentStop：理由跟 AWC-1／DECL-1 一樣，交接檔是
+        # 主 session 的收尾紀律，subagent 沒有「換則交接」這件事。
+        "id": "HND-3",
+        "module": "hnd3_handoff_closing_snippet",
+        "events": {"Stop"},
+        "tools": None,
+    },
+    {
         # ENC-1 是目前唯一掛 PostToolUse 的規則。理由：它驗的是「寫進去之後
         # 磁碟上實際長什麼樣」（NUL／BOM／行尾），那些東西 PreToolUse 拿到的
         # 字串裡根本不存在。這也是整套 harness 第一次用「結果」而非「意圖」當判準。
