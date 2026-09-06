@@ -201,6 +201,16 @@ DESC = {
         "badge": "＋SubagentStop", "on": "<b>Stop · SubagentStop</b>",
         "why": "改過的 .md 標「待審核」卻無 hash 對得上的審查 marker",
     },
+    "ONB-1": {
+        "badge": "9/06 新·shadow", "on": "<b>SessionStart</b>",
+        "why": "新專案有 PROJECT_CONTEXT.md 卻沒有 AGENTS.md/CODE_MAP.md，開場提醒一次",
+        "tip": "「新建專案自動配置」Phase 1，唯讀提醒不自動寫檔。動機與判準見 "
+               "<code>SESSIONSTART_AUTOCONFIG_PLAN.md</code>；SessionStart 的 "
+               "additionalContext 到不到得了模型，2026-09-06 用 "
+               "<code>tests/sessionstart_probe/</code> 實測過（開場第一輪就到，"
+               "不必繞 Stop 的兩段式投遞）。跨 session 記「講過了」的狀態，"
+               "第一版誤把 shadow 觀察期也算進「講過了」，已修。",
+    },
     "ENC-1": {
         "badge": "7/30 新·enforce", "on": "<b>PostToolUse</b> Write/Edit/MultiEdit",
         "why": "寫入後讀磁碟實際位元組：NUL byte／BOM／行尾（結果而非意圖當判準）",

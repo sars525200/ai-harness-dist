@@ -71,6 +71,9 @@
     },
     "LEARN-1": {
       "shadow": false
+    },
+    "ONB-1": {
+      "shadow": true
     }
   }
 }

@@ -48,7 +48,9 @@ MUTATIONS = [
     ),
     (
         "WARN 全部退回 stderr（＝改動被整個 revert）",
-        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):',
+        # 錨點 2026-09-06 更新：ONB-1 把 SessionStart 併進直接投遞分支之後，
+        # 原本綁的三事件元組已不存在——改綁含 SessionStart 的四事件版本。
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart"):',
         'if False:',
     ),
     (
@@ -63,8 +65,9 @@ MUTATIONS = [
     ),
     (
         "Stop 也走 PreToolUse 形狀的 JSON（跨事件外推）",
-        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):',
-        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop"):',
+        # 錨點 2026-09-06 更新：同上，改綁含 SessionStart 的四事件版本。
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart"):',
+        'if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart", "Stop"):',
     ),
     (
         "Stop 不再落便箋（訊息當場蒸發，回到「有記 log 但沒人收到」）",

@@ -325,6 +325,18 @@ REGISTRY = [
         "events": {"Stop"},
         "tools": None,
     },
+    {
+        # ONB-1：新專案（有 PROJECT_CONTEXT.md 但沒有 AGENTS.md/CODE_MAP.md）
+        # 開場提醒一次「還沒接上規則產生器」。只 WARN 不 BLOCK，直接走
+        # additionalContext——tests/sessionstart_probe/（2026-09-06 實測）證實
+        # SessionStart 的 additionalContext 開場第一輪就到得了模型，不是 Stop
+        # 那種「這一輪已結束」的死路，不必繞兩段式投遞。判準與只講一次的設計見
+        # 規則檔 docstring 與 SESSIONSTART_AUTOCONFIG_PLAN.md。
+        "id": "ONB-1",
+        "module": "onb1_sessionstart_notice",
+        "events": {"SessionStart"},
+        "tools": None,
+    },
 ]
 
 _RULE_CACHE: dict = {}
@@ -655,7 +667,12 @@ def _dispatch(payload: dict) -> int:
 
     if warn_items:
         joined = "\n".join(m for _, _, _, m in warn_items)
-        if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit"):
+        # SessionStart 併進直接投遞這一支：2026-09-06 tests/sessionstart_probe/
+        # 實測證實它跟 PreToolUse/PostToolUse/UserPromptSubmit 同一個結論——
+        # additionalContext 開場第一輪就到得了模型。跟 Stop／SubagentStop 不同，
+        # SessionStart 不是「這一輪已結束沒有接下來」的情況，不必繞下面的
+        # 兩段式佇列（那是為 Stop 的死路設計的，SessionStart 繞了只是白繞）。
+        if event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "SessionStart"):
             # 2026-07-30 實測（隔離 cwd ＋ 自帶 settings.json 的暗號探針，三條路徑同時測）：
             #   stderr + exit 0        → **完全蒸發**。hook 確實執行（落檔 marker 為證），
             #                            但模型被要求逐項列出收到的訊息時沒有它。

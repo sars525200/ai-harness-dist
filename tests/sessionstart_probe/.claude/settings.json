@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py -3 \"D:\\Patrick-AI\\.ai-harness\\tests\\sessionstart_probe\\probe_hook.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
