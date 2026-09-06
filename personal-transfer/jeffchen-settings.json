@@ -151,16 +151,13 @@
     "defaultMode": "auto",
     "additionalDirectories": [
       "~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
-      "C:\\itportal-redirect",
       "~/.claude/projects/d--IT-department/memory",
       "~/.claude/projects/D--Patrick-AI-IT-department/memory",
       "~/.claude/projects/D--Patrick-AI-MIS-install/memory",
       "~/.claude/projects/D--Patrick-AI--ai-harness/memory",
-      "D:\\Patrick-AI\\IT-department\\.aimemory",
       "D:\\Patrick-AI\\.ai-harness\\dashboard",
       "D:\\Patrick-AI\\.ai-harness\\hooks\\rules",
       "D:\\Patrick-AI\\.ai-harness\\tests",
-      "D:\\Patrick-AI\\MIS-install\\codebase-health-dashboard",
       "D:\\Patrick-AI\\.ai-harness"
     ]
   },
