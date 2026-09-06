@@ -718,6 +718,13 @@ def main() -> int:
             ("封存與 /clear 後改名（sweep／閒置名／reason 閘門）", "test_session_archive.py"),
             ("HND-1 交接檔生命週期（誤報率／正對照／歸檔工具）", "test_hnd1_handoff.py"),
             ("交接檔合併提議（過度合併／不刪不覆蓋）", "test_merge_handoff.py"),
+            # 2026-09-07 新增：post-commit 會在「內容零損失」時自動 force-push
+            # 備份鏡像。那段判準一旦放寬就等於把備份的保護整個拿掉，而且拿掉的
+            # 當下沒有徵兆 —— 所以兩個方向都要在每次全套跑到。
+            # **姊妹腳本 tests/mutations/mutate_push_cloud_backup.py 刻意不接進來**：
+            # 它吃 .scratch/cloud-export/ 那份不進版控的規則檔，換一台機器就必紅，
+            # 那種紅會讓人開始忽略整份輸出。它照舊手動跑。
+            ("備份鏡像自動對齊（同內容改寫／有獨有內容要拒絕）", "test_mirror_realign.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)

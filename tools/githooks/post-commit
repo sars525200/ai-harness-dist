@@ -18,6 +18,9 @@
 #   1. stderr 印一行警告 —— commit 當下就看得到
 #   2. state/mirror_sync_failed.txt —— 給 tools/check_before_start.py [4] 之外的後手用
 # 成功則刪掉標記，所以「檔案存在」＝「最後一次推送是失敗的」。
+#
+# 2026-09-07 再加一層：分叉但**內容零損失**時自動對齊（見下方 try_realign），
+# 因為留下痕跡並沒有讓這件事變少 —— 09-02 之後又發生兩次。
 
 set -u
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
@@ -50,6 +53,46 @@ fi
 
 git remote | grep -qx backup || exit 0
 
+# ── 同內容改寫 → 自動對齊（2026-09-07 加）────────────────────────────────
+# 2026-09-02 / 09-06 / 09-07 三次分叉，成因每次都一樣：某則對話 commit 之後
+# 幾十秒內又 amend 同一顆，而這支 hook 在那幾十秒內已經把**改之前**那顆推進
+# 鏡像了。改之後的那顆換了 sha ⇒ 從此每一次推送都 non-fast-forward 被拒。
+#
+# 前一次修的只是「讓失敗被看見」，沒有處理成因，所以它每隔幾天就再來一次；
+# 而人工處理一次要挖十分鐘（確認鏡像那顆是不是真的沒有獨有內容）。這裡把那個
+# 確認寫成程式：
+#
+#   **只有在「鏡像獨有的每一顆 commit，其檔案樹都能在本機找到同樣一份」時才對齊。**
+#
+# 綁的是後果（有沒有內容只存在於鏡像），不是成因（是不是 amend 造成的）——
+# 所以 rebase、cherry-pick、squash 只要沒弄丟內容，一樣自動過；反過來只要有
+# 任何一份內容只在鏡像裡，就一律不碰、照舊大聲失敗。對齊成功也會留痕跡，
+# 不是靜默 force。
+try_realign() {
+    git fetch -q backup "+refs/heads/*:refs/remotes/_mirror/*" 2>/dev/null || return 1
+    _did=0
+    for _ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/_mirror/); do
+        _br=${_ref#_mirror/}
+        # 鏡像有、本機沒有的分支：整支放棄自動處理（可能是別台機器推的）。
+        git show-ref --verify -q "refs/heads/$_br" || return 1
+        _r=$(git rev-parse "$_ref") || return 1
+        _l=$(git rev-parse "$_br") || return 1
+        [ "$_r" = "$_l" ] && continue
+        git merge-base --is-ancestor "$_r" "$_l" && continue   # 純落後，一般 push 就會過
+        _only=$(git rev-list "$_r" --not "$_l" | while read -r c; do git rev-parse "$c^{tree}"; done | sort -u)
+        [ -n "$_only" ] || return 1
+        _mine=$(git rev-list "$_l" --not "$_r" | while read -r c; do git rev-parse "$c^{tree}"; done | sort -u)
+        for _t in $_only; do
+            printf '%s\n' "$_mine" | grep -qx "$_t" || return 1
+        done
+        git push -q --force-with-lease="$_br:$_r" backup "$_br" 2>/dev/null || return 1
+        echo "$(date '+%Y-%m-%d %H:%M:%S')  $_br  $_r -> $_l  （鏡像獨有的 commit 內容在本機都有，已對齊）" \
+            >> "$ROOT/state/mirror_realigned.log" 2>/dev/null
+        _did=1
+    done
+    [ "$_did" = 1 ]
+}
+
 ERR=$(git push -q backup --all 2>&1)
 if [ $? -eq 0 ]; then
     rm -f "$MARK"
@@ -57,6 +100,15 @@ if [ $? -eq 0 ]; then
 fi
 
 mkdir -p "$ROOT/state" 2>/dev/null
+if try_realign; then
+    ERR=$(git push -q backup --all 2>&1)
+    if [ $? -eq 0 ]; then
+        rm -f "$MARK"
+        echo "!! 鏡像曾分叉，已自動對齊（獨有內容 0 份）—— 紀錄 state/mirror_realigned.log" >&2
+        exit 0
+    fi
+fi
+
 {
     echo "最後一次鏡像推送失敗"
     echo "時間: $(date '+%Y-%m-%d %H:%M:%S')"
