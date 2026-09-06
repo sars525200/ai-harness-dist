@@ -245,13 +245,17 @@ DESC = {
                "設定檔是專案維護的，接受任意字串等於讓一份 md 擁有每次寫檔執行任意指令的能力。",
     },
     "TITLE-2": {
-        "badge": "9/06 新·shadow", "on": "既有 <b>PreToolUse</b> 清單（不新增掛載點）",
-        "why": "這一輪宣告了任務範圍，但標題還是從未命名／平台預設代號／舊格式待命名·WARN",
+        "badge": "9/06 新·正式·BLOCK", "on": "既有 <b>PreToolUse</b> 清單（不新增掛載點）",
+        "why": "這一輪宣告了任務範圍，但標題還是從未命名／平台預設代號／舊格式待命名·BLOCK 擋下一步操作",
         "tip": "TITLE-1（純文件規則）100% 靠模型自律，同一天就漏做一次——`session_title.py` "
                "已測試過的 `_declared_task()`／`is_legacy_idle()`／`_last_custom_title()` 純函式"
                "沒接上任何 hook。這條只重用它們，不重寫判準。刻意掛進已經穩定跑一個多月的 "
                "PreToolUse matcher，不新增 settings.json 掛載——2026-08-28 退役 session_title.py "
                "三個掛載的真因是「無 matcher 的 PreToolUse」，不是「PreToolUse 這個掛法」本身。"
+               "轉正式當天觀測到連續 3 輪 WARN 被忽略，user 明確要求提前把 WARN 升級成 BLOCK "
+               "（原計畫等 2026-09-13 驗證窗過後再議，見 SESSION_TITLE_HOOK_PLAN.md）——"
+               "`set_session_title` 是 MCP 工具、不在這個 matcher 裡，BLOCK 擋不到改名這個動作"
+               "本身，只擋「不改名就做別的事」。"
                "只認三種真正的「從未做」，不認「進度數字沒跟上」，避免每次改進度都吵。"
                "詳見 SESSION_TITLE_HOOK_PLAN.md。",
     },

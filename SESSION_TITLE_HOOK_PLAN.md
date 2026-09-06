@@ -152,6 +152,21 @@ grilling，本檔案外沒有另存 map——問答收斂快，直接收成規�
       不在本次範圍內順手清
 - [ ] 提案 B、TITLE-2 抓「過期未更新」：兩者都留到 2026-09-13 驗證窗過後再議
       （與 TODOS.md 那張「TITLE-2 剛轉正式，還沒驗過 WARN 有沒有用」同一個時間點）
+- [x] **TITLE-2 WARN → BLOCK 升級（2026-09-06，同日內推翻上面「等 09-13」的決定）**：
+      轉正式當天在同一則對話裡就觀測到連續 3 輪 WARN 被忽略（`title2_reminder.py`
+      檔頭「升級」段記錄的真實案例）。user 在另一則對話（改名機制查核）裡明確
+      要求提前執行，不等驗證窗跑完。**這是使用者的明確決定，不是模型自行判斷
+      「證據不夠但先做」**。已改 `hooks/rules/title2_reminder.py`：`warn()` 全
+      部換成 `block()`，`import` 改 `contract.block`；`dispatch_config.json` 的
+      `"TITLE-2": {"shadow": false}` 不變（本來就是正式版，這次只改判定不改
+      掛載範圍）。**風險已排除**：`set_session_title`（MCP 工具）不在 `PreToolUse`
+      的 matcher 清單裡，`block()` 擋不到改名這個動作本身，只擋「不改名就做
+      別的事」；matcher 字串本身這次沒有改動，不重演 2026-08-28 的 Cursor CLI
+      咬傷。**已驗**：`tests/test_title2_reminder.py` 13/13（原本斷言只查
+      `.message` 是否有值，沒有斷言 `.decision`，改完不用動測試就全過；
+      escalate 相關 3 條子案例也都還在）。**尚未做**：`eval/run_all.py`／
+      `/audit` 全套跑一次；`dashboard/gen_hook_rules.py` 的 `DESC["TITLE-2"]`
+      文字仍寫著舊的「WARN」用語，需要跟著改，否則看板描述與實際行為對不上。
 - [ ] **尚未 commit**——這則對話結束時 repo 同時有 2 個其他 session 在動
       （`3aacde83…`／`7981cc4e…`），且雲端備份鏡像最後一輪失敗（見 `TODOS.md`
       既有記票，非本次新增問題）。commit 前建議先跑

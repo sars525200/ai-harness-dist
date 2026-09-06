@@ -7,13 +7,28 @@
 到漏做一次：一則對話裡自我宣告了兩次、動了檔，側欄卻還是平台塞的預設代號
 （`pc-<host>-adj-noun` 或 `New session`）。
 
-## 為什麼是 WARN 不是 BLOCK，為什麼掛 PreToolUse 不是 Stop
+## 為什麼掛 PreToolUse 不是 Stop
 
-2026-07-31 實測過三種 WARN 投遞管道，`Stop`／`SubagentStop` 的 WARN
+2026-07-31 實測過三種 WARN 投遞管道，`Stop`／`SubagentStop` 的訊息
 **到不了同一輪**（`sys.stderr` 完全蒸發、平鋪 `additionalContext` 被 zod 剝掉），
 唯一同輪送達的是 `PreToolUse` 配 `hookSpecificOutput.additionalContext`
-（`dispatch.py` L625-640 附近的實測記錄）。改名這件事本來就不該擋任何操作——
-標題只是「側欄好不好認」，不是正確性問題，硬 BLOCK 沒有道理。
+（`dispatch.py` L625-640 附近的實測記錄）。
+
+## 2026-09-06 升級：WARN → BLOCK（user 明確要求提前執行，推翻同日稍早的計畫）
+
+`SESSION_TITLE_HOOK_PLAN.md` 原本記著「自動化證據不足，等 2026-09-13 驗證窗
+過了再議」，而轉正式當天就觀測到連續 3 輪 WARN 被忽略（見下段「升級」）。
+user 當場決定不等驗證窗，直接把 WARN 換成 BLOCK——這是使用者的明確決定，
+不是模型自行判斷「WARN 不夠嚴格所以升級」。
+
+**這條界線其實沒有違反最初的「標題只是側欄好不好認，不是正確性問題」**：
+`block()` 只擋 `dispatch.py` 既有 `PreToolUse` 清單裡的操作性工具
+（`Bash|PowerShell|Skill|Write|Edit|MultiEdit|NotebookEdit|Agent`），
+`set_session_title` 本身是 MCP 工具、不在這個 matcher 裡（`SESSION_TITLE_HOOK_PLAN.md`
+現況欄已實測確認），所以**改名這個動作本身永遠不會被這條規則擋住**——
+被擋的是「不改名就想做別的事」，邏輯上跟舊版「先擋住再放行」的退役教訓
+（沒限定 matcher 咬到 Cursor CLI）不是同一種風險：這裡沿用的是既有、已經
+穩定跑一個多月的 matcher，不新增掛載點、不擴大範圍。
 
 ## 為什麼掛既有 matcher，不新增掛載點
 
@@ -64,7 +79,7 @@ import os
 import re
 import time
 
-from contract import allow, iter_turn_assistant_texts, warn
+from contract import allow, block, iter_turn_assistant_texts
 
 import session_title as _T
 
@@ -199,13 +214,14 @@ def check(ctx):
     count = _bump_count(session_id)
     message = (
         "TITLE-1（global/hub/21-title-claude.md）：這一輪的自我宣告已經確定任務"
-        "範圍，但這則對話的標題還是%s。該呼叫 set_session_title 改名了——"
+        "範圍，但這則對話的標題還是%s。請先呼叫 mcp__ccd_session_mgmt__set_session_title"
+        "（不受這條規則攔截）改名，才能繼續下一步操作——"
         "組好的標題參考：「%s」。"
         % (("預設值「%s」" % existing) if existing else "從未命名過", declared)
     )
     if count >= _ESCALATE_AT:
         message = (
-            "⚠️ 這是本則對話第 %d 次提醒——前面都沒有照做，請現在就呼叫 "
+            "⚠️ 這是本則對話第 %d 次被擋——前面都沒有照做，請現在就呼叫 "
             "set_session_title。\n" % count
         ) + message
-    return warn(message)
+    return block(message)
