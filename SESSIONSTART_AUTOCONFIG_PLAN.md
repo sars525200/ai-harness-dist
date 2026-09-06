@@ -6,8 +6,9 @@
 
 ## 狀態
 
-**Phase 1 已完成並曾接上正式站；Phase 2（`ONB-2`）已取代 `ONB-1` 上線，`shadow: true`
-觀察中**——狀態細節見下方「Phase 2 設計」章節的「狀態」小節，這裡只留 Phase 1 的歷史記錄。
+**Phase 1 已完成並曾接上正式站；Phase 2（`ONB-2`）已取代 `ONB-1` 上線，
+2026-09-07 使用者決定跳過 shadow 觀察期直接轉 `shadow: false`**——狀態細節見
+下方「Phase 2 設計」章節的「狀態」小節，這裡只留 Phase 1 的歷史記錄。
 
 - `ONB-1` 規則（`hooks/rules/onb1_sessionstart_notice.py`）已寫完，REGISTRY／
   直接投遞通道（`hooks/dispatch.py`）已接、`dispatch_config.json` 已登記
@@ -228,22 +229,21 @@ SessionStart 開場偵測到「還沒接上」時，直接呼叫 `generate_rules
 
 ### 狀態
 
-**Execute 階段收斂完成，隔離驗證通過，已分批 commit。**
-`ONB-2`（`shadow: true`）取代 `ONB-1` 掛上 `global/settings.json` 既有的
-`SessionStart`→`dispatch.py` 綁定（沒有新增 hook 掛載點，沿用既有的）。
-`ONB-1` 模組保留、不再獨立掛 `SessionStart`。正式站升 `shadow: false` 待下一輪
-明確請示使用者，不在本次自動做。
+**已上線，`shadow: false`，2026-09-07 生效。**
+`ONB-2` 取代 `ONB-1` 掛上 `global/settings.json` 既有的 `SessionStart`→
+`dispatch.py` 綁定（沒有新增 hook 掛載點，沿用既有的）。`ONB-1` 模組保留、
+不再獨立掛 `SessionStart`。
+
+**轉正決定的風險揭露（問過使用者，使用者選了跳過觀察期）**：隔離腳本驗證的是
+規則模組自己的判斷邏輯（4 情境全過），**不是**透過真實 `dispatch.py` 開場觸發鏈
+跑出來的結果，且從沒有在任何真實部門專案上真的執行過一次。使用者在知道這個
+落差的情況下選擇「現在就轉 `shadow:false`」而非先觀察，不是我判斷可以跳過。
 
 ## 沒做的
 
-**本計畫書範圍外，明確排除**：
-
-- Phase 2 的正式站 shadow 轉正——本次刻意停在 `shadow: true`，轉正是下一個
-  獨立的使用者決定，不在這次一起做掉。
-
 **已完成**：`global/settings.json` 與 `~/.claude/settings.json` 已接上 `SessionStart`；
-`ONB-2` 已取代 `ONB-1` 成為實際掛載的規則（`shadow: true`，觀察中）；四項隔離
-情境全過；`dashboard/gen_hook_rules.py` 已補 `DESC["ONB-2"]`。
+`ONB-2` 已取代 `ONB-1` 成為實際掛載的規則且已轉 `shadow: false`；四項隔離情境
+全過；`dashboard/gen_hook_rules.py` 已補 `DESC["ONB-2"]`。
 
 **還沒驗到**：`ONB-2` 在真實 SessionStart 開場（透過 `dispatch.py` 本身，不是
 繞過它直接呼叫規則模組）確實被觸發到——四欄如下。
@@ -251,4 +251,4 @@ SessionStart 開場偵測到「還沒接上」時，直接呼叫 `generate_rules
 | 項目 | 為何沒驗 | 驗證指令逐字 | 誰跑 |
 |---|---|---|---|
 | `ONB-2` 透過真實 `dispatch.py` REGISTRY 走訪被叫到 | 本次對話沒有重啟 session，隔離腳本繞過了 `dispatch.py` 的事件比對邏輯 | 在一個帶 `.claude/PROJECT_CONTEXT.md`（缺 `AGENTS.md`／`CODE_MAP.md`）的新目錄開一個新 session，檢查 `state/events.<session_id>.ndjson` 裡有沒有 `{"rule_id": "ONB-2"}` 的 `applies`/`decision` 記錄 | 使用者下一次在符合前提的真實專案開新 session 時 |
-| 正式站 `shadow: false` 轉正 | 使用者尚未被問過、也還沒有真實專案跑過至少一輪 shadow 觀察 | （待決）——見下方待辦 | 使用者下一輪明確回答後才動 |
+| `ONB-2` 在真實部門專案第一次自動寫出 `AGENTS.md`／`CODE_MAP.md` 後內容是否可用 | 已轉 `shadow:false` 但尚未有真實部門專案觸發過；轉正時使用者知情選擇跳過先觀察一輪的做法 | 在符合前提的真實部門專案開新 session，看到成功提醒後人工核對產出的 `AGENTS.md`／`CODE_MAP.md` 內容是否合理 | 使用者第一次在真實專案觸發後 |
