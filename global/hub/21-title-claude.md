@@ -33,6 +33,7 @@ audience: claude
 #   - 「收尾抽不到原名才退回宣告字面」→ 同 `session_archive.py` 的 compose_closed。
 #   ⚠ 常駐層只留「做什麼」與「不做會怎樣」；**為什麼是這個設計**一律留在這裡，不要再抄回去。
 ---
+- **`TITLE-1`**（文件內部代號，**非 hook 硬擋**——`dispatch_config.json` 沒有這條，沒有程式在執行期檢查）：以下對話命名規則。
 - **對話名稱**：任務一確定就呼叫 `set_session_title`（`session_id: "self"`）；轉向再叫一次。user 給了名字就用他的，**不必等人開口**。
 - **改完名要推雲端**（本機改名不會自動同步）：跑 `py -3 <harness>/tools/push_cloud_title.py "同一個標題"`，**推失敗當場講、不准吞**。
 - **沒有程式會代勞**：**不叫不是沒名字，是平台塞一個**（你的第一句話，或 `pc-…-sunny-ripple` 代號）——看起來像名字，所以漏命名很難發現。
