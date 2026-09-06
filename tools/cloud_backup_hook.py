@@ -194,7 +194,11 @@ class State:
             f"時間: {now_iso()}\ncommit: {head}\nexit: {exit_code}\n原因（最後幾行）:\n"
             + "\n".join(tail) + "\n\n"
             "完整輸出: state/cloud_backup.log\n"
-            "手動重跑: py -3 tools/push_cloud_backup.py --push\n",
+            # 這裡**不能寫 push_cloud_backup.py --push**（2026-09-07 實際踩到）：
+            # 那支只負責推，不寫 state/。照它跑而且推成功之後，這個失敗標記與
+            # cloud_backup_last.json 仍停在「失敗」，開工檢查 [4] 照樣報 [!!] ——
+            # 備份明明是好的，守門卻永遠紅，紅久了人就不讀它了。
+            "手動重跑: py -3 tools/cloud_backup_hook.py --run\n",
             encoding="utf-8")
 
 
