@@ -386,7 +386,7 @@ def _message(stale, broken, sig: str) -> str:
         head = "、".join(stale[:_MAX_LIST])
         more = "" if len(stale) <= _MAX_LIST else "（另有 %d 份）" % (len(stale) - _MAX_LIST)
         parts.append("超過 %d 天沒動且未標結案：%s%s" % (_STALE_DAYS, head, more))
-    parts.append("結案的可以用 `py -3 tools/archive_handoff.py` 搬進歸檔區"
+    parts.append("結案的可以用 `py -3 <harness>\\tools\\archive_handoff.py` 搬進歸檔區"
                  "（只搬已標結案的，不刪檔）")
     # 簽章夾在訊息裡，`note_key()` 靠它去重：同一批檔只講一次，
     # 檔案一變就是新的一條。用「講過幾次」或固定鍵都會讓新壞掉的那份被吃掉。
