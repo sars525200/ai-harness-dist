@@ -2,7 +2,6 @@
 name: code-rules-generator
 display_name: 編碼規則產生器
 description: 讀部門 .claude/PROJECT_CONTEXT.md（或 .cursor/ 版）的結構化 rules-content 區塊與封閉關鍵字清單，產出符合 AGENTS.md 開放標準的規則檔。只套用到 IT-department、MIS-install；harness 自己排除（COLLAB_HANDOFF.md、cursor-adapter.mdc 禁止 harness 根目錄出現 AGENTS.md）。
-type: 產生器
 ---
 
 # 編碼規則產生器（/code-rules-generator）
@@ -80,3 +79,11 @@ py -3 -X utf8 skills\code-rules-generator\generate_rules.py <目標專案根目�
 
 同一份 `rules-content` 重跑兩次，輸出應逐字相同，除了「附錄／參考」裡
 `<!-- generated-at: ... -->` 那一行時間戳——驗證重跑時忽略那一行再比對。
+
+## 邊界
+
+- 不從 `PROJECT_CONTEXT.md` 的自由散文裡自動抽取內容——只讀 `rules-content` 結構化區塊，
+  部門維護者要自己把內容摘要進去。
+- 不判斷關鍵字清單是否仍準確——只印警告，不擋輸出，也不自動修改 `PROJECT_CONTEXT.md`。
+- 不套用到 harness 自己（見上方 harness 排除的理由）。
+- 不做「新建專案自動接上」的流程——那是明確排除的下一個 effort。

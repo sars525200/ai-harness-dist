@@ -2,7 +2,6 @@
 name: code-map-generator
 display_name: 代碼地圖產生器
 description: 離線輕量掃描專案頂層目錄，產出獨立新檔 CODE_MAP.md（own/vendor/archive/dev-prod-mirror 標註＋DEV/PROD 內容一致性警告）。harness／IT-department／MIS-install 三個目標都套用。不接外部雲端語意搜尋 MCP、不依賴外部 API key。
-type: 產生器
 ---
 
 # 代碼地圖產生器（/code-map-generator）
@@ -53,3 +52,10 @@ py -3 -X utf8 skills\code-map-generator\generate_map.py <目標專案根目錄>
 
 同一份目錄結構重跑兩次，輸出應逐字相同，除了檔尾 `<!-- generated-at: ... -->`
 那一行時間戳——驗證重跑時忽略那一行再比對。
+
+## 邊界
+
+- 不掃子目錄的子目錄（只展開 `.codemap-expand` 明列的那一層，不遞迴）。
+- 不做語意搜尋、不接雲端 API、不猜「這個目錄看起來像什麼」。
+- 不自動更新 `.codemap-expand`／`.vendorlist`／`dev-prod-sync`——這三個都是人工維護的設定檔。
+- 不判斷「新建專案要不要自動套用」——這支只在人工呼叫時對已存在的專案跑一次。
