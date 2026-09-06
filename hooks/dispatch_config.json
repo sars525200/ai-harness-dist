@@ -68,6 +68,9 @@
     },
     "TITLE-2": {
       "shadow": false
+    },
+    "LEARN-1": {
+      "shadow": true
     }
   }
 }
