@@ -201,6 +201,16 @@ REGISTRY = [
         "tools": {"Write", "Edit", "MultiEdit", "NotebookEdit"},
     },
     {
+        # TITLE-2：shadow 觀察期（見 SESSION_TITLE_HOOK_PLAN.md）。刻意掛進這個
+        # 既有、已經穩定跑一個多月的 PreToolUse 清單，不新增 settings.json 掛載——
+        # 2026-08-28 退役 session_title.py 三個掛載的真因是「無 matcher 的
+        # PreToolUse」，不是「PreToolUse 這個掛法」本身（session_title.py 檔頭）。
+        "id": "TITLE-2",
+        "module": "title2_reminder",
+        "events": {"PreToolUse"},
+        "tools": {"Bash", "PowerShell", "Skill", "Write", "Edit", "MultiEdit", "NotebookEdit", "Agent"},
+    },
+    {
         "id": "R1",
         "module": "r1_default_migration",
         "events": {"PreToolUse"},

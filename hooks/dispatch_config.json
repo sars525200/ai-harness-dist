@@ -65,6 +65,9 @@
     },
     "EXP-1": {
       "shadow": false
+    },
+    "TITLE-2": {
+      "shadow": true
     }
   }
 }
