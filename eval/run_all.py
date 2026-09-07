@@ -4,6 +4,13 @@
 
     py -3 D:\\Patrick-AI\\.ai-harness\\eval\\run_all.py
 
+另外多跑一層 L0：`tests/` 底下的回歸網（`tests/run_all.py`）。
+為什麼掛在這裡：2026-09-05 起 `tests/test_hook_rules.py` 11 條紅了 7 條、**兩天沒人發現**，
+根因是 `hooks/report.py` 少一行 sys.path，但真正的缺口是**沒有任何例行入口會跑 tests/**
+（這支腳本 09-07 之前全檔沒有 `tests` 字樣）。skill eval 綠燈跟 hook 有沒有壞是兩件事，
+兩件事都得在同一個入口報出來，否則「跑過 eval 了」會被讀成「回歸網也綠」。
+要單獨跑 eval 不跑回歸網：`--skip-tests`（會在總結明講這一輪不代表回歸網通過）。
+
 四層對應 SKILL_EVAL_PLAN.md §4：
     L1 結構檢查   全自動   塞爆＋執行①
     L2 契約回歸   全自動   迴歸
@@ -42,8 +49,34 @@ def run(script: str, *args: str) -> int:
     return p.returncode
 
 
+def run_regression_net() -> int:
+    """跑 tests/ 的回歸網。找不到入口一律判紅，不當成「沒有這一層」。"""
+    runner = os.path.join(os.path.dirname(HERE), "tests", "run_all.py")
+    if not os.path.exists(runner):
+        print(f"  ❌ 找不到 {runner} —— 判紅。")
+        print("     沒有入口不等於沒有測試：tests/ 底下有近百支回歸測試，")
+        print("     少了入口只是沒人跑，不是通過。")
+        return 1
+    sys.stdout.flush()
+    p = subprocess.run([sys.executable, "-X", "utf8", runner],
+                       encoding="utf-8", errors="replace",
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    sys.stdout.flush()
+    return p.returncode
+
+
 def main() -> int:
     rc = {}
+    skip_tests = "--skip-tests" in sys.argv
+
+    print("\n" + "#" * 78)
+    print("# L0 回歸網（tests/run_all.py —— hook 規則、閘門、產生器）")
+    print("#" * 78)
+    if skip_tests:
+        print("  ⚠ 依 --skip-tests 跳過 —— 這一輪的結果**不代表回歸網通過**。")
+        rc["L0"] = 0
+    else:
+        rc["L0"] = run_regression_net()
 
     print("\n" + "#" * 78)
     print("# L1 結構檢查（含偵測器 self-test）")
@@ -120,8 +153,10 @@ def main() -> int:
     print("\n" + "=" * 78)
     print("總結")
     print("=" * 78)
-    for k in ("L1-self", "L1", "L2-self", "L2", "L3", "L4"):
-        print(f"  {k:<9} {'PASS' if rc.get(k) == 0 else 'FAIL / 有待處理'}")
+    for k in ("L0", "L1-self", "L1", "L2-self", "L2", "L3", "L4"):
+        label = "SKIPPED（未驗）" if (k == "L0" and skip_tests) else \
+                ("PASS" if rc.get(k) == 0 else "FAIL / 有待處理")
+        print(f"  {k:<9} {label}")
     print()
     print("  ⚠ 這裡的 PASS 不含「skill 實際跑起來對不對」——那是 L4 的實跑，需人在場。")
     return 1 if any(v for v in rc.values()) else 0
