@@ -7,7 +7,13 @@ r"""對 PR-1 的「程式碼區塊不算宣告」邏輯做變異，確認 pr1_14
 
   · 誤擋方向 —— 示範被當成宣告（pr1_14）
   · **誤放行方向** —— 一份真的待審核的計畫書，只要在圍欄裡引用了 SKIP／PASSED
-    marker 的寫法就自動通關（pr1_15）。這個方向沒有人會發現，因為它安靜。
+    marker 的寫法就自動通關（pr1_15／pr1_35）。這個方向沒有人會發現，因為它安靜。
+
+⚠ **誤放行方向要兩個 fixture，不是一個**（2026-09-08 實跑補上）：pr1_15 的檔裡
+   SKIP 與 PASSED 兩個示範都有，所以「PASSED 改讀原文」那條變異一跑，規則會走到
+   「有 marker 但 hash 對不上」—— **還是 BLOCK、訊息裡還是有 ADVERSARIAL_REVIEW_PASSED**，
+   pr1_15 照樣綠（實測 exit 0，整條變異沒被抓到）。pr1_35 只放 PASSED 示範，
+   並斷言**擋的理由**是「檔尾沒有 marker」；理由一變就是 PASSED 那一側壞了。
 
     py -3 D:\Patrick-AI\.ai-harness\tests\mutations\mutate_pr1_fences.py
 """

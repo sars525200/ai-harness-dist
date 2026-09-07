@@ -81,6 +81,25 @@ def _entry(message, minutes_old=0, rule="", kind="event", key="", count=1):
             "count": count, "rule": rule, "kind": kind, "key": key}
 
 
+def _ups_doc(out):
+    """把投遞輸出解析成 dict。**空輸出先用斷言擋下來，不要讓它炸成例外。**
+
+    2026-09-08 實測：把 dispatch 的 `if event == "UserPromptSubmit":` 改成
+    `if False:`（＝投遞窗口整個消失）時，下面五條 case 全部死在
+    `JSONDecodeError` 上 —— 一條斷言都沒跑到。測試確實 exit 1，但**紅的理由
+    是意外例外不是斷言**：哪天有人把那幾條斷言改壞，這個變異照樣紅，沒人會發現。
+    """
+    assert out.strip(), (
+        "UserPromptSubmit 沒有輸出任何東西 —— 便箋沒排入，或投遞窗口不見了"
+    )
+    return json.loads(out)
+
+
+def _ups_ctx(out):
+    """投遞出去的 additionalContext 內容（空輸出的斷言見 `_ups_doc`）。"""
+    return (_ups_doc(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+
+
 def _run(event, verdicts, shadow, session_id="test-warn-channel", kinds=None):
     """隔離跑一次 _dispatch，回 (rc, stdout, stderr)。
 
@@ -190,7 +209,7 @@ def _c4():
     import glob
     import os
     sid = "warnchan-stop-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
     rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False, session_id=sid)
@@ -226,17 +245,18 @@ def _c4e():
     import glob
     import os
     sid = "warnchan-accum-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
 
     _run("Stop", [warn("第一則 AWC-1")], shadow=False, session_id=sid)
     _run("Stop", [warn("第二則 DISP-1")], shadow=False, session_id=sid)
+    assert os.path.exists(note), "前置沒成立：兩次 Stop 都該落便箋"
 
     rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
     assert rc == 0, f"rc={rc}"
     import json as _json
-    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    ctx = _ups_ctx(out)
     assert "第一則 AWC-1" in ctx, f"前一則被覆寫了 —— 這正是 E-8 要修的失效：{ctx!r}"
     assert "第二則 DISP-1" in ctx, f"後一則沒送到：{ctx!r}"
     assert not os.path.exists(note), "投遞後便箋沒清掉"
@@ -252,13 +272,14 @@ def _c4f():
     import glob
     import os
     sid = "warnchan-dedup-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     for stale in glob.glob(note):
         os.remove(stale)
 
     for _ in range(3):
         _run("Stop", [warn("重複的提醒")], shadow=False, session_id=sid)
 
+    assert os.path.exists(note), "前置沒成立：Stop 該落便箋"
     import json as _json
     with open(note, encoding="utf-8-sig") as fh:
         doc = _json.load(fh)
@@ -267,7 +288,7 @@ def _c4f():
     assert entries[0].get("count") == 3, f"次數沒累計：{entries[0]}"
 
     rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
-    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    ctx = _ups_ctx(out)
     assert "累計 3 次" in ctx, f"投遞時沒講出重複次數：{ctx!r}"
 
 
@@ -277,14 +298,14 @@ def _c4g():
     import json as _json
     import os
     sid = "warnchan-legacy-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     os.makedirs(os.path.dirname(note), exist_ok=True)
     with open(note, "w", encoding="utf-8") as fh:
         _json.dump({"ts": dispatch._now(), "message": "舊格式的訊息"}, fh, ensure_ascii=False)
 
     rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
     assert rc == 0, f"rc={rc}"
-    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    ctx = _ups_ctx(out)
     assert "舊格式的訊息" in ctx, f"舊格式便箋被丟掉了：{ctx!r}"
 
 
@@ -298,7 +319,7 @@ def _c4h():
     import json as _json
     import os
     sid = "warnchan-expire-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     os.makedirs(os.path.dirname(note), exist_ok=True)
     old_ts = dispatch._minutes_ago(dispatch._PENDING_TTL_MIN + 30)
     with open(note, "w", encoding="utf-8") as fh:
@@ -308,7 +329,7 @@ def _c4h():
         ], "dropped": 0}, fh, ensure_ascii=False)
 
     rc, out, _ = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
-    ctx = (_json.loads(out).get("hookSpecificOutput") or {}).get("additionalContext", "")
+    ctx = _ups_ctx(out)
     assert "還新鮮的提醒" in ctx, f"新鮮的那則沒送到：{ctx!r}"
     assert "早就過期的提醒" not in ctx, "過期的不該投遞"
     assert "1 則提醒沒能投遞" in ctx, (
@@ -322,13 +343,13 @@ def _c4c():
     import json as _json
     import os
     sid = "warnchan-ups-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
     _run("Stop", [warn("AWC-1 便箋內容")], shadow=False, session_id=sid)
     assert os.path.exists(note), "前置沒成立：Stop 該落便箋"
 
     rc, out, err = _run("UserPromptSubmit", [], shadow=False, session_id=sid)
     assert rc == 0, f"rc={rc}"
-    doc = _json.loads(out)
+    doc = _ups_doc(out)
     hso = doc.get("hookSpecificOutput") or {}
     assert hso.get("hookEventName") == "UserPromptSubmit", (
         f"hookEventName 必須是實際事件名，否則整包被 zod 剝掉：{hso}"

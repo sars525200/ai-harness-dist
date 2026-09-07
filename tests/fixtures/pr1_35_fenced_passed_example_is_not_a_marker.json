@@ -1,0 +1,55 @@
+{
+  "name": "PR-1 圍欄裡的 PASSED 示範不算蓋章，要當成「完全沒有 marker」→ BLOCK",
+  "why": "剝圍欄有 SKIP 與 PASSED 兩個方向，fixture 15 只守得住 SKIP 那一側：它同時放了 SKIP 與 PASSED 兩個示範，所以「PASSED 改讀原文」這個變異一跑，規則會走到『有 marker 但 hash 對不上』——**還是 BLOCK、訊息裡還是有 ADVERSARIAL_REVIEW_PASSED**，fixture 15 照樣綠（2026-09-08 實跑：那個變異 exit 0，整個沒被抓到）。這一條只放 PASSED 示範，並且斷言**擋的理由**是「檔尾沒有 marker」而不是「hash 對不上」——理由變了就是剝圍欄的 PASSED 那一側壞了。誤擋看得見，誤放行看不見。",
+  "workspace": {
+    "files": {
+      "PASSED_DEMO_PLAN.md": "# 真的計畫書\n\n> 狀態：待審核\n\n## §1 現況\n\n這份是真的要送審的，還沒有人審過。\n\n## §2 附錄：審完之後的章長什麼樣\n\n審完在檔尾補上這一行：\n\n```\n<!-- ADVERSARIAL_REVIEW_PASSED sha256=59b4e92820aecf6017f259d5d39dc71884f0b58f228c353b59f08484d51f489e rounds=3 at=2026-07-29T18:00:00+08:00 -->\n```\n\n以上只是示範寫法，不是這份文件的憑證。\n"
+    },
+    "transcript": [
+      {
+        "type": "user",
+        "message": {
+          "content": "把計畫書寫完"
+        }
+      },
+      {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "name": "Write",
+              "input": {
+                "file_path": "<DIR>/PASSED_DEMO_PLAN.md",
+                "content": "..."
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "content": "File created"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "payload": {
+    "hook_event_name": "Stop",
+    "session_id": "fx-pr1-35",
+    "transcript_path": "<TRANSCRIPT>",
+    "cwd": "<DIR>",
+    "stop_hook_active": false
+  },
+  "expect": {
+    "decision": "BLOCK",
+    "message_contains": "檔尾沒有 ADVERSARIAL_REVIEW_PASSED marker"
+  },
+  "rule": "pr1_plan_review_marker"
+}

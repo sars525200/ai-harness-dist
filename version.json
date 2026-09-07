@@ -1,0 +1,7 @@
+{
+  "version": "0.1.1",
+  "scheme": "MAJOR.MINOR.PATCH",
+  "patch_bump": "自動——每次 commit 到這個 repo，tools/githooks/pre-commit 會把 PATCH 位加 1，併進同一顆 commit",
+  "major_minor_bump": "手動——有人自己改這個檔的 version 欄位時，hook 會尊重那次修改、不會覆蓋",
+  "note": "這個檔案本身沒有規則說明力，唯一真相是 tools/githooks/pre-commit 的原始碼與註解"
+}

@@ -81,8 +81,14 @@ MUTATIONS = [
         "Stop 不再落便箋（訊息當場蒸發，回到「有記 log 但沒人收到」）",
         # 錨點 2026-08-28 更新：改成逐條排入之後，原本綁的
         # `_queue_pending_warning(session_id, joined)` 那一行不存在了。改綁迴圈的呼叫。
+        # 換上去的東西 2026-09-08 改過：原本換成 `_noop_queue(...)`，那個名字
+        # 在 dispatch.py 根本不存在 ⇒ 變異一跑就 NameError，七條 case 全部死在
+        # 「非預期例外」上，**一條斷言都沒跑到**。它模擬不了它宣稱的情境
+        # （訊息當場蒸發），只是把程式弄壞。改成真的 no-op：呼叫照跑、參數照傳、
+        # 就是什麼都不做 —— 這才是「不落便箋」長的樣子，
+        # 由 `_c4` 的「Stop 沒有落下便箋」那條斷言接住。
         "                _queue_pending_warning(session_id, w_msg, rule_id=w_rule,",
-        "                _noop_queue(session_id, w_msg, rule_id=w_rule,",
+        "                (lambda *_a, **_k: None)(session_id, w_msg, rule_id=w_rule,",
     ),
     (
         "便箋投遞後不清除（下一輪會重送 —— 重複提醒就是噪音）",

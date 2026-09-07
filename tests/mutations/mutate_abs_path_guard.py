@@ -3,7 +3,8 @@ r"""對自指路徑守門做變異，確認 test_abs_path_guard.py 真的會叫�
 
     py -3 <harness>\tests\mutations\mutate_abs_path_guard.py
 
-四個變異分成兩種形狀，**兩種都要有**：
+變異分成兩種形狀，**兩種都要有**（條數看 `len(MUTATIONS)`，這裡刻意不寫死：
+原文寫「四個變異」，實際早就是 5 條 —— 手寫的數字過期時沒有任何東西會叫）：
 
 * **把判準放寬**（誤殺）：「落在 harness 底下」退成「是絕對路徑就算」、
   豁免從前綴退成整個 `tests\`、複本目錄不再跳過。
@@ -78,8 +79,6 @@ EXPECT = {
         "指到別處的絕對路徑不得誤殺",
     "拿掉「只留有名字的指派」（說明字串整批湧入）":
         "說明字串／非具名常數不列入硬判定",
-    "「只認指派」退化成「檔案內容含絕對路徑就算」":
-        "自指的絕對路徑要抓到（名字任取）",
     "豁免加回來，而且一加就是整個 tests/":
         "豁免不得擴大到整個 tests/",
     "複本目錄（.claude worktree）不再跳過":
@@ -87,6 +86,24 @@ EXPECT = {
     "判準退回舊的名字集合（票上原本要做的『放寬名字集合』也在這個形狀裡）":
         "自指的絕對路徑要抓到（名字任取）",
 }
+
+# 兩份手寫清單要對得上，**而且在跑任何變異之前就對**（2026-09-08 補）：
+#   · 孤兒 key ＝ 那條變異已經被刪了、預期沒跟著刪。實際發生過一次：
+#     f6fb127「守門換軸」把「只認指派退化成檔案內容含絕對路徑就算」那條變異刪掉，
+#     EXPECT 裡那把鑰匙留到現在 —— **沒有任何東西會叫**，因為下面只從 label 查 EXPECT，
+#     多出來的 key 永遠不會被查到。讀的人卻會以為那條還在測。
+#   · 缺 key ＝ 新變異沒寫預期，下面 `EXPECT[label]` 會 KeyError，
+#     而那時被測檔已經被改壞了 —— 先擋在這裡，還原邏輯就不必接這種爛攤子。
+_labels = [name for name, _old, _new in MUTATIONS]
+_orphan = sorted(set(EXPECT) - set(_labels))
+_missing = sorted(set(_labels) - set(EXPECT))
+if _orphan or _missing:
+    print("⛔ EXPECT 與 MUTATIONS 對不上，被測檔一個字都還沒動：")
+    for k in _orphan:
+        print(f"   孤兒預期（沒有對應變異）：{k}")
+    for k in _missing:
+        print(f"   缺預期（變異沒寫預期會紅在哪）：{k}")
+    sys.exit(1)
 
 
 def read():

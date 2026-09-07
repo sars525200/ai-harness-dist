@@ -76,6 +76,25 @@ def _case_zero_shown(fails):
             fails.append(f"數字 {n} 沒出現在表裡")
 
 
+def _case_other_type_zero(fails):
+    """非 int／list／bool 的值走 `cell()` 的 else 分支，空值一樣要標 rt-zero。
+
+    2026-09-07 變異盤點量到的缺口：`cls = "" if v else " rt-zero"` 在 `cell()` 裡有
+    **三份逐字同文**（list／int／else）。list 與 int 各有斷言守著，**else 那一份
+    沒有任何測試** —— 逐份改壞實跑，只有它改壞了測試照樣綠（exit 0）。
+    現況沒有欄位會走到 else，但它是「型別不是前三種時怎麼辦」的答案，
+    改壞了不會有人發現，而下一個新增的欄位就會從那裡出去。
+    """
+    m = _load()
+    row = m._row("字串型的值", "", "有內容")
+    if 'rt-zero">' not in row:
+        fails.append("else 分支的空值沒標 rt-zero —— 空字串會跟有值的長得一樣")
+    if ">有內容<" not in row:
+        fails.append("else 分支沒把值印出來")
+    if 'rt-zero">有內容<' in row:
+        fails.append("else 分支把有值的也標成 rt-zero —— 反過來說謊")
+
+
 def _case_refuse_missing(fails):
     with tempfile.TemporaryDirectory() as tmp:
         missing = os.path.join(tmp, "nope")
@@ -271,6 +290,7 @@ def run() -> "tuple[int, list]":
     cases = [
         ("bool 印「有／無」不是 True／False", _case_bool_not_true),
         ("0 與「無」看得見且標 rt-zero", _case_zero_shown),
+        ("else 分支的空值也標 rt-zero", _case_other_type_zero),
         ("目錄不存在時拒跑", _case_refuse_missing),
         ("#lay-data 同步且找不到就拒跑", _case_lay_data_sync),
         ("下拉候選專案含沒接 harness 的", _case_projects_listed),
