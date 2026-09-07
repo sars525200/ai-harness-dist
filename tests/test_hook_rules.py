@@ -280,6 +280,67 @@ def _case_desc_coverage(fails: list) -> None:
         fails.append(f"這些規則有事件卻沒有敘述：{missing}（表格會顯示「—」）")
 
 
+def _registry_ids(root: str) -> "list[str]":
+    """從 dispatch.py 的 REGISTRY 讀出規則 id。
+
+    走 AST 而不是 import：import 會把 hooks 目錄的相依全拉進來，而這支測試
+    只需要那張清單。清單讀不出來一律判失敗，不當成「零條、通過」。
+    """
+    import ast
+    src = io.open(os.path.join(root, "hooks", "dispatch.py"),
+                  encoding="utf-8").read()
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Assign) and getattr(node.targets[0], "id", "") == "REGISTRY":
+            out = []
+            for elt in node.value.elts:
+                for k, v in zip(elt.keys, elt.values):
+                    if getattr(k, "value", "") == "id":
+                        out.append(v.value)
+            return out
+    return []
+
+
+def _case_registry_config_parity(fails: list) -> None:
+    """REGISTRY 與 `dispatch_config.json` 必須是同一份清單，**兩份清單對帳**。
+
+    為什麼需要這道守門（2026-09-07 實測）：`_is_shadow()` 的預設值是
+    `shadow=True` —— **設定檔裡缺一條，那條就靜靜跑 shadow**：判定照跑、
+    log 照記、訊息一個字都不送出去。IDX-1 就是這樣過了 11 天：
+    **判定 242 次、真的送達 1 次**，而它整條規則的價值就是「把清單印出來」。
+
+    畫面上完全看不出來 —— 沒有錯誤、沒有紅字，只是那條規則不存在。
+    這正是「空轉的守門」最擅長的偽裝：它跑得好好的，只是沒有人收得到。
+
+    判準綁後果不綁字樣：**要沉默就得明寫 `shadow: true`**。
+    寫下來的沉默是一個決定，缺項的沉默是一個意外，而畫面上兩者長得一樣。
+    反向也驗：設定檔有、REGISTRY 沒有 ⇒ 那條設定從來不會被讀到。
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    ids = _registry_ids(root)
+    if not ids:
+        fails.append("讀不出 dispatch.py 的 REGISTRY —— 判斷不出來，不當成通過")
+        return
+    cfg_path = os.path.join(root, "hooks", "dispatch_config.json")
+    if not os.path.isfile(cfg_path):
+        fails.append("找不到 dispatch_config.json —— 判斷不出來，不當成通過")
+        return
+    with open(cfg_path, encoding="utf-8-sig") as fh:
+        cfg = json.load(fh)["rules"]
+    missing = [r for r in ids if r not in cfg]
+    if missing:
+        fails.append(
+            f"這些規則在 REGISTRY 但設定檔沒有：{missing} —— 預設 shadow=True，"
+            "它們會判定、會記 log，但一個字都送不出去，而畫面上看不出來。"
+            "要沉默就明寫 shadow: true")
+    orphan = [r for r in cfg if r not in ids]
+    if orphan:
+        fails.append(
+            f"這些規則在設定檔但 REGISTRY 沒有：{orphan} —— 那幾行設定永遠不會被讀到")
+    for rid, conf in cfg.items():
+        if "shadow" not in conf:
+            fails.append(f"{rid} 的設定沒寫 shadow —— 缺項會退回預設值 True（沉默）")
+
+
 def _case_progress_doc_rule_count(fails: list) -> None:
     """`HARNESS_PROGRESS.md` 寫的規則條數必須等於 `dispatch_config` 的實際條數。
 
@@ -304,10 +365,18 @@ def _case_progress_doc_rule_count(fails: list) -> None:
                      " —— 判斷不出來，不當成通過")
         return
     with open(cfg_path, encoding="utf-8-sig") as fh:
-        actual = len(json.load(fh)["rules"])
+        rules = json.load(fh)["rules"]
+    # 「N 條」＝登記總數；「N enforce」＝真的會送出去的那幾條。
+    # 這兩個數字在 2026-09-07 之前一直相等（設定檔裡每一條都是 shadow:false），
+    # 於是這道守門拿總數當 enforce 數也照樣綠 —— 明寫兩條 shadow 之後才分得開。
+    actual = len(rules)
+    enforce = sum(1 for v in rules.values() if not v.get("shadow", True))
     with open(doc_path, encoding="utf-8") as fh:
         doc = fh.read()
     pat = re.compile(r"(\d+)\s*條")
+    # 排除日期寫法：`8/07 enforce` 的 07 不是條數。負向後查比列白名單穩，
+    # 因為要擋的是「數字前面接了 / - . 或另一個數字」這個形狀，不是某幾行。
+    pat_enf = re.compile(r"(?<![\d/\-.])(\d+)\s*enforce")
     checked = 0
     for lineno, line in enumerate(doc.splitlines(), 1):
         if "enforce" not in line:
@@ -317,6 +386,11 @@ def _case_progress_doc_rule_count(fails: list) -> None:
             if int(mm.group(1)) != actual:
                 fails.append(f"HARNESS_PROGRESS.md:{lineno} 寫「{mm.group(1)} 條」，"
                              f"實際 {actual} 條")
+        for mm in pat_enf.finditer(line):
+            checked += 1
+            if int(mm.group(1)) != enforce:
+                fails.append(f"HARNESS_PROGRESS.md:{lineno} 寫「{mm.group(1)} enforce」，"
+                             f"實際 {enforce} 條 enforce")
     if not checked:
         fails.append("整份文件找不到任何「N 條 … enforce」——"
                      "判準可能綁錯了，零命中不算通過")
@@ -334,6 +408,7 @@ def run() -> "tuple[int, list]":
         ("長條用 sqrt 尺度、0 不畫", _case_bar_scale),
         ("marker 守門與冪等", _case_marker_and_idempotent),
         ("有事件的規則都有敘述", _case_desc_coverage),
+        ("REGISTRY 與 dispatch_config 是同一份清單", _case_registry_config_parity),
         ("進度文件的規則條數沒漂（F-18 守門）", _case_progress_doc_rule_count),
     ]
     passed, failures = 0, []

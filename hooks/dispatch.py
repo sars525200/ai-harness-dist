@@ -242,9 +242,10 @@ REGISTRY = [
         "tools": None,
     },
     {
-        # LEARN-1：shadow 觀察「技術任務先問要不要學」有沒有真的漏問
-        # （見該檔檔頭）。已進 dispatch_config.json 明寫 shadow: true——
-        # 只記 applies／decision 到 events log，不送達也不影響行為。
+        # LEARN-1：觀察「技術任務先問要不要學」有沒有真的漏問（見該檔檔頭）。
+        # 2026-09-06 由 shadow 轉 enforce，dispatch_config.json 現在寫的是
+        # shadow: false。（這段註解 2026-09-07 前一直停在「明寫 shadow: true」，
+        # 跟設定檔相反——註解不是真相，`dispatch_config.json` 才是。）
         # 與 DECL-1 同理由只掛 Stop：問不問學習說明是主 session 的紀律。
         "id": "LEARN-1",
         "module": "learn1_shadow",
@@ -254,9 +255,11 @@ REGISTRY = [
     {
         # DECL-2：shadow 觀察「這輪動了檔案卻整段零宣告」（見該檔檔頭）。
         # DECL-1 只判「宣告存在時完不完整」，這條補「根本沒宣告」的空白——
-        # 2026-09-06 稽核 LEARN-1 時發現的真實缺口。刻意不進
-        # dispatch_config.json——預設 shadow=True，跟 LEARN-1 同一套先攢
-        # 資料再議轉正式的流程。只掛 Stop：宣不宣告是主 session 的紀律。
+        # 2026-09-06 稽核 LEARN-1 時發現的真實缺口，先攢資料再議轉正式。
+        # 2026-09-07 起 shadow 狀態一律**明寫**在 dispatch_config.json——
+        # 「缺項＝預設 shadow」讓 IDX-1 靜靜不出聲 11 天沒人發現，
+        # 現在 REGISTRY 與設定檔的兩份清單有守門在對帳（見 test_hook_rules.py）。
+        # 只掛 Stop：宣不宣告是主 session 的紀律。
         "id": "DECL-2",
         "module": "decl2_missing_declaration",
         "events": {"Stop"},

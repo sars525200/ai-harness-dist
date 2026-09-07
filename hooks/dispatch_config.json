@@ -74,6 +74,12 @@
     },
     "ONB-2": {
       "shadow": false
+    },
+    "IDX-1": {
+      "shadow": true
+    },
+    "DECL-2": {
+      "shadow": true
     }
   }
 }

@@ -44,7 +44,7 @@
 | 2 | **Tools**（工具） | 🟡 | CLI 齊全；allow 187→**115**（2d 清死條目＋冗餘）、deny **12** 條（Bash／PowerShell 對稱）；2 個 MCP 未授權 |
 | 3 | **Sandbox**（沙盒） | 🔴 **未起步** | 無隔離，直接讀寫本機與 VM |
 | 4 | **Orchestration**（編排） | 🟡 | **10** skills＋5 任務模式＋模型路由；**2 個自建角色已上線實測**（Phase 2） |
-| 5 | **Hook**（掛鉤） | 🟢 **25 條已登記進 `dispatch_config.json`（24 enforce、1 shadow：ONB-1；LEARN-1 於 2026-09-06 轉 enforce）**——⚠ IDX-1 不在這份設定檔裡、靠 dispatch.py 的預設值跑 shadow，不計入這格的分母 | 條數與 shadow 狀態的單一真相是 `hooks/dispatch_config.json`，**這裡不重抄清單**（重抄過一次，規則從 9 加到 12 之後這一格掛了兩週沒人發現；2026-09-06 F-18 守門實測這裡仍與 dispatch.py 的 REGISTRY 對不上，該次只補了自己動到的 TITLE-2，沒有回頭查其餘落差——這次補 LEARN-1 時再犯一次同樣的病，且順帶發現 F-18 守門本身比對的是設定檔的 key 數、不是 REGISTRY 總數，IDX-1 從未進設定檔是既有落差，已一併訂正）。交付形態分三種：BLOCK→exit 2、WARN→`additionalContext`、Stop 落便箋→UserPromptSubmit 投遞。便箋分**狀態型／事件型**（8/28）：狀態型不過期、超量時最後才丟，且規則的「同一則只講一次」以**投遞成功**為準（回執在 `contract.py`）|
+| 5 | **Hook**（掛鉤） | 🟢 **27 條已登記進 `dispatch_config.json`（25 enforce、2 shadow：IDX-1／DECL-2）**——2026-09-07 起 shadow 一律明寫，「缺項＝預設 shadow」的隱形狀態已消失，REGISTRY 與設定檔由守門對帳 | 條數與 shadow 狀態的單一真相是 `hooks/dispatch_config.json`，**這裡不重抄清單**（重抄過一次，規則從 9 加到 12 之後這一格掛了兩週沒人發現；2026-09-06 F-18 守門實測這裡仍與 dispatch.py 的 REGISTRY 對不上，該次只補了自己動到的 TITLE-2，沒有回頭查其餘落差——這次補 LEARN-1 時再犯一次同樣的病，且順帶發現 F-18 守門本身比對的是設定檔的 key 數、不是 REGISTRY 總數，IDX-1 從未進設定檔是既有落差，已一併訂正）。交付形態分三種：BLOCK→exit 2、WARN→`additionalContext`、Stop 落便箋→UserPromptSubmit 投遞。便箋分**狀態型／事件型**（8/28）：狀態型不過期、超量時最後才丟，且規則的「同一則只講一次」以**投遞成功**為準（回執在 `contract.py`）|
 | 6 | **Observability**（可觀測性） | 🟡 | 有 event log 與 decision log；無 traces／evals／成本儀表 |
 
 ---
@@ -144,7 +144,7 @@
 
 ---
 
-## 5. Hook 🟢 → **`dispatch_config.json` 登記 25 條**（24 enforce、1 shadow：ONB-1；LEARN-1 於 2026-09-06 由 shadow 轉 enforce；IDX-1／DECL-2 額外靠 dispatch.py 預設值跑 shadow，不在這份設定檔裡）——單一真相是 REGISTRY／`hooks/dispatch.py`，這裡的數字會漂，出問題以 F-18 守門的即時計數為準；2026-09-06 補 LEARN-1 時順手核對，發現這裡原寫 23 但設定檔實際已是 24——漂移早於本次改動
+## 5. Hook 🟢 → **`dispatch_config.json` 登記 27 條**（25 enforce、2 shadow：IDX-1／DECL-2 —— 2026-09-07 補進設定檔明寫 shadow: true，在那之前它們靠 dispatch.py 的預設值跑 shadow，IDX-1 就這樣判定 242 次、真的送達 1 次）——單一真相是 REGISTRY／`hooks/dispatch.py`，這裡的數字會漂，出問題以 F-18 守門的即時計數為準；2026-09-06 補 LEARN-1 時順手核對，發現這裡原寫 23 但設定檔實際已是 24——漂移早於本次改動
 　　　　`hooks/dispatch_config.json` 判定其中 enforce 的有 21 個；IDX-1（8/27 上線，判準見 TODOS.md）與
 　　　　TITLE-2（9/06 上線，判準見 `SESSION_TITLE_HOOK_PLAN.md`）兩個刻意留在 shadow
 
