@@ -428,9 +428,28 @@ def _rules_copy_line(repo: Path) -> None:
             "它的左半邊就是要清掉的那些字串）")
     elif state == "stale":
         out("    [!] 清洗規則檔副本**可能過期** —— %s：%s" % (why, "、".join(files)))
-        out("        更新副本後跑：py -3 tools/cloud_backup_hook.py --mark-copied")
+        # 設了副本目錄就直接給會**真的複製**的那個指令：原本這裡只印
+        # `--mark-copied`（只蓋時間戳），照著跑等於登記了一份沒更新的副本 ——
+        # 比沒登記更難發現，因為下一次檢查會顯示 [OK]。
+        if _cfg_str(repo, "cloudRulesCopyDir"):
+            out("        更新副本：py -3 tools/cloud_backup_hook.py --copy-rules"
+                "（會複製並逐 byte 核對後登記）")
+        else:
+            out("        更新副本後跑：py -3 tools/cloud_backup_hook.py --mark-copied"
+                "（只蓋時間戳；設 cloudRulesCopyDir 可改用 --copy-rules 真的複製）")
     else:
-        out("    [OK] 清洗規則檔副本已登記（%s；登記的是時間不是內容）" % why)
+        # 兩種登記強度要分開講：`--copy-rules` 是複製後逐 byte 核對過的，
+        # `--mark-copied` 只是一個時間戳。印同一句話會讓後者被讀成前者，
+        # 而後者正是「按了登記但忘記複製」那個死法的入口。
+        try:
+            _mk = (repo / "state" / "cloud_export_copied_at.txt").read_text(
+                encoding="utf-8")
+        except OSError:
+            _mk = ""
+        if "逐 byte 核對" in _mk:
+            out("    [OK] 清洗規則檔副本已複製並**逐 byte 核對過**（%s）" % why)
+        else:
+            out("    [OK] 清洗規則檔副本已登記（%s；登記的是時間不是內容）" % why)
 
 
 def block_cloud(repo: Path, head: str, skip_net: bool) -> bool:

@@ -210,6 +210,14 @@ py -3 tools/push_cloud_backup.py --seed-token-baseline   # 只在第一次；檔
 它跟其他三個規則檔一樣不進版控，已加進 `cloud_backup_hook.py` 的 `RULES_FILES`——NAS 副本現在要**四個檔**，
 `--mark-copied` 缺它就拒絕登記，開工檢查 [4] 會報「可能過期」直到副本補上。
 
+**2026-09-07 起副本更新是一個指令**：`py -3 tools/cloud_backup_hook.py --copy-rules`。
+它讀 `harness.config.json` 的 `cloudRulesCopyDir`（不進版控，所以路徑不會外流），
+複製後逐 byte 核對 sha256，核對過了才登記，登記檔只記雜湊、**不含任何行內容**。
+原本是「手動複製 ＋ `--mark-copied` 蓋時間戳」兩步——**會被漏掉的步驟遲早會被漏掉**，
+而漏掉的症狀是登記時間很新、副本內容是舊的，比沒登記更難發現（開工檢查會顯示 `[OK]`）。
+開工檢查 [4] 現在分開講「已逐 byte 核對過」與「只登記了時間」，看得出是哪一種；
+`--mark-copied` 留給副本在密碼管理器那類程式碰不到的位置。
+
 ⚠ **代價要講清楚**：從此每顆帶新英數 token 的 commit（約一半）會讓 post-commit 的背景推**紅到有人判完為止**，
 `state/cloud_backup_failed.txt` 最後幾行就是要判的清單（工具收尾會重印 FAIL 摘要）。這是設計，不是壞掉。
 

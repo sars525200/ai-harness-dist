@@ -4,6 +4,7 @@
 
     py -3 tools/cloud_backup_hook.py --spawn     # post-commit 用：立刻回，背景跑 --run
     py -3 tools/cloud_backup_hook.py --run       # 前景跑一輪（含鎖、標記、HEAD 追平）
+    py -3 tools/cloud_backup_hook.py --copy-rules  # 規則檔複製到副本目錄＋核對＋登記
     py -3 tools/cloud_backup_hook.py --status    # 印最後一次結果與落後幾顆
 
 ## 為什麼要有這支，而不是 post-commit 直接呼叫 push_cloud_backup.py
@@ -42,8 +43,10 @@ Windows 上 `os.kill(pid, 0)` 不是探測、是 `TerminateProcess` —— 會�
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -103,8 +106,102 @@ def rules_copy_state(root: Path) -> tuple[str, list, str]:
     return "fresh", present, "登記於 %s，之後正本沒再動過" % when
 
 
+def _cfg_str(root: Path, key: str) -> str:
+    """從 harness.config.json 讀一個字串設定；讀不到就回空字串＝這台沒設。"""
+    cfg = root / "harness.config.json"
+    if not cfg.is_file():
+        return ""
+    try:
+        data = json.loads(cfg.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return ""
+    v = data.get(key)
+    return v.strip() if isinstance(v, str) else ""
+
+
+def _sha_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with p.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def do_copy_rules(root: Path) -> int:
+    """把規則檔正本複製到設定裡的副本目錄，逐 byte 核對過才登記。
+
+    為什麼要有這個動作：原本只有 `--mark-copied`，複製那一步靠人手動做，
+    而 NAS 上那份 README 自己就寫著「兩步都要，只做一步等於沒更新」——
+    **會被漏掉的步驟遲早會被漏掉**，而漏掉的症狀是登記時間看起來很新、
+    副本內容卻是舊的，比沒登記更難發現。這裡把複製與登記綁成一個動作，
+    而且登記的是**核對過的雜湊**，不再只是一個時間戳。
+
+    ⚠ 這些檔含敏感字串（replace-rules.txt 的左半邊就是要清掉的那些字）。
+    這支只印檔名、大小與雜湊前 12 碼，**任何情況下都不印行內容**。
+    副本目的地誰讀得到取決於那個位置的權限，不是這支能控制的。
+    """
+    rules = root.joinpath(*RULES_SUBDIR)
+    if not rules.is_dir():
+        print("拒絕複製：規則目錄不在 %s —— 沒有正本可複製" % rules)
+        return 2
+    missing = [f for f in RULES_FILES if not (rules / f).is_file()]
+    if missing:
+        print("拒絕複製：正本缺 %s —— 半份副本比沒有更糟" % "、".join(missing))
+        return 2
+
+    dst_s = _cfg_str(root, "cloudRulesCopyDir")
+    if not dst_s:
+        print("這台沒設 cloudRulesCopyDir（harness.config.json）—— 不猜位置。")
+        print("設一個機器外／同步得出去的目錄再跑；只想蓋時間戳走 --mark-copied。")
+        return 2
+    dst = Path(dst_s)
+    try:
+        dst.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print("副本目錄建不起來：%s（%s）" % (dst, e))
+        return 2
+
+    # commit-map 不在 RULES_FILES 裡（清洗工具不讀它），但還原時要拿它把
+    # 文件裡的舊 commit hash 對回去，正本有就一起帶。
+    extra = [p.name for p in sorted(rules.glob("commit-map-*.txt"))]
+    marks = []
+    for name in list(RULES_FILES) + extra:
+        src = rules / name
+        out = dst / name
+        want = _sha_file(src)
+        before = _sha_file(out) if out.is_file() else None
+        if before == want:
+            print("  同  %-28s %7d bytes  %s" % (name, src.stat().st_size, want[:12]))
+        else:
+            shutil.copy2(str(src), str(out))
+            got = _sha_file(out)
+            if got != want:
+                print("  ✗  %s 複製後雜湊不符 —— 中止，不登記" % name)
+                return 2
+            print("  ✓  %-28s %7d bytes  %s → %s"
+                  % (name, src.stat().st_size,
+                     before[:12] if before else "（原本沒有）", got[:12]))
+        marks.append("%s  %s" % (want[:16], name))
+
+    state = root / "state"
+    state.mkdir(parents=True, exist_ok=True)
+    (state / COPIED_MARK).write_text(
+        "副本已複製並逐 byte 核對於 %s\n"
+        "目的地：%s\n"
+        "核對過的雜湊（sha256 前 16 碼，**不含任何行內容**）：\n%s\n"
+        % (now_iso(), dst, "\n".join("  " + m for m in marks)),
+        encoding="utf-8")
+    print("已複製並登記 %d 個檔 → %s" % (len(marks), dst))
+    return 0
+
+
 def do_mark_copied(root: Path) -> int:
-    """人把副本另存到別處之後，蓋一個時間戳。"""
+    """人把副本另存到別處之後，蓋一個時間戳。
+
+    **副本目的地是這台碰得到的路徑時請改用 `--copy-rules`**：那個會真的複製
+    並逐 byte 核對，這個只寫時間、證明不了副本內容。這支留給「副本在密碼
+    管理器／別人的機器」那種程式碰不到的位置。
+    """
     rules = root.joinpath(*RULES_SUBDIR)
     if not rules.is_dir():
         print("拒絕登記：規則目錄不在 %s —— 沒有正本可登記" % rules)
@@ -298,6 +395,8 @@ def main() -> int:
     g.add_argument("--spawn", action="store_true", help="立刻回，背景跑一輪")
     g.add_argument("--run", action="store_true", help="前景跑一輪")
     g.add_argument("--status", action="store_true", help="印最後一次結果")
+    g.add_argument("--copy-rules", action="store_true",
+                   help="把規則檔複製到 cloudRulesCopyDir 並核對後登記")
     g.add_argument("--mark-copied", action="store_true",
                    help="把清洗規則檔另存到別處之後，蓋一個登記時間戳")
     ap.add_argument("--root", help="repo 根（預設是這支所在的 harness repo）")
@@ -309,6 +408,8 @@ def main() -> int:
         return do_spawn(root, backend)
     if a.run:
         return do_run(root, backend)
+    if a.copy_rules:
+        return do_copy_rules(root)
     if a.mark_copied:
         return do_mark_copied(root)
     return do_status(root)

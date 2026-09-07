@@ -30,6 +30,7 @@ import json
 import os
 import subprocess
 import sys
+import json as _json
 import tempfile
 import time
 from pathlib import Path
@@ -287,6 +288,46 @@ def run():
         _run(repo, be, "--mark-copied")
         st, _, _ = _h.rules_copy_state(repo)
         check("重新登記後回 fresh", st == "fresh", st)
+
+        # ── --copy-rules：真的複製 ＋ 逐 byte 核對 ＋ 登記 ──────────────
+        # 這個動作會把敏感規則檔寫到另一個位置，所以「它以為自己複製成功」
+        # 必須跟「檔案真的一樣」是同一件事，不能只看它印了什麼。
+        import hashlib as _hl
+
+        def _sha(p):
+            return _hl.sha256(p.read_bytes()).hexdigest()
+
+        # 沒設定就不准猜位置 —— 猜錯會把敏感檔寫到不該去的地方
+        r = _run(repo, be, "--copy-rules")
+        check("沒設 cloudRulesCopyDir：拒跑 exit 2", r.returncode == 2, r.stdout + r.stderr)
+        check("沒設 cloudRulesCopyDir：講得出要設哪個鍵",
+              "cloudRulesCopyDir" in r.stdout, r.stdout)
+
+        copy_dir = base / "rules-copy"
+        (repo / "harness.config.json").write_text(
+            _json.dumps({"schema": 1, "cloudRulesCopyDir": str(copy_dir)},
+                        ensure_ascii=False), encoding="utf-8")
+
+        r = _run(repo, be, "--copy-rules")
+        check("複製 exit 0", r.returncode == 0, r.stdout + r.stderr)
+        src_dir = repo.joinpath(*_h.RULES_SUBDIR)
+        same = [f for f in _h.RULES_FILES
+                if (copy_dir / f).is_file() and _sha(copy_dir / f) == _sha(src_dir / f)]
+        check("每個規則檔都真的複製過去且逐 byte 相同",
+              len(same) == len(_h.RULES_FILES), str(same))
+        st, _, _ = _h.rules_copy_state(repo)
+        check("複製之後回 fresh", st == "fresh", st)
+
+        # 登記檔不准帶行內容 —— 規則檔左半邊就是要清掉的敏感字串
+        _mark_txt = (repo / "state" / _h.COPIED_MARK).read_text(encoding="utf-8")
+        check("登記檔不含規則行內容", "x==>y" not in _mark_txt, _mark_txt[:200])
+        check("登記檔記了核對過的雜湊", "sha256" in _mark_txt, _mark_txt[:200])
+
+        # 正本缺一個就不准做半份副本
+        (src_dir / "mailmap.txt").unlink()
+        r = _run(repo, be, "--copy-rules")
+        check("正本缺檔：拒絕複製 exit 2", r.returncode == 2, r.stdout + r.stderr)
+        check("正本缺檔：點名缺哪個", "mailmap.txt" in r.stdout, r.stdout)
 
     # 接線層：判準寫對但沒接上開工檢查，症狀跟沒寫一樣。
     _cbs_src = (ROOT / "tools" / "check_before_start.py").read_text(encoding="utf-8")
