@@ -83,5 +83,5 @@ finally:
 same = hashlib.sha256(read().encode("utf-8")).hexdigest() == digest
 print("\n" + "=" * 60)
 print(f"規則還原：{'✔ 雜湊一致' if same else '✘ 還原失敗'}")
-print("五個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
 sys.exit(0 if (all_red and same) else 1)

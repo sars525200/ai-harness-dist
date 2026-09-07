@@ -349,6 +349,87 @@ def _case_caps_table_matches_agents(fails):
             fails.append(f"能力表少了 {a['name']}")
 
 
+def _write_events(tmp, files, age=None):
+    """建假 event log。files: {檔名 stem: [每行 json 字串]}；age 給了就設 mtime。"""
+    import time as _t
+    now = _t.time()
+    for stem, lines in files.items():
+        p = os.path.join(tmp, f"events.{stem}.ndjson")
+        with open(p, "w", encoding="utf-8") as f:
+            for ln in lines:
+                f.write(ln + "\n")
+        if age is not None:
+            os.utime(p, (now - age, now - age))
+    return now
+
+
+# ── 以下兩條補的是同一個過濾：`_TEST_SESSION.match(stem) or ".agent-" in stem`
+#    這句在產生器裡有**三份逐字同文的過濾**（running_by_role / sessions /
+#    sessions_detail），2026-09-07 逐份改壞實跑證實：只有 sessions() 那一份
+#    有人守，另外兩份改壞了測試照樣全綠。變異腳本用 `replace(…, 1)` 只換第一份
+#    ⇒ 那條變異打中的正是沒人測的 running_by_role，從寫下來那天起就是假綠燈。
+#    修錨點只能讓變異打對地方；這兩條才是把「沒人測」補起來。
+
+def _case_running_excludes_subagent_and_test(fails):
+    """running_by_role()：subagent 分檔與測試 session 都不算一條主 session。
+
+    漏掉會怎樣：分檔被當成主 session 後，它自己的 `agent_spawn` 找不到對應的
+    stop（stop 只會記在 `events.<主 sid>.agent-*`，不會記在
+    `events.<sid>.agent-x.agent-*`），於是**永遠有人在跑**；測試餵料同理。
+    畫面上就是「明明沒人在跑卻列著幾個角色」——不報錯，只是數字錯。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        m = _load()
+        m.STATE_DIR = __import__("pathlib").Path(tmp)
+        _write_events(tmp, {
+            # 主 session：派 1 個、結束 1 個 → 帳面上不該有人在跑
+            "aaaa1111": [
+                '{"ts":"2026-09-07T10:00:00","kind":"agent_spawn","subagent_type":"查詢員"}',
+            ],
+            "aaaa1111.agent-x1": [
+                '{"ts":"2026-09-07T10:02:00","event":"SubagentStop","agent_type":"查詢員"}',
+            ],
+            # subagent 分檔裡自己也有 spawn（會派人的角色就會長這樣）
+            "aaaa1111.agent-z9": [
+                '{"ts":"2026-09-07T10:01:00","kind":"agent_spawn","subagent_type":"查詢員"}',
+            ],
+            # 測試餵料（手寫規律 UUID）
+            "11111111-2222-4333": [
+                '{"ts":"2026-09-07T10:00:00","kind":"agent_spawn","subagent_type":"查詢員"}',
+            ],
+        })
+        got = {k: v for k, v in m.running_by_role().items() if v}
+        if got:
+            fails.append(
+                f"沒排除 subagent 分檔或測試 session：running={got}（應為空）"
+                "——分檔裡的 spawn 找不到對應的 stop，會變成永遠在跑")
+
+
+def _case_detail_excludes_subagent_and_test(fails):
+    """sessions_detail()：分檔與測試 session 不該各自變成一張卡片。
+
+    漏掉會怎樣：`sid` 取 stem 前 8 碼，分檔的前 8 碼跟主檔一樣 ⇒ **同一個
+    session 會出現兩張以上長得一樣的卡**，而卡上的「正在跑」還是假的。
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        m = _load()
+        m.STATE_DIR = __import__("pathlib").Path(tmp)
+        now = _write_events(tmp, {
+            "cccc3333": ['{"ts":"2026-09-07T10:00:00","kind":"dispatch","tool_name":"Read"}'],
+            "cccc3333.agent-q1": [
+                '{"ts":"2026-09-07T10:01:00","kind":"agent_spawn","subagent_type":"查詢員"}',
+            ],
+            "22222222-3333-4444": [
+                '{"ts":"2026-09-07T10:00:00","kind":"dispatch","tool_name":"Read"}',
+            ],
+        }, age=5)
+        rows = m.sessions_detail(now)
+        sids = [r["sid"] for r in rows]
+        if sids != ["cccc3333"]:
+            fails.append(
+                f"沒排除 subagent 分檔或測試 session：卡片={sids}（應只有 cccc3333）")
+
+
 def run() -> "tuple[int, list]":
     cases = [
         ("主 session 活動窗（5 分鐘）判定正確", _case_active_window),
@@ -357,6 +438,8 @@ def run() -> "tuple[int, list]":
         ("固定 now 下冪等", _case_idempotent),
         ("角色目錄空時拒跑", _case_refuse_empty),
         ("進行中的 subagent 跨檔逐 session 配對", _case_running_cross_file),
+        ("running_by_role 排除分檔與測試 session", _case_running_excludes_subagent_and_test),
+        ("sessions_detail 排除分檔與測試 session", _case_detail_excludes_subagent_and_test),
         ("自建／內建分類正確", _case_builtin_flag),
         ("每個角色都配到 registry 認得的 icon", _case_every_role_has_badge),
         ("每個部門都對得到職能群（有顏色）", _case_every_dept_has_group),

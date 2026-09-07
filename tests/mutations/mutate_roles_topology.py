@@ -60,6 +60,42 @@ MUTATIONS = [
         "        if False:",
     ),
     (
+        "running_by_role 不排除 subagent 分檔（分檔的 spawn 永遠配不到 stop ⇒ 永遠有人在跑）",
+        # ⚠ 那句 if 在目標檔有**三份逐字同文**，這裡是第 1 份（running_by_role）。
+        #   2026-09-07 之前這一份沒有任何測試在守，而上面那條變異的
+        #   `replace(…, 1)` 打中的正是它 ⇒ 那條變異從寫下來那天起就是假綠燈。
+        #   現在三份各自綁一條變異、各自有測試，錨點也各自唯一。
+        '    out: dict = {}\n'
+        '    if not STATE_DIR.exists():\n'
+        '        return out\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
+        '        if _TEST_SESSION.match(stem) or ".agent-" in stem:',
+        '    out: dict = {}\n'
+        '    if not STATE_DIR.exists():\n'
+        '        return out\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
+        '        if False:',
+    ),
+    (
+        "sessions_detail 不排除 subagent 分檔（同一個 session 冒出好幾張一樣的卡）",
+        # 三份同文的第 3 份（sessions_detail）。sid 取 stem 前 8 碼，分檔的前 8
+        #   碼跟主檔一樣 ⇒ 漏掉這道過濾，畫面上會是同一個 session 的重複卡片。
+        '    out = []\n'
+        '    if not STATE_DIR.exists():\n'
+        '        return out\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
+        '        if _TEST_SESSION.match(stem) or ".agent-" in stem:',
+        '    out = []\n'
+        '    if not STATE_DIR.exists():\n'
+        '        return out\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
+        '        if False:',
+    ),
+    (
         "masthead 時間戳不換（退回手寫值停在舊日期——第五次發作的原形）",
         '    out, cnt = re.subn(r"<time>[^<]*</time>",',
         '    out, cnt = re.subn(r"<time-NOPE>[^<]*</time-NOPE>",',
@@ -113,5 +149,5 @@ finally:
 same = hashlib.sha256(read().encode("utf-8")).hexdigest() == digest
 print("\n" + "=" * 60)
 print(f"產生器還原：{'✔ 雜湊一致' if same else '✘ 還原失敗'}")
-print("六個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
+print(f"{len(MUTATIONS)} 個變異全部被抓到，回歸網可信" if all_red else "有變異沒被抓到，需補強")
 sys.exit(0 if (all_red and same) else 1)
