@@ -98,8 +98,40 @@ def resource_path(name: str) -> Path | None:
     return None
 
 
+#: 安裝目的地的**資料夾名**。碟號不寫在這裡 —— 見 _pick_work_drive()。
+INSTALL_SUBPATH = os.path.join("Patrick-AI", ".ai-harness")
+
+
+def _pick_work_drive() -> str:
+    """挑一顆放工作區的固定磁碟，回 `"X:\\"`。
+
+    為什麼不寫死碟號（U-1）：這支是**換機安裝精靈**，跑它的人多半不是寫它的人。
+    原本寫的是「有 D 就 D，沒有就 C」，換一台機器／換一個部門就不成立，而且
+    不成立的症狀是**預設值長得很正常但指到別人的碟**——沒有錯誤訊息。
+
+    這裡是雞生蛋的那一端：新機器上還沒有 harness.config.json 可讀，所以碟號只能
+    探測。判準是「**固定磁碟且不是系統碟**」，不是「叫做 D」——隨身碟、光碟機、
+    網路磁碟都會被排除，探不到就退回系統碟（會存在，不會產生一個假路徑）。
+    """
+    system = (os.environ.get("SystemDrive") or "C:").rstrip("\\") + "\\"
+    try:
+        import ctypes  # noqa: PLC0415  只有這裡要，不值得放檔頭
+        drive_type = ctypes.windll.kernel32.GetDriveTypeW
+        DRIVE_FIXED = 3
+        for code in range(ord("A"), ord("Z") + 1):
+            root = "%s:\\" % chr(code)
+            if root.upper() == system.upper():
+                continue
+            if drive_type(root) == DRIVE_FIXED and Path(root).exists():
+                return root
+    except Exception:
+        # 探測失敗不是致命的：退回系統碟，人在畫面上還能自己改。
+        pass
+    return system
+
+
 def default_target() -> str:
-    return r"D:\Patrick-AI\.ai-harness" if Path("D:\\").exists() else r"C:\Patrick-AI\.ai-harness"
+    return str(Path(_pick_work_drive()) / INSTALL_SUBPATH)
 
 
 class App(tk.Tk):

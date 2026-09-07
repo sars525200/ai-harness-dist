@@ -61,7 +61,12 @@ TOKEN_RE = re.compile(r"`([0-9a-f]{7,40})`")
 # ⚠ "sha8" 是 2026-09-05 補的：`user-rules-reconcile.md` 那張表有一欄就叫 SHA8，
 # 記的是**貼進去的內容摘要**不是 commit。三個檔各引用它一次，全都在講「這一欄」，
 # 三處都被誤判成 git hash（其中兩處的行文本身就在說它是誤判）。
-CONTEXT_SKIP = ("session", "sha256", "sha-256", "sha8", "本線")
+# ⚠ "對話"／"jsonl" 是 2026-09-07 補的：對話 id 跟 commit 長得一模一樣，而中文
+#   文件講它時寫的是「這則對話」「jsonl `xxxxxxxx`」，一次都沒寫過 session ——
+#   原本的判準是英文字，所以整批漏網，一支守門靠 15 筆假警報活著。
+#   **而且這件事只會變多**：TITLE-1 現在要求每個對話標題都帶短 id。
+CONTEXT_SKIP = ("session", "sha256", "sha-256", "sha8", "本線",
+                "對話", "jsonl")
 
 
 def load_allow() -> dict:
