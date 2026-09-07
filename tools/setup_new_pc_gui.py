@@ -3,10 +3,12 @@ r"""新電腦安裝精靈（偵測＋引導版·視窗介面）。
 
     py -3 tools\setup_new_pc_gui.py
 
-**「偵測＋引導」是刻意的範圍**（2026-09-06 user 選定）：它**不自動下載安裝**任何東西。
-自動安裝要付三個躲不掉的代價——一定跳 UAC、官方下載網址半年就會過期、
-以及「自動下載並執行第三方程式」等於你要為那條通道的資安負責。
-這支改成：偵測缺什麼 → 給官方連結 → 人自己裝 → 按「重新檢查」。
+**範圍：偵測 → 一鍵裝 → 重檢查**（2026-09-07 user 指示「能夠跑腳本安裝的都改成跑腳本」，
+推翻 2026-09-06 訂的「只給連結、人自己裝」）。改用 winget 而不是自己抓安裝檔，
+原本那三個顧慮剛好都被它接走：UAC 仍會跳但只跳一次、網址由套件清單維護不會過期、
+**而且清單帶雜湊值會被驗**——比人自己去下載頁點檔案更嚴，那條路沒有任何東西在驗。
+每一列仍保留「開啟下載頁」：winget 裝不動時要有第二條路，
+而「唯一的路失敗了」跟「還有一條路」對站在機器前面的人差很多。
 
 **必裝的是 4 個不是 3 個。** harness 的 6 條 hook 全部是 `py -3 ...` 開頭，
 少了 Python 每一條 hook 都會失敗**而且不報錯**——對話照常進行、規則一條都不跑。
@@ -44,15 +46,22 @@ APP_TITLE = "Harness 換機安裝精靈"
 # 缺了**不影響接線**。2026-09-07 真機實測逼出來的：主控台版的同一段檢查對 `gh`
 # 明寫「接線本身用不到它」，視窗版卻把四個並列成「都要有」並染紅——**兩版判準不一致，
 # 而嚴的那版嚴錯地方**，人在新機前面看到紅字就不敢往下按。
+# 第七欄 `winget`：winget 套件識別碼，`None` ＝ 只能給下載頁。
+# 2026-09-07 user 指示「能夠跑腳本安裝的都改成跑腳本」，**推翻同日稍早
+# 「不自動下載安裝、只給官網連結」那條**。反而更穩：winget 的資訊清單帶雜湊值，
+# 裝下來的東西會被驗；人自己去下載頁點檔案則沒有任何東西在驗。
+# 四個識別碼都在這台實查過（`winget search --id <id> --exact`）。
 REQUIRED = [
     ("Python",       "py",     ["-3", "--version"],  "https://www.python.org/downloads/",
-     "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must"),
+     "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must",
+     "Python.Python.3.13"),
     ("Git",          "git",    ["--version"],        "https://git-scm.com/download/win",
-     "用來把 harness 下載下來", "must"),
+     "用來把 harness 下載下來", "must", "Git.Git"),
     ("GitHub CLI",   "gh",     ["--version"],        "https://cli.github.com/",
-     "只有「登入 GitHub」那一步要它；harness 已經下載完就用不到", "nice"),
+     "只有還沒下載 harness 時才要它；下載完就用不到", "nice", "GitHub.cli"),
     ("Claude Code",  "claude", ["--version"],        "https://claude.com/claude-code",
-     "接線是把連結建進它的設定資料夾，所以看資料夾在不在，不看 PATH", "must"),
+     "接線是把連結建進它的設定資料夾，所以看資料夾在不在，不看 PATH", "must",
+     "Anthropic.ClaudeCode"),
 ]
 
 # 接線的目標資料夾。**Claude Code 的判準是它，不是 PATH 上有沒有 `claude` 指令**——
@@ -98,6 +107,20 @@ def refresh_path_from_registry() -> None:
         # 舊的那份留在最後：登錄檔沒有的東西（例如這個 session 自己加的）不要弄丟。
         parts.append(os.environ.get("PATH", ""))
         os.environ["PATH"] = os.pathsep.join(p for p in parts if p)
+
+
+def detect(name: str, exe: str, args: list[str]):
+    """回 `(裝好了沒, 說明)`。**判準綁後果，不綁名字**——問的是「這台機器現在
+    有沒有這個能力」，不是「某個指令叫什麼」。Claude Code 那條就是這樣才修對的。"""
+    if shutil.which(exe) is None:
+        rc, out = -1, "PATH 上找不到 %s" % exe
+    else:
+        rc, out = run([exe] + args, timeout=60)
+    ok = rc == 0
+    if not ok and name == "Claude Code" and CLAUDE_HOME.is_dir():
+        # 桌面版不裝 `claude` shim，但接線要的就是這個資料夾。
+        ok, out = True, "設定資料夾在：%s（桌面版不會在 PATH 上放 claude，正常）" % CLAUDE_HOME
+    return ok, out
 
 
 def child_env() -> dict:
@@ -244,15 +267,23 @@ class App(tk.Tk):
             "裝完按「重新檢查」就好，這支會自己重讀 PATH，不必重開視窗。"
         )).pack(anchor="w", pady=(0, 10))
         self.rows = {}
-        for name, exe, _a, url, why, _level in REQUIRED:
+        has_winget = shutil.which("winget") is not None
+        for name, exe, _a, url, why, _level, pkg in REQUIRED:
             row = tk.Frame(self.tab1); row.pack(fill="x", pady=3)
             st = tk.Label(row, text="檢查中", width=8, anchor="w", fg="#888")
             st.pack(side="left")
             tk.Label(row, text=name, width=13, anchor="w").pack(side="left")
             tk.Label(row, text=why, fg="#666", font=self.f_small,
                      anchor="w").pack(side="left", fill="x", expand=True)
-            btn = tk.Button(row, text="開啟下載頁", width=12,
-                            command=lambda u=url: webbrowser.open(u))
+            # 下載頁那顆一直留著：winget 裝失敗時人要有第二條路，
+            # 而「唯一的路失敗了」跟「還有一條路」對站在機器前面的人差很多。
+            tk.Button(row, text="開啟下載頁", width=11,
+                      command=lambda u=url: webbrowser.open(u)).pack(side="right", padx=(6, 0))
+            if has_winget and pkg:
+                btn = tk.Button(row, text="自動安裝", width=11,
+                                command=lambda n=name, p=pkg: self.do_install(n, p))
+            else:
+                btn = tk.Button(row, text="（無自動安裝）", width=11, state="disabled")
             btn.pack(side="right")
             self.rows[name] = (st, btn)
         bar = tk.Frame(self.tab1); bar.pack(fill="x", pady=(14, 0))
@@ -356,17 +387,8 @@ class App(tk.Tk):
             refresh_path_from_registry()
             self.say("── 檢查環境 ──")
             blocking, optional = [], []
-            for name, exe, args, _url, _why, level in REQUIRED:
-                if shutil.which(exe) is None:
-                    rc, out = -1, "PATH 上找不到 %s" % exe
-                else:
-                    rc, out = run([exe] + args, timeout=60)
-                ok = rc == 0
-                # Claude Code 的真判準是設定資料夾，不是 PATH 上的指令：桌面版
-                # 不裝那個 shim，但接線要的就是這個資料夾。找不到指令時退到資料夾。
-                if not ok and name == "Claude Code" and CLAUDE_HOME.is_dir():
-                    ok = True
-                    out = "設定資料夾在：%s（桌面版不會在 PATH 上放 claude，正常）" % CLAUDE_HOME
+            for name, exe, args, _url, _why, level, _pkg in REQUIRED:
+                ok, out = detect(name, exe, args)
                 ver = out.splitlines()[0][:70] if ok and out else ""
                 mark = "[OK]" if ok else ("[!!]" if level == "must" else "[--]")
                 self.say("%s %-12s %s" % (mark, name, ver or out[:70]))
@@ -386,6 +408,36 @@ class App(tk.Tk):
             else:
                 self.ui(self._env_result, "4 個都在，可以往下走。")
                 self.say("[OK] 環境齊全。")
+        self.spawn(work)
+
+    def do_install(self, name: str, pkg: str) -> None:
+        """按下「自動安裝」：跑 winget 裝一個，裝完自動重檢查。
+
+        `--silent` 是刻意的：安裝程式自己的視窗開在這支背後、又沒有人去點，
+        會變成一個看起來當掉的精靈。裝不動時不硬撐——把 winget 的原話印出來，
+        並叫人改用旁邊的下載頁，**不要讓失敗看起來像成功**。
+        """
+        def work():
+            self.say("── 自動安裝 %s（winget %s）──" % (name, pkg))
+            self.say("     可能會跳出系統的權限確認視窗，按「是」。第一次會久一點。")
+            rc, out = run(["winget", "install", "--id", pkg, "--exact",
+                           "--silent", "--accept-package-agreements",
+                           "--accept-source-agreements"], timeout=1800)
+            tail = (out or "").strip().splitlines()
+            self.say("     " + (tail[-1][:120] if tail else "（沒有輸出）"))
+            # **成敗看結果，不看離開碼。** 實測：東西早就裝好時 winget 回
+            # 2316632107（「找不到可用的升級」），照離開碼判會報成失敗，
+            # 然後叫人去重裝一個他明明已經有的東西——這支踩過同一種錯兩次了。
+            # 而且離開碼與訊息都會隨語系和版本變，能撐住的只有「現在偵測得到嗎」。
+            refresh_path_from_registry()
+            row = next((r for r in REQUIRED if r[0] == name), None)
+            ok = detect(name, row[1], row[2])[0] if row else rc == 0
+            if ok:
+                self.say("[OK] %s 現在偵測得到了。" % name)
+            else:
+                self.say("[!!] %s 裝完還是偵測不到（winget 離開碼 %s）。"
+                         "改按右邊「開啟下載頁」自己裝。" % (name, rc))
+            self.check_env()
         self.spawn(work)
 
     def _set_row(self, payload) -> None:
