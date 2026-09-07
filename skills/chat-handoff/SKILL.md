@@ -39,10 +39,16 @@ type: 流程
 `No such file or directory`——工具本身認 git repo root、不寫死路徑，錯的是這裡的呼叫範例）：
 
 ```
-py -3 <harness>\tools\new_handoff.py --task "<任務名>" --type task
+py -3 <harness>\tools\new_handoff.py --task "<任務名>" --type task --slug <英文短詞>
 py -3 <harness>\tools\new_handoff.py --task "<任務名>" --type research \
-    --plan <計畫書路徑> --sections "§4, §7"
+    --plan <計畫書路徑> --sections "§4, §7" --slug <英文短詞>
 ```
+
+**任務名幾乎必是中文（全域規則要求繁體中文），`--slug` 幾乎必填**（2026-09-07
+起）：檔名只從 `--task` 抽英數字元，抽不到（純中文任務名就是抽不到）會直接
+拒跑並印錯誤，不會靜靜 fallback——舊版會 fallback 成固定字樣 `handoff`，
+同一天兩個不同任務撞同一個檔名、語意也丟光。`--slug` 抓語意關鍵字的英文
+短詞即可，不必音譯（例：任務名「平面圖分區色塊」→ `--slug floor-map-zone`）。
 
 `--type` 二選一見下節「兩套骨架」。有主計畫書就帶 `--plan`／`--sections`——
 這是這則交接要「把主任務的計畫書一起帶給下一個接手窗口」的地方，寫在

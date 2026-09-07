@@ -23,9 +23,18 @@ frontmatter 五欄兩套共用，見 `hooks/rules/hnd2_frontmatter_contract.py` 
 如此），但「這是接續還是另一件事」只有人知道。撞名就報錯讓人自己選
 `--slug`，不猜——跟 `merge_handoff.py --write` 遇到已存在的合併稿同一個紀律。
 
+## 純中文任務名必須帶 `--slug`（2026-09-07 修）
+
+`--task` 抽檔名只認英數字元；全域規則要求任務名「繁體中文、≤12 字」，
+抽不到英數字元時**拒跑並要求補 `--slug`**，不 fallback 成固定字樣
+（舊版會 fallback 成 `handoff`，兩個不同任務撞同一個檔名、語意也丟光——
+2026-09-07 盤點抓到 2 份現行檔案就是這樣壞的）。`--slug` 是英文短詞，
+不必是音譯，抓語意關鍵字即可。
+
     py -3 tools/new_handoff.py --task "省token方案研究" --type research
     py -3 tools/new_handoff.py --task "換機接線器" --type task \
         --plan MODEL_ROUTING_PLAN.md --sections "§4, §7"
+    py -3 tools/new_handoff.py --task "平面圖分區色塊" --type task --slug floor-map-zone
 
 【核心層】路徑一律從 git repo root 推，不寫死任何專案路徑。
 """
@@ -69,10 +78,11 @@ def _repo_root(start: str) -> str:
 
 
 def _slug_from_task(task: str) -> str:
-    """任務名多半是中文，抽不出英文詞幹時退回固定字樣，不猜音譯。"""
+    """任務名多半是中文，抽不出英文詞幹就回傳空字串——呼叫端負責拒跑，不猜音譯、
+    不 fallback 成固定字樣（曾經 fallback 成 `handoff`，撞名後彼此覆蓋不了、
+    語意也全丟光，見 2026-09-07 盤點）。"""
     words = _SLUG_KEEP.findall(task or "")
-    slug = "-".join(w.lower() for w in words)
-    return slug or "handoff"
+    return "-".join(w.lower() for w in words)
 
 
 def _task_skeleton(task: str) -> str:
@@ -172,6 +182,10 @@ def main() -> int:
     os.makedirs(directory, exist_ok=True)
 
     slug = a.slug.strip() or _slug_from_task(a.task)
+    if not slug:
+        print(f"--task \"{a.task}\" 抽不出任何英數字元當檔名——純中文任務名"
+              "（合規的那種）必須自己補 --slug，不猜音譯、不 fallback 成固定字樣")
+        return 2
     filename = f"{datetime.date.today():%Y%m%d}-{slug}.md"
     path = os.path.join(directory, filename)
     if os.path.exists(path):
