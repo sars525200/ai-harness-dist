@@ -42,7 +42,16 @@ MUTATIONS = [
     ),
     (
         "零值不標 rt-zero（0 跟正常值長得一樣）",
+        # 錨點 2026-09-07 多帶兩行：`cls = "" if v else " rt-zero"` 在目標檔有
+        # **三份逐字同文**（list／int／else 三個分支），而 `replace(…, 1)` 只換
+        # 第一份 —— 這條的名字講的是「0」＝ int 分支，原錨點卻打中 list 分支。
+        # 逐份實跑：list 紅、int 紅、**else 分支沒人在測**（改壞了測試照樣綠）。
+        # 綁回名字所指的那一份；else 分支沒人守這件事留在這裡當紀錄。
+        '        elif isinstance(v, int):\n'
+        '            txt = str(v)\n'
         '            cls = "" if v else " rt-zero"',
+        '        elif isinstance(v, int):\n'
+        '            txt = str(v)\n'
         '            cls = ""',
     ),
     (

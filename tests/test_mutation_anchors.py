@@ -44,6 +44,16 @@ def _read(path: str) -> str:
         return fh.read()
 
 
+#: 被測檔內容的快取。同一支被測檔會被十幾條錨點各查一次。
+_TARGET_SRC: dict = {}
+
+
+def _target_src(path: str) -> str:
+    if path not in _TARGET_SRC:
+        _TARGET_SRC[path] = _read(path)
+    return _TARGET_SRC[path]
+
+
 def _as_str(node: ast.AST) -> "str | None":
     r"""模組層賦值右側能不能當成字串常數。
 
@@ -163,7 +173,11 @@ def _delegated_anchors(tree: ast.Module, consts: dict) -> dict:
 
 
 def _anchor_lists(tree: ast.Module, consts: dict, funcs=(), delegated=None) -> "list[tuple[str, list, int]]":
-    """回傳 [(清單名, [(說明, 錨點字串, 該項的被測檔常數名或 None), ...], 讀不出來的項數), ...]。
+    """回傳 [(清單名, [(說明, 錨點, 被測檔常數名或 None, 是不是委派), ...], 讀不出來的項數), ...]。
+
+    第四欄「是不是委派」決定要不要驗唯一性：委派錨點**不會被拿去做字串替換**
+    （那些變異動的是資料檔），所以「同文幾份」對它們沒有後果；直接錨點才會
+    走 `replace(old, new, 1)`，份數才是判準。
 
     兩種形狀：
       三元組 `(說明, 錨點, 換成什麼)`        —— 全清單共用模組層的 TARGET
@@ -202,13 +216,13 @@ def _anchor_lists(tree: ast.Module, consts: dict, funcs=(), delegated=None) -> "
                 got = (delegated or {}).get(anchor.id) or []
                 if got:
                     for a in got:
-                        items.append((str(label.value), a, per_target))
+                        items.append((str(label.value), a, per_target, True))
                 else:
                     unreadable += 1
                 continue
             text = _fold_str(anchor, consts)
             if isinstance(label, ast.Constant) and text is not None:
-                items.append((str(label.value), text, per_target))
+                items.append((str(label.value), text, per_target, False))
             else:
                 unreadable += 1
         found.append((name, items, unreadable))
@@ -239,7 +253,7 @@ def run() -> "tuple[int, list[str]]":
             failures.append(f"{base} 取不到任何錨點 —— 清單名要是 {'／'.join(_LIST_NAMES)}")
             continue
         # 每一項都自己指定被測檔時，模組層的 TARGET 不是必要的。
-        needs_default = any(t is None for _, items, _ in lists for _, _, t in items)
+        needs_default = any(t is None for _, items, _ in lists for _, _, t, _ in items)
         if needs_default and default_target is None:
             failures.append(
                 f"{base} 找不到被測檔常數（{'／'.join(_TARGET_NAMES)}）"
@@ -253,7 +267,7 @@ def run() -> "tuple[int, list[str]]":
                     f"{base} · {list_name} 有 {unreadable} 項讀不出錨點"
                     "（形狀不是三元組或四元組）—— 那幾項等於沒在測，而畫面上看不出少了它們"
                 )
-            for label, anchor, per_target in items:
+            for label, anchor, per_target, delegated_anchor in items:
                 target = consts.get(per_target) if per_target else default_target
                 if target is None:
                     failures.append(
@@ -264,12 +278,34 @@ def run() -> "tuple[int, list[str]]":
                 if not os.path.exists(target):
                     failures.append(f"{base} · {list_name}「{label}」的被測檔不存在：{target}")
                     continue
-                if anchor in _read(target):
+                # **數份數，不是問「在不在」**（2026-09-07 加）：
+                # 變異腳本一律用 `replace(old, new, 1)`，只換由上往下第一份。
+                # 錨點有兩份以上同文時，「第一份是哪個函式」既沒有人寫下來、
+                # 也沒有人在維護 —— 中間插一段程式碼就會悄悄換成另一個。
+                # 實際咬到：mutate_roles_topology 的「不排除 subagent 分檔」
+                # 那條，錨點三份同文，打中的是唯一沒人測的 running_by_role，
+                # 這條變異從寫下來那天起就印「沒紅 ✘ 假綠燈！」。
+                # 舊版只驗「字串在不在」，對這種漂法完全看不見。
+                # 委派錨點只做「這段訊息還在不在」的存在檢查，沒有替換行為，
+                # 份數對它沒有後果 —— 對它套唯一性只會製造一條永遠紅的假警報，
+                # 而永遠紅的守門等於沒有守門。
+                n = _target_src(target).count(anchor)
+                if n >= 1 and delegated_anchor:
                     passed += 1
-                else:
+                elif n == 1:
+                    passed += 1
+                elif n == 0:
                     failures.append(
                         f"{base} · {list_name}「{label}」的錨點已漂掉，"
                         f"在 {os.path.basename(target)} 裡找不到 —— 這個變異等於沒在測"
+                    )
+                else:
+                    failures.append(
+                        f"{base} · {list_name}「{label}」的錨點在 "
+                        f"{os.path.basename(target)} 裡有 {n} 份逐字同文 —— "
+                        "replace(…, 1) 只換第一份，而它是哪一份沒有人在維護；"
+                        "打中沒人測的那一份時，這條變異會靜靜地什麼都不測。"
+                        "請把錨點往上下多帶幾行讓它唯一"
                     )
     return passed, failures
 

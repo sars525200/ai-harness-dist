@@ -55,8 +55,16 @@ MUTATIONS = [
     ),
     (
         "ensure_ascii 沒關（中文變 \\uXXXX）",
-        "}, ensure_ascii=False))",
-        "}))",
+        # 錨點 2026-09-07 多帶兩行：`}, ensure_ascii=False))` 在 dispatch.py 有
+        # **兩份逐字同文**（便箋投遞、直接投遞），`replace(…, 1)` 只換第一份。
+        # 逐份實跑兩份都會紅，但「打中哪一份」由行序決定、沒有人在維護。
+        # 綁直接投遞那一份：絕大多數規則走的是它。
+        '                    "additionalContext": joined,\n'
+        '                }\n'
+        '            }, ensure_ascii=False))',
+        '                    "additionalContext": joined,\n'
+        '                }\n'
+        '            }))',
     ),
     (
         "shadow 不再 short-circuit（shadow 的零影響承諾破功）",
@@ -107,7 +115,13 @@ MUTATIONS = [
     # ── 2026-08-22（E-8）便箋從單槽改成可累積，補四個變異 ──────────────
     (
         "便箋退回單槽覆寫（＝E-8 改動被 revert，後一則蓋掉前一則）",
-        "        data = _read_pending(path)",
+        # 錨點 2026-09-07 多帶一行：`data = _read_pending(path)` 在 dispatch.py 有
+        # **兩份逐字同文**（排入佇列、取出投遞）。這條講的是「排入時蓋掉前一則」，
+        # 多帶上一行 `path = _pending_path(session_id)` 才咬得住排入那一份
+        # —— 取出那一份的上一行是 `return ""`。
+        '        path = _pending_path(session_id)\n'
+        '        data = _read_pending(path)',
+        '        path = _pending_path(session_id)\n'
         '        data = {"entries": [], "dropped": 0}',
     ),
     (
