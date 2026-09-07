@@ -157,13 +157,74 @@ def run(cmd: list[str], cwd: str | None = None, timeout: int = 300):
     return r.returncode, (out + err).strip()
 
 
-def resource_path(name: str) -> Path | None:
-    """打包後在 _MEIPASS，當 .py 跑時在本檔旁邊。都沒有回 None（讓人自己挑，不猜）。"""
-    for base in (getattr(sys, "_MEIPASS", None), Path(__file__).resolve().parent):
+DRIVE_REMOVABLE, DRIVE_FIXED = 2, 3
+
+
+def _drives(kinds: tuple[int, ...]) -> list[Path]:
+    """列出指定型別的磁碟根目錄。探測失敗回空清單，不讓呼叫端當掉。"""
+    out: list[Path] = []
+    try:
+        import ctypes  # noqa: PLC0415
+        drive_type = ctypes.windll.kernel32.GetDriveTypeW
+        for code in range(ord("A"), ord("Z") + 1):
+            root = Path("%s:\\" % chr(code))
+            if drive_type(str(root)) in kinds and root.exists():
+                out.append(root)
+    except Exception:
+        pass
+    return out
+
+
+def find_settings_json() -> Path | None:
+    """找舊機帶來的 `settings.json`。**找不到回 None，不猜一個。**
+
+    2026-09-08 新機打回來：exe 版第 4 分頁那一格是空的，人得自己按「瀏覽…」，
+    而檔案明明就躺在 exe 旁邊。原因是舊版只看 `_MEIPASS` 與 `__file__` 的資料夾
+    ——**onefile 打包後這兩個都指向解壓縮的暫存夾**，不是人看得到的那個資料夾。
+    `sys.executable` 的資料夾才是。順手把隨身碟也掃進來（主控台版一直有掃）。
+    """
+    cands: list[Path] = []
+    bases = [Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None,
+             getattr(sys, "_MEIPASS", None),
+             Path(__file__).resolve().parent]
+    for base in bases:
         if base:
-            p = Path(base) / name
-            if p.exists():
+            cands.append(Path(base) / "settings.json")
+    for d in _drives((DRIVE_REMOVABLE, DRIVE_FIXED)):
+        cands.append(d / "settings.json")
+        cands.append(d / ".claude" / "settings.json")
+    for p in cands:
+        try:
+            if p.is_file():
                 return p
+        except OSError:
+            continue
+    return None
+
+
+def find_harness_repo(*extra: str) -> Path | None:
+    """找這台機器上**已經下載好**的 harness，回它的根目錄。
+
+    2026-09-08 新機打回來：步驟 3 把 repo 放到 `D:\\AI-Unifi\\.ai-harness`
+    （人自己改過目的地），關掉重開之後第 4 分頁只去看預設路徑
+    `D:\\Patrick-AI\\.ai-harness`，於是印「先完成步驟 3」——**明明已經下載完了**。
+    照那句話做要重下載 25 MB，而畫面上沒有任何地方說「換一個位置找找看」。
+    記住位置的責任不該落在人身上：這裡直接去找。
+    """
+    cands: list[Path] = [Path(e.strip()) for e in extra if e and e.strip()]
+    cands.append(Path(default_target()))
+    for d in _drives((DRIVE_FIXED,)):
+        cands.append(d / ".ai-harness")
+        try:
+            cands.extend(sorted(d.glob("*/.ai-harness")))
+        except OSError:
+            pass
+    for c in cands:
+        try:
+            if (c / "tools" / "wire_machine.py").is_file():
+                return c
+        except OSError:
+            continue
     return None
 
 
@@ -220,13 +281,19 @@ class App(tk.Tk):
 
         self.q: queue.Queue = queue.Queue()
         self.busy = False
-        self.source_path: Path | None = resource_path("settings.json")
+        self.source_path: Path | None = find_settings_json()
         self.repo_dir: Path | None = None
         self.env_ok = False
         self.previewed = False
 
         self._build()
         self.after(120, self._pump)
+        # 開場就把「這台已經有 harness」找出來填進步驟 3 那格。不填的代價是
+        # 關掉重開之後第 4 分頁只認預設路徑，會叫人重下載一次已經有的東西。
+        found = find_harness_repo()
+        if found:
+            self._set_target(str(found))
+            self.say("[OK] 這台已經有 harness：%s（步驟 3 可以跳過）" % found)
         self.check_env()
 
     # ── 版面 ────────────────────────────────────────────────
@@ -327,8 +394,10 @@ class App(tk.Tk):
         self.e_src.pack(side="left", fill="x", expand=True)
         tk.Button(r, text="瀏覽…", width=8, command=self.pick_source).pack(side="left", padx=6)
         tk.Label(self.tab4, font=self.f_small, fg="#666", justify="left", anchor="w",
-                 text="打包成 exe 時這份會包在裡面，就不用帶隨身碟。現在當 .py 跑，"
-                      "放在本檔旁邊或自己選一份。").pack(anchor="w")
+                 text="開啟時會自動找：exe（或本檔）旁邊、各磁碟根目錄、各磁碟的 .claude 資料夾。"
+                      "上面那格是空的就代表都沒找到，按「瀏覽…」自己挑一份。"
+                      "⚠ 這份**不會**被包進 exe——它帶著你的權限規則與工作目錄，"
+                      "烤進一個到處複製的檔案裡不妥。").pack(anchor="w")
 
         bar = tk.Frame(self.tab4); bar.pack(fill="x", pady=(14, 0))
         self.b_preview = tk.Button(bar, text="① 先看計畫（不動任何東西）", width=26,
@@ -560,16 +629,34 @@ class App(tk.Tk):
             self.e_src.insert(0, f)
 
     def _wire_ready(self) -> tuple[Path, Path] | None:
-        repo = self.repo_dir or Path(self.e_target.get().strip())
-        wire = repo / "tools" / "wire_machine.py"
-        if not wire.exists():
-            self.say("[!!] 找不到 %s —— 先完成步驟 3。" % wire)
+        repo = self.repo_dir or find_harness_repo(self.e_target.get())
+        if repo is None:
+            self.say("[!!] 這台機器上找不到已下載的 harness——先完成步驟 3。")
+            self.say("     找過：步驟 3 那格的路徑、預設路徑，"
+                     "以及每顆固定磁碟的 `\\.ai-harness` 與 `\\*\\.ai-harness`。")
             return None
-        src = Path(self.e_src.get().strip())
-        if not src.exists():
-            self.say("[!!] settings.json 不存在：%s" % src)
+        if repo != self.repo_dir:
+            self.repo_dir = repo
+            self.say("[OK] 這台已經有 harness 了：%s（不必重跑步驟 3）" % repo)
+            self.ui(self._set_target, str(repo))
+        raw = self.e_src.get().strip()
+        if not raw:
+            # **空白不是路徑。** `Path("")` 會變成 `Path(".")`，而 `.` 是存在的
+            # 資料夾 ⇒ 舊寫法的 `exists()` 守衛把它放過去，接線器拿 `.` 去
+            # `read_bytes()`，畫面上吐出一整段
+            # `PermissionError: [Errno 13] Permission denied: '.'`。
+            # 2026-09-08 新機真的撞到——**看起來像程式壞了，其實只是沒選檔案**。
+            self.say("[!!] 還沒指定舊電腦的 settings.json——按右邊「瀏覽…」挑一份。")
+            return None
+        src = Path(raw)
+        if not src.is_file():
+            self.say("[!!] 這不是一個檔案：%s" % src)
             return None
         return repo, src
+
+    def _set_target(self, text) -> None:
+        self.e_target.delete(0, "end")
+        self.e_target.insert(0, text)
 
     def _run_wire(self, apply: bool) -> None:
         got = self._wire_ready()
