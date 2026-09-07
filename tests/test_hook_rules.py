@@ -26,9 +26,16 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEN_PATH = os.path.join(ROOT, "dashboard", "gen_hook_rules.py")
+HOOKS_DIR = os.path.join(ROOT, "hooks")
 
 
 def _load():
+    # report.py 已改成 `from contract import STATE_DIR`（2026-09-05·B4）；
+    # gen_hook_rules 自己的 _load_report() 有補 sys.path，但這裡是直接載入
+    # gen_hook_rules 本檔，它 import 時才會去 exec_module report.py，
+    # 得先把 hooks/ 放進 sys.path 才不會撞 ModuleNotFoundError。
+    if HOOKS_DIR not in sys.path:
+        sys.path.insert(0, HOOKS_DIR)
     spec = importlib.util.spec_from_file_location("gen_hook_rules_under_test", GEN_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -95,6 +102,11 @@ def _case_probe_pattern_single_truth(fails: list) -> None:
     here = os.path.dirname(os.path.abspath(__file__))
 
     def _load_by_path(rel: str, name: str):
+        # report.py 已改成 `from contract import STATE_DIR`（2026-09-05·B4），
+        # 直接載入 hooks/report.py 得先讓 hooks/ 在 sys.path 上，否則
+        # exec_module 時撞 ModuleNotFoundError（見 _load() 同一個坑）。
+        if HOOKS_DIR not in sys.path:
+            sys.path.insert(0, HOOKS_DIR)
         spec = importlib.util.spec_from_file_location(
             name, os.path.join(here, "..", *rel.split("/")))
         mod = importlib.util.module_from_spec(spec)

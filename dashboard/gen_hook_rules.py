@@ -323,7 +323,15 @@ def _esc(t: str) -> str:
 
 
 def _load_report():
-    """匯入 report.py 取它的 loader —— 掃描與 probe 排除規則只能有一份真相。"""
+    """匯入 report.py 取它的 loader —— 掃描與 probe 排除規則只能有一份真相。
+
+    2026-09-07：report.py 已改成 `from contract import STATE_DIR`（2026-09-05·B4），
+    這裡用 spec_from_file_location 直接載入不會自動把 hooks/ 加進 sys.path，
+    exec_module 時就撞 `ModuleNotFoundError: No module named 'contract'`。
+    """
+    hooks_dir = str(REPORT_PY.parent)
+    if hooks_dir not in sys.path:
+        sys.path.insert(0, hooks_dir)
     spec = importlib.util.spec_from_file_location("harness_report", REPORT_PY)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

@@ -32,6 +32,18 @@
       "where": "CLOUD_BACKUP_PLAN.md:252、TODOS.md:93",
       "reason": "雲端異地備份（`github.com/sars525200/ai-harness`）**第一次推上去時的 tip**。那份是清洗過的複製品：clone 一份、重寫內容與 commit metadata 再推，本機歷史全程未被改寫 ⇒ **兩份歷史刻意分叉、識別碼完全不同**，這顆物件從來沒有在本地存在過，也永遠不會。（user 2026-09-04 裁定「雲端的才清洗，本地的不動」；新舊對照表在 `.scratch/cloud-export/commit-map-20260904.txt`，不進版控。）⚠ 同理，往後任何寫進文件的雲端 tip 都是這一類 —— 不要用 `git log` 去查真值代入，那會查到另一份歷史的東西。",
       "decided_on": "2026-09-05"
+    },
+    {
+      "value": "83c93e0d",
+      "where": "UNIVERSAL_HARNESS_PLAN.md:73",
+      "reason": "同上一筆 `08d06eb2` 的道理：雲端異地備份清洗複製品的 tip，跟本機歷史刻意分叉，物件從來沒在本地存在過。",
+      "decided_on": "2026-09-07"
+    },
+    {
+      "value": "f21838f",
+      "where": "MEMORY_RESTORE_PLAN.md:77、82",
+      "reason": "記憶 repo 當時的 HEAD。**記憶 repo 已於 2026-09-05 全部拆除**（user 裁定記憶不跨機器延續，見 MEMORY_RESTORE_PLAN.md T6）——.git、本機 bare 鏡像、NAS 離線包三層當天全刪，這顆物件已無任何本地副本可核對，且永遠不會再有（拆除是刻意的，不是待修）。",
+      "decided_on": "2026-09-07"
     }
   ]
 }

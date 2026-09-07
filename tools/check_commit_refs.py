@@ -61,7 +61,12 @@ TOKEN_RE = re.compile(r"`([0-9a-f]{7,40})`")
 # ⚠ "sha8" 是 2026-09-05 補的：`user-rules-reconcile.md` 那張表有一欄就叫 SHA8，
 # 記的是**貼進去的內容摘要**不是 commit。三個檔各引用它一次，全都在講「這一欄」，
 # 三處都被誤判成 git hash（其中兩處的行文本身就在說它是誤判）。
-CONTEXT_SKIP = ("session", "sha256", "sha-256", "sha8", "本線")
+# ⚠ "對話" 是 2026-09-07 補的：`MODEL_ROUTING_PLAN.md`／`TOKEN_COST_PLAN.md`／
+# `COST_OBSERVABILITY_PLAN.md` 引用的是 Claude session id（jsonl 檔名前 8 碼），
+# 不是 git commit——跟英文 "session" 是同一類誤判，只是這批文件用中文講。
+# 逐一補回 allow list 會違反本檔 `_why` 的收錄標準（那份清單刻意不收 session id），
+# 正解跟 "session" 一樣是結構性排除。
+CONTEXT_SKIP = ("session", "sha256", "sha-256", "sha8", "本線", "對話")
 
 
 def load_allow() -> dict:
@@ -77,7 +82,12 @@ def load_allow() -> dict:
 
 def exists(sha: str) -> bool:
     for repo in REPOS:
-        if not os.path.isdir(os.path.join(repo, ".git")):
+        # `.git` 在一般 repo 是目錄，但在 git worktree 裡是一個指向
+        # `<主 repo>/.git/worktrees/<name>` 的檔案（2026-09-07 實測抓到：
+        # 本檔在 worktree 底下跑時，`isdir()` 一律 False，ROOT 這個 repo
+        # 就被整個跳過 —— 連真的存在的 hash 都會被判「四個 repo都找不到」）。
+        # `exists()` 對「一般 repo」和「worktree」都成立，判準改用它。
+        if not os.path.exists(os.path.join(repo, ".git")):
             continue
         r = subprocess.run(["git", "-C", repo, "cat-file", "-e", sha],
                            capture_output=True)
