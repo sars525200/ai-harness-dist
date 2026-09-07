@@ -40,18 +40,64 @@ APP_TITLE = "Harness 換機安裝精靈"
 
 # 官方下載頁。**只連到官方入口、不直接抓安裝檔**——直連檔案的網址才是會過期、
 # 也才是要驗雜湊值的那一種；連到入口頁由人自己下載，那條資安責任就不在這支身上。
+# 第六欄 `level`：`must`＝接線真的需要，缺了就別往下走；`nice`＝只有某一步需要，
+# 缺了**不影響接線**。2026-09-07 真機實測逼出來的：主控台版的同一段檢查對 `gh`
+# 明寫「接線本身用不到它」，視窗版卻把四個並列成「都要有」並染紅——**兩版判準不一致，
+# 而嚴的那版嚴錯地方**，人在新機前面看到紅字就不敢往下按。
 REQUIRED = [
     ("Python",       "py",     ["-3", "--version"],  "https://www.python.org/downloads/",
-     "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效"),
+     "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must"),
     ("Git",          "git",    ["--version"],        "https://git-scm.com/download/win",
-     "用來把 harness 下載下來"),
+     "用來把 harness 下載下來", "must"),
     ("GitHub CLI",   "gh",     ["--version"],        "https://cli.github.com/",
-     "用來登入 GitHub（repo 是私人的）"),
+     "只有「登入 GitHub」那一步要它；harness 已經下載完就用不到", "nice"),
     ("Claude Code",  "claude", ["--version"],        "https://claude.com/claude-code",
-     "主角"),
+     "接線是把連結建進它的設定資料夾，所以看資料夾在不在，不看 PATH", "must"),
 ]
 
+# 接線的目標資料夾。**Claude Code 的判準是它，不是 PATH 上有沒有 `claude` 指令**——
+# 2026-09-07 真機實測：桌面版跑得好好的，PATH 上卻沒有 `claude`（那是 npm 版才會裝的
+# shim），於是精靈永遠說「缺少 Claude Code」。問錯問題比答錯更難查，因為畫面看起來
+# 很篤定。主控台版一直都是看這個資料夾，這裡改成跟它一致。
+CLAUDE_HOME = Path.home() / ".claude"
+
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+
+
+def refresh_path_from_registry() -> None:
+    """回登錄檔重讀系統與使用者的 PATH，蓋掉本程序啟動當下的那份快照。
+
+    2026-09-07 真機實測逼出來的第二個坑：**執行中的程序抓的是啟動當下的環境**。
+    先開精靈、後裝軟體的人按「重新檢查」，是在同一個程序裡重跑，讀到的還是舊 PATH
+    ⇒ 裝好了它照樣說缺少。原本的提示叫人「把這個視窗以外的終端機關掉重開」，
+    **漏了說它自己也要重開**——而那正是唯一沒被關掉的那個視窗。
+
+    與其叫人重開，不如讓「重新檢查」真的重新讀。讀不到就靜靜跳過，
+    維持原本的行為，不因為刷新失敗而擋住任何人。
+    """
+    if os.name != "nt":
+        return
+    try:
+        import winreg
+    except ImportError:
+        return
+    parts = []
+    for root, sub in (
+        (winreg.HKEY_LOCAL_MACHINE,
+         r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+        (winreg.HKEY_CURRENT_USER, "Environment"),
+    ):
+        try:
+            with winreg.OpenKey(root, sub) as key:
+                value, _ = winreg.QueryValueEx(key, "Path")
+                if value:
+                    parts.append(os.path.expandvars(value))
+        except OSError:
+            continue
+    if parts:
+        # 舊的那份留在最後：登錄檔沒有的東西（例如這個 session 自己加的）不要弄丟。
+        parts.append(os.environ.get("PATH", ""))
+        os.environ["PATH"] = os.pathsep.join(p for p in parts if p)
 
 
 def child_env() -> dict:
@@ -193,10 +239,12 @@ class App(tk.Tk):
 
     def _build_tab1(self) -> None:
         tk.Label(self.tab1, justify="left", text=(
-            "這 4 個都要有。Python 特別重要——少了它，規則會安靜地整組失效，"
-            "畫面上看不出任何異狀。")).pack(anchor="w", pady=(0, 10))
+            "標「缺少」的才擋你，標「選配」的沒裝也能往下走。Python 特別重要——"
+            "少了它，規則會安靜地整組失效，畫面上看不出任何異狀。\n"
+            "裝完按「重新檢查」就好，這支會自己重讀 PATH，不必重開視窗。"
+        )).pack(anchor="w", pady=(0, 10))
         self.rows = {}
-        for name, exe, _a, url, why in REQUIRED:
+        for name, exe, _a, url, why, _level in REQUIRED:
             row = tk.Frame(self.tab1); row.pack(fill="x", pady=3)
             st = tk.Label(row, text="檢查中", width=8, anchor="w", fg="#888")
             st.pack(side="left")
@@ -305,33 +353,52 @@ class App(tk.Tk):
     # ── 步驟 1：環境 ────────────────────────────────────────
     def check_env(self) -> None:
         def work():
+            refresh_path_from_registry()
             self.say("── 檢查環境 ──")
-            missing = []
-            for name, exe, args, _url, _why in REQUIRED:
+            blocking, optional = [], []
+            for name, exe, args, _url, _why, level in REQUIRED:
                 if shutil.which(exe) is None:
                     rc, out = -1, "PATH 上找不到 %s" % exe
                 else:
                     rc, out = run([exe] + args, timeout=60)
                 ok = rc == 0
-                ver = out.splitlines()[0][:60] if ok and out else ""
-                self.say("%s %-12s %s" % ("[OK]" if ok else "[!!]", name, ver or out[:70]))
+                # Claude Code 的真判準是設定資料夾，不是 PATH 上的指令：桌面版
+                # 不裝那個 shim，但接線要的就是這個資料夾。找不到指令時退到資料夾。
+                if not ok and name == "Claude Code" and CLAUDE_HOME.is_dir():
+                    ok = True
+                    out = "設定資料夾在：%s（桌面版不會在 PATH 上放 claude，正常）" % CLAUDE_HOME
+                ver = out.splitlines()[0][:70] if ok and out else ""
+                mark = "[OK]" if ok else ("[!!]" if level == "must" else "[--]")
+                self.say("%s %-12s %s" % (mark, name, ver or out[:70]))
                 if not ok:
-                    missing.append(name)
-                self.ui(self._set_row, (name, ok))
-            self.env_ok = not missing
-            if missing:
+                    (blocking if level == "must" else optional).append(name)
+                self.ui(self._set_row, (name, ok, level))
+            self.env_ok = not blocking
+            if blocking:
                 self.ui(self._env_result,
-                        "還缺 %d 個：%s。裝完記得把這個視窗以外的終端機都關掉重開。"
-                        % (len(missing), "、".join(missing)))
+                        "還缺 %d 個非有不可的：%s。裝完按一次「重新檢查」就好，"
+                        "這支會自己重讀 PATH，不必重開視窗。"
+                        % (len(blocking), "、".join(blocking)))
+            elif optional:
+                self.ui(self._env_result,
+                        "可以往下走。%s 沒裝，但接線用不到它。" % "、".join(optional))
+                self.say("[OK] 非有不可的都在。%s 是選配。" % "、".join(optional))
             else:
                 self.ui(self._env_result, "4 個都在，可以往下走。")
                 self.say("[OK] 環境齊全。")
         self.spawn(work)
 
     def _set_row(self, payload) -> None:
-        name, ok = payload
+        name, ok, level = payload
         st, btn = self.rows[name]
-        st.configure(text="已安裝" if ok else "缺少", fg="#2c6b4f" if ok else "#a8481b")
+        if ok:
+            st.configure(text="已安裝", fg="#2c6b4f")
+        elif level == "must":
+            st.configure(text="缺少", fg="#a8481b")
+        else:
+            # 選配的東西缺了不該染成紅字：紅色代表「你不能往下走」，
+            # 用在不擋人的東西上會讓真正的紅字失去意義。
+            st.configure(text="選配", fg="#8a6d3b")
         btn.configure(state="disabled" if ok else "normal")
 
     def _env_result(self, text) -> None:
