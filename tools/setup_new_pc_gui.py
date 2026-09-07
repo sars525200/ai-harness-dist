@@ -10,17 +10,26 @@ r"""新電腦安裝精靈（偵測＋引導版·視窗介面）。
 每一列仍保留「開啟下載頁」：winget 裝不動時要有第二條路，
 而「唯一的路失敗了」跟「還有一條路」對站在機器前面的人差很多。
 
-**必裝的是 4 個不是 3 個。** harness 的 6 條 hook 全部是 `py -3 ...` 開頭，
-少了 Python 每一條 hook 都會失敗**而且不報錯**——對話照常進行、規則一條都不跑。
-那是這套系統最貴的失效方式，所以 Python 列為必要而非選配。
+**要檢查的是 5 列**（2026-09-08 起）。兩件事值得單獨說：
+* Python——6 條 hook 全部是 `py -3 ...` 開頭，少了它每一條都會失敗**而且不報錯**，
+  對話照常進行、規則一條都不跑。那是這套系統最貴的失效方式。
+* Claude 拆成「設定資料夾」與「CLI」兩列——**資料夾在不代表 CLI 在**。桌面版不放
+  `claude` 到 PATH，而技能與子代理會直接叫它。合成一列的話綠燈會把缺口蓋掉。
 
-**settings.json 從哪來**（三段 fallback，找不到就讓人自己挑，不猜）：
-打包成 exe 時放進 `sys._MEIPASS`；當 `.py` 跑時放在本檔旁邊；都沒有就開檔案對話框。
-**不要把它 commit 進版控**——那份有 116 條權限規則與 12 個工作目錄，是個人／公司的
-專案結構；自己用無妨，要散佈得換成乾淨範本（見 `UNIVERSAL_HARNESS_PLAN.md` §0.5）。
+**畫面上那句 `why` 要短，長版寫在 `detail` 且只在那一列缺少時才進紀錄。**
+五列各掛一段長句會疊成一牆字，而需要那句話的人是東西缺了的那一個。
+
+**settings.json 從哪來**（`find_settings_json()`，找不到就讓人自己挑，不猜）：
+exe（或本檔）旁邊 → `sys._MEIPASS` → 各磁碟根目錄與其 `.claude` 資料夾。
+⚠ **onefile 打包後 `__file__` 與 `_MEIPASS` 都指向解壓縮暫存夾**，人看得到的那個
+資料夾是 `sys.executable` 的——2026-09-08 就是漏了它，exe 版那格永遠空白。
+**不要把它 commit 進版控、也不要 `--add-data` 進 exe**——那份有 116 條權限規則與
+12 個工作目錄，是個人／公司的專案結構；自己用無妨，要散佈得換成乾淨範本
+（見 `UNIVERSAL_HARNESS_PLAN.md` §0.5）。
 
 之後要包成 exe：`pip install pyinstaller` 後
-`pyinstaller --onefile --windowed --add-data "settings.json;." tools\setup_new_pc_gui.py`
+`pyinstaller --onefile --windowed tools\setup_new_pc_gui.py`（**刻意不帶 `--add-data`**，
+理由同上；代價是 settings.json 要跟 exe 放在同一個資料夾）。
 ⚠ 未簽章的 exe 每個使用者都會看到「Windows 已保護您的電腦」，商用前要先買程式碼簽章憑證。
 """
 from __future__ import annotations
@@ -76,32 +85,36 @@ class Need(NamedTuple):
     exe: str
     args: list
     url: str
-    why: str
+    why: str                         # 畫面上那句，短。長了會折行、五列疊起來像一牆字
     level: str                       # must＝缺了就別往下走；nice＝只有某一步要
     winget: str | None
     folder: Path | None = None
+    detail: str = ""                 # 缺了會壞什麼。**只在那一列缺少時才印進紀錄**
 
 
 REQUIRED = [
     Need("Python", "py", ["-3", "--version"], "https://www.python.org/downloads/",
-         "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must",
-         "Python.Python.3.13"),
+         "規則靠它跑", "must", "Python.Python.3.13",
+         detail="harness 的 6 條 hook 全部是 py -3 開頭。缺了每一條都失敗"
+                "而且不報錯——對話照常進行、規則一條都不跑。"),
     Need("Git", "git", ["--version"], "https://git-scm.com/download/win",
-         "用來把 harness 下載下來", "must", "Git.Git"),
+         "用來下載 harness", "must", "Git.Git",
+         detail="步驟 3 的 git clone 要它。"),
     Need("GitHub CLI", "gh", ["--version"], "https://cli.github.com/",
-         "只有還沒下載 harness 時才要它；下載完就用不到", "nice", "GitHub.cli"),
+         "只有下載時要", "nice", "GitHub.cli",
+         detail="harness 那個 repo 是私人的，要先 gh auth login 才 clone 得下來。"
+                "已經下載完就用不到，接線不需要它。"),
     Need("Claude 設定資料夾", "claude", ["--version"], "https://claude.com/claude-code",
-         "接線就是把技能與角色的連結建進這個資料夾；桌面版或指令列版跑過一次就會有",
-         "must", "Anthropic.ClaudeCode", CLAUDE_HOME),
+         "接線的目標", "must", "Anthropic.ClaudeCode", CLAUDE_HOME,
+         detail="接線就是把技能與角色的連結建進 ~/.claude。"
+                "桌面版或指令列版跑過一次就會有；沒有它接線沒有目標。"),
     # 2026-09-08 user 指出的缺口：**上面那一列過了不代表指令列版在**。
-    # 桌面版不放 `claude` 到 PATH，而 harness 有四個地方直接 `shutil.which("claude")`
-    # 去叫它：`hooks/session_title.py`（換 token）、`tools/run_claude_reviewer.py`
-    # （找不到就拒跑）、`tools/skill_watch_run.py`（讀版本）、`skills/skill-watch`。
-    # 缺了不會擋接線，會讓那些功能**安靜地降級**——所以列 must，並在這裡寫清楚
-    # 缺了會壞什麼，而不是只寫「建議安裝」。
     Need("Claude CLI", "claude", ["--version"], "https://claude.com/claude-code",
-         "技能與子代理會直接叫 claude 指令；缺了 /adversarial-review 拒跑、"
-         "換 token 與版本偵測靜默失效", "must", "Anthropic.ClaudeCode"),
+         "技能與子代理要叫它", "must", "Anthropic.ClaudeCode",
+         detail="harness 有四個地方直接 shutil.which(\"claude\")："
+                "hooks/session_title.py 換 token、tools/run_claude_reviewer.py 找不到就拒跑、"
+                "tools/skill_watch_run.py 讀版本、skills/skill-watch。"
+                "缺了不擋接線，會讓這些安靜降級——不報錯，所以更難發現。"),
 ]
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -336,8 +349,8 @@ class App(tk.Tk):
         top.pack(fill="x")
         tk.Label(top, text=APP_TITLE, font=self.f_head).pack(anchor="w")
         tk.Label(top, font=self.f_small, fg="#555", justify="left",
-                 text="缺什麼就按那一列的「自動安裝」，它會用 Windows 內建的 winget 幫你裝，"
-                      "裝完自己更新狀態。裝不動時右邊還有官方下載頁。").pack(anchor="w", pady=(2, 0))
+                 text="缺什麼就按那一列的「自動安裝」。裝不動時右邊有官方下載頁。"
+                 ).pack(anchor="w", pady=(2, 0))
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=16, pady=(8, 4))
@@ -363,9 +376,8 @@ class App(tk.Tk):
 
     def _build_tab1(self) -> None:
         tk.Label(self.tab1, justify="left", text=(
-            "標「缺少」的才擋你，標「選配」的沒裝也能往下走。Python 特別重要——"
-            "少了它，規則會安靜地整組失效，畫面上看不出任何異狀。\n"
-            "裝完按「重新檢查」就好，這支會自己重讀 PATH，不必重開視窗。"
+            "標「缺少」的才擋你，「選配」沒裝也走得下去。"
+            "裝完按「重新檢查」，不必重開視窗。缺了什麼會壞什麼，看下面的過程紀錄。"
         )).pack(anchor="w", pady=(0, 10))
         self.rows = {}
         has_winget = shutil.which("winget") is not None
@@ -374,8 +386,8 @@ class App(tk.Tk):
             st = tk.Label(row, text="檢查中", width=8, anchor="w", fg="#888")
             st.pack(side="left")
             tk.Label(row, text=item.name, width=17, anchor="w").pack(side="left")
-            tk.Label(row, text=item.why, fg="#666", font=self.f_small, wraplength=430,
-                     justify="left", anchor="w").pack(side="left", fill="x", expand=True)
+            tk.Label(row, text=item.why, fg="#666", font=self.f_small,
+                     anchor="w").pack(side="left", fill="x", expand=True)
             # 下載頁那顆一直留著：winget 裝失敗時人要有第二條路，
             # 而「唯一的路失敗了」跟「還有一條路」對站在機器前面的人差很多。
             tk.Button(row, text="開啟下載頁", width=11,
@@ -508,6 +520,10 @@ class App(tk.Tk):
             mark = "[OK]" if ok else ("[!!]" if item.level == "must" else "[--]")
             self.say("%s %-16s %s" % (mark, item.name, ver or out[:70]))
             if not ok:
+                # 長版只在缺少時出現。畫面上五列各掛一段長句會疊成一牆字，
+                # 而真正需要那句話的人是**東西缺了的那一個**，不是每一個人。
+                if item.detail:
+                    self.say("     %s" % item.detail)
                 (blocking if item.level == "must" else optional).append(item.name)
             self.ui(self._set_row, (item.name, ok, item.level))
         self.env_ok = not blocking
