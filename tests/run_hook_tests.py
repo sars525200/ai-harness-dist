@@ -576,6 +576,7 @@ def main() -> int:
         import test_log_error_slim
         import test_checks_failopen
         import test_cloud_backup_hook
+        import test_push_cloud_backup_hex_bucket
         for run_fn, label in (
             # 這兩條放最前面是有理由的：**bytecode 不是原始碼的話，後面每一項的
             # 綠燈都不能信**（8/21 實際發生過：規則改了、pyc 沒重編、945 條全綠）。
@@ -611,6 +612,10 @@ def main() -> int:
             # 守的是「雲端備份背景化之後，失敗與漏推不會變成看不見」：撞鎖要記待推、
             # 推到一半 HEAD 動了要補推、失敗要留標記、成功要刪標記。後端換成假的。
             (test_cloud_backup_hook.run, "雲端備份背景推送（鎖／待推／HEAD 追平／失敗標記）"),
+            # 守的是 §8「棘輪自動放行·hex 桶」：長度 7/8/40/64 的純十六進位字串
+            # 不必等人判定；洩漏 canary 確認桶子邊界沒有畫歪，並逐條核對正本
+            # 規則檔左半邊零命中。
+            (test_push_cloud_backup_hex_bucket.run, "棘輪自動放行 hex 桶（§8·邊界與洩漏回歸）"),
             # 守的是「探針不會把沒接好讀成接好了」。D-1 三輪覆核連兩輪抓到同一形狀：
             # 探針把「存在／非空」當成「已改寫／已 restore」。三種靜默失效與「裝好了」
             # 同形——junction 指到別處、hook command 打空、記憶目錄是空的。

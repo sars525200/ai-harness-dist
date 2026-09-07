@@ -193,9 +193,12 @@ TOKEN_RX = re.compile(
     r"|\b[A-Z][A-Z0-9-]{2,}\b")                     # 全大寫 ≥3：縮寫、部門代號
 
 
-# 純十六進位 ≥7 字＝commit hash。它有形狀、不可能是帳號名或公司名，而文件裡
+# 純十六進位＝commit hash 或雜湊值。它有形狀、不可能是帳號名或公司名，而文件裡
 # 每引用一顆 commit 就多一個——留著會讓每次備份都要人判一串 hash。綁形狀排除，不綁名字。
-HEX_RX = re.compile(r"^[0-9a-f]{7,40}$")
+# 長度 7–40 是 git short hash／sha1；64 是額外收的 sha256（2026-09-07，
+# `CLOUD_BACKUP_PLAN.md` §8：對 16 條規則左半邊跑過洩漏測試，零命中——
+# 這條放寬前先證明它不會放行任何一條已知敏感值，不是先信綠燈）。
+HEX_RX = re.compile(r"^[0-9a-f]{7,40}$|^[0-9a-f]{64}$")
 
 
 def tokens(data: str) -> set:
