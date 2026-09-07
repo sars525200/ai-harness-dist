@@ -53,6 +53,7 @@
 | &nbsp;&nbsp;└ `hooks/rules/ctx1_resident_budget.py` | CTX-1 —— 常駐層檔案寫入後的預算檢查（PostToolUse Write/Edit） | own |
 | &nbsp;&nbsp;└ `hooks/rules/db1_deploy.py` | DB-1 —— 部署邊界對帳（攔 `git push vm`） | own |
 | &nbsp;&nbsp;└ `hooks/rules/decl1_stage_files.py` | DECL-1 —— Stop 事件觀察：這一輪有宣告階段，卻沒帶「修改檔案」欄 | own |
+| &nbsp;&nbsp;└ `hooks/rules/decl2_missing_declaration.py` | DECL-2 —— Stop shadow：這一輪明明動了檔案，卻整段找不到任何自我宣告 | own |
 | &nbsp;&nbsp;└ `hooks/rules/disp1_dispatch_discipline.py` | DISP-1 —— 這個 session 跑了一大堆工具，卻一個 subagent 都沒派 | own |
 | &nbsp;&nbsp;└ `hooks/rules/enc1_file_encoding.py` | ENC-1 —— 寫入後檢查磁碟上的實際位元組：NUL byte／BOM 方向／關鍵檔行尾 | own |
 | &nbsp;&nbsp;└ `hooks/rules/eol1_pure_eol_change.py` | EOL-1 —— commit 前擋下「純行尾變更」（PreToolUse git commit） | own |
@@ -63,7 +64,9 @@
 | &nbsp;&nbsp;└ `hooks/rules/hnd3_handoff_closing_snippet.py` | HND-3 —— Stop 閘門：這一輪動過交接檔，回覆結尾就要有可複製的 fenced code block | own |
 | &nbsp;&nbsp;└ `hooks/rules/html1_nesting.py` | HTML-1 —— 寫完 HTML 後檢查容器標籤有沒有關好（漏一個 `</div>` 會吞掉後面整片） | own |
 | &nbsp;&nbsp;└ `hooks/rules/idx1_staged_visibility.py` | IDX-1 —— `git commit` 前把整份 staged 清單攤開，並標出這一輪從沒被提過的檔 | own |
-| &nbsp;&nbsp;└ `hooks/rules/learn1_shadow.py` | LEARN-1 —— Stop shadow：碰技術面任務卻沒問過「要不要學」的訊號蒐集 | own |
+| &nbsp;&nbsp;└ `hooks/rules/learn1_shadow.py` | LEARN-1 —— Stop：碰技術面任務卻沒問過「要不要學」時提醒一次 | own |
+| &nbsp;&nbsp;└ `hooks/rules/onb1_sessionstart_notice.py` | ONB-1 —— 新專案第一次開場，還沒接上規則產生器就提醒一次 | own |
+| &nbsp;&nbsp;└ `hooks/rules/onb2_sessionstart_autoconfig.py` | ONB-2 —— 新專案第一次開場，真的自動幫他接上規則產生器（不只是印提示） | own |
 | &nbsp;&nbsp;└ `hooks/rules/pr1_plan_review_marker.py` | PR-1 —— Stop 事件：標「待審核」的計畫書，沒有有效的審查 marker 就擋 | own |
 | &nbsp;&nbsp;└ `hooks/rules/quota1_window_burn.py` | QUOTA-1 —— 五小時／七日配額視窗燒到幾成 | own |
 | &nbsp;&nbsp;└ `hooks/rules/r1_default_migration.py` | R1 —— push 邊界觀察：DEFAULT_* 常數值變動，提醒可能需要一併遷移 saved | own |
@@ -76,7 +79,6 @@
 | &nbsp;&nbsp;└ `hooks/session_scan.py` | 定期把側邊欄列表收乾淨：放生的空殼 ＋ 超過保留期的舊對話 | own |
 | &nbsp;&nbsp;└ `hooks/session_title.py` | Stop 事件：把自我宣告的「任務」名寫成這則對話的標題 | own |
 | &nbsp;&nbsp;└ `hooks/spike.py` | Step 0 schema spike —— 唯讀，只記錄不干預 | own |
-| `personal-transfer/` | 換機搬檔用的臨時容器 | own |
 | `reviewer/` | (用途待人工填寫) | own |
 | `rulefile/` | (用途待人工填寫) | own |
 | `session-archive/` | 封存／建置產物，不展開 | archive |
@@ -85,6 +87,7 @@
 | &nbsp;&nbsp;└ `skills/adversarial-review/` | 找不共用推理脈絡的獨立審查者，逐輪檢查計畫或 wayfinder map，找出會讓規則、資料或系統靜默失效的缺陷並收斂 | own |
 | &nbsp;&nbsp;└ `skills/chat-handoff/` | 任務檔的格式與換則交接 | own |
 | &nbsp;&nbsp;└ `skills/code-map-generator/` | 離線輕量掃描專案頂層目錄，產出獨立新檔 CODE_MAP.md（own/vendor/archive/dev-prod-mirror 標註＋DEV/PROD 內容一致性警告） | own |
+| &nbsp;&nbsp;└ `skills/code-rules-generator/` | 讀部門 .claude/PROJECT_CONTEXT.md（或 .cursor/ 版）的結構化 rules-content 區塊與封閉關鍵字清單，產出符合 AGENTS.md… | own |
 | &nbsp;&nbsp;└ `skills/context-health/` | 量測並瘦身「每則對話都付」的常駐層檔案（CLAUDE.md／MEMORY.md） | own |
 | &nbsp;&nbsp;└ `skills/design-spec/` | 把「要做什麼」寫成別人能接手的工作規格 | own |
 | &nbsp;&nbsp;└ `skills/domain-modeling/` | Build and sharpen a project's domain model | own |
@@ -95,6 +98,7 @@
 | &nbsp;&nbsp;└ `skills/research/` | Investigate a question against high-trust primary sources and capture the findings as a… | own |
 | &nbsp;&nbsp;└ `skills/session-workflow/` | 把一則任務從開場走到交付 | own |
 | &nbsp;&nbsp;└ `skills/skill-watch/` | 檢查你使用的 AI 平台有沒有推出新技能、改名、或移除既有能力，比對本機現況後把「可合併／可取代」的候選端到你面前 | own |
+| &nbsp;&nbsp;└ `skills/spawn-task/` | 使用者想現在就把一件事拆成獨立背景任務去做，而不是等模型自己在做事途中順手發現才喊 | own |
 | &nbsp;&nbsp;└ `skills/to-tickets/` | Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each… | own |
 | &nbsp;&nbsp;└ `skills/visual-check/` | 用 headless 截圖真的看一眼畫面，再宣稱 UI 改好了 | own |
 | &nbsp;&nbsp;└ `skills/wayfinder/` | Plan a huge chunk of work (more than one agent session can hold) as a shared map of… | own |
@@ -111,4 +115,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-06T21:23:31 -->
+<!-- generated-at: 2026-09-07T15:13:31 -->
+<!-- onb2-status: auto-generated, unreviewed -->
