@@ -1,0 +1,5 @@
+{"utterance": "這則對話太長了，先交接給新對話", "expect": "chat-handoff", "why": "description 明列觸發詞「這則太長」「交接給新對話」"}
+{"utterance": "等等要 /clear，先幫我交接一下", "expect": "chat-handoff", "why": "「/clear 前先交接」是明列觸發詞"}
+{"utterance": "這個任務規模是 M，開工當下先建交接檔", "expect": "chat-handoff", "why": "S/M 級任務開工當下就要建檔，不必等換則"}
+{"utterance": "收工，順便補一下規範跟日誌", "expect": null, "why": "收工封存走 shougong，description 明講「收工封存不是這支」"}
+{"utterance": "幫我把 CLAUDE.md 精簡一下", "expect": null, "why": "常駐層瘦身走 context-health，跟任務檔交接是不同工具"}

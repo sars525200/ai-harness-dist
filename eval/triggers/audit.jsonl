@@ -1,0 +1,5 @@
+{"utterance": "查一下 harness 現在做到哪個進度了", "expect": "audit", "why": "「查進度」是 description 明列觸發詞"}
+{"utterance": "這份計畫書寫成完成了，但我懷疑實際檔案沒改，幫我核對一下", "expect": "audit", "why": "更新看板/計畫書前確認現況，屬稽核執行器職責"}
+{"utterance": "PROGRESS.md 跟 CLAUDE.md 講的不一樣，哪一份才對", "expect": "audit", "why": "多真相判準（同一件事兩份文件說法不同）"}
+{"utterance": "這個 bug 一直修不好，幫我查根因", "expect": null, "why": "查根因走 diagnose-bug，不是文件/進度一致性稽核"}
+{"utterance": "把這份計畫拆成一張張票", "expect": null, "why": "拆票走 to-tickets，audit 只出差異清單不動手改分工"}

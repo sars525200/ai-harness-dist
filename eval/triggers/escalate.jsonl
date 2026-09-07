@@ -1,0 +1,5 @@
+{"utterance": "這個角色回報說【需要但沒有】權限，卡住了", "expect": "escalate", "why": "description 明列「【需要但沒有】」觸發詞"}
+{"utterance": "我試了三次同一條路都卡住，要不要往上報一下", "expect": "escalate", "why": "重試同一條路徑卡住是明列觸發情境"}
+{"utterance": "這件事做得下去，但要花的力氣完全不成比例，先跟你確認要不要繼續", "expect": "escalate", "why": "成本明顯超過價值時把決定權交回，正是這支的定義"}
+{"utterance": "這個功能太難了，直接放棄不做了", "expect": null, "why": "單純放棄不是請示，escalate 是把選項與成本帶回去讓人決定，不是自己決定不做"}
+{"utterance": "幫我重新規劃一下這個任務的做法", "expect": null, "why": "規劃走 design-spec，escalate 只在卡住時用"}

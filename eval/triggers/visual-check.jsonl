@@ -1,0 +1,5 @@
+{"utterance": "這個面板改完了，截圖看一下淺色深色兩張對不對", "expect": "visual-check", "why": "淺深色各截一張、逐張看，正是這支的流程"}
+{"utterance": "使用者說這裡跑版了，幫我真的截圖看一眼", "expect": "visual-check", "why": "description 明列觸發詞「跑版」＋「真的看一眼」"}
+{"utterance": "新做的這個視窗，截圖驗一下對齊有沒有歪掉", "expect": "visual-check", "why": "description 明列觸發詞「歪掉」"}
+{"utterance": "這個提示框要用哪一級顏色比較對", "expect": null, "why": "配色查表走 explainer-style／ui-rules，不是截圖驗收"}
+{"utterance": "幫我看一下這段邏輯改得對不對", "expect": null, "why": "業務邏輯審查不是視覺驗證，description 明講不改業務邏輯"}

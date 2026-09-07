@@ -1,0 +1,5 @@
+{"utterance": "幫我查一下這個第三方 API 的官方文件是怎麼寫的", "expect": "research", "why": "against high-trust primary sources 查文件，明列情境"}
+{"utterance": "去查證一下這個套件現在的定價方案，存一份調查報告", "expect": "research", "why": "capture findings as a Markdown file 是明列產出"}
+{"utterance": "這個主題我要一份有來源根據的調查，背景查證的工作交給你去查", "expect": "research", "why": "reading legwork delegated 是明列使用時機"}
+{"utterance": "幫我查這段程式碼裡哪裡呼叫了這個函式", "expect": null, "why": "codebase 內部定位走 locator，不是對外部一手資料的查證"}
+{"utterance": "查一下 SG-082 現在的狀態是什麼", "expect": null, "why": "內部台帳現況查詢走 suggestion-inbox 的邊界規則，不是外部研究"}

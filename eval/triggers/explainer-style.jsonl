@@ -1,0 +1,5 @@
+{"utterance": "使用者已經點頭要一頁圖解了，配色要用哪一套", "expect": "explainer-style", "why": "已獲同意做說明頁後才查這份配色表，正是使用時機"}
+{"utterance": "說明頁裡這個提示框要用哪一級的顏色", "expect": "explainer-style", "why": "五級提示框查詢是明列內容"}
+{"utterance": "這頁圖解的字級要怎麼分階層", "expect": "explainer-style", "why": "六階字級規範是明列內容"}
+{"utterance": "幫我做一頁介紹這個功能怎麼運作的說明頁", "expect": null, "why": "尚未確認要不要做說明頁，EXP-1 要求先問，未獲同意不該直接查配色開做"}
+{"utterance": "幫我截圖看一下這個畫面深色模式對不對", "expect": null, "why": "截圖驗收走 visual-check，不是配色與字級對照表"}

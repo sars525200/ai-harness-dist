@@ -1,0 +1,5 @@
+{"utterance": "CLAUDE.md 太肥了，幫我瘦身一下", "expect": "context-health", "why": "description 明列觸發詞「CLAUDE.md 太長」"}
+{"utterance": "規則太多找不到重點，記憶檔要不要精簡", "expect": "context-health", "why": "description 明列觸發詞「規則太多找不到」"}
+{"utterance": "每則對話 context 成本太高，先量一下 CLAUDE.md 跟 MEMORY.md 多大", "expect": "context-health", "why": "「context 成本太高」是明列觸發詞，且先量後決定是這支流程"}
+{"utterance": "收工了，順便幫我補一下規範跟記憶", "expect": null, "why": "收工封存走 shougong；description 明講收工不做健檢"}
+{"utterance": "幫我看這個 session 的 token 都花去哪裡了", "expect": null, "why": "單則對話用量分析是 explain-usage，不是常駐層檔案瘦身"}

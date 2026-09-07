@@ -1,0 +1,5 @@
+{"utterance": "保管人換了，可是設備的倉位跟座位沒有跟著自動帶過去", "expect": "asset-data-rules", "why": "保管人→倉位/座位自動帶的典型症狀"}
+{"utterance": "這筆單據明明完成了，workflow_status 卻沒有變", "expect": "asset-data-rules", "why": "單據完成聯動失效，description 明列的觸發症狀"}
+{"utterance": "dump 匯出之後，我剛改的欄位又變回舊值了", "expect": "asset-data-rules", "why": "dump／autosave 覆蓋，description 明列症狀"}
+{"utterance": "這台電腦要報廢，幫我出一份報廢文件", "expect": null, "why": "報廢文件產生走 project-scrap-document-generation，不是資料一致性硬規則"}
+{"utterance": "幫我在設備清單加一個新的欄位顯示保固到期日", "expect": null, "why": "單純新增欄位是一般開發，不是這支列出的症狀情境"}

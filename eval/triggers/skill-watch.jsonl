@@ -1,0 +1,5 @@
+{"utterance": "檢查一下 Claude Code 平台最近有沒有推新技能", "expect": "skill-watch", "why": "description 明列觸發詞「檢查平台更新」的同義說法"}
+{"utterance": "官方 skill 有沒有改名或整個下架的，比對一下我們現有的", "expect": "skill-watch", "why": "改名、移除既有能力是 description 明列偵測項目"}
+{"utterance": "平台出了什麼新功能，跟我們現有技能重疊嗎", "expect": "skill-watch", "why": "description 明列觸發詞「平台出了什麼新功能」"}
+{"utterance": "幫我裝一個新的外部 skill 套件進來", "expect": null, "why": "實際安裝走 external-skill-import，skill-watch 只提報候選不動手裝"}
+{"utterance": "這支 skill 寫得好不好，幫我審查一下內容品質", "expect": null, "why": "審查既有 skill 內容走 adversarial-review 或一般 review，不是掃平台更新"}

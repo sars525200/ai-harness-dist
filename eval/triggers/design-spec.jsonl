@@ -1,0 +1,5 @@
+{"utterance": "這個功能規模還不確定，先幫我寫一份工作規格", "expect": "design-spec", "why": "規模待定時走 design-spec，description 明列"}
+{"utterance": "這件事要正式一點，寫一份計畫書給我看", "expect": "design-spec", "why": "人要正式計畫書是明列觸發情境"}
+{"utterance": "疊代一下這份既有的 PLAN.md，把待決分岔列出來", "expect": "design-spec", "why": "疊代既有 *_PLAN.md 是明列觸發情境"}
+{"utterance": "這個要動資料遷移又跨兩個 repo，範圍太大了", "expect": null, "why": "明確 M 級（資料遷移＋跨 repo）該轉 wayfinder 開共享地圖，不是 design-spec"}
+{"utterance": "幫我把這行 CSS 顏色改一下", "expect": null, "why": "L 級單點修改不需要先寫規格"}

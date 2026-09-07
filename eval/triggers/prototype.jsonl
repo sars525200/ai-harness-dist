@@ -1,0 +1,5 @@
+{"utterance": "先做個丟棄式原型看這個狀態機合不合理", "expect": "prototype", "why": "description 明列「sanity-check whether a state model...feels right」"}
+{"utterance": "我想先驗證一下這個 UI 長怎樣，再決定要不要正式做", "expect": "prototype", "why": "explore what a UI should look like，明列情境"}
+{"utterance": "這個邏輯感覺怪怪的，先做個小 demo 試試看對不對", "expect": "prototype", "why": "設計問題先用可丟棄的原型驗證，正是這支的定位"}
+{"utterance": "這個功能確定了，直接做進正式程式碼", "expect": null, "why": "已確定要做、非驗證性質，不需要先做丟棄式原型"}
+{"utterance": "幫我寫一份正式的工作規格給下一棒接手", "expect": null, "why": "產出正式規格走 design-spec，prototype 產出的是可丟棄的探索品"}

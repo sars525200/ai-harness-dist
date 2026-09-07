@@ -1,0 +1,5 @@
+{"utterance": "PROJECT_CONTEXT.md 的 rules-content 改了，重新產一份 AGENTS.md", "expect": "code-rules-generator", "why": "直接對應 description：讀 rules-content 產出 AGENTS.md 規則檔"}
+{"utterance": "IT-department 這邊的規則檔要照 AGENTS.md 開放格式重新產生一次", "expect": "code-rules-generator", "why": "IT-department 是本 skill 明列的適用專案"}
+{"utterance": "MIS-install 那邊 .cursor/ 版的結構化規則也要轉成標準格式", "expect": "code-rules-generator", "why": ".cursor/ 版是 description 明列的來源之一"}
+{"utterance": "幫我在 CLAUDE.md 加一條新規則", "expect": null, "why": "直接手改常駐層規則檔，不是從 PROJECT_CONTEXT.md 產生"}
+{"utterance": "harness 這個 repo 也幫我產一份 AGENTS.md", "expect": null, "why": "description 明講 harness 自己排除，不套用在 harness 本身"}

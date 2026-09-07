@@ -1,0 +1,5 @@
+{"utterance": "/spawn-task 幫我另開一個任務去修這份過期文件", "expect": "spawn-task", "why": "直接使用 /spawn-task 指令帶描述"}
+{"utterance": "這件事不要佔用這則對話，另外開一個背景 session 處理", "expect": "spawn-task", "why": "description 明列觸發語「不要佔用這則對話，另外開一個處理」"}
+{"utterance": "幫我開一個背景任務去清這段舊程式碼", "expect": "spawn-task", "why": "description 明列觸發語「開一個背景 session 處理」"}
+{"utterance": "這個小事你直接在這裡改一改就好，不用另開", "expect": null, "why": "明講不用另開，屬於當場處理不是拆成背景任務"}
+{"utterance": "幫我稽核一下這個模組現況跟文件對不對得上", "expect": null, "why": "稽核走 audit，不是把發現的問題拆成背景任務"}

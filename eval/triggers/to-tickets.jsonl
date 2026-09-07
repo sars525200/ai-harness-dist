@@ -1,0 +1,5 @@
+{"utterance": "把這份計畫拆成一張張票，每張標清楚依賴關係", "expect": "to-tickets", "why": "description 明列「declaring its blocking edges」＝標依賴"}
+{"utterance": "這次討論的內容幫我拆成 tracer-bullet 的票發到票務系統", "expect": "to-tickets", "why": "tracer-bullet tickets 是 description 直接點名的產出形式"}
+{"utterance": "幫我把這份 spec 拆成幾張可以獨立做的票", "expect": "to-tickets", "why": "把 spec 拆成票是明列的輸入來源之一"}
+{"utterance": "這個工程太大了，一個 session 做不完，幫我開個共享地圖規劃", "expect": null, "why": "超過一個 session 容量的規劃走 wayfinder，不是單純拆票"}
+{"utterance": "這件事規模還不確定，先幫我整理一份能接手的規格", "expect": null, "why": "規模待定先寫規格走 design-spec，不是直接拆票"}

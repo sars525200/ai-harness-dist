@@ -1,0 +1,5 @@
+{"utterance": "我要寫個腳本批次改 PROD 的 sqlite，先做個 dry-run 給我看再寫", "expect": "data-preview-html", "why": "批次改正式 sqlite 前先 dry-run，正是這支的職責"}
+{"utterance": "這次資料遷移影響上千筆，先弄一份互動 HTML 讓我篩選點頭", "expect": "data-preview-html", "why": "遷移前用互動 HTML 給人點頭，description 明列情境"}
+{"utterance": "這個分類引擎要重新跑，跑之前先讓我看 dry-run 結果", "expect": "data-preview-html", "why": "分類引擎回填是 description 明列的觸發場景"}
+{"utterance": "幫我在表單裡加一個新增按鈕", "expect": null, "why": "一般表單 CRUD，description 明講不用這支"}
+{"utterance": "這筆資料改壞了，查一下為什麼不見", "expect": null, "why": "事後鑑識走 data-incident，這支是寫前預覽不是事後查"}

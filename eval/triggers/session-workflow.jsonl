@@ -1,0 +1,5 @@
+{"utterance": "我要開始一個新任務，幫我改一下這個 bug", "expect": "session-workflow", "why": "「下新任務」是 description 明列觸發情境"}
+{"utterance": "開工了，先走一輪查詢跟規劃再動手", "expect": "session-workflow", "why": "「說開工」是 description 明列觸發詞"}
+{"utterance": "這件事要正式開始做了，先幫我自我宣告一下", "expect": "session-workflow", "why": "「正要自我宣告」是明列觸發時機"}
+{"utterance": "先跟我確認一下這個功能到底要不要做", "expect": null, "why": "純釐清屬 ASK 模式的問答，不是編排整段任務的開場到交付"}
+{"utterance": "幫我把這個任務拆成一張張票", "expect": null, "why": "拆票走 to-tickets，session-workflow 編排的是單則任務內的五階段"}

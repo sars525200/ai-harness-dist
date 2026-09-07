@@ -1,0 +1,5 @@
+{"utterance": "測試全綠但使用者說沒好，是不是驗證方式本身有問題", "expect": "verify-rules", "why": "description 明列症狀「測試全綠但使用者說沒好」"}
+{"utterance": "這個變異測試怎麼跑都不會紅", "expect": "verify-rules", "why": "description 明列症狀「變異測試沒紅」"}
+{"utterance": "我要對帳一下外部報表的數字跟系統算出來的對不對", "expect": "verify-rules", "why": "對帳外部報表是明列使用情境"}
+{"utterance": "這個 bug 很怪，改了好幾次都查不出根因", "expect": null, "why": "查根因走 diagnose-bug，verify-rules 是驗證紀律參考不是診斷迴圈"}
+{"utterance": "幫我幫這個新功能寫幾個單元測試", "expect": null, "why": "單純寫測試是一般開發工作，不是判讀驗證是否可信的紀律問題"}

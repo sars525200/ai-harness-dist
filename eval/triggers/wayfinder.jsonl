@@ -1,0 +1,5 @@
+{"utterance": "這個資料遷移工程太大了，開一張共享地圖來追蹤決策票", "expect": "wayfinder", "why": "資料遷移＋規模超過一個 session，是 wayfinder 的典型使用情境"}
+{"utterance": "這個要動好幾個 repo，範圍太大一個 session 做不完，幫我規劃", "expect": "wayfinder", "why": "description 明列「more than one agent session can hold」"}
+{"utterance": "/wayfinder 幫我拆這個大型任務成一張張決議票", "expect": "wayfinder", "why": "直接呼叫指令並描述大型任務"}
+{"utterance": "這個功能規格先幫我寫一下就好，不用開地圖", "expect": null, "why": "L 級單點明講不需要開 wayfinder map，走 design-spec 即可"}
+{"utterance": "把這份計畫拆成一堆可以獨立做的票", "expect": null, "why": "單純拆票走 to-tickets，wayfinder 是規劃巨型工程的共享地圖而非拆票本身"}

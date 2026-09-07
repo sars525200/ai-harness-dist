@@ -1,0 +1,5 @@
+{"utterance": "這個浮層被裁掉一半，看不全", "expect": "ui-rules", "why": "description 明列症狀「浮層被裁一半」"}
+{"utterance": "深色模式下這一塊完全看不見顏色", "expect": "ui-rules", "why": "description 明列症狀「深色某塊看不見」"}
+{"utterance": "我改了顏色但畫面上沒有變", "expect": "ui-rules", "why": "description 明列症狀「改了顏色沒生效」"}
+{"utterance": "這個改完的畫面截圖看一下深淺色對不對", "expect": null, "why": "實際截圖驗收走 visual-check，ui-rules 是查表不是動手驗證"}
+{"utterance": "這個按鈕點了之後資料沒有存進去", "expect": null, "why": "存檔邏輯失效走 server-api-hard-rules，不是視覺／版面問題"}

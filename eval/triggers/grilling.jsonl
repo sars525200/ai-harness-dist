@@ -1,0 +1,5 @@
+{"utterance": "把我這個計畫往死裡電一下，看有沒有漏洞", "expect": "grilling", "why": "要求狠狠質疑計畫，是 grill 觸發詞"}
+{"utterance": "grill me on this decision before I commit to it", "expect": "grilling", "why": "description 明列的英文觸發語直接命中"}
+{"utterance": "幫我狠狠質疑這個想法，我怕自己漏了什麼盲點", "expect": "grilling", "why": "使用者主動要求壓力測試自己的思考"}
+{"utterance": "幫我把這個做成一份正式的工作規格就好", "expect": null, "why": "只是要規格文件，不是要被質疑逼問，走 design-spec"}
+{"utterance": "審查一下這份 PR 有沒有問題", "expect": null, "why": "一般程式碼審查跟「電人」的對抗式提問是不同性質"}

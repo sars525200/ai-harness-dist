@@ -1,0 +1,5 @@
+{"utterance": "division 跟 department 到底哪個是部門哪個是課，幫我理清楚寫進 CONTEXT.md", "expect": "domain-modeling", "why": "討論並記錄領域詞彙定義正是這支的職責"}
+{"utterance": "我要記一筆架構決策，寫個 ADR", "expect": "domain-modeling", "why": "description 明列「recording or editing an ADR」"}
+{"utterance": "這個詞在專案裡的定義好像跟大家理解的不一樣，要不要寫進去", "expect": "domain-modeling", "why": "討論 codebase terminology 是明列觸發情境"}
+{"utterance": "幫我查一下這個變數是在哪個檔案定義的", "expect": null, "why": "程式碼層級的定義位置查找走 locator，不是領域詞彙建模"}
+{"utterance": "這個模組現在進度做到哪，跟文件對不對得上", "expect": null, "why": "進度/一致性稽核走 audit，不是詞彙與 ADR"}

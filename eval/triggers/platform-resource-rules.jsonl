@@ -1,0 +1,5 @@
+{"utterance": "改了 DEFAULT_* 的預設值，但存檔後好像沒生效", "expect": "platform-resource-rules", "why": "description 明列症狀「改了預設值沒生效」"}
+{"utterance": "平台資源那個陣列型選項，存了一次之後變短了", "expect": "platform-resource-rules", "why": "description 明列症狀「陣列型資料被整批覆寫變短」"}
+{"utterance": "要新增一個外部 JS lib，要怎麼進 ALLOWED_KEYS 才不會被擋", "expect": "platform-resource-rules", "why": "ALLOWED_KEYS 與外部 JS lib 引入是明列觸發點"}
+{"utterance": "保管人換了，倉位座位沒有自動帶過去", "expect": null, "why": "這是 asset-data-rules 的症狀（保管人自動帶入），不是平台資源存檔"}
+{"utterance": "幫我在畫面上加一個新按鈕", "expect": null, "why": "一般 UI 開發不涉及 /api/platform-resources/save 或 ALLOWED_KEYS"}

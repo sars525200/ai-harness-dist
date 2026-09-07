@@ -1,0 +1,5 @@
+{"utterance": "幫我掃一下這個專案頂層目錄，產一份 CODE_MAP", "expect": "code-map-generator", "why": "直接點名產物 CODE_MAP.md"}
+{"utterance": "DEV 跟 PROD 兩份目錄的內容是不是有差異，幫我掃一下", "expect": "code-map-generator", "why": "dev-prod-mirror 一致性警告是這支的產出項"}
+{"utterance": "這個 repo 裡哪些是自己寫的、哪些是外部套件、哪些是舊的沒在用，整理一份地圖", "expect": "code-map-generator", "why": "own/vendor/archive 標註正是這支的分類法"}
+{"utterance": "幫我查這個函式定義在哪個檔案", "expect": null, "why": "單點定位走 locator 的搜尋，不是產出整份專案地圖"}
+{"utterance": "這兩個 repo 的邏輯是不是同步的", "expect": null, "why": "同步比對走 sync-checker，不是離線掃描目錄結構"}
