@@ -92,5 +92,6 @@ IT-department 的 `dev-prod-sync` 前置依賴已補上（`PROJECT_CONTEXT.md`�
 | 狀態 | 項目 | 說明 |
 |---|---|---|
 | ✅ 已解 | MAP-1 上線（2026-09-07 使用者同意規格後施作，enforce） | 動了：`hooks/rules/map1_code_map_freshness.py`（新）、`hooks/dispatch.py` REGISTRY、`hooks/dispatch_config.json`、`dashboard/gen_hook_rules.py` ORDER/DESC、`HARNESS_PROGRESS.md` 規則數字（兩處：L47、L147）、`tests/test_map1.py`（新，24 案例）。證據：回歸網 24/24 綠；三種變異（不忽略時間戳／永遠 allow／產生器壞掉當沒事）分別讓 2／6 個案例紅、第三種直接炸——網會紅；走真正的 `dispatch.py`：harness SessionStart 出 WARN、`git commit` exit 2、MIS-install 不出聲；對三個真實專案實跑：harness 當場抓到過期（本次新增規則檔所致，重跑後綠）、IT／MIS 綠。`eval/run_all.py` L1–L4 PASS。`tests/test_hook_rules.py` 剩 7 個失敗全部在 HEAD 基準（git worktree 實跑比對）就存在（`ModuleNotFoundError: contract`，測試環境問題，非本次造成）。 |
+| ⏳ 待驗 | 看板 Hook 表有沒有長出 MAP-1 那列 | 為何沒驗：看板 HTML 由 Stop hook 自動刷新，收工時沒去確認它跑了。驗證指令：`py -3 dashboard/refresh_dashboard.py` 後開 `http://127.0.0.1:8099/` 看 Hook 表。誰跑：下一個開 harness 的 session。 |
 | 📝 記票不修 | `dashboard/gen_hook_rules.py` 的 ONB-2 badge 寫「shadow」但設定檔是 enforce（畫面上的 shadow 欄是動態讀設定檔，badge 只是編輯文字） | 不修的後果：看板讀者以為 ONB-2 還在觀察期。修法：badge 改「9/07 新·enforce」 |
 | 📝 記票不修 | 上表票 04／05 寫「尚未 commit」已過期（2026-09-07 查證兩個部門的 `AGENTS.md`／`CODE_MAP.md` 均已入版控）；「新專案自動配置留待下一個 effort」已由 `ONB-2` 實作並 enforce（見 `SESSIONSTART_AUTOCONFIG_PLAN.md`） | 不修的後果：讀本檔的人以為還有兩件事沒做。修法：把兩處狀態改成已完成＋指向 ONB-2 |
