@@ -36,7 +36,17 @@ for _stream in (sys.stdout, sys.stderr):
 # 從 contract 取（2026-09-05·B4）：這裡原本寫死 D 槽絕對路徑，換機後這支會
 # 掃一個不存在的目錄、印出「0 筆事件」——而 0 筆在這張報表上長得像「很乾淨」，
 # 不像「找錯地方」。仍是模組層名字：test_hook_rules 靠改它指到臨時目錄。
-from contract import STATE_DIR
+#
+# 2026-09-07：先把本檔所在目錄放進 sys.path 再 import。這支不只當腳本跑——
+# dashboard/gen_hook_rules.py 與 tests/test_hook_rules.py 都用 spec_from_file_location
+# 按路徑載入它，那條路不會自動把 hooks/ 放進 sys.path。看板在正式環境能跑是因為
+# 呼叫它的 dispatch.py 剛好已經把 hooks/ 放進去了；測試單獨跑就 7 條全倒
+# （2026-09-05 a0b217a 起，倒了兩天沒人看——回歸網紅著跟沒有一樣）。
+# 同一個 idiom 見 dashboard/gen_hook_rules.py 對 DASHBOARD、subagent_stats.py 對 _HARNESS_ROOT。
+_HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _HOOKS_DIR not in sys.path:
+    sys.path.insert(0, _HOOKS_DIR)
+from contract import STATE_DIR  # noqa: E402
 
 
 def _split_stem(stem: str) -> tuple[str, str]:
