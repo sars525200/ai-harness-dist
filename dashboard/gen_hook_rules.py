@@ -154,6 +154,26 @@ DESC = {
                "去重刻意<b>等 event log 出現 deliver 才標記已通報</b>——實測 86 筆 Stop 級 WARN 有 "
                "23 筆（27%）從沒到達模型，而「判定了」與「送達了」在 report.py 上分不出來。",
     },
+    "HND-2": {
+        "badge": "9/06 新·enforce", "on": "<b>PreToolUse</b> Write/Edit/MultiEdit",
+        "why": "寫交接檔（<code>.scratch/handoff/</code>）時 frontmatter 五欄"
+               "（status/type/task/plan/plan_sections）不齊全或不合法就 BLOCK",
+        "tip": "只驗 frontmatter，不驗正文結構——地板制：frontmatter 硬，正文交給任務"
+               "形狀自己決定（任務型七段 vs 研究型表格）。<code>plan</code> 指的計畫書"
+               "存不存在是<b>事實</b>判準，跟 HND-1「commit／路徑失效才算數」同一個等級。"
+               "PreToolUse＋BLOCK 而不是像 HND-1 掛 Stop 發便箋——這條要守的是"
+               "「一開始就把地基打對」，Stop 那時檔已經寫完、格式已經漂了。",
+    },
+    "HND-3": {
+        "badge": "9/06 新·enforce", "on": "<b>Stop</b>",
+        "why": "這一輪動過交接檔卻沒在回覆結尾附可複製的 fenced code block 就 BLOCK",
+        "tip": "`skills/chat-handoff/SKILL.md` §3 的「新對話建議第一句」原本只是文件"
+               "說明、零強制力。判準是<b>格式事實</b>：回覆結尾去空白後是不是一個完整的"
+               "``` 區塊，不猜「讀起來像不像在收尾」。WARN 走便箋要下一輪才送達——"
+               "AWC-1 已經驗證過這條路對「確保」類需求會失敗，直接抄 BLOCK 用 exit code 2"
+               "在同一輪生效。兩道防迴圈比照 AWC-1：<code>stop_hook_active</code> 旗標＋"
+               "同一 user 回合的獨立雜湊只擋一次。",
+    },
     "HND-1": {
         "badge": "9/03 新·enforce", "on": "<b>Stop</b> → UserPromptSubmit 投遞",
         "why": "交接檔還開著幾份、哪幾份講的東西已經不存在",
