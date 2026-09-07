@@ -85,8 +85,10 @@ D-1 定案（§4）只實作 `same-person-new-pc` 這一份；`department` 那�
 | 新機端 Python 前置（`py -3` 叫得動、≥3.9、tkinter 有） | **✅ 已驗** | `Python 3.12.10`；視窗版精靈整個跑起來 ⇒ tkinter 在。順帶：`git version 2.55.0.windows.5` |
 | Claude Code 用設定資料夾判定（不看 PATH） | **✅ 已驗** | 畫面印 `設定資料夾在：C:\Users\<USER>\.claude`，判為已安裝。**桌面版確實不放 `claude` 到 PATH**，2026-09-07 那個修正在真機成立 |
 | winget 自動安裝真的裝得起來 | **✅ 已驗** | 按 GitHub CLI 那列的「自動安裝」→ `gh version 2.100.0 (2026-09-03)`。**這是「裝一個機器上原本沒有的東西」，不是對已裝好的東西重跑** |
-| `setup_new_pc.py --apply` 實際接線與驗收 | ⬜ **仍未驗** | 那趟只走到第 1 分頁，沒進到接線。指令：新機上 `py -3 tools\setup_new_pc.py`（不加旗標）。誰跑＝user |
-| clone 下來的版本含兩支精靈 | ⬜ **仍未驗** | 同上，還沒 clone。指令：clone 完看 `tools\setup_new_pc.py` 在不在。誰跑＝user |
+| 開場自動找到已下載的 harness | **✅ 已驗** | 真機印 `這台已經有 harness：D:\AI-Unifi\.ai-harness（步驟 3 可以跳過）`。**位置不是預設值**（user 自己改過目的地），走的正是掃描那條分支 |
+| `setup_new_pc.py --apply` 實際接線與驗收 | ⬜ **仍未驗** | 還沒走到第 4 分頁。指令：新機上 `py -3 tools\setup_new_pc.py`（不加旗標）。誰跑＝user |
+| clone 下來的版本含兩支精靈 | ⬜ **仍未驗** | 新機的 harness 是先前就在的，不是這趟 clone 的。指令：clone 完看 `tools\setup_new_pc.py` 在不在。誰跑＝user |
+| winget 的 `Anthropic.ClaudeCode` 會不會把 `claude` 放上 PATH | ⬜ **仍未驗** | 舊機的 CLI 是 npm 裝的（`%APPDATA%\npm\claude.cmd`），winget 那份沒裝，**在來源機上裝會變成兩份 `claude` 搶 PATH 順序**，不值得為驗證冒險。新機 2026-09-08 顯示 `2.1.263` 在 PATH 上，但 user 裁定「之前就安裝了」⇒ **不算這條的證據**。⚠ 附記：同一台 9/7 明寫「PATH 上找不到 claude」，兩者對不起來，中間發生過什麼沒查。指令：在一台沒有 `claude` 的機器上按第 5 列「自動安裝」，看它翻不翻成「已安裝」。誰跑＝下一台新機的 user |
 
 **⚠ 同一趟打回來兩個缺陷，都已修（`6274ee6`）**：
 
