@@ -35,7 +35,7 @@ import webbrowser
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import filedialog, font as tkfont, ttk
+from tkinter import filedialog, font as tkfont, messagebox, ttk
 
 REPO_URL = "https://github.com/sars525200/ai-harness.git"
 APP_TITLE = "Harness 換機安裝精靈"
@@ -235,8 +235,8 @@ class App(tk.Tk):
         top.pack(fill="x")
         tk.Label(top, text=APP_TITLE, font=self.f_head).pack(anchor="w")
         tk.Label(top, font=self.f_small, fg="#555", justify="left",
-                 text="這支不會自動下載安裝任何東西。它只告訴你缺什麼、給你官方下載頁，"
-                      "裝完你按「重新檢查」。").pack(anchor="w", pady=(2, 0))
+                 text="缺什麼就按那一列的「自動安裝」，它會用 Windows 內建的 winget 幫你裝，"
+                      "裝完自己更新狀態。裝不動時右邊還有官方下載頁。").pack(anchor="w", pady=(2, 0))
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=16, pady=(8, 4))
@@ -383,32 +383,43 @@ class App(tk.Tk):
 
     # ── 步驟 1：環境 ────────────────────────────────────────
     def check_env(self) -> None:
-        def work():
-            refresh_path_from_registry()
-            self.say("── 檢查環境 ──")
-            blocking, optional = [], []
-            for name, exe, args, _url, _why, level, _pkg in REQUIRED:
-                ok, out = detect(name, exe, args)
-                ver = out.splitlines()[0][:70] if ok and out else ""
-                mark = "[OK]" if ok else ("[!!]" if level == "must" else "[--]")
-                self.say("%s %-12s %s" % (mark, name, ver or out[:70]))
-                if not ok:
-                    (blocking if level == "must" else optional).append(name)
-                self.ui(self._set_row, (name, ok, level))
-            self.env_ok = not blocking
-            if blocking:
-                self.ui(self._env_result,
-                        "還缺 %d 個非有不可的：%s。裝完按一次「重新檢查」就好，"
-                        "這支會自己重讀 PATH，不必重開視窗。"
-                        % (len(blocking), "、".join(blocking)))
-            elif optional:
-                self.ui(self._env_result,
-                        "可以往下走。%s 沒裝，但接線用不到它。" % "、".join(optional))
-                self.say("[OK] 非有不可的都在。%s 是選配。" % "、".join(optional))
-            else:
-                self.ui(self._env_result, "4 個都在，可以往下走。")
-                self.say("[OK] 環境齊全。")
-        self.spawn(work)
+        self.spawn(self._scan_env)
+
+    def _scan_env(self) -> None:
+        """掃一輪並更新畫面。**故意不自己 `spawn`**，由呼叫者決定要不要開執行緒。
+
+        2026-09-08 新機打回來的 bug：`do_install` 裝完後呼叫 `check_env()`，
+        而 `check_env` 又 `spawn` 一次——那時 `do_install` 自己的 `busy` 還沒放掉
+        （`finally` 要等 `work()` 整個回來才跑）⇒ 重檢查被守衛擋掉，
+        只印一行「前一個動作還在跑」，**四列狀態原地不動**。
+        紀錄上寫著「[OK] 現在偵測得到了」、畫面上那一列卻還是「缺少」——
+        **失敗看起來像成功**，人只能自己去按「重新檢查」才看得到真相。
+        掃描本體抽成普通函式後，誰在跑就在誰的執行緒裡跑完，不再自己擋自己。
+        """
+        refresh_path_from_registry()
+        self.say("── 檢查環境 ──")
+        blocking, optional = [], []
+        for name, exe, args, _url, _why, level, _pkg in REQUIRED:
+            ok, out = detect(name, exe, args)
+            ver = out.splitlines()[0][:70] if ok and out else ""
+            mark = "[OK]" if ok else ("[!!]" if level == "must" else "[--]")
+            self.say("%s %-12s %s" % (mark, name, ver or out[:70]))
+            if not ok:
+                (blocking if level == "must" else optional).append(name)
+            self.ui(self._set_row, (name, ok, level))
+        self.env_ok = not blocking
+        if blocking:
+            self.ui(self._env_result,
+                    "還缺 %d 個非有不可的：%s。裝完按一次「重新檢查」就好，"
+                    "這支會自己重讀 PATH，不必重開視窗。"
+                    % (len(blocking), "、".join(blocking)))
+        elif optional:
+            self.ui(self._env_result,
+                    "可以往下走。%s 沒裝，但接線用不到它。" % "、".join(optional))
+            self.say("[OK] 非有不可的都在。%s 是選配。" % "、".join(optional))
+        else:
+            self.ui(self._env_result, "4 個都在，可以往下走。")
+            self.say("[OK] 環境齊全。")
 
     def do_install(self, name: str, pkg: str) -> None:
         """按下「自動安裝」：跑 winget 裝一個，裝完自動重檢查。
@@ -437,8 +448,33 @@ class App(tk.Tk):
             else:
                 self.say("[!!] %s 裝完還是偵測不到（winget 離開碼 %s）。"
                          "改按右邊「開啟下載頁」自己裝。" % (name, rc))
-            self.check_env()
+            # 直接呼叫掃描本體，不走 `check_env()`——那條會再 spawn 一次而被
+            # 自己的 busy 擋掉（見 `_scan_env` 檔頭）。順序也有意義：
+            # 先掃完把四列更新排進佇列，再排彈窗，佇列是先進先出 ⇒
+            # 人看到彈窗時那一列已經是新的，不會出現「說裝好了但畫面還寫缺少」。
+            self._scan_env()
+            self.ui(self._install_done, (name, ok))
         self.spawn(work)
+
+    def _install_done(self, payload) -> None:
+        """裝完跳一個彈窗。**沉默的成功跟沉默的失敗長得一模一樣**——
+
+        2026-09-08 新機回報：「安裝完成沒有彈出視窗提醒」。winget 帶 `--silent`
+        跑在背景，畫面上唯一的變化是紀錄框多幾行字；人不知道該不該繼續等，
+        也不知道要不要去按「重新檢查」。彈窗是這支唯一會主動停下來找人的地方。
+        """
+        name, ok = payload
+        if ok:
+            messagebox.showinfo(
+                APP_TITLE,
+                "%s 裝好了。\n\n上面那一列已經變成「已安裝」，可以往下一個分頁走。" % name,
+                parent=self)
+        else:
+            messagebox.showwarning(
+                APP_TITLE,
+                "%s 沒裝起來。\n\n改按那一列右邊的「開啟下載頁」自己裝，"
+                "裝完回來按「重新檢查」。\n詳細訊息在下面的「過程紀錄」。" % name,
+                parent=self)
 
     def _set_row(self, payload) -> None:
         name, ok, level = payload
