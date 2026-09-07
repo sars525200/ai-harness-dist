@@ -86,8 +86,13 @@ MUTATIONS = [
     ),
     (
         "UserPromptSubmit 的投遞窗口移到 candidates 守門之後（永遠送不出去）",
-        '    if event == "UserPromptSubmit":\n        pending = _take_pending_warning(session_id)',
-        '    if False:\n        pending = _take_pending_warning(session_id)',
+        # 錨點 2026-09-07 更新：deliver 事件補 `rules` 欄位時，兩行之間多了一行
+        # 清空旁通道，原錨點（兩行相連）當場漂掉——**這次是被自己人改到的第二次**，
+        # 而它是被 tests/test_mutation_anchors.py 當場攔下來的，不是事後才發現。
+        # 改綁 if 那一行本身：它是「投遞窗口在不在 candidates 守門之前」的判準所在，
+        # 中間再插幾行也不會漂。
+        '    if event == "UserPromptSubmit":',
+        '    if False:',
     ),
     (
         "Agent 心跳不見（退回「只知道誰結束、不知道誰在跑」）",

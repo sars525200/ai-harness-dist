@@ -599,7 +599,11 @@ def _dispatch(payload: dict) -> int:
     if event == "UserPromptSubmit":
         pending = _take_pending_warning(session_id)
         if pending:
-            _log_event(session_id, agent_id, agent_type, kind="deliver", event=event)
+            # `rules` 是這一筆送的是哪幾條。少了它，deliver 只證明「有東西送出去」，
+            # 回答不了「某條規則的提醒到得了嗎」—— 而那正是每次把規則轉 enforce
+            # 之後唯一要驗的事。
+            _log_event(session_id, agent_id, agent_type, kind="deliver", event=event,
+                       rules=sorted(set(_LAST_DELIVERED_RULES)), path="pending")
             sys.stdout.write(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "UserPromptSubmit",
@@ -702,6 +706,11 @@ def _dispatch(payload: dict) -> int:
                     "additionalContext": joined,
                 }
             }, ensure_ascii=False))
+            # 這條路原本一筆 deliver 都沒落 —— 整個事件檔裡的 deliver 全來自
+            # Stop 便箋那條。於是「直接投遞的 WARN 有沒有真的送出去」在日誌上
+            # 是一片空白，而它是絕大多數規則走的路。
+            _log_event(session_id, agent_id, agent_type, kind="deliver", event=event,
+                       rules=sorted({r for r, _, _, _ in warn_items}), path="direct")
         else:
             # Stop／SubagentStop：2026-07-31 實測（tests/stop_warn_probe/，兩輪
             # --resume 觀察下一輪 context）**三條路徑全部到不了模型**——
@@ -867,6 +876,20 @@ def _queue_pending_warning(session_id: str, message: str, rule_id: str = "",
         pass
 
 
+#: `_take_pending_warning()` 最近一次真的送出去的規則 id。
+#:
+#: **為什麼用模組層旁通道而不是改回傳值**：那支的回傳字串被
+#: `tests/test_warn_channel.py` 直接比對，換成 tuple 會連帶動到別條線正在改的檔。
+#: 這個值只給觀測用（寫進 deliver 事件），沒有人靠它做判定 —— 讀到空的最壞
+#: 情況是那筆 deliver 沒記規則名，跟改動前一樣，不會有人因此拿到錯的答案。
+#:
+#: **投遞前不需要另外清空**：`_take_pending_warning()` 的每一條會回非空字串的
+#: 路徑都必定先寫過這個值，而回空字串時上面那個 `if pending:` 就不會落 deliver。
+#: 2026-09-07 曾經多寫一行 `[:] = []` 當保險，變異測試證明拿掉它測試不會紅
+#: —— 那就是一行永遠不會生效的防護，正是這次要清掉的那種東西。
+_LAST_DELIVERED_RULES: list = []
+
+
 def _take_pending_warning(session_id: str) -> str:
     """取出並**刪除**便箋（只投一次），把累積的多則串起來。
 
@@ -915,6 +938,7 @@ def _take_pending_warning(session_id: str) -> str:
                 f"⚠ 另有 {lost} 則提醒沒能投遞（超過 {_PENDING_TTL_MIN} 分鐘、"
                 f"或超出便箋容量而被丟棄）。")
         joined = "\n".join(parts)
+        _LAST_DELIVERED_RULES[:] = [r for r, _ in receipts]
         if joined and receipts:
             record_delivered(session_id, receipts)
         return joined

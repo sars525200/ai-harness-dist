@@ -546,6 +546,7 @@ def main() -> int:
         import test_warn_wording
         import test_progress_chart
         import test_todos
+        import test_deliver_event_rules
         import test_warn_channel
         import test_workflow_compliance
         import test_check_bloat
@@ -631,6 +632,7 @@ def main() -> int:
             (test_index_health.run, "常駐層指向與容量（撞上限／死索引／glob 寫錯）"),
             (test_log_error_slim.run, "錯誤 log 瘦身（解析類不印 traceback／豁免不擴大）"),
             (test_warn_channel.run, "WARN 輸出通道"),
+            (test_deliver_event_rules.run, "deliver 事件的規則歸屬"),
             (test_progress_chart.run, "進度圖產生器"),
             (test_cost_panel.run, "成本／mix 產生器"),
             (test_budget1.run, "BUDGET-1 用量閘門"),
@@ -725,6 +727,27 @@ def main() -> int:
             # 它吃 .scratch/cloud-export/ 那份不進版控的規則檔，換一台機器就必紅，
             # 那種紅會讓人開始忽略整份輸出。它照舊手動跑。
             ("備份鏡像自動對齊（同內容改寫／有獨有內容要拒絕）", "test_mirror_realign.py"),
+
+            # ── 2026-09-07 補接的 11 支孤兒 ────────────────────────────────
+            # 盤點結果：tests/ 底下 86 支可獨立執行的腳本裡，有 12 支**沒有任何
+            # 自動流程會跑到**（run_hook_tests 不 import 也不列、eval/run_all.py
+            # 根本不碰 tests/）。它們今天全部是綠的 —— 而那正是最難發現的形狀：
+            # 幾百條斷言都還對，只是沒有人在看，壞掉的那天不會有任何徵兆。
+            # 上面那句「獨立腳本沒接進來就等於沒裝」寫於 2026-08-28，寫完之後
+            # 這個坑又累積了 12 支。**寫下警語不會讓事情不發生，接上去才會。**
+            # 全部實測跑過：11 支合計約 12 秒，最慢的是記憶備份那支（5.7 秒，
+            # 它要建真的 git repo）。
+            ("HND-2 交接檔 frontmatter 契約", "test_hnd2_frontmatter.py"),
+            ("HND-3 交接收尾的可複製區塊", "test_hnd3_closing_snippet.py"),
+            ("開工檢查的協作者計數", "test_check_before_start_collab.py"),
+            ("CTX-1", "test_ctx1.py"),
+            ("AWC-1 偵測能力", "test_awc1_detection.py"),
+            ("R1 對 Python 語法的區塊邊界", "test_r1_python_blocks.py"),
+            ("記憶備份 hook", "test_memory_backup_hook.py"),
+            ("skill-watch 平台定義與開關", "test_skill_watch_platforms.py"),
+            ("skill-watch 注入縫", "test_skill_watch_run.py"),
+            ("run_claude_reviewer 守門", "test_run_claude_reviewer.py"),
+            ("真 repo 的 RealGitContext smoke", "smoke_real_git.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)
