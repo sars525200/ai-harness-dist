@@ -43,7 +43,20 @@ MUTATIONS = [
     ),
     (
         "不排除 subagent 分檔（一個 session 派幾個 agent 就被算成幾條線）",
+        # ⚠ 錨點刻意多帶三行：那句 if 在目標檔有**三份逐字同文**
+        #   （running_by_role / sessions / sessions_detail），而 `replace(…, 1)`
+        #   只換第一份。2026-09-07 實跑證實它打中的是 running_by_role，
+        #   那份的過濾沒有任何測試在驗 ⇒ 這條變異印「沒紅 ✘ 假綠燈！」。
+        #   帶上 `sessions()` 的空狀態回傳值（三份裡唯一不同的那一行）才唯一，
+        #   打中的才是 _case_excludes_subagent_and_test 真的守著的那一份。
+        #   **錨點守門只驗「字串在不在」，不驗「打中第幾個」** —— 這種漂法它看不見。
+        '        return {"active": 0, "total": 0, "rows": []}\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
         '        if _TEST_SESSION.match(stem) or ".agent-" in stem:',
+        '        return {"active": 0, "total": 0, "rows": []}\n'
+        '    for path in STATE_DIR.glob("events.*.ndjson"):\n'
+        '        stem = path.name[len("events."):-len(".ndjson")]\n'
         "        if False:",
     ),
     (
