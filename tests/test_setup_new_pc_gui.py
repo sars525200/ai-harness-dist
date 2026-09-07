@@ -64,10 +64,11 @@ def fake_run(cmd, timeout=None, cwd=None):
     return (0, "Successfully installed")
 
 
+real_detect = G.detect                                    # [5] 要用真的那支
 G.run = fake_run
-G.detect = lambda name, exe, args: (
+G.detect = lambda item: (
     ((True, "gh version 9.9.9") if installed["gh"] else (False, "PATH 上找不到 gh"))
-    if name == "GitHub CLI" else (True, "%s stub 1.0" % name))
+    if item.name == "GitHub CLI" else (True, "%s stub 1.0" % item.name))
 G.refresh_path_from_registry = lambda: None
 G.messagebox = types.SimpleNamespace(
     showinfo=lambda *a, **k: popups.append(("info", a)),
@@ -90,8 +91,8 @@ if OLD:
     def old_do_install(name, pkg, _self=app):
         def work():
             G.run(["winget", "install", "--id", pkg])
-            row = next(r for r in G.REQUIRED if r[0] == name)
-            ok = G.detect(name, row[1], row[2])[0]
+            row = next(r for r in G.REQUIRED if r.name == name)
+            ok = G.detect(row)[0]
             _self.say("[OK] %s 現在偵測得到了。" % name if ok else "[!!] 失敗")
             _self.check_env()          # ← 被自己的 busy 擋掉的那一行
         _self.spawn(work)
@@ -203,6 +204,29 @@ with tempfile.TemporaryDirectory() as td:
     finally:
         sys.executable, G._drives = real_exe, real_drives
         del sys.frozen                                 # type: ignore[attr-defined]
+
+# ── 5. 設定資料夾在、CLI 不在 → 兩列必須分得開 ────────────
+# 2026-09-08 user 指出的缺口：桌面版讓「設定資料夾」那列變綠，而 harness 有四個
+# 地方直接 `shutil.which("claude")`。合成一列的話**綠燈會把缺口蓋掉**，
+# 而缺口的症狀是那些功能安靜降級，不是報錯。
+real_which = G.shutil.which
+G.shutil.which = lambda n: None if n == "claude" else real_which(n)
+try:
+    folder_row = next((r for r in G.REQUIRED if r.folder is not None), None)
+    cli_row = next((r for r in G.REQUIRED if r.name == "Claude CLI"), None)
+    if folder_row is None or cli_row is None:
+        fails.append("[5] 少了「設定資料夾」或「Claude CLI」其中一列")
+    else:
+        if folder_row.folder.is_dir() and not real_detect(folder_row)[0]:
+            fails.append("[5] 設定資料夾在，卻判成缺少")
+        if real_detect(cli_row)[0]:
+            fails.append("[5] claude 不在 PATH，CLI 那列卻判成已安裝——缺口又被蓋掉了")
+        if cli_row.folder is not None:
+            fails.append("[5] CLI 那列有資料夾退路，等於永遠不會紅")
+        if cli_row.level != "must":
+            fails.append("[5] CLI 那列不是 must")
+finally:
+    G.shutil.which = real_which
 
 # 定錨 [2] 的根因：`Path("")` 就是 `Path(".")`，而它**存在**——
 # 這正是舊的 exists() 守衛放行的原因。這行紅了代表 Python 行為變了，

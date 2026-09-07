@@ -33,6 +33,7 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
+from typing import NamedTuple
 
 import tkinter as tk
 from tkinter import filedialog, font as tkfont, messagebox, ttk
@@ -51,24 +52,57 @@ APP_TITLE = "Harness 換機安裝精靈"
 # 「不自動下載安裝、只給官網連結」那條**。反而更穩：winget 的資訊清單帶雜湊值，
 # 裝下來的東西會被驗；人自己去下載頁點檔案則沒有任何東西在驗。
 # 四個識別碼都在這台實查過（`winget search --id <id> --exact`）。
-REQUIRED = [
-    ("Python",       "py",     ["-3", "--version"],  "https://www.python.org/downloads/",
-     "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must",
-     "Python.Python.3.13"),
-    ("Git",          "git",    ["--version"],        "https://git-scm.com/download/win",
-     "用來把 harness 下載下來", "must", "Git.Git"),
-    ("GitHub CLI",   "gh",     ["--version"],        "https://cli.github.com/",
-     "只有還沒下載 harness 時才要它；下載完就用不到", "nice", "GitHub.cli"),
-    ("Claude Code",  "claude", ["--version"],        "https://claude.com/claude-code",
-     "接線是把連結建進它的設定資料夾，所以看資料夾在不在，不看 PATH", "must",
-     "Anthropic.ClaudeCode"),
-]
-
-# 接線的目標資料夾。**Claude Code 的判準是它，不是 PATH 上有沒有 `claude` 指令**——
-# 2026-09-07 真機實測：桌面版跑得好好的，PATH 上卻沒有 `claude`（那是 npm 版才會裝的
+# ⚠ **`Anthropic.ClaudeCode` 會不會把 `claude` 放上 PATH，本機沒驗過**：這台的
+# CLI 是 npm 裝的（`%APPDATA%\npm\claude.cmd`），winget 那份沒裝，而在來源機上裝它
+# 會變成兩份 `claude` 搶 PATH 順序，不值得為了驗證去冒這個險。
+# **不必事先驗也不會出事**：`do_install()` 的成敗判準是「裝完偵測得到嗎」，
+# 不是離開碼——真的沒放上 PATH，畫面會說「裝完還是偵測不到」並要人改走下載頁，
+# 不會謊報成功。真機跑過就知道，結果回填 `UNIVERSAL_HARNESS_PLAN.md` §0.5。
+# 接線的目標資料夾。**「Claude 設定資料夾」那一列的判準是它，不是 PATH**——
+# 2026-09-07 真機實測：桌面版跑得好好的，PATH 上卻沒有 `claude`（那是指令列版才會裝的
 # shim），於是精靈永遠說「缺少 Claude Code」。問錯問題比答錯更難查，因為畫面看起來
 # 很篤定。主控台版一直都是看這個資料夾，這裡改成跟它一致。
 CLAUDE_HOME = Path.home() / ".claude"
+
+
+class Need(NamedTuple):
+    """一列要檢查的東西。
+
+    `folder` 有值時＝**指令找不到就退而看這個資料夾**。這一欄取代了原本
+    `detect()` 裡 `name == "Claude Code"` 的字串比對——判準綁在資料上，
+    加一列不必回去改判斷式，也不會因為改個顯示名稱就讓判準悄悄失效。
+    """
+    name: str
+    exe: str
+    args: list
+    url: str
+    why: str
+    level: str                       # must＝缺了就別往下走；nice＝只有某一步要
+    winget: str | None
+    folder: Path | None = None
+
+
+REQUIRED = [
+    Need("Python", "py", ["-3", "--version"], "https://www.python.org/downloads/",
+         "harness 的 6 條 hook 全部靠它跑；缺了規則會靜默失效", "must",
+         "Python.Python.3.13"),
+    Need("Git", "git", ["--version"], "https://git-scm.com/download/win",
+         "用來把 harness 下載下來", "must", "Git.Git"),
+    Need("GitHub CLI", "gh", ["--version"], "https://cli.github.com/",
+         "只有還沒下載 harness 時才要它；下載完就用不到", "nice", "GitHub.cli"),
+    Need("Claude 設定資料夾", "claude", ["--version"], "https://claude.com/claude-code",
+         "接線就是把技能與角色的連結建進這個資料夾；桌面版或指令列版跑過一次就會有",
+         "must", "Anthropic.ClaudeCode", CLAUDE_HOME),
+    # 2026-09-08 user 指出的缺口：**上面那一列過了不代表指令列版在**。
+    # 桌面版不放 `claude` 到 PATH，而 harness 有四個地方直接 `shutil.which("claude")`
+    # 去叫它：`hooks/session_title.py`（換 token）、`tools/run_claude_reviewer.py`
+    # （找不到就拒跑）、`tools/skill_watch_run.py`（讀版本）、`skills/skill-watch`。
+    # 缺了不會擋接線，會讓那些功能**安靜地降級**——所以列 must，並在這裡寫清楚
+    # 缺了會壞什麼，而不是只寫「建議安裝」。
+    Need("Claude CLI", "claude", ["--version"], "https://claude.com/claude-code",
+         "技能與子代理會直接叫 claude 指令；缺了 /adversarial-review 拒跑、"
+         "換 token 與版本偵測靜默失效", "must", "Anthropic.ClaudeCode"),
+]
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
@@ -109,17 +143,17 @@ def refresh_path_from_registry() -> None:
         os.environ["PATH"] = os.pathsep.join(p for p in parts if p)
 
 
-def detect(name: str, exe: str, args: list[str]):
+def detect(item: "Need"):
     """回 `(裝好了沒, 說明)`。**判準綁後果，不綁名字**——問的是「這台機器現在
-    有沒有這個能力」，不是「某個指令叫什麼」。Claude Code 那條就是這樣才修對的。"""
-    if shutil.which(exe) is None:
-        rc, out = -1, "PATH 上找不到 %s" % exe
+    有沒有這個能力」，不是「某個指令叫什麼」。Claude 那兩列就是這樣才分得開的。"""
+    if shutil.which(item.exe) is None:
+        rc, out = -1, "PATH 上找不到 %s" % item.exe
     else:
-        rc, out = run([exe] + args, timeout=60)
+        rc, out = run([item.exe] + item.args, timeout=60)
     ok = rc == 0
-    if not ok and name == "Claude Code" and CLAUDE_HOME.is_dir():
+    if not ok and item.folder is not None and item.folder.is_dir():
         # 桌面版不裝 `claude` shim，但接線要的就是這個資料夾。
-        ok, out = True, "設定資料夾在：%s（桌面版不會在 PATH 上放 claude，正常）" % CLAUDE_HOME
+        ok, out = True, "資料夾在：%s（桌面版不會在 PATH 上放 claude，正常）" % item.folder
     return ok, out
 
 
@@ -335,24 +369,24 @@ class App(tk.Tk):
         )).pack(anchor="w", pady=(0, 10))
         self.rows = {}
         has_winget = shutil.which("winget") is not None
-        for name, exe, _a, url, why, _level, pkg in REQUIRED:
+        for item in REQUIRED:
             row = tk.Frame(self.tab1); row.pack(fill="x", pady=3)
             st = tk.Label(row, text="檢查中", width=8, anchor="w", fg="#888")
             st.pack(side="left")
-            tk.Label(row, text=name, width=13, anchor="w").pack(side="left")
-            tk.Label(row, text=why, fg="#666", font=self.f_small,
-                     anchor="w").pack(side="left", fill="x", expand=True)
+            tk.Label(row, text=item.name, width=17, anchor="w").pack(side="left")
+            tk.Label(row, text=item.why, fg="#666", font=self.f_small, wraplength=430,
+                     justify="left", anchor="w").pack(side="left", fill="x", expand=True)
             # 下載頁那顆一直留著：winget 裝失敗時人要有第二條路，
             # 而「唯一的路失敗了」跟「還有一條路」對站在機器前面的人差很多。
             tk.Button(row, text="開啟下載頁", width=11,
-                      command=lambda u=url: webbrowser.open(u)).pack(side="right", padx=(6, 0))
-            if has_winget and pkg:
+                      command=lambda u=item.url: webbrowser.open(u)).pack(side="right", padx=(6, 0))
+            if has_winget and item.winget:
                 btn = tk.Button(row, text="自動安裝", width=11,
-                                command=lambda n=name, p=pkg: self.do_install(n, p))
+                                command=lambda n=item.name, p=item.winget: self.do_install(n, p))
             else:
                 btn = tk.Button(row, text="（無自動安裝）", width=11, state="disabled")
             btn.pack(side="right")
-            self.rows[name] = (st, btn)
+            self.rows[item.name] = (st, btn)
         bar = tk.Frame(self.tab1); bar.pack(fill="x", pady=(14, 0))
         self.b_recheck = tk.Button(bar, text="重新檢查", width=14, command=self.check_env)
         self.b_recheck.pack(side="left")
@@ -468,14 +502,14 @@ class App(tk.Tk):
         refresh_path_from_registry()
         self.say("── 檢查環境 ──")
         blocking, optional = [], []
-        for name, exe, args, _url, _why, level, _pkg in REQUIRED:
-            ok, out = detect(name, exe, args)
+        for item in REQUIRED:
+            ok, out = detect(item)
             ver = out.splitlines()[0][:70] if ok and out else ""
-            mark = "[OK]" if ok else ("[!!]" if level == "must" else "[--]")
-            self.say("%s %-12s %s" % (mark, name, ver or out[:70]))
+            mark = "[OK]" if ok else ("[!!]" if item.level == "must" else "[--]")
+            self.say("%s %-16s %s" % (mark, item.name, ver or out[:70]))
             if not ok:
-                (blocking if level == "must" else optional).append(name)
-            self.ui(self._set_row, (name, ok, level))
+                (blocking if item.level == "must" else optional).append(item.name)
+            self.ui(self._set_row, (item.name, ok, item.level))
         self.env_ok = not blocking
         if blocking:
             self.ui(self._env_result,
@@ -487,7 +521,7 @@ class App(tk.Tk):
                     "可以往下走。%s 沒裝，但接線用不到它。" % "、".join(optional))
             self.say("[OK] 非有不可的都在。%s 是選配。" % "、".join(optional))
         else:
-            self.ui(self._env_result, "4 個都在，可以往下走。")
+            self.ui(self._env_result, "%d 個都在，可以往下走。" % len(REQUIRED))
             self.say("[OK] 環境齊全。")
 
     def do_install(self, name: str, pkg: str) -> None:
@@ -510,8 +544,8 @@ class App(tk.Tk):
             # 然後叫人去重裝一個他明明已經有的東西——這支踩過同一種錯兩次了。
             # 而且離開碼與訊息都會隨語系和版本變，能撐住的只有「現在偵測得到嗎」。
             refresh_path_from_registry()
-            row = next((r for r in REQUIRED if r[0] == name), None)
-            ok = detect(name, row[1], row[2])[0] if row else rc == 0
+            row = next((r for r in REQUIRED if r.name == name), None)
+            ok = detect(row)[0] if row else rc == 0
             if ok:
                 self.say("[OK] %s 現在偵測得到了。" % name)
             else:

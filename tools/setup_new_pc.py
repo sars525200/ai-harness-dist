@@ -110,6 +110,18 @@ def preflight() -> list[str]:
         blocked.append("找不到 %s。請先安裝 Claude Code 並開過一次，"
                        "讓它把設定目錄建出來。" % LIVE_DIR)
 
+    # **設定目錄在，不代表指令列版在。** 桌面版不會把 `claude` 放上 PATH，而 harness
+    # 有四個地方直接 `shutil.which("claude")` 去叫它：`hooks/session_title.py`（換 token）、
+    # `tools/run_claude_reviewer.py`（找不到就拒跑）、`tools/skill_watch_run.py`（讀版本）、
+    # `skills/skill-watch/platforms.json`。缺了不擋接線，所以這裡**不進 blocked**——
+    # 但要講清楚會壞什麼，否則接完線的人會以為 harness 是完整的。
+    if shutil.which("claude"):
+        say(OK, "Claude CLI 在 PATH 上")
+    else:
+        say(BAD, "Claude CLI 不在 PATH —— 接線不受影響，但技能與子代理叫不動它："
+                 "/adversarial-review 會拒跑，換 token 與版本偵測會靜默失效。"
+                 "補裝：winget install --id Anthropic.ClaudeCode --exact")
+
     for n in JUNCTIONS:
         p = LIVE_DIR / n
         if p.exists() and not _resolves_to(p, HARNESS_ROOT / n):
