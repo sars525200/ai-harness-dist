@@ -66,7 +66,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["IDX-1", "EOL-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "QUOTA-1",
+ORDER = ["IDX-1", "EOL-1", "MAP-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "QUOTA-1",
          "WIN-1", "PR-1", "ENC-1", "HTML-1", "EXP-1", "UI-1", "CHK-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
@@ -232,6 +232,20 @@ DESC = {
                "第一版誤把 shadow 觀察期也算進「講過了」，已修。"
                "<b>2026-09-07 起不再獨立掛 SessionStart</b>——被 ONB-2 取代，"
                "模組留著只給 ONB-2 前提不足時引用同一段提醒文字。",
+    },
+    "MAP-1": {
+        "badge": "9/07 新·enforce", "on": "<b>SessionStart</b>／PreToolUse git commit",
+        "why": "CODE_MAP.md 跟產生器現在算出來的結果<b>逐字不同</b>（只忽略檔尾時間戳與未審核標記）·"
+               "開場 WARN 印重跑指令、commit 前 BLOCK",
+        "tip": "地圖是一次性產物：ONB-2 只在新專案第一次開場寫一次，之後沒有任何機制會說它過期了——"
+               "「看得見的缺陷」（用途欄空白、未審核）之外先治「看不見的」。"
+               "判準綁後果不綁名字：呼叫 <code>generate_map.py --out</code> 到暫存檔比對，"
+               "不另寫第二份掃描邏輯。副作用講明：<b>CODE_MAP.md 從此禁止手改</b>，"
+               "要填用途欄就去該目錄補 README 第一行或 docstring 再重跑。"
+               "產生器跑不起來 → WARN 說「判斷不出來」，不當成沒問題、也不 BLOCK。"
+               "已知限制：看工作樹不看 index。bypass：<code># HARNESS_BYPASS:MAP-1</code>。"
+               "回歸網 <code>tests/test_map1.py</code> 對假專案跑真產生器（不 mock），"
+               "含「只差時間戳→不出聲」這個防永遠紅的案例。",
     },
     "ONB-2": {
         "badge": "9/07 新·shadow", "on": "<b>SessionStart</b>",

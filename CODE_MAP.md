@@ -65,6 +65,7 @@
 | &nbsp;&nbsp;└ `hooks/rules/html1_nesting.py` | HTML-1 —— 寫完 HTML 後檢查容器標籤有沒有關好（漏一個 `</div>` 會吞掉後面整片） | own |
 | &nbsp;&nbsp;└ `hooks/rules/idx1_staged_visibility.py` | IDX-1 —— `git commit` 前把整份 staged 清單攤開，並標出這一輪從沒被提過的檔 | own |
 | &nbsp;&nbsp;└ `hooks/rules/learn1_shadow.py` | LEARN-1 —— Stop：碰技術面任務卻沒問過「要不要學」時提醒一次 | own |
+| &nbsp;&nbsp;└ `hooks/rules/map1_code_map_freshness.py` | MAP-1 —— CODE_MAP.md 跟目錄現況脫節就出聲（SessionStart WARN／git commit BLOCK） | own |
 | &nbsp;&nbsp;└ `hooks/rules/onb1_sessionstart_notice.py` | ONB-1 —— 新專案第一次開場，還沒接上規則產生器就提醒一次 | own |
 | &nbsp;&nbsp;└ `hooks/rules/onb2_sessionstart_autoconfig.py` | ONB-2 —— 新專案第一次開場，真的自動幫他接上規則產生器（不只是印提示） | own |
 | &nbsp;&nbsp;└ `hooks/rules/pr1_plan_review_marker.py` | PR-1 —— Stop 事件：標「待審核」的計畫書，沒有有效的審查 marker 就擋 | own |
@@ -115,5 +116,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-07T15:13:31 -->
+<!-- generated-at: 2026-09-07T23:35:14 -->
 <!-- onb2-status: auto-generated, unreviewed -->

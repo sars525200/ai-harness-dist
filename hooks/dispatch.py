@@ -343,6 +343,20 @@ REGISTRY = [
         "events": {"SessionStart"},
         "tools": None,
     },
+    {
+        # MAP-1：CODE_MAP.md 跟目錄現況脫節就出聲（2026-09-07 使用者選「兩個時機都要」）。
+        # 判準綁後果：呼叫 generate_map.py 本尊 --out 到暫存檔逐字比對，只忽略檔尾
+        # 兩行機械註解。SessionStart WARN（地圖被讀的時機）、git commit BLOCK（過期
+        # 地圖進版控＝下一個人拿到假地圖）。tools 設 None 是因為兩個事件共用一支模組，
+        # applies() 自己依事件分流（PreToolUse 只認 Bash／PowerShell 的 git commit）。
+        # 產生器跑不起來 → WARN 說判斷不出來，不 BLOCK（別讓所有 commit 被一支壞腳本綁架）。
+        # ONB-1/2 排除 harness 是因為它們負責「第一次產生」；這條負責「產生之後」，
+        # harness 自己有地圖所以在範圍內。規格見 CODE_RULES_MAP_PLAN.md「MAP-1」節。
+        "id": "MAP-1",
+        "module": "map1_code_map_freshness",
+        "events": {"SessionStart", "PreToolUse"},
+        "tools": None,
+    },
 ]
 
 _RULE_CACHE: dict = {}
