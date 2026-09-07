@@ -30,6 +30,32 @@ r"""HND-3 —— Stop 閘門：這一輪動過交接檔，回覆結尾就要有�
 `.scratch/handoff/`（不含 `archive/`，跟 HND-1／HND-2 同一個管轄範圍）。
 沒有動過交接檔 ⇒ 這條規則不適用，不管回覆長什麼樣。
 
+## 2026-09-08 收斂：「動過交接檔」不等於「要收尾」（user 真機回報）
+
+上線後真機回報：一輪只是照 §0「開工就建」自動建檔、或照「進度日誌怎麼寫」
+在階段轉換時 append 一段（兩者都是 skill 本來就要求的**正常施作動作**，
+不是要換則），一樣被 BLOCK 逼著補「新對話建議第一句」——使用者形容是
+「結束對話也會產文章」。原判準把「這輪有沒有寫過交接檔」當成「是不是在
+收尾」，這兩件事其實不是同一件事：一個任務一生會動交接檔好幾次（開工建檔
+＋每次轉場 append），只有最後那次才是真正的 §3「換則時做什麼」。
+
+改法：在「有沒有碰過交接檔」之外，再查一個**這次寫入的內容裡有沒有收尾
+訊號**——`_has_closing_signal()`：
+
+    A. frontmatter `status:` 這一行被改成 done／closed／archived／superseded
+       （§4「結案」的動作，帶著改 status 這一步）
+    B. 這次 Write／Edit／MultiEdit 寫入的內容本身含一個 fenced code block
+       （§3 第 3 點「新對話建議第一句」照定義就是要嵌一段可複製貼上的
+       開場白，也就是一段 fenced code block；純進度日誌 append 或填
+       「目標」「硬限制」的散文段落不會天然帶 fence）
+
+兩個訊號任一命中才 BLOCK。**沒有訊號 ⇒ 這一輪不算真的在收尾**，即使有動過
+交接檔也放行——涵蓋開工建檔那次 Edit（填「目標」「硬限制」，沒有 fence
+也沒有改 status）與每次轉場的進度日誌 append（`### [階段]` 那幾行，同樣
+沒有 fence）。跟 HND-3 判準一貫的立場一樣：**查得到的事實，不猜語意**——
+這裡查的事實從「有沒有寫檔」收斂成「寫了什麼」，沒有回頭去猜「這輪讀起來
+像不像收尾」。
+
 「回覆結尾要有 fenced code block」的判準也一樣具體：不是「有沒有提到交接」
 「有沒有講收尾」這種語意判斷，是**訊息去除尾端空白後，最後一段內容是不是
 一個完整的 fenced code block**（``` 開頭、中間至少一行、``` 結尾貼著訊息
@@ -84,6 +110,12 @@ _HANDOFF_TOOLS = {"Write", "Edit", "MultiEdit"}
 # 跟語意判斷（「像不像在收尾」）無關——理由見檔頭。
 _TRAILING_FENCE_RE = re.compile(r"```[^\n`]*\n[\s\S]*?\n```\s*$")
 
+# 「這次寫入的內容裡有沒有收尾訊號」——見檔頭 2026-09-08 那段。
+# 不用 trailing 版本：這裡查的是寫入內容裡任何位置有沒有一個完整 fence，
+# 不要求貼在字串尾端（Edit 的 new_string 常常不是整份檔案）。
+_ANY_FENCE_RE = re.compile(r"```[^\n`]*\n[\s\S]*?\n```")
+_STATUS_CLOSE_RE = re.compile(r"(?m)^status:\s*(done|closed|archived|superseded)\b")
+
 
 def _walk_up_for_git(start: str) -> str:
     """從 `start` 往上找第一個帶 `.git` 的目錄；找不到回空字串。"""
@@ -124,11 +156,55 @@ def _is_handoff_path(file_path: str, root: str) -> bool:
     return rel.split(os.sep, 1)[0] != "archive"
 
 
-def _touched_handoff_files(ctx) -> "list[str] | None":
-    """這一輪 Write/Edit/MultiEdit 命中交接目錄的檔名（去重、依出現順序）。
+def _block_texts(block: dict) -> "list[str]":
+    """一個 tool_use block 這次實際寫入的內容——Write 的 `content`、
+    Edit 的 `new_string`、MultiEdit 每個 edit 的 `new_string`。
+    只看「新寫入的」，不看 `old_string`（收尾訊號要問「這次加了什麼」）。
+    """
+    inp = block.get("input") or {}
+    name = block.get("name")
+    if name == "Write":
+        return [inp.get("content") or ""]
+    if name == "Edit":
+        return [inp.get("new_string") or ""]
+    if name == "MultiEdit":
+        out = []
+        for e in inp.get("edits") or []:
+            if isinstance(e, dict):
+                out.append(e.get("new_string") or "")
+        return out
+    return []
 
-    回 None＝transcript 讀不到、判斷不出來——呼叫端必須 fail-open
-    （跟 `iter_turn_tool_uses` 自己的契約一致，別把「不知道」當「沒有」）。
+
+def _has_closing_signal(block: dict) -> bool:
+    """這次寫入的內容裡有沒有真正的收尾訊號——見檔頭 2026-09-08 那段。
+
+    A. status 改成 done／closed／archived／superseded（§4 結案）
+    B. 寫入內容本身含一個完整 fenced code block（§3 第 3 點「新對話建議
+       第一句」的定義就是一段可複製貼上的開場白）
+
+    純進度日誌 append、或開工當下填「目標」「硬限制」，兩者都不會天然
+    命中 A／B，所以不算收尾——這是本次收斂要放行的兩種情況。
+    """
+    for text in _block_texts(block):
+        if not text:
+            continue
+        if _STATUS_CLOSE_RE.search(text):
+            return True
+        if _ANY_FENCE_RE.search(text):
+            return True
+    return False
+
+
+def _touched_handoff_files(ctx) -> "list[str] | None":
+    """這一輪 Write/Edit/MultiEdit 命中交接目錄、且**帶收尾訊號**的檔名
+    （去重、依出現順序）。回 None＝transcript 讀不到、判斷不出來——呼叫端
+    必須 fail-open（跟 `iter_turn_tool_uses` 自己的契約一致，別把「不知道」
+    當「沒有」）。
+
+    2026-09-08 起：只回「有動過」不夠，還要「動的內容帶收尾訊號」才算——
+    理由見檔頭。單純動過但沒有訊號的檔（開工建檔、進度日誌 append）不算
+    命中，不會出現在回傳清單裡，訊息裡也就不會提到它。
     """
     blocks = iter_turn_tool_uses(ctx.turn_transcript_path)
     if blocks is None:
@@ -139,10 +215,13 @@ def _touched_handoff_files(ctx) -> "list[str] | None":
         if not isinstance(b, dict) or b.get("name") not in _HANDOFF_TOOLS:
             continue
         fp = (b.get("input") or {}).get("file_path") or ""
-        if fp and _is_handoff_path(fp, root):
-            name = os.path.basename(fp)
-            if name not in hits:
-                hits.append(name)
+        if not fp or not _is_handoff_path(fp, root):
+            continue
+        if not _has_closing_signal(b):
+            continue
+        name = os.path.basename(fp)
+        if name not in hits:
+            hits.append(name)
     return hits
 
 
@@ -207,7 +286,8 @@ def check(ctx):
     if _already_blocked(key):
         return allow()
 
-    # ③ 這一輪有沒有真的動過交接檔——讀不到／沒有都放行
+    # ③ 這一輪有沒有真的在收尾（動過交接檔＋內容帶收尾訊號）——讀不到／
+    #    沒有都放行。單純動過但沒訊號（開工建檔、進度日誌 append）不算。
     touched = _touched_handoff_files(ctx)
     if not touched:
         return allow()
@@ -220,8 +300,9 @@ def check(ctx):
     _record_block(key)
     names = "、".join(touched)
     return block(
-        f"chat-handoff【硬規則】：這一輪動過交接檔（{names}），回覆結尾要附一段"
-        "可複製的 fenced code block（```……```），對應 `skills/chat-handoff/SKILL.md` "
-        "§3「新對話建議第一句」——不是散文提醒使用者去讀檔，是要能直接複製貼進"
-        "下一個空對話的那幾行。這一輪目前結尾沒有這樣的區塊，補上再結束。"
+        f"chat-handoff【硬規則】：這一輪動過交接檔並寫入收尾內容（{names}），"
+        "回覆結尾要附一段可複製的 fenced code block（```……```），對應 "
+        "`skills/chat-handoff/SKILL.md` §3「新對話建議第一句」——不是散文"
+        "提醒使用者去讀檔，是要能直接複製貼進下一個空對話的那幾行。這一輪"
+        "目前結尾沒有這樣的區塊，補上再結束。"
     )

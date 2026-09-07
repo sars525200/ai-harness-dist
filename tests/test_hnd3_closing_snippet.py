@@ -21,6 +21,10 @@ r"""HND-3（交接收尾要有可複製 fenced code block）的回歸網（2026-
   7. **兩道防迴圈**（原封不動抄 AWC-1）：`stop_hook_active` 旗標放行；
      同一回合擋一次之後第二次要放行，換 session 要重新擋。
   8. **transcript 讀不到 → ALLOW**（fail-open：判斷不出來就不擋）。
+  9. **2026-09-08 收斂**：動過交接檔但寫入內容沒有收尾訊號（status 沒改成
+     非 open、內容也沒有 fenced code block）→ ALLOW，即使回覆結尾沒有 fence。
+     涵蓋 §0「開工就建」那次填「目標」「硬限制」、與階段轉換的進度日誌
+     append——這兩種都是 skill 本來就要求的正常施作，不是要換則。
 
 先證明它會紅：把「結尾要有 fenced code block」那條判準改成恆真（永遠當作
 有），本檔第 3 案必須轉紅——驗完復原。
@@ -129,65 +133,70 @@ def test_no_handoff_touch_allow(tmp):
 
 
 def test_handoff_write_with_fence_allow(tmp):
-    """2. Write 命中交接檔，結尾有完整 fenced code block → ALLOW。"""
+    """2. Write 命中交接檔且寫入內容帶收尾訊號，結尾有完整 fenced code block → ALLOW。"""
     repo = _mkrepo(tmp)
     handoff_path = os.path.join(repo, ".scratch", "handoff", "20260906-x.md")
+    content = ("---\nstatus: done\n---\n## 新對話建議第一句\n"
+               "```\n讀 .scratch/handoff/20260906-x.md。\n```\n")
     rows = [
         _user("交接一下"),
-        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: open\n---\n"}),
+        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": content}),
         _tool_result("t1"),
         _asst_text(_FENCE_OK),
     ]
     tp = _transcript(repo, rows)
     ctx = _ctx(repo, tp, _FENCE_OK)
     v = R.check(ctx)
-    _check("動交接檔＋結尾有 fence → ALLOW", v.decision == ALLOW, v.decision)
+    _check("動交接檔(帶收尾訊號)＋結尾有 fence → ALLOW", v.decision == ALLOW, v.decision)
 
 
 def test_handoff_write_no_fence_block(tmp):
-    """3. Write 命中交接檔，結尾沒有 fenced code block → BLOCK，訊息點名檔名。"""
+    """3. Write 命中交接檔且把 status 改成 done（收尾訊號），結尾沒有
+    fenced code block → BLOCK，訊息點名檔名。"""
     repo = _mkrepo(tmp)
     handoff_path = os.path.join(repo, ".scratch", "handoff", "20260906-y.md")
     rows = [
         _user("交接一下"),
-        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: open\n---\n"}),
+        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: done\n---\n"}),
         _tool_result("t1"),
         _asst_text(_NO_FENCE),
     ]
     tp = _transcript(repo, rows)
     ctx = _ctx(repo, tp, _NO_FENCE, session="no-fence")
     v = R.check(ctx)
-    _check("動交接檔＋結尾沒 fence → BLOCK", v.decision == BLOCK, v.decision)
+    _check("動交接檔(status→done)＋結尾沒 fence → BLOCK", v.decision == BLOCK, v.decision)
     _check("訊息點名檔名", "20260906-y.md" in v.message)
 
 
 def test_edit_counts_too(tmp):
-    """4. Edit（不是 Write）命中交接檔一樣算數 → BLOCK。"""
+    """4. Edit（不是 Write）命中交接檔、new_string 帶收尾訊號一樣算數 → BLOCK。"""
     repo = _mkrepo(tmp)
     handoff_path = os.path.join(repo, ".scratch", "handoff", "20260906-z.md")
     os.makedirs(os.path.dirname(handoff_path), exist_ok=True)
     with open(handoff_path, "w", encoding="utf-8") as fh:
         fh.write("---\nstatus: open\n---\n舊內容")
     rows = [
-        _user("補一段進度日誌"),
+        _user("收尾"),
         _asst_tool("t1", "Edit", {"file_path": handoff_path,
-                                   "old_string": "舊內容", "new_string": "新內容"}),
+                                   "old_string": "status: open",
+                                   "new_string": "status: done"}),
         _tool_result("t1"),
         _asst_text(_NO_FENCE),
     ]
     tp = _transcript(repo, rows)
     ctx = _ctx(repo, tp, _NO_FENCE, session="edit-case")
     v = R.check(ctx)
-    _check("Edit 命中交接檔 → BLOCK", v.decision == BLOCK, v.decision)
+    _check("Edit 命中交接檔(status→done) → BLOCK", v.decision == BLOCK, v.decision)
 
 
 def test_fence_must_be_at_tail(tmp):
-    """5. fenced code block 出現在中段、結尾是別的文字 → 仍要 BLOCK（判準是「結尾」）。"""
+    """5. 寫入內容帶收尾訊號，但 fenced code block 出現在回覆中段、結尾是別的文字
+    → 仍要 BLOCK（判準是「結尾」）。"""
     repo = _mkrepo(tmp)
     handoff_path = os.path.join(repo, ".scratch", "handoff", "20260906-mid.md")
     rows = [
         _user("交接一下"),
-        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: open\n---\n"}),
+        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: done\n---\n"}),
         _tool_result("t1"),
         _asst_text(_FENCE_MID_ONLY),
     ]
@@ -195,6 +204,54 @@ def test_fence_must_be_at_tail(tmp):
     ctx = _ctx(repo, tp, _FENCE_MID_ONLY, session="mid-fence")
     v = R.check(ctx)
     _check("fence 只在中段 → 仍 BLOCK", v.decision == BLOCK, v.decision)
+
+
+def test_opening_build_no_signal_allow(tmp):
+    """9a. §0 開工建檔：Edit 只填「目標」「硬限制」，沒有改 status、沒有 fence
+    → 不算收尾訊號 → ALLOW，即使回覆結尾沒有 fenced code block。"""
+    repo = _mkrepo(tmp)
+    handoff_path = os.path.join(repo, ".scratch", "handoff", "20260908-open.md")
+    os.makedirs(os.path.dirname(handoff_path), exist_ok=True)
+    with open(handoff_path, "w", encoding="utf-8") as fh:
+        fh.write("---\nstatus: open\n---\n## 目標\n（待填）\n## 硬限制\n（待填）\n")
+    rows = [
+        _user("開工"),
+        _asst_tool("t1", "Edit", {"file_path": handoff_path,
+                                   "old_string": "## 目標\n（待填）\n## 硬限制\n（待填）\n",
+                                   "new_string": "## 目標\n把 HND-3 誤觸發收斂\n## 硬限制\n不動 §0 骨架\n"}),
+        _tool_result("t1"),
+        _asst_text(_NO_FENCE),
+    ]
+    tp = _transcript(repo, rows)
+    ctx = _ctx(repo, tp, _NO_FENCE, session="opening-build")
+    v = R.check(ctx)
+    _check("開工建檔(無收尾訊號) → ALLOW", v.decision == ALLOW, v.decision)
+
+
+def test_progress_log_append_no_signal_allow(tmp):
+    """9b. 階段轉換的進度日誌 append：沒有改 status、沒有 fence
+    → 不算收尾訊號 → ALLOW，即使回覆結尾沒有 fenced code block。"""
+    repo = _mkrepo(tmp)
+    handoff_path = os.path.join(repo, ".scratch", "handoff", "20260908-log.md")
+    os.makedirs(os.path.dirname(handoff_path), exist_ok=True)
+    with open(handoff_path, "w", encoding="utf-8") as fh:
+        fh.write("---\nstatus: open\n---\n## 進度日誌\n")
+    rows = [
+        _user("轉到 Execute"),
+        _asst_tool("t1", "Edit", {
+            "file_path": handoff_path,
+            "old_string": "## 進度日誌\n",
+            "new_string": ("## 進度日誌\n"
+                            "### [Execute] HND-3 收斂\n"
+                            "- 做了什麼：改判準\n- 為什麼是這個決定：見檔頭\n- 沒做的：無\n"),
+        }),
+        _tool_result("t1"),
+        _asst_text(_NO_FENCE),
+    ]
+    tp = _transcript(repo, rows)
+    ctx = _ctx(repo, tp, _NO_FENCE, session="progress-log")
+    v = R.check(ctx)
+    _check("進度日誌 append(無收尾訊號) → ALLOW", v.decision == ALLOW, v.decision)
 
 
 def test_archive_not_counted(tmp):
@@ -238,12 +295,12 @@ def test_unreadable_transcript_allow(tmp):
 
 
 def test_loop_guard_b(tmp):
-    """9. 防迴圈 B：同一回合擋一次之後第二次要放行；換 session 要重新擋。"""
+    """10. 防迴圈 B：同一回合擋一次之後第二次要放行；換 session 要重新擋。"""
     repo = _mkrepo(tmp)
     handoff_path = os.path.join(repo, ".scratch", "handoff", "20260906-loop.md")
     rows = [
         _user("交接一下，兩個 repo 都處理完了"),
-        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "x"}),
+        _asst_tool("t1", "Write", {"file_path": handoff_path, "content": "---\nstatus: done\n---\n"}),
         _tool_result("t1"),
         _asst_text(_NO_FENCE),
     ]
@@ -257,7 +314,7 @@ def test_loop_guard_b(tmp):
 
     rows_other = [
         _user("交接一下，兩個 repo 都處理完了"),
-        _asst_tool("t2", "Write", {"file_path": handoff_path, "content": "x"}),
+        _asst_tool("t2", "Write", {"file_path": handoff_path, "content": "---\nstatus: done\n---\n"}),
         _tool_result("t2"),
         _asst_text(_NO_FENCE),
     ]
@@ -287,6 +344,8 @@ def run():
         test_edit_counts_too,
         test_fence_must_be_at_tail,
         test_archive_not_counted,
+        test_opening_build_no_signal_allow,
+        test_progress_log_append_no_signal_allow,
         test_stop_hook_active_allow,
         test_unreadable_transcript_allow,
         test_loop_guard_b,
