@@ -16,6 +16,20 @@
 **「叫模型記得」與「執行期閘門」是兩件事**，而第 3 次證明連「記得去查」都不夠 ——
 帶著預期去查，只會找到預期中的東西。
 
+## 2026-09-07：**清單乾淨就不出聲**（由「每次都印」改）
+
+上線後 11 天完全沒有送達過 —— 它從沒進 `dispatch_config.json`，而缺項的預設值
+是 shadow。事件日誌實測 **判定 242 次、真的送達 1 次**。解開沉默時面對的取捨是：
+242 次裡 **199 次是乾淨清單**，全開等於每次 commit 都多 350 字，而
+「常態出現的 WARN 會被整條無視」是這條規則自己檔頭就寫著的死法。
+
+所以改成：**只有在有可疑項、或判斷不出來的時候才出聲**。
+
+**放棄了什麼要講清楚**：原本的設計意圖是「每次都逐行讀完整份清單」，針對的正是
+8/27 第 3 次失效（帶著預期去 grep，於是漏掉沒預期到的那個）。改完之後，
+「檔案這一輪被提過、但提它的理由與這次 commit 無關」這種情形不再會被印出來。
+**留下的防線是：只要出聲，就仍然印完整清單並逐項標記**，不折疊、不只印可疑的那幾個。
+
 ## 判準：不判對錯，只保證「看得見」＋標出可疑
 
 **不擋**（WARN）。這條規則沒有能力判斷一個檔該不該在 index 裡 —— 那要知道
@@ -83,7 +97,12 @@ def _turn_mentions(ctx) -> "set[str] | None":
                 blob.append(v)
             elif isinstance(v, (list, tuple)):
                 blob.extend(x for x in v if isinstance(x, str))
-    return {"\n".join(blob)} if blob else set()
+    # ⚠ blob 是空的 ⇒ 這一輪一個工具輸入字串都沒讀到，那是**判斷不出來**，
+    #   不是「每個檔都提過」。舊版回空 set，而呼叫端的 `if mentions:` 對空 set
+    #   為假 ⇒ unseen 永遠是空的 ⇒ 印出「沒有明顯的外來項」。
+    #   在「每次都印清單」的年代那只是一句多餘的話；改成「乾淨就不出聲」之後，
+    #   同一個空集合會變成**靜默放行**——同一個 bug，後果從囉唆升級成漏報。
+    return {"\n".join(blob)} if blob else None
 
 
 def check(ctx):
@@ -106,12 +125,20 @@ def check(ctx):
             if p not in hay and leaf not in hay:
                 unseen.append(p)
 
+    # 乾淨就不出聲（2026-09-07）。判斷不出來（mentions is None）仍然出聲：
+    # 「不知道」不是「沒問題」，而這條規則存在的理由正是那三次「以為沒問題」。
+    if mentions is not None and not unseen:
+        return allow()
+
     shown = staged[:_MAX_LIST]
     lines = "\n".join(f"    {'⚠ ' if p in unseen else '  '}{p}" for p in shown)
     more = f"\n    …另有 {len(staged) - len(shown)} 個未列出" if len(staged) > len(shown) else ""
 
+    why = ("這一輪的工具呼叫**從沒提過其中幾個檔**"
+           if unseen else "**這一輪的對話紀錄讀不到**，無法判斷有沒有混入外來項")
     head = (
-        f"index 現在有 {len(staged)} 個檔。多 session 共用 repo 時 index 是共用狀態，"
+        f"index 現在有 {len(staged)} 個檔，而{why} —— 所以這次把整份清單攤開。"
+        f"（清單乾淨時這條規則不出聲。）多 session 共用 repo 時 index 是共用狀態，"
         f"`git add <路徑>` 不保證 index 裡只有那些路徑 —— 兩個指令之間就會被別的 session 塞東西進來。"
     )
     body = f"\n\n  這次要 commit 的完整清單：\n{lines}{more}"
@@ -126,7 +153,7 @@ def check(ctx):
             "\n  撤掉單一檔的做法是 `git restore --staged <路徑>`；"
             "同一個檔裡混了別人的 hunk 則走 `tools/filter_hunks.py`。"
         )
-    else:
+    else:  # pragma: no cover —— 走到這裡代表上面的 allow() 沒生效
         tail = "\n\n  清單裡每個檔這一輪都出現過，沒有明顯的外來項。"
 
     tail += (

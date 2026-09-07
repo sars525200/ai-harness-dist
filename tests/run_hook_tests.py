@@ -538,6 +538,7 @@ def main() -> int:
         import test_skill_roster
         import test_open_in_ide
         import test_decl1
+        import test_idx1
         import test_decl2_missing_declaration
         import test_disp1
         import test_esc1
@@ -655,6 +656,7 @@ def main() -> int:
             (test_skill_roster.run, "Skill 清冊產生器"),
             (test_open_in_ide.run, "看板在 IDE 開檔"),
             (test_decl1.run, "DECL-1 宣告欄位"),
+            (test_idx1.run, "IDX-1 staged 清單可見性"),
             (test_decl2_missing_declaration.run, "DECL-2 動檔零宣告（shadow）"),
             (test_disp1.run, "DISP-1 派工紀律"),
             (test_esc1.run, "ESC-1 需求登記"),
