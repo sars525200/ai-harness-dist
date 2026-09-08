@@ -55,7 +55,7 @@ if p.exists():
         ctl[k.strip()] = v.strip()
 n = len(calls.read_text(encoding="utf-8").splitlines()) if calls.exists() else 0
 with calls.open("a", encoding="utf-8") as fh:
-    fh.write(" ".join(sys.argv[1:]) + "\n")
+    fh.write(" ".join(sys.argv[1:]) + " via=" + os.environ.get("CLOUD_BACKUP_VIA_HOOK", "") + "\n")
 if ctl.get("commit") == "1" and n == 0:
     repo = Path(os.getcwd())
     (repo / "again.txt").write_text("again\n", encoding="utf-8")
@@ -127,6 +127,9 @@ def run():
         st = repo / "state"
         check("成功：exit 0", r.returncode == 0, r.stdout + r.stderr)
         check("成功：後端只被叫一次", _calls(be) == 1, str(_calls(be)))
+        check("成功：包裝器叫後端時帶 CLOUD_BACKUP_VIA_HOOK=1（少了它後端會反過來轉交包裝器）",
+              "via=1" in (be.parent / "calls.txt").read_text(encoding="utf-8"),
+              (be.parent / "calls.txt").read_text(encoding="utf-8")[:200])
         last = json.loads((st / "cloud_backup_last.json").read_text(encoding="utf-8"))
         check("成功：結果檔記的是 HEAD", last["head"] == _git(repo, "rev-parse", "HEAD"))
         check("成功：結果檔 ok=true", last["ok"] is True)

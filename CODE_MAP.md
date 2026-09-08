@@ -117,5 +117,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-08T10:43:11 -->
+<!-- generated-at: 2026-09-08T11:16:16 -->
 <!-- onb2-status: auto-generated, unreviewed -->

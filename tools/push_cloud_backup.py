@@ -21,6 +21,15 @@ commit metadata 裡的公司信箱。這些東西**不能交給雲端服務商**
 「harness 跨機同步」那列），成因是「沒有東西提醒他要看」。這支的存在就是為了
 讓「更新雲端備份」變成一行指令。
 
+## 手動 --push 一律走包裝器（2026-09-08）
+
+這支只推、不寫 `state/`；寫結果檔的是包裝器 `cloud_backup_hook.py`（post-commit 走的那道門）。
+2026-09-07、09-08 各踩一次：棘輪擋下後人手動 `--push` 推成功，結果檔仍停在「失敗」，
+開工檢查照樣報 [!!]——備份是好的、守門永遠紅。所有指路寫的又都是 `--push`，改文字等於
+要人記得走另一道門。所以 `--push` 沒帶包裝器標記（`CLOUD_BACKUP_VIA_HOOK=1`）時**自己轉交
+包裝器**，包裝器再帶標記叫回這支——哪道門進來都留紀錄。帶 `--remote`／`--keep`／`--rules-dir`
+的進階用法不轉交（包裝器不吃那些參數），但會講明 state/ 不會更新。
+
 ## 規則檔為什麼不進版控
 
 `replace-rules.txt` 的**左半邊就是要清掉的那些字串**。把它 commit 進 repo 等於
@@ -70,6 +79,7 @@ import difflib
 import importlib.util
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -79,6 +89,9 @@ import tempfile
 from pathlib import Path
 
 HARNESS_ROOT = Path(__file__).resolve().parent.parent
+# 手動 --push 轉交的包裝器，與它叫回來時帶的標記（兩支同名，tests/test_push_cloud_backup_manual_push.py 對帳）
+HOOK_FILE = Path(__file__).resolve().parent / "cloud_backup_hook.py"
+VIA_HOOK_ENV = "CLOUD_BACKUP_VIA_HOOK"
 RULES_DIR = HARNESS_ROOT / ".scratch" / "cloud-export"
 RULES_FILE = RULES_DIR / "replace-rules.txt"
 MAILMAP_FILE = RULES_DIR / "mailmap.txt"
@@ -555,6 +568,17 @@ def main() -> int:
     ap.add_argument("--keep", action="store_true", help="保留工作目錄供檢查")
     ap.add_argument("--rules-dir", help="規則目錄改指別處（只給變異測試用，正本不動）")
     args = ap.parse_args()
+
+    if args.push and os.environ.get(VIA_HOOK_ENV) != "1":
+        advanced = args.remote or args.keep or args.rules_dir
+        if not advanced and HOOK_FILE.is_file():
+            print("手動 --push 轉交包裝器 cloud_backup_hook.py --run：它推完會把結果寫進 state/，"
+                  "開工檢查才不會把成功說成失敗（2026-09-08 起）")
+            sys.stdout.flush()
+            return subprocess.call([sys.executable, str(HOOK_FILE), "--run", "--backend", str(Path(__file__).resolve())],
+                                   cwd=str(HARNESS_ROOT))
+        print("⚠ 這次不走包裝器（帶了進階參數或找不到包裝器）—— state/ 的結果檔不會更新，"
+              "開工檢查仍會照舊紀錄判定")
 
     if args.rules_dir:
         configure_rules_dir(Path(args.rules_dir))

@@ -83,9 +83,12 @@ def _serve_slow_first(delay: float):
             state["n"] += 1
             if state["n"] == 1:
                 time.sleep(delay)
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"x")
+            try:
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"x")
+            except OSError:
+                return  # 第一個請求那頭已經逾時掛斷——這正是要模擬的情況，不是錯
 
         def log_message(self, *a):
             return

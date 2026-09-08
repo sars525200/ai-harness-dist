@@ -291,10 +291,9 @@ class State:
             f"時間: {now_iso()}\ncommit: {head}\nexit: {exit_code}\n原因（最後幾行）:\n"
             + "\n".join(tail) + "\n\n"
             "完整輸出: state/cloud_backup.log\n"
-            # 這裡**不能寫 push_cloud_backup.py --push**（2026-09-07 實際踩到）：
-            # 那支只負責推，不寫 state/。照它跑而且推成功之後，這個失敗標記與
-            # cloud_backup_last.json 仍停在「失敗」，開工檢查 [4] 照樣報 [!!] ——
-            # 備份明明是好的，守門卻永遠紅，紅久了人就不讀它了。
+            # 2026-09-07 這裡曾因 push_cloud_backup.py --push 不寫 state/ 而說謊（推成功、
+            # 標記仍停在失敗、開工檢查永遠紅）。2026-09-08 起後端的 --push 會自己轉交
+            # 這支 --run，兩道門都留紀錄；這裡仍寫 --run，因為它就是留紀錄的那道門。
             "手動重跑: py -3 tools/cloud_backup_hook.py --run\n",
             encoding="utf-8")
 
@@ -312,7 +311,9 @@ def parse_cloud_tip(output: str) -> str:
 def run_once(root: Path, backend: Path, st: State) -> tuple[bool, str]:
     head = git(root, "rev-parse", "HEAD")
     st.append_log(f"\n===== [{now_iso()}] 開始推送  HEAD={head[:12]} =====")
-    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    # 標記＝「這次是包裝器叫的」。後端的 --push 看不到它就會反過來轉交包裝器（2026-09-08），
+    # 少了這行兩支會互踢到永遠。名字與 push_cloud_backup.py 的 VIA_HOOK_ENV 同字串。
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1", CLOUD_BACKUP_VIA_HOOK="1")
     r = subprocess.run([sys.executable, str(backend), "--push"], cwd=str(root),
                        capture_output=True, env=env)
     out = (r.stdout or b"").decode("utf-8", "replace") + (r.stderr or b"").decode("utf-8", "replace")

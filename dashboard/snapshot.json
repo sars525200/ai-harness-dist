@@ -61,25 +61,25 @@
     "WIN-1"
   ],
   "would_block": {
-    "MAP-1": 23,
-    "AWC-1": 345,
-    "HND-1": 178,
-    "WIN-1": 446,
+    "MAP-1": 25,
+    "AWC-1": 347,
+    "HND-1": 179,
+    "WIN-1": 449,
     "DISP-1": 112,
-    "IDX-1": 244,
+    "IDX-1": 245,
     "ENC-1": 77,
     "CHK-1": 11,
     "DB-1": 67,
     "PR-1": 49,
-    "TITLE-2": 81,
-    "DECL-1": 52,
+    "TITLE-2": 84,
+    "DECL-1": 53,
     "HTML-1": 10,
     "ESC-1": 35,
     "HND-3": 20,
     "DECL-2": 14,
     "R3": 4,
     "HND-2": 10,
-    "QUOTA-1": 10,
+    "QUOTA-1": 11,
     "BUDGET-1": 7,
     "ONB-2": 4,
     "LEARN-1": 3,
@@ -93,5 +93,5 @@
     "R1": 0
   },
   "skill_count": 33,
-  "tool_raw_count": 132
+  "tool_raw_count": 133
 }
