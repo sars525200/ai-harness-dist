@@ -25,6 +25,7 @@
 | &nbsp;&nbsp;└ `global/hub/20-modes.md` | 2 | own |
 | &nbsp;&nbsp;└ `global/hub/21-title-claude.md` | - **`TITLE-1`**（文件內部代號，**非 hook 硬擋**——`dispatch_config.json` 沒有這條，沒有程式在執行期檢查）：以下對話命名規則 | own |
 | &nbsp;&nbsp;└ `global/hub/22-title-cursor.md` | - **對話名稱**：任務一確定就呼叫 `rename_chat`（`cursor-app-control`，參數 `title`） | own |
+| &nbsp;&nbsp;└ `global/hub/23-cross-session-msg-claude.md` | - **兩套通訊系統不互通，定址方式各自查各自的清單**： | own |
 | &nbsp;&nbsp;└ `global/hub/30-workflow.md` | 3 | own |
 | &nbsp;&nbsp;└ `global/hub/40-dispatch.md` | 4 | own |
 | &nbsp;&nbsp;└ `global/hub/41-dispatch-claude.md` | - **session 指令擋住派工時必須當場說**，別默默自己做完（`CLAUDE_CODE_CHILD_SESSION=1`＝ | own |
@@ -117,5 +118,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-08T11:16:16 -->
+<!-- generated-at: 2026-09-08T17:48:10 -->
 <!-- onb2-status: auto-generated, unreviewed -->
