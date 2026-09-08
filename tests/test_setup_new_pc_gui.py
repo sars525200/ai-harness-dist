@@ -139,6 +139,11 @@ with tempfile.TemporaryDirectory() as td:
     repo = Path(td) / "AI-Unifi" / ".ai-harness"
     (repo / "tools").mkdir(parents=True)
     (repo / "tools" / "wire_machine.py").write_text("# stub\n", encoding="utf-8")
+    # [8] 之後接線閘門會先驗這份 harness 的零件齊不齊。這裡要驗的是**來源檔**
+    # 那幾條守衛，所以 repo 本身要造成「可用」的樣子，否則會被前一道擋掉，
+    # 綠燈就變成「測到別條規則」而不是這條。
+    (repo / "tools" / "gen_explainer_page.py").write_text("# stub\n", encoding="utf-8")
+    (repo / "version.json").write_text('{"version": "0.0.0"}', encoding="utf-8")
 
     app.repo_dir = repo
     app.e_src.delete(0, "end")                   # 空白
@@ -299,6 +304,87 @@ if dflt.parent != root:
 if dflt.name != ".ai-harness":
     fails.append("[7] 預設目的地的資料夾名是 %r，不是 .ai-harness——"
                  "find_harness_repo() 的第二層只認這個名字，改了就掃不到" % dflt.name)
+
+# ── 8. 一份殘破的 harness 不准被當成可用 ───────────────────
+#
+# 真機三連撞：精靈找到 `D:\_backup-<BACKUP-FOLDER-EXAMPLE>\.ai-harness`（舊備份），
+# 印「步驟 3 可以跳過」、把那個路徑填進目的地欄位，於是按下載走到
+# 「已經有一份，跳過」——照畫面操作永遠拿不到新版，使用者以為安裝器沒更新。
+# 更貴的是接線：那會把 `.claude\agents`／`skills` 兩個 junction 指向這份備份，
+# 全程沒有警告，症狀是哪天備份被清、技能與角色整批消失。
+#
+# 綁後果不綁名字：不比對資料夾叫不叫 backup，只問「缺的零件會讓畫面上哪裡壞掉」。
+if OLD:
+    G.repo_missing_parts = lambda _p: []        # 舊寫法：找到就當可用，不看新舊
+with tempfile.TemporaryDirectory() as td:
+    stale = Path(td) / "stale"; (stale / "tools").mkdir(parents=True)
+    (stale / "tools" / "wire_machine.py").write_text("", encoding="utf-8")   # 接得了線
+    fresh = Path(td) / "fresh"; (fresh / "tools").mkdir(parents=True)
+    (fresh / "tools" / "wire_machine.py").write_text("", encoding="utf-8")
+    (fresh / "tools" / "gen_explainer_page.py").write_text("", encoding="utf-8")
+    (fresh / "version.json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+
+    if not G.repo_missing_parts(stale):
+        fails.append("[8] 少了版號檔與說明頁產生器的 repo 被判成可用——"
+                     "那正是真機上被當成「已經有 harness」的那一份")
+    if G.repo_missing_parts(fresh):
+        fails.append("[8] 零件齊全的 repo 被誤判成缺東西：%s"
+                     % G.repo_missing_parts(fresh))
+
+    # 接線閘門：指著殘破 repo 時必須擋下，而且不能是靜默放行。
+    saved_repo, saved_src = app.repo_dir, app.e_src.get()
+    try:
+        app.repo_dir = stale
+        app.e_src.delete(0, "end"); app.e_src.insert(0, str(fresh / "version.json"))
+        if app._wire_ready() is not None:
+            fails.append("[8] 接線閘門放行了一份殘破的 harness——"
+                         "junction 會指向它，壞掉時不會有任何錯誤訊息")
+        app.repo_dir = fresh
+        if app._wire_ready() is None:
+            fails.append("[8] 零件齊全的 repo 也被接線閘門擋下了——守門寬到永遠紅"
+                         "等於沒有守門")
+    finally:
+        app.repo_dir = saved_repo
+        app.e_src.delete(0, "end"); app.e_src.insert(0, saved_src)
+
+# ── 9. 下載要邊跑邊回報，不能等跑完才一次吐出來 ────────────
+#
+# 2026-09-08 真機當場提的：「下載要有進度條」。25 MB 的 clone 要一兩分鐘，
+# `subprocess.run` 那種等跑完才拿輸出的寫法，畫面在那段時間完全靜止＝按了像沒反應。
+# 綁後果：**不驗有沒有用某個函式**，只驗「命令還在跑的時候，回報已經進來了」。
+# 順帶驗 `\r`：git 的進度是用 \r 覆蓋同一行，整行讀會把它們併成一行、進度只跳一次。
+child = (
+    "import sys,time\n"
+    "sys.stdout.write('Receiving objects:  10%\\r'); sys.stdout.flush()\n"
+    "time.sleep(1.5)\n"
+    "sys.stdout.write('Receiving objects: 100%\\r'); sys.stdout.flush()\n"
+)
+if OLD:
+    def _old_streaming(cmd, on_line, cwd=None, timeout=300):
+        """舊寫法：等整個指令跑完，才把輸出一次交出去。"""
+        rc, out = G.run(cmd, cwd=cwd, timeout=timeout)
+        for ln in out.splitlines():
+            on_line(ln)
+        return rc, out
+    G.run_streaming = _old_streaming
+seen: list[tuple[float, str]] = []
+t0 = time.monotonic()
+rc, _out = G.run_streaming([sys.executable, "-c", child],
+                           lambda ln: seen.append((time.monotonic() - t0, ln)),
+                           timeout=60)
+t_done = time.monotonic() - t0
+if rc != 0:
+    fails.append("[9] 串流跑指令自己失敗了（退出碼 %s）" % rc)
+elif not seen:
+    fails.append("[9] 整個過程一行回報都沒有——進度條不會動")
+else:
+    if seen[0][0] > t_done - 1.0:
+        fails.append("[9] 第一行回報等到指令快結束才進來（%.2fs / 全長 %.2fs）——"
+                     "那是跑完才一次吐出來，畫面在下載期間依然靜止"
+                     % (seen[0][0], t_done))
+    if len(seen) < 2:
+        fails.append("[9] 只收到 %d 行：git 的進度用 \\r 覆蓋同一行，"
+                     "整行讀會把它們併成一行、進度條只跳一次" % len(seen))
 
 # 定錨 [2] 的根因：`Path("")` 就是 `Path(".")`，而它**存在**——
 # 這正是舊的 exists() 守衛放行的原因。這行紅了代表 Python 行為變了，

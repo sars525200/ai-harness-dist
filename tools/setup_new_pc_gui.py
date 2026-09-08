@@ -41,10 +41,12 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
 from typing import NamedTuple
@@ -207,6 +209,82 @@ def run(cmd: list[str], cwd: str | None = None, timeout: int = 300):
     out = (r.stdout or b"").decode("utf-8", "replace")
     err = (r.stderr or b"").decode("utf-8", "replace")
     return r.returncode, (out + err).strip()
+
+
+def run_streaming(cmd: list[str], on_line, cwd: str | None = None, timeout: int = 1800):
+    r"""跑指令並**邊跑邊回報每一行**，回 `(returncode, 最後幾行)`。
+
+    為什麼不共用 `run()`：`subprocess.run` 要等程式整個跑完才拿得到輸出。
+    `git clone` 抓 25 MB 要一兩分鐘，那段時間畫面一動也不動——2026-09-08 真機
+    當場問「下載要有進度條」，看到的就是這個：**按了像沒反應**。
+
+    git 的進度寫在 stderr，而且用 `\r` 一直覆蓋同一行（不是換行），所以這裡逐 byte
+    讀、碰到 `\r` 或 `\n` 都當一行送出去。整行讀（`for line in stdout`）會卡到
+    clone 結束才一次吐出來，等於沒有進度。
+    """
+    exe = cmd[0]
+    if not Path(exe).is_absolute():
+        resolved = shutil.which(exe)
+        if resolved is None:
+            return -1, "PATH 上找不到：%s" % exe
+        cmd = [resolved] + cmd[1:]
+    try:
+        p = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, env=child_env(),
+                             creationflags=NO_WINDOW)
+    except FileNotFoundError:
+        return -1, "找不到指令：%s" % cmd[0]
+    except OSError as e:
+        return -1, "無法執行 %s：%s" % (cmd[0], e)
+    tail: list[str] = []
+    buf = b""
+    deadline = time.monotonic() + timeout
+    while True:
+        ch = p.stdout.read(1) if p.stdout else b""
+        if not ch:
+            break
+        if ch in (b"\r", b"\n"):
+            line, buf = buf.decode("utf-8", "replace").strip(), b""
+            if line:
+                tail.append(line)
+                del tail[:-40]          # 只留尾巴：失敗時要看的都在最後
+                try:
+                    on_line(line)
+                except Exception:
+                    pass                # 回報壞掉不該把下載一起弄死
+            continue
+        buf += ch
+        if time.monotonic() > deadline:
+            p.kill()
+            return -1, "逾時（超過 %d 秒）" % timeout
+    p.wait()
+    if buf.strip():
+        tail.append(buf.decode("utf-8", "replace").strip())
+    return p.returncode, "\n".join(tail)
+
+
+#: 這份 harness 少了它就會在畫面上壞掉的零件 →「缺了會看到什麼」。
+#  綁後果不綁名字：**不看資料夾叫什麼**。2026-09-08 真機那份叫
+#  `_backup-<BACKUP-FOLDER-EXAMPLE>`，但下一份不會叫這個名字，靠名字認就是在
+#  預測下一個人怎麼命名。這裡問的是「拿它來用會不會壞」，每一項都對得上
+#  一個使用者真的看得到的症狀。
+REPO_PARTS = [
+    (Path("version.json"), "版號會顯示「未知」"),
+    (Path("tools") / "gen_explainer_page.py", "說明頁按鈕會報「版本太舊」"),
+    (Path("tools") / "wire_machine.py", "第 4 分頁根本接不了線"),
+]
+
+
+def repo_missing_parts(repo: Path) -> "list[str]":
+    """回這份 harness 缺了哪些零件（人看得懂的字串）。空清單＝夠用。"""
+    out = []
+    for rel, symptom in REPO_PARTS:
+        try:
+            if not (repo / rel).is_file():
+                out.append("%s（%s）" % (rel.as_posix(), symptom))
+        except OSError:
+            out.append("%s（讀不到）" % rel.as_posix())
+    return out
 
 
 DRIVE_REMOVABLE, DRIVE_FIXED = 2, 3
@@ -413,11 +491,25 @@ class App(tk.Tk):
         self.after(120, self._pump)
         # 開場就把「這台已經有 harness」找出來填進步驟 3 那格。不填的代價是
         # 關掉重開之後第 4 分頁只認預設路徑，會叫人重下載一次已經有的東西。
+        #
+        # ⚠ 但**只在那份真的能用時才填**。2026-09-08 真機：它找到一份舊備份
+        #    `D:\_backup-<BACKUP-FOLDER-EXAMPLE>\.ai-harness`，印「步驟 3 可以跳過」，
+        #    還把那個路徑填進目的地欄位——於是按「開始下載」走到「已經有一份，
+        #    跳過下載」，**照著畫面操作永遠拿不到新版**。使用者連撞三次，
+        #    每次都以為是安裝器沒更新。填一個死路比不填更糟。
         found = find_harness_repo()
         if found:
-            self._set_target(str(found))
-            self.repo_dir = found
-            self.say("[OK] 這台已經有 harness：%s（步驟 3 可以跳過）" % found)
+            missing = repo_missing_parts(found)
+            if missing:
+                self.say("[!!] 找到一份 harness，但它太舊、不能用：%s" % found)
+                for m in missing:
+                    self.say("     缺 %s" % m)
+                self.say("     步驟 3 的目的地保留預設值 %s——按「開始下載」拿一份新的。"
+                         % default_target())
+            else:
+                self._set_target(str(found))
+                self.repo_dir = found
+                self.say("[OK] 這台已經有 harness：%s（步驟 3 可以跳過）" % found)
         self._refresh_version_label()
         self.check_env()
 
@@ -522,6 +614,12 @@ class App(tk.Tk):
         self.b_clone = tk.Button(bar, text="開始下載", width=14, command=self.do_clone)
         self.b_clone.pack(side="left")
         self.l_clone = tk.Label(bar, text="", anchor="w"); self.l_clone.pack(side="left", padx=12)
+        # 進度條與它下面那行字。下載要一兩分鐘，沒有它畫面就是完全靜止。
+        self.pb_clone = ttk.Progressbar(self.tab3, mode="determinate", maximum=100)
+        self.pb_clone.pack(fill="x", pady=(12, 2))
+        self.l_progress = tk.Label(self.tab3, text="", font=self.f_small, fg="#666",
+                                   anchor="w")
+        self.l_progress.pack(anchor="w")
 
     def _build_tab4(self) -> None:
         f = tk.Frame(self.tab4); f.pack(fill="x")
@@ -773,12 +871,44 @@ class App(tk.Tk):
             self.e_target.delete(0, "end")
             self.e_target.insert(0, str(Path(d) / ".ai-harness"))
 
+    #: git clone --progress 的進度行，例如 `Receiving objects:  47% (580/1234), 5.00 MiB`
+    _CLONE_PCT = re.compile(r"(Receiving objects|Resolving deltas):\s+(\d+)%")
+
+    def _clone_progress(self, pair) -> None:
+        value, text = pair
+        self.pb_clone.configure(value=value)
+        self.l_progress.configure(text=text[:90])
+
+    def _on_clone_line(self, line: str) -> None:
+        """把 git 的進度行換算成 0–100。**在背景執行緒被呼叫，只准丟進佇列。**"""
+        m = self._CLONE_PCT.search(line)
+        if not m:
+            return
+        pct = int(m.group(2))
+        # 收檔算 0–90、解 delta 算 90–100。只認前一段的話，進度條會在收完檔時
+        # 衝到滿格然後乾等解 delta——看起來就像卡住了。
+        value = pct * 0.9 if m.group(1) == "Receiving objects" else 90 + pct * 0.1
+        self.ui(self._clone_progress, (value, line))
+
     def do_clone(self) -> None:
         target = Path(self.e_target.get().strip())
 
         def work():
             if target.exists() and any(target.iterdir()):
                 if (target / ".git").exists():
+                    stale = repo_missing_parts(target)
+                    if stale:
+                        # 「已經有一份」不等於「那份能用」。不擋在這裡的話，
+                        # 目的地指著舊備份的人按下載會看到綠字「已存在，可直接接線」
+                        # ——一個成功訊息，實際上什麼都沒發生。
+                        self.say("[!!] %s 有一份 harness，但它太舊、不能用：" % target)
+                        for m in stale:
+                            self.say("     缺 %s" % m)
+                        self.say("     改一個空的位置（例如 %s）再按一次下載，"
+                                 "或到那個資料夾自己 git pull。" % default_target())
+                        self.ui(lambda _p: self.l_clone.configure(text="那份太舊，換個位置",
+                                                                  fg="#a8481b"))
+                        return
                     self.say("[OK] %s 已經有一份 harness，跳過下載。" % target)
                     self.repo_dir = target
                     self.ui(lambda _p: self.l_clone.configure(text="已存在，可直接接線",
@@ -790,8 +920,12 @@ class App(tk.Tk):
                 self.ui(lambda _p: self.l_clone.configure(text="目標資料夾被佔用", fg="#a8481b"))
                 return
             self.say("── 下載 harness（約 25 MB，可能要一兩分鐘）──")
-            rc, out = run(["git", "clone", REPO_URL, str(target)], timeout=1800)
+            self.ui(self._clone_progress, (0.0, "連線中…"))
+            rc, out = run_streaming(
+                ["git", "clone", "--progress", REPO_URL, str(target)],
+                self._on_clone_line, timeout=1800)
             if rc == 0:
+                self.ui(self._clone_progress, (100.0, "完成"))
                 self.repo_dir = target
                 self.say("[OK] 下載完成：%s" % target)
                 self.ui(lambda _p: self.l_clone.configure(text="下載完成", fg="#2c6b4f"))
@@ -816,6 +950,17 @@ class App(tk.Tk):
             self.say("[!!] 這台機器上找不到已下載的 harness——先完成步驟 3。")
             self.say("     找過：步驟 3 那格的路徑、預設路徑，"
                      "以及每顆固定磁碟的 `\\.ai-harness` 與 `\\*\\.ai-harness`。")
+            return None
+        stale = repo_missing_parts(repo)
+        if stale:
+            # 這條是**最貴的一條**：接線會把 `~\.claude\agents`／`skills` 兩個
+            # junction 指向這份 repo。指到一份會被清掉的舊備份，症狀是哪天技能
+            # 和角色整批消失，而且當下不會有任何錯誤——所以寧可在這裡擋死。
+            self.say("[!!] 要接線的這份 harness 太舊、不能用：%s" % repo)
+            for m in stale:
+                self.say("     缺 %s" % m)
+            self.say("     接下去會把 `.claude\\agents`／`skills` 指向這份，"
+                     "**先回步驟 3 下載一份新的**。")
             return None
         if repo != self.repo_dir:
             self.repo_dir = repo
