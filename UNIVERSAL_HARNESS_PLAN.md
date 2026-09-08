@@ -51,7 +51,7 @@ D-1 定案（§4）只實作 `same-person-new-pc` 這一份；`department` 那�
 | 2 | 新電腦 | 裝 Git、GitHub CLI、Claude Code | 官方安裝流程，不在本文件範圍；裝完重開終端機 |
 | 3 | 新電腦 | 登入 GitHub | `gh auth login`（瀏覽器授權，帳號 `sars525200`） |
 | 4 | 新電腦 | clone | `git clone https://github.com/sars525200/ai-harness.git D:\Patrick-AI\.ai-harness` |
-| 5 | 新電腦 | 跑接線精靈，它接手預覽→確認→接線→驗收 | `py -3 tools/setup_new_pc.py`（`--check` 只檢查不動手；`--source` 手動指定來源） |
+| 5 | 新電腦 | 跑接線精靈，它接手預覽→確認→接線→驗收 | `py -3 tools/setup_new_pc.py`（`--check` 只檢查不動手；`--source` 手動指定來源）。視窗版 `setup_new_pc_gui.py` 標題旁顯示 `harness vX.Y.Z`（讀 `version.json`），第 4 分頁底部「📖 查看使用說明」現場跑 `tools/gen_explainer_page.py` 產 `docs/harness-guide.html`（不進版控）並開瀏覽器——2026-09-08 加 |
 
 **步驟 5 的包裝：`tools/setup_new_pc.py`（2026-09-06 建）。** 它不取代 `wire_machine.py`，
 只是把「找來源 → 預覽 → 停下來等人確認 → `--apply` → 跑回歸網」串起來，讓不寫指令的人
@@ -88,6 +88,11 @@ D-1 定案（§4）只實作 `same-person-new-pc` 這一份；`department` 那�
 | 開場自動找到已下載的 harness | **✅ 已驗** | 真機印 `這台已經有 harness：D:\AI-Unifi\.ai-harness（步驟 3 可以跳過）`。**位置不是預設值**（user 自己改過目的地），走的正是掃描那條分支 |
 | `setup_new_pc.py --apply` 實際接線與驗收 | ⬜ **仍未驗** | 還沒走到第 4 分頁。指令：新機上 `py -3 tools\setup_new_pc.py`（不加旗標）。誰跑＝user |
 | clone 下來的版本含兩支精靈 | ⬜ **仍未驗** | 新機的 harness 是先前就在的，不是這趟 clone 的。指令：clone 完看 `tools\setup_new_pc.py` 在不在。誰跑＝user |
+| **版號**：真的 `git commit` 時 pre-commit 會把 `version.json` PATCH +1 併進同一顆 commit（2026-09-08 新增，見 W4） | ✅ 已驗（2026-09-08 10:43） | 主線第一顆真 commit `85e9820`（另一條線的 DASH-1）：`git show --stat HEAD` 列出 `version.json ｜ 7 +`，`git show HEAD:version.json` 是 `0.1.1`。⚠ 同日抓到並修掉一個坑：worktree 跟主 checkout 共用 hooks，舊版 hook 會把**主 checkout** 的檔 +1（三次「無 commit 卻被改」事故都是這個）；修法與紅→綠證據見 `tests/test_pre_commit_version.py` 檔頭 |
+| **版號**：人手動改 MAJOR/MINOR 並 stage 後 commit，hook 不覆蓋 | ✅ 已驗（暫存 repo 真 commit） | `tests/test_pre_commit_version.py` 第 2 條：改成 `0.2.0`、`git add`、真 commit 後仍 `0.2.0`，12/12 綠；本 repo 主線尚未有人真的升過 MINOR，第一次升時順手看一眼 `git show HEAD:version.json` 即可 |
+| **版號**：只在 `main` 上 +1，其他分支不動（2026-09-08 user 裁決） | ✅ 已驗（暫存 repo 真 commit） | 為什麼：分支各自 +1 ⇒ 兩條分支都把 0.1.1 升成 0.1.2，每次合併都要人手解 `version.json`——那是機制自己製造的工作。`tests/test_pre_commit_version.py` 第 5／5b／5c 條：非 main（worktree 與同 checkout 換分支兩種）都不動，切回 main 又會跳（5c 是「hook 整支停掉也全綠」的反證）。15/15 綠，舊 hook 跑同一支紅 8 條 |
+| **說明頁**：新機精靈第 4 分頁「查看使用說明」按鈕真的產頁並開瀏覽器（2026-09-08 新增） | ⬜ **仍未驗** | 產生器 `tools/gen_explainer_page.py` 本機跑過、頁面淺深色截圖看過、52 張卡片與展開都在；但按鈕→產生→`webbrowser.open` 這條只有語法與匯入檢查，沒真機點過。指令：新機開 `py -3 tools\setup_new_pc_gui.py` → 第 4 分頁 → 按「📖 查看使用說明」，看紀錄框有 `[OK] 已開啟` 且瀏覽器真的開。誰跑＝下一台新機的 user |
+| **說明頁**：卡片「複製」鈕在 `file://` 下能不能寫剪貼簿 | ⬜ **仍未驗** | 沙箱預覽裡 fallback 走到「複製失敗，請手動選取」；瀏覽器對本機檔案的剪貼簿政策各家不同。指令：真機開頁後按任一技能卡「複製」，看按鈕翻成「已複製」還是「複製失敗」。誰跑＝同上 |
 | winget 的 `Anthropic.ClaudeCode` 會不會把 `claude` 放上 PATH | ⬜ **仍未驗** | 舊機的 CLI 是 npm 裝的（`%APPDATA%\npm\claude.cmd`），winget 那份沒裝，**在來源機上裝會變成兩份 `claude` 搶 PATH 順序**，不值得為驗證冒險。新機 2026-09-08 顯示 `2.1.263` 在 PATH 上，但 user 裁定「之前就安裝了」⇒ **不算這條的證據**。⚠ 附記：同一台 9/7 明寫「PATH 上找不到 claude」，兩者對不起來，中間發生過什麼沒查。指令：在一台沒有 `claude` 的機器上按第 5 列「自動安裝」，看它翻不翻成「已安裝」。誰跑＝下一台新機的 user |
 
 **⚠ 同一趟打回來兩個缺陷，都已修（`6274ee6`）**：
@@ -280,7 +285,7 @@ harness 切成**三層**，**判準是一句話：換一個部門還成立嗎？
    | W1 | 建／修 `~\.claude\agents`、`~\.claude\skills` 的 junction | P1、P7 |
    | W2 | `gen_layers.py --init` 產 `harness.config.json` | P3 |
    | W3 | 確保 `state\` 存在且可寫 | P4 |
-   | W4 | 安裝 `tools/githooks/post-commit` | **P9**（2026-09-03 訂正·第 4 輪發現 2：原本寫 P2 是錯的——P2 只走 live `settings.json` 的 Claude hook，`.git\hooks\post-commit` 根本不在那條路徑上） |
+   | W4 | 安裝 `tools/githooks/post-commit` **與 `pre-commit`**（2026-09-08 起兩支，接線器迴圈逐支比對逐支裝；pre-commit 管 `version.json` 的 PATCH 自動 +1，見該檔開頭「為什麼是 pre-commit 不是 post-commit」） | **P9**（2026-09-03 訂正·第 4 輪發現 2：原本寫 P2 是錯的——P2 只走 live `settings.json` 的 Claude hook，`.git\hooks\post-commit` 根本不在那條路徑上）。⚠ P9 目前只驗 post-commit 那支有沒有**接上**；pre-commit 的**行為**由 `tests/test_pre_commit_version.py` 在暫存 repo 真 commit 驗（含 worktree 不跨 checkout），但「本機 `.git/hooks/pre-commit` 是不是版控那份」P9 仍沒探 |
    | W5 | **在新機建一顆 bare 鏡像並加 `backup` remote** | P9 |
    | W6 | 同步 `cursor-agents\` → `~\.cursor\agents\` | P8 |
    | W7 | 把 `global/CLAUDE.md` restore 到 live | P6 |

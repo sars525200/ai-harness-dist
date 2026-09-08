@@ -1,0 +1,95 @@
+#!/bin/sh
+# harness 版號：每次 commit 前把 version.json 的 PATCH 位 +1，併進**同一顆** commit。
+#
+#   來源：D:\Patrick-AI\.ai-harness\version.json
+#
+# ⚠ 這是**版控中的正本**。`.git/hooks/` 不進版控，換機器或重新 clone 都不會有它。
+#   安裝：cp tools/githooks/pre-commit .git/hooks/pre-commit
+#   （`tools/wire_machine.py` 的接線流程會自動做這件事，見該檔 w45_mirror。）
+#
+# ── 為什麼是 pre-commit，不是 post-commit ──────────────────────────────────
+# 同目錄的 post-commit 已經證明過一件事（見該檔開頭註解，2026-09-02/06/07 三次
+# 事故）：commit 完之後才回頭改東西、再補一顆 commit 或 amend，會讓鏡像備份分叉、
+# 要花十分鐘人工排查。版號如果比照辦理（commit 完 → 再 amend 進版號），會重踩
+# 同一個坑，而且這次是本 repo 自己的歷史，不是備份鏡像。
+#
+# pre-commit 在 commit **形成之前**跑，把 version.json 的新版號直接 `git add`
+# 進索引，本來就會併進使用者正在寫的這顆 commit——不需要 amend、不會多一顆
+# commit、不會有歷史分叉的問題。
+#
+# ── 為什麼「已經被人手動改過就不動」────────────────────────────────────────
+# MAJOR/MINOR 兩碼是人判斷的（這次改動算不算破壞相容、算不算加了新功能），
+# 不是機器猜得出來的。如果這次 commit 本來就帶著使用者手動改過的 version.json
+# （已經 staged 的版本跟 HEAD 不同），代表人已經決定好這次要用哪個版號，
+# hook 這時候再自動 +1 PATCH，會把人剛設定好的版號覆蓋掉——所以這種情況
+# hook 什麼都不做，直接放行。
+#
+# ── fail-open ──────────────────────────────────────────────────────────────
+# 版號機制壞掉不該擋下開發者的 commit。任何一步失敗就安靜跳過，不印警告、
+# 不中止——這不是資料完整性等級的東西，版號停在原地錯過幾次也不影響功能，
+# 跟 post-commit 那邊「備份漏了要留痕跡」是不同等級的風險，不比照辦理。
+#
+# ── ROOT 一定要從「現在這個 checkout」算，不能從 hook 檔的位置算 ─────────────
+# 2026-09-08 實地咬到三次：`.claude/worktrees/*` 底下的 worktree 跟主 checkout
+# **共用同一份 `.git/hooks/`**，所以 worktree 裡 commit 時 `$0` 仍是主目錄那份
+# hook。第一版用 `$(dirname "$0")/../..` 推 ROOT，於是 worktree 的 commit 把
+# **主 checkout** 的 version.json 加了 1，又因為 git 給 hook 的 GIT_INDEX_FILE 是
+# worktree 自己的索引，主目錄那邊只剩「檔被改了、沒 staged」——三次都查不到誰動的。
+# git 跑 hook 時 cwd 就是當前 checkout 的頂層，直接問它才是對的；worktree 的分支
+# 若還沒有 version.json 就 `[ -f ]` 不成立、安靜跳過，不會跨去動別人的檔。
+
+#
+# ── 只在主線（main）跳 ─────────────────────────────────────────────────────
+# 2026-09-08 user 決定。版號的用途是「發布線走到哪」，而分支各自 +1 的後果是：
+# 兩條分支各自把 0.1.1 升成 0.1.2，合併時 version.json 必衝突，每次合併都要
+# 人手解一次——那是機制自己製造出來的工作。分支上什麼都不做，合併回 main
+# 之後的下一顆 commit 自然會把版號往前推。
+# detached HEAD（`git rebase`、`git bisect` 中間狀態）拿不到分支名 ⇒ 一併跳過。
+
+set -u
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0
+[ "$BRANCH" = "main" ] || exit 0
+VF="$ROOT/version.json"
+[ -f "$VF" ] || exit 0
+
+# 人已經手動改過 version.json 並 staged ⇒ 尊重人的版號，hook 不插手
+if ! git -C "$ROOT" diff --cached --quiet -- version.json 2>/dev/null; then
+    exit 0
+fi
+
+CUR=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$VF" 2>/dev/null \
+      | sed 's/.*"\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/')
+[ -n "$CUR" ] || exit 0
+
+MAJOR=$(echo "$CUR" | cut -d. -f1)
+MINOR=$(echo "$CUR" | cut -d. -f2)
+PATCH=$(echo "$CUR" | cut -d. -f3)
+case "$MAJOR$MINOR$PATCH" in *[!0-9]*|"") exit 0 ;; esac
+NEW_VER="$MAJOR.$MINOR.$((PATCH + 1))"
+
+if command -v py >/dev/null 2>&1; then
+    PYBIN="py -3"
+elif command -v python3 >/dev/null 2>&1; then
+    PYBIN="python3"
+else
+    PYBIN=""
+fi
+[ -n "$PYBIN" ] || exit 0
+
+$PYBIN - "$VF" "$NEW_VER" <<'PYEOF' 2>/dev/null || exit 0
+import json, sys
+path, new_ver = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data["version"] = new_ver
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+except Exception:
+    sys.exit(1)
+PYEOF
+
+git -C "$ROOT" add "$VF" 2>/dev/null || true
+exit 0

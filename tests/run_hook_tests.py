@@ -759,6 +759,7 @@ def main() -> int:
             ("skill-watch 注入縫", "test_skill_watch_run.py"),
             ("run_claude_reviewer 守門", "test_run_claude_reviewer.py"),
             ("真 repo 的 RealGitContext smoke", "smoke_real_git.py"),
+            ("版號 pre-commit（真 commit／手動升版不覆蓋／worktree 不跨 checkout）", "test_pre_commit_version.py"),
         ]
         for label, fname in _EXTRA_SCRIPTS:
             path = os.path.join(_HERE, fname)

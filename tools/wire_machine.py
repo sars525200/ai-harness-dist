@@ -396,15 +396,23 @@ def w78_restore(log: Log) -> None:
 # ── W4 / W5 ──────────────────────────────────────────────────────────────
 
 def w45_mirror(log: Log, mirror: "str | None") -> None:
-    src = HARNESS_ROOT / "tools" / "githooks" / "post-commit"
-    dst = HARNESS_ROOT / ".git" / "hooks" / "post-commit"
-    if dst.exists() and dst.read_bytes() == src.read_bytes():
-        log.add(SAME, "W4", "post-commit 已是版控裡那一份")
-    else:
+    # `.git/hooks/` 不進版控，clone 不會帶 —— 版控裡的正本都在 tools/githooks/，
+    # 這裡逐支比對、逐支裝。post-commit 管備份鏡像／雲端／記憶三條副本；
+    # pre-commit 管版號 PATCH 自動 +1（見該檔開頭註解：故意用 pre-commit 不用
+    # post-commit+amend，理由跟 post-commit 這支自己踩過的鏡像分叉坑一樣）。
+    for name in ("post-commit", "pre-commit"):
+        src = HARNESS_ROOT / "tools" / "githooks" / name
+        dst = HARNESS_ROOT / ".git" / "hooks" / name
+        if not src.exists():
+            log.add(SKIP, "W4", "版控裡沒有 tools/githooks/%s ⇒ 略過" % name)
+            continue
+        if dst.exists() and dst.read_bytes() == src.read_bytes():
+            log.add(SAME, "W4", "%s 已是版控裡那一份" % name)
+            continue
         if log.apply:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(str(src), str(dst))
-        log.did("W4", "安裝 post-commit（`.git/hooks/` 不進版控，clone 不會帶）")
+        log.did("W4", "安裝 %s（`.git/hooks/` 不進版控，clone 不會帶）" % name)
 
     if not mirror:
         log.add(SKIP, "W5", "沒給 --mirror ⇒ 本機備份鏡像這一步跳過（不是通過）")

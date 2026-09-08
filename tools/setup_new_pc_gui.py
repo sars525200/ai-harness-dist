@@ -311,6 +311,23 @@ def default_target() -> str:
     return str(Path(_pick_work_drive()) / INSTALL_SUBPATH)
 
 
+def harness_version(repo: Path | None) -> str:
+    """讀 `<repo>/version.json` 的版號。找不到就回「未知」，不擋畫面。
+
+    版號本身怎麼升見 `tools/githooks/pre-commit`——這裡只負責讀，不負責算。
+    """
+    if repo is None:
+        return "未知"
+    vf = repo / "version.json"
+    if not vf.is_file():
+        return "未知"
+    try:
+        import json as _json
+        return str(_json.loads(vf.read_bytes().decode("utf-8")).get("version", "未知"))
+    except Exception:                                    # noqa: BLE001
+        return "未知"
+
+
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -340,14 +357,31 @@ class App(tk.Tk):
         found = find_harness_repo()
         if found:
             self._set_target(str(found))
+            self.repo_dir = found
             self.say("[OK] 這台已經有 harness：%s（步驟 3 可以跳過）" % found)
+        self._refresh_version_label()
         self.check_env()
+
+    def _refresh_version_label(self, repo: Path | None = None) -> None:
+        """更新標題旁的版號小字。找不到 repo 就顯示空白，不當錯誤處理。
+
+        沒指定 `repo` 時優先用已知的 `self.repo_dir`；兩者都沒有、而且不是
+        打包成 exe 在跑，就退而顯示**這支腳本自己所在**的那份 repo 版號——
+        單純給還沒下載到別處的人一個參考值，不會被拿去當接線目標。
+        """
+        r = repo or self.repo_dir
+        if r is None and not getattr(sys, "frozen", False):
+            r = Path(__file__).resolve().parents[1]
+        self.l_version.configure(text=("harness v%s" % harness_version(r)) if r else "")
 
     # ── 版面 ────────────────────────────────────────────────
     def _build(self) -> None:
         top = tk.Frame(self, padx=16, pady=12)
         top.pack(fill="x")
-        tk.Label(top, text=APP_TITLE, font=self.f_head).pack(anchor="w")
+        head = tk.Frame(top); head.pack(fill="x", anchor="w")
+        tk.Label(head, text=APP_TITLE, font=self.f_head).pack(side="left")
+        self.l_version = tk.Label(head, text="", font=self.f_small, fg="#888")
+        self.l_version.pack(side="left", padx=(8, 0), anchor="s")
         tk.Label(top, font=self.f_small, fg="#555", justify="left",
                  text="缺什麼就按那一列的「自動安裝」。裝不動時右邊有官方下載頁。"
                  ).pack(anchor="w", pady=(2, 0))
@@ -457,6 +491,46 @@ class App(tk.Tk):
                               "所以中間一定要有人看過計畫。").pack(anchor="w")
         self.l_wire = tk.Label(self.tab4, text="", anchor="w", justify="left")
         self.l_wire.pack(anchor="w", pady=(6, 0))
+
+        sep = tk.Frame(self.tab4, height=1, bg="#d1d9e0"); sep.pack(fill="x", pady=(16, 12))
+        tk.Label(self.tab4, font=self.f_small, fg="#666", justify="left", anchor="w",
+                 text="裝完想知道這套系統怎麼運作、規則長怎樣、有哪些技能可以用——"
+                      "按下面這顆會在瀏覽器開一頁說明，離線可讀，不需要登入任何東西。"
+                 ).pack(anchor="w")
+        tk.Button(self.tab4, text="📖 查看使用說明", width=18,
+                  command=self.open_explainer).pack(anchor="w", pady=(6, 0))
+
+    def open_explainer(self) -> None:
+        """產生（或重用）本機說明頁並用預設瀏覽器打開它。
+
+        現場重跑產生器，不是打開一份存好的舊檔——這樣說明頁裡的技能清單、
+        規則清單才會跟**這台機器現在 clone 到的內容**一致，不會因為說明頁
+        是很久以前產生的而跟實際規則對不上。
+        """
+        repo = self.repo_dir or find_harness_repo(self.e_target.get())
+        if repo is None:
+            self.say("[!!] 這台機器上找不到已下載的 harness——先完成步驟 3 才有東西可以說明。")
+            return
+        gen = repo / "tools" / "gen_explainer_page.py"
+        if not gen.exists():
+            self.say("[!!] 這份 harness 裡沒有 %s——版本太舊，先更新 repo。" % gen)
+            return
+
+        def work():
+            self.say("── 產生說明頁 ──")
+            cmd = [sys.executable if not getattr(sys, "frozen", False) else "py",
+                   *([] if not getattr(sys, "frozen", False) else ["-3"]),
+                   str(gen)]
+            rc, out = run(cmd, cwd=str(repo), timeout=120)
+            for line in out.splitlines()[-20:]:
+                self.say("   " + line)
+            out_html = repo / "docs" / "harness-guide.html"
+            if rc != 0 or not out_html.exists():
+                self.say("[!!] 說明頁沒產生成功（退出碼 %s）。" % rc)
+                return
+            self.say("[OK] 已開啟：%s" % out_html)
+            webbrowser.open(out_html.as_uri())
+        self.spawn(work)
 
     # ── 背景工作 ────────────────────────────────────────────
     def say(self, text: str) -> None:
@@ -653,6 +727,7 @@ class App(tk.Tk):
                     self.repo_dir = target
                     self.ui(lambda _p: self.l_clone.configure(text="已存在，可直接接線",
                                                               fg="#2c6b4f"))
+                    self.ui(lambda _p: self._refresh_version_label(target))
                     return
                 # 非空又不是 git repo：拒跑。往裡面 clone 會失敗，覆蓋則可能刪掉別人的東西。
                 self.say("[!!] %s 不是空的、也不是 harness。換一個位置或先清空。" % target)
@@ -664,6 +739,7 @@ class App(tk.Tk):
                 self.repo_dir = target
                 self.say("[OK] 下載完成：%s" % target)
                 self.ui(lambda _p: self.l_clone.configure(text="下載完成", fg="#2c6b4f"))
+                self.ui(lambda _p: self._refresh_version_label(target))
             else:
                 self.say("[!!] 下載失敗（%s）：%s" % (rc, out[-400:]))
                 self.ui(lambda _p: self.l_clone.configure(text="下載失敗，看下方紀錄",

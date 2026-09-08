@@ -45,6 +45,10 @@ dashboard/.refresh.lock
 # dashboard/harness-dashboard.shell.html。
 dashboard/harness-dashboard.html
 
+# 換機安裝說明頁是產物（tools/gen_explainer_page.py 現場產生，跟這台機器
+# 當下 clone 到的內容同步）。進 git 的是產生器本身，不是產出的 html。
+docs/harness-guide.html
+
 # user 提供的參考圖（Model routing 等）：計畫書已把內容轉成文字，
 # 圖檔本身 8MB 且非程式資產，不進版控（要看原圖去本機這個目錄）
 參考/
