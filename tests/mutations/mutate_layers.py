@@ -45,12 +45,24 @@ MUTATIONS = [
         # 錨點 2026-09-07 多帶兩行：`cls = "" if v else " rt-zero"` 在目標檔有
         # **三份逐字同文**（list／int／else 三個分支），而 `replace(…, 1)` 只換
         # 第一份 —— 這條的名字講的是「0」＝ int 分支，原錨點卻打中 list 分支。
-        # 逐份實跑：list 紅、int 紅、**else 分支沒人在測**（改壞了測試照樣綠）。
-        # 綁回名字所指的那一份；else 分支沒人守這件事留在這裡當紀錄。
+        # 逐份實跑：list 紅、int 紅、**else 分支當時沒人在測**（改壞了測試照樣綠）。
+        # 綁回名字所指的那一份；else 那一份 2026-09-08 補了下一條變異與斷言。
         '        elif isinstance(v, int):\n'
         '            txt = str(v)\n'
         '            cls = "" if v else " rt-zero"',
         '        elif isinstance(v, int):\n'
+        '            txt = str(v)\n'
+        '            cls = ""',
+    ),
+    (
+        # 2026-09-08 補：上一條註解裡記著「else 分支沒人在測」，記了就要補上。
+        # 錨點刻意帶 `else:` 那一行 —— 三份同文只有它前面是 `else:`，這樣才咬得住
+        # 第三份；只寫 `cls = ...` 那一行的話 `replace(…, 1)` 永遠打在 list 那一份。
+        "else 分支的零值不標 rt-zero（三份同文裡最後那一份）",
+        '        else:\n'
+        '            txt = str(v)\n'
+        '            cls = "" if v else " rt-zero"',
+        '        else:\n'
         '            txt = str(v)\n'
         '            cls = ""',
     ),

@@ -252,8 +252,16 @@ def _case_marker_and_idempotent(fails: list) -> None:
     try:
         m.inject("<p>沒有標記</p>", "x")
         fails.append("找不到 marker 時沒拒跑 —— 會猜插入位置")
-    except SystemExit:
-        pass
+    except SystemExit as exc:
+        if m.MARK_START not in str(exc):
+            fails.append(f"拒跑了但訊息沒指出缺哪個 marker：{exc}")
+    except Exception as exc:  # noqa: BLE001
+        # 2026-09-08 補：把守門那一行改成 `if False:` 之後，程式不是「靜默猜位置」
+        # 而是當場炸成 ValueError（`split` 拆不出兩段）。舊寫法只接 SystemExit，
+        # 於是那個變異是靠 `run()` 的「例外：…」兜底轉紅的 ——
+        # **紅的理由不是這條守門，是崩潰**。哪天有人把守門的斷言改壞，
+        # 變異照樣紅，沒人會發現。這一支明寫：崩潰不算拒跑。
+        fails.append(f"marker 缺失時炸成 {type(exc).__name__} 而不是帶訊息的拒跑：{exc}")
     stats = {"DB-1": {"applies": 5, "block": 2, "enforce": 2, "shadow": 0}}
     if m.build_html(stats, {}) != m.build_html(stats, {}):
         fails.append("固定輸入連跑兩次結果不同 —— 不冪等")

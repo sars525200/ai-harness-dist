@@ -159,6 +159,14 @@ def _c10():
         g.inject("<div>沒有標記的 html</div>", "<section>x</section>")
     except SystemExit as exc:
         assert "PROGRESS_CHART_START" in str(exc), str(exc)
+    except Exception as exc:  # noqa: BLE001
+        # 2026-09-08 補：拿掉守門那一行之後，程式不是「靜默猜位置」而是當場炸成
+        # ValueError（`split` 拆不出兩段）。舊寫法只接 SystemExit，於是那個變異
+        # 是靠 `@case` 的「非預期例外」兜底轉紅的 —— **上面那條斷言從來沒跑過**。
+        # 把崩潰明寫成一種失敗：守門的價值就是那句訊息，崩潰沒有訊息。
+        raise AssertionError(
+            f"marker 缺失時炸成 {type(exc).__name__} 而不是帶訊息的拒跑：{exc}"
+        ) from exc
     else:
         raise AssertionError("marker 不存在卻照樣注入 —— 會塞進別的分頁")
 
