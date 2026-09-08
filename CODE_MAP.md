@@ -1,4 +1,4 @@
-# CODE_MAP.md（.ai-harness）
+# CODE_MAP.md（competent-ptolemy-30de6e）
 
 | 路徑 | 用途 | 標籤 |
 |---|---|---|
@@ -12,6 +12,7 @@
 | &nbsp;&nbsp;└ `agents/project-auditor.md` | 查專案文件與程式是否還對得上 | own |
 | &nbsp;&nbsp;└ `agents/sync-checker.md` | 部署前或改完前端後，查兩份副本是否同步、版號有沒有升 | own |
 | &nbsp;&nbsp;└ `agents/visual-designer.md` | 畫面不對時派（間距、對齊、深色、摺線、hover） | own |
+| `build/` | 封存／建置產物，不展開 | archive |
 | `cursor-agents/` | (用途待人工填寫) | own |
 | `dashboard/` | (用途待人工填寫) | own |
 | `docs/` | (用途待人工填寫) | own |
@@ -83,7 +84,6 @@
 | &nbsp;&nbsp;└ `hooks/spike.py` | Step 0 schema spike —— 唯讀，只記錄不干預 | own |
 | `reviewer/` | (用途待人工填寫) | own |
 | `rulefile/` | (用途待人工填寫) | own |
-| `session-archive/` | 封存／建置產物，不展開 | archive |
 | `skills/` | (用途待人工填寫) | own |
 | &nbsp;&nbsp;└ `skills/_meta/` | (用途待人工填寫) | own |
 | &nbsp;&nbsp;└ `skills/adversarial-review/` | 找不共用推理脈絡的獨立審查者，逐輪檢查計畫或 wayfinder map，找出會讓規則、資料或系統靜默失效的缺陷並收斂 | own |
@@ -100,7 +100,6 @@
 | &nbsp;&nbsp;└ `skills/research/` | Investigate a question against high-trust primary sources and capture the findings as a… | own |
 | &nbsp;&nbsp;└ `skills/session-workflow/` | 把一則任務從開場走到交付 | own |
 | &nbsp;&nbsp;└ `skills/skill-watch/` | 檢查你使用的 AI 平台有沒有推出新技能、改名、或移除既有能力，比對本機現況後把「可合併／可取代」的候選端到你面前 | own |
-| &nbsp;&nbsp;└ `skills/spawn-task/` | 使用者想現在就把一件事拆成獨立背景任務去做，而不是等模型自己在做事途中順手發現才喊 | own |
 | &nbsp;&nbsp;└ `skills/to-tickets/` | Break a plan, spec, or the current conversation into a set of tracer-bullet tickets, each… | own |
 | &nbsp;&nbsp;└ `skills/visual-check/` | 用 headless 截圖真的看一眼畫面，再宣稱 UI 改好了 | own |
 | &nbsp;&nbsp;└ `skills/wayfinder/` | Plan a huge chunk of work (more than one agent session can hold) as a shared map of… | own |
@@ -108,7 +107,6 @@
 | `state/` | (用途待人工填寫) | own |
 | `tests/` | (用途待人工填寫) | own |
 | `tools/` | (用途待人工填寫) | own |
-| `參考/` | (用途待人工填寫) | own |
 
 ## 警告
 
@@ -117,5 +115,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-08T11:16:16 -->
+<!-- generated-at: 2026-09-08T17:10:12 -->
 <!-- onb2-status: auto-generated, unreviewed -->

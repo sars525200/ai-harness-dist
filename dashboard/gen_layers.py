@@ -40,7 +40,13 @@ sys.stderr.reconfigure(encoding="utf-8")
 
 DASHBOARD_DIR = Path(__file__).resolve().parent
 HARNESS_ROOT = DASHBOARD_DIR.parent
-CONFIG_PATH = HARNESS_ROOT / "harness.config.json"
+# `HARNESS_CONFIG_PATH` 覆寫口（2026-09-08）：只給測試用，讓 `tests/test_harness_config.py`
+# 的拒跑測試指到暫存假設定，不必借用正本。預設行為不變——沒設這個環境變數時
+# 跟以前一樣讀 harness 根目錄那份。不接受這個口子的話，測試只能靠 os.rename 正本，
+# 兩套回歸網並發跑會撞同一個暫存檔名（TODOS.md「harness.config.json 被留在
+# --init 範本態」那張票的根因）。
+_CONFIG_ENV_OVERRIDE = os.environ.get("HARNESS_CONFIG_PATH")
+CONFIG_PATH = Path(_CONFIG_ENV_OVERRIDE) if _CONFIG_ENV_OVERRIDE else HARNESS_ROOT / "harness.config.json"
 CONFIG_SCHEMA = 1
 GLOBAL_DIR = Path.home() / ".claude"
 

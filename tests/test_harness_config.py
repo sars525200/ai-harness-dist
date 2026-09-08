@@ -53,39 +53,38 @@ def check(name: str, cond: bool, detail: str = "") -> None:
 
 
 @contextlib.contextmanager
-def swapped_config(tag: str):
-    """把 `harness.config.json` 借走驗拒跑，結束保證還回來。
+def isolated_config(content: "dict | None"):
+    """在暫存目錄放一份假設定（或刻意不放），**正本從頭到尾不被碰**。
 
-    ## 為什麼不能只寫 try/finally
+    ## v16（2026-09-08）取代舊版 `swapped_config()`——理由是一次真實併發事故
 
-    finally 擋不住**整個進程被硬殺**。真實案例（2026-08-24 → 08-28）：
+    舊版靠 `os.rename` 把正本借走、還回來，備份檔名是固定的 `v15bak`～`v15bak5`。
+    兩套回歸網並發跑時，B 行程會把 A 行程**進行中、還沒還**的備份誤判成
+    「上一輪沒善終」去搶救復原——這不是「忘記還」，是兩個行程搶同一把鑰匙。
+    2026-09-08 10:44 兩套並發跑完，正本真的不見了（`test_config_residue.py`
+    的收尾比對抓到：「不見了 —— 有測試借走沒還」）；`TODOS.md` 2026-09-03
+    那張「根因未查到」的票就是同一個洞的前一次發作。
 
-      硬殺 → 備份留在原地 → 現行 config 停在測試造出的「缺欄位」中間態
-      → `discover_projects()` 連續四天直接拒跑（那個檔 gitignored，git 不會提醒）
-      → 下次跑測試 `os.rename` 撞名拋例外 → `run()` 的 except 只塞進 `_details`
-      **不印 FAIL** → 畫面上只有「23 通過、1 失敗」的計數對不上會露餡
-
-    所以這裡多做一件事：**開場先自癒**。備份還在 ⇒ 上一輪沒善終 ⇒
-    現行 config 是測試寫的壞資料、備份才是原版 ⇒ 換回來再開工。
-    現行那份不刪，另存 `.rescued` 留證（萬一人在硬殺後手動改過，改動還在）。
+    只加鎖能防兩個行程同時動手，防不了「正本本來就不該被這五條測試碰」這件事
+    本身——所以改成完全隔離：`dashboard/gen_layers.py` 讀 `HARNESS_CONFIG_PATH`
+    環境變數覆寫 `CONFIG_PATH`，這裡只在暫存目錄造一份假設定用環境變數指過去，
+    正本連讀都不必讀。`content=None` 時刻意不建檔，用來驗「設定不存在」那條路。
     """
-    backup = CONFIG.with_suffix(f".json.{tag}")
-    if backup.exists():
-        rescued = CONFIG.with_suffix(f".json.{tag}-rescued")
-        print(f"       ※ 發現殘留備份 {backup.name} —— 上一輪沒善終。"
-              f"以備份為原版還原；現行那份另存 {rescued.name}")
-        if CONFIG.exists():
-            if rescued.exists():
-                rescued.unlink()
-            os.rename(CONFIG, rescued)
-        os.rename(backup, CONFIG)
-    os.rename(CONFIG, backup)
-    try:
-        yield
-    finally:
-        if CONFIG.exists():
-            CONFIG.unlink()
-        os.rename(backup, CONFIG)
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "harness.config.json"
+        if content is not None:
+            path.write_text(json.dumps(content, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
+        yield path
+
+
+def _run_gen_layers(config_path: Path, *args: str) -> "subprocess.CompletedProcess":
+    """在隔離設定上跑 `gen_layers.py`；正本完全不進這個 subprocess 的視野。"""
+    env = dict(os.environ)
+    env["HARNESS_CONFIG_PATH"] = str(config_path)
+    return subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), *args],
+                          capture_output=True, text=True, encoding="utf-8",
+                          timeout=60, env=env)
 
 
 _DRIVE_RE = __import__("re").compile(r"[A-Za-z]:[\\/]?")
@@ -315,12 +314,8 @@ def test_project_dir_comes_from_config() -> None:
 
 def test_refuses_without_config() -> None:
     """V-15 ②：設定檔不在時必須拒跑、講清楚缺什麼，且不得 fallback。"""
-    if not CONFIG.exists():
-        check("設定檔存在（前置）", False, f"{CONFIG} 不存在，無法測")
-        return
-    with swapped_config("v15bak"):
-        r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
-                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+    with isolated_config(None) as cfg_path:
+        r = _run_gen_layers(cfg_path, "--check")
         out = (r.stdout or "") + (r.stderr or "")
         check("缺設定時拒跑（V-15②·非 0 離開碼）", r.returncode != 0,
               f"returncode={r.returncode}")
@@ -337,13 +332,9 @@ def test_refuses_without_config() -> None:
 
 def test_config_schema_guard() -> None:
     """schema 不符要拒跑，不是照舊解析（沿用 check_bloat 的 schema 2 教訓）。"""
-    orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    with swapped_config("v15bak2"):
-        bad = dict(orig)
-        bad["schema"] = 999
-        CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
-        r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
-                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+    bad = {"schema": 999, "currentProject": "x", "scanRoots": [], "extraProjects": []}
+    with isolated_config(bad) as cfg_path:
+        r = _run_gen_layers(cfg_path, "--check")
         out = (r.stdout or "") + (r.stderr or "")
         check("schema 不符時拒跑", r.returncode != 0 and "schema" in out,
               f"returncode={r.returncode}, out={out[:200]}")
@@ -358,13 +349,10 @@ def test_nonexistent_current_project_refuses() -> None:
     換部門的人跑健檢會看到「報告第一列是一個不存在的專案、CLAUDE.md 印無」，
     **那跟「那個專案很乾淨」長得一模一樣**。
     """
-    orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    with swapped_config("v15bak4"):
-        bad = dict(orig)
-        bad["currentProject"] = "D:\\完全不存在的專案目錄-v15probe"
-        CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
-        r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
-                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+    bad = {"schema": 1, "currentProject": "D:\\完全不存在的專案目錄-v15probe",
+           "scanRoots": [], "extraProjects": []}
+    with isolated_config(bad) as cfg_path:
+        r = _run_gen_layers(cfg_path, "--check")
         out = (r.stdout or "") + (r.stderr or "")
         check("currentProject 不存在時拒跑（F-8）", r.returncode != 0,
               f"returncode={r.returncode}")
@@ -380,14 +368,13 @@ def test_init_bootstrap_creates_template() -> None:
     P-12 正文寫過「要附一支 bootstrap，否則看板六支產生器同時停擺」，
     但實際沒做（`git ls-files | grep bootstrap` = 0）——覆核抓到的。
     """
-    with swapped_config("v15bak5"):
-        r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--init"],
-                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+    with isolated_config(None) as cfg_path:
+        r = _run_gen_layers(cfg_path, "--init")
         out = (r.stdout or "") + (r.stderr or "")
-        created = CONFIG.exists()
+        created = cfg_path.exists()
         check("--init 產生設定範本（F-8）", created, f"檔案沒出現；out={out[:200]}")
         if created:
-            cfg = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8-sig"))
             check("範本含全部必填欄位",
                   all(k in cfg for k in ("schema", "currentProject", "scanRoots",
                                          "extraProjects")),
@@ -395,7 +382,7 @@ def test_init_bootstrap_creates_template() -> None:
             check("範本的路徑是假的（逼人去改，不會靜默跑起來）",
                   not Path(cfg["currentProject"]).is_dir(),
                   "範本的 currentProject 竟然指向真實目錄")
-            CONFIG.unlink()
+            # 暫存目錄跟著 with 區塊結束自動清掉，不必手動 unlink。
 
 
 def test_config_is_gitignored() -> None:
@@ -408,12 +395,9 @@ def test_config_is_gitignored() -> None:
 
 def test_missing_field_guard() -> None:
     """缺必填欄位要指名是哪一個，不是回一個空清單。"""
-    orig = json.loads(CONFIG.read_text(encoding="utf-8-sig"))
-    with swapped_config("v15bak3"):
-        bad = {k: v for k, v in orig.items() if k != "scanRoots"}
-        CONFIG.write_text(json.dumps(bad, ensure_ascii=False, indent=2), encoding="utf-8")
-        r = subprocess.run([sys.executable, "-X", "utf8", str(GEN_LAYERS), "--check"],
-                           capture_output=True, text=True, encoding="utf-8", timeout=60)
+    bad = {"schema": 1, "currentProject": "x", "extraProjects": []}   # 故意缺 scanRoots
+    with isolated_config(bad) as cfg_path:
+        r = _run_gen_layers(cfg_path, "--check")
         out = (r.stdout or "") + (r.stderr or "")
         check("缺欄位時指名哪個欄位", r.returncode != 0 and "scanRoots" in out,
               f"returncode={r.returncode}, out={out[:200]}")
@@ -939,8 +923,10 @@ def test_interface_names_preserved() -> None:
 def run() -> "tuple[int, list]":
     """給 `run_hook_tests.py` 呼叫。
 
-    ⚠ 這一組會**暫時改名 `harness.config.json`**（驗 U-2 拒跑）。每個 case 都有
-    `swapped_config()` 還原；整個進程被硬殺時還原不會發生，但**下次跑會自癒**（備份還在＝上次沒善終，以它為原版換回來）。
+    ⚠ 驗 U-2 拒跑的那幾條（v16 起）**完全不碰正本** `harness.config.json`——
+    各自在暫存目錄造一份假設定，用 `HARNESS_CONFIG_PATH` 環境變數指給
+    `gen_layers.py` 讀（見 `isolated_config()`）。兩套回歸網同時跑也不會互撞，
+    因為沒有共用檔名可撞。
     """
     global _passed, _failed, _details
     _passed, _failed, _details = 0, 0, []
