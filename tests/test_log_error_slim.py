@@ -20,7 +20,12 @@ import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, r"D:\Patrick-AI\.ai-harness\hooks")
+# 從本檔位置推——**不能寫死主目錄路徑**。2026-09-08 順著 test_agent_gate.py
+# 挖到的同型 bug 盤查到這裡：寫死時不管在哪個 worktree 跑，永遠 import／
+# subprocess 呼叫的都是**主目錄**那份 dispatch.py，worktree 自己的版本
+# 改了什麼，這支測試的綠燈完全看不到。
+_HOOKS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks")
+sys.path.insert(0, _HOOKS)
 
 
 def run():
@@ -80,7 +85,7 @@ def run():
         ck("輪替後新檔已縮小", os.path.getsize(path) < 900, str(os.path.getsize(path)))
 
         # ── 端到端：壞 JSON 仍 fail-open ──────────────────────────────
-        r = subprocess.run([sys.executable, r"D:\Patrick-AI\.ai-harness\hooks\dispatch.py"],
+        r = subprocess.run([sys.executable, os.path.join(_HOOKS, "dispatch.py")],
                            input=raw_bad.encode(), capture_output=True)
         ck("壞 JSON 仍 exit 0（fail-open）", r.returncode == 0, f"rc={r.returncode}")
     finally:
