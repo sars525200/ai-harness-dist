@@ -30,6 +30,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import time
@@ -277,6 +278,27 @@ try:
                          " exe 版在沒裝 Python 的新機器上這顆按鈕就是壞的" % (interp_calls[0],))
 finally:
     G.run = _saved_run
+
+# ── 7. 預設安裝目的地必須落在碟根直屬 ─────────────────────
+#
+# 綁後果不綁名字：不去比對「有沒有出現 Patrick-AI 這串字」——那要預測下一個人
+# 會用哪個部門名當資料夾。判準是**它落在 find_harness_repo() 的第幾層**：
+#   ① 欄位填的  ② `碟根\.ai-harness`（明確列舉）  ③ `碟根\*\.ai-harness`（萬用比對）
+# 預設值只要多包一層資料夾就掉到第三層，跟機器上任何一份舊備份（真機案例：
+# `D:\_backup-<BACKUP-FOLDER-EXAMPLE>\.ai-harness`）同層、靠字母排序決勝負。
+# 2026-09-08 真機就是那份過期備份被選中，版號顯示「未知」、說明頁按鈕報版本太舊，
+# 而「② 開始接線」不會擋——junction 會指向一個遲早被清掉的備份夾。
+if OLD:
+    G.INSTALL_SUBPATH = os.path.join("Patrick-AI", ".ai-harness")   # 舊寫法：多包一層人名
+root = Path(G._pick_work_drive())
+dflt = Path(G.default_target())
+if dflt.parent != root:
+    fails.append("[7] 預設安裝目的地 %s 不是碟根直屬（碟根 %s）——"
+                 "它會掉到 find_harness_repo() 的萬用比對那層，"
+                 "跟舊備份同層靠字母排序決勝負" % (dflt, root))
+if dflt.name != ".ai-harness":
+    fails.append("[7] 預設目的地的資料夾名是 %r，不是 .ai-harness——"
+                 "find_harness_repo() 的第二層只認這個名字，改了就掃不到" % dflt.name)
 
 # 定錨 [2] 的根因：`Path("")` 就是 `Path(".")`，而它**存在**——
 # 這正是舊的 exists() 守衛放行的原因。這行紅了代表 Python 行為變了，

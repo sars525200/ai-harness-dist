@@ -281,7 +281,20 @@ def find_harness_repo(*extra: str) -> Path | None:
 
 
 #: 安裝目的地的**資料夾名**。碟號不寫在這裡 —— 見 _pick_work_drive()。
-INSTALL_SUBPATH = os.path.join("Patrick-AI", ".ai-harness")
+#
+#  2026-09-08 user 當場點破：`_pick_work_drive()` 花了一整段註解講「不能寫死碟號，
+#  換一台機器換一個部門就不成立」，下一行卻把資料夾名寫成一個**人名**
+#  （原值 `Patrick-AI\.ai-harness`）。同一個錯誤只防了一半。這是換機安裝精靈，
+#  跑它的人多半不是寫它的人。
+#
+#  改放**碟根**還順手降了一個風險：`find_harness_repo()` 找 repo 分三層——
+#  ① 欄位填的 ② `碟根\.ai-harness`（明確列舉）③ `碟根\*\.ai-harness`（萬用比對）。
+#  舊預設落在第三層，跟 `D:\_backup-…-20260908\.ai-harness` 這種舊備份**同一層、
+#  靠字母排序決勝負**；真機上就是那份過期備份被選中，一路到按說明頁按鈕才爆。
+#  放碟根＝進第二層，永遠贏過第三層，不必賴排序。
+#
+#  既有安裝不受影響：舊位置仍由第三層的萬用比對找得到。
+INSTALL_SUBPATH = ".ai-harness"
 
 
 def _pick_work_drive() -> str:
