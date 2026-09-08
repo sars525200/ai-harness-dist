@@ -127,6 +127,25 @@ def run() -> "tuple[int, list]":
     check("重生子行程走 win_subprocess（Windows 不閃黑窗）",
           "win_subprocess.run" in src,
           "do_refresh 仍直接 subprocess.run python.exe")
+    # 2026-09-08：9/07 服務無聲停掉六小時才被發現，之後死因查不出來 —— 三個留痕點缺一不可
+    _watch_body = src.split("def watcher(", 1)[1].split("\ndef ", 1)[0]
+    check("背景檢查每輪覆寫心跳檔（DASH-1 靠它夾死亡時間）",
+          "write_heartbeat()" in _watch_body,
+          "watcher() 裡沒有 write_heartbeat() —— 服務死了時間夾不準")
+    _serve_body = src.split("def serve(", 1)[1].split("\nAUTOSTART_NAME", 1)[0]
+    check("主執行緒任何退出都留字（不只 Ctrl-C）",
+          "traceback.format_exc()" in _serve_body and "服務結束" in _serve_body,
+          "serve() 的 except／finally 沒寫 log —— 下次再死一樣無聲")
+    import tempfile
+    with tempfile.TemporaryDirectory() as _td:
+        _hb = os.path.join(_td, "alive.json")
+        _ok = m.write_heartbeat(_hb)
+        _data = json.load(open(_hb, encoding="utf-8")) if _ok else {}
+        check("心跳檔寫得出來且帶 pid／埠／時間",
+              _ok and _data.get("pid") == os.getpid() and "ts" in _data
+              and "port" in _data and "at" in _data,
+              f"ok={_ok} data={_data}")
+        check("心跳檔不留暫存殘骸", not os.path.exists(_hb + ".tmp"), "alive.json.tmp 還在")
     _ref = open(os.path.join(_ROOT, "dashboard", "refresh_dashboard.py"), encoding="utf-8").read()
     check("產生器子行程也走 win_subprocess",
           "win_subprocess.run" in _ref,

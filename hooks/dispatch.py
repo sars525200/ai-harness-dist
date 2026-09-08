@@ -357,6 +357,16 @@ REGISTRY = [
         "events": {"SessionStart", "PreToolUse"},
         "tools": None,
     },
+    {
+        # DASH-1（2026-09-08）：本機看板服務死了要有人發現。9/07 服務無聲停掉六小時
+        # 以上才被人工發現；頁面上的徽章只在頁面開著時有用。開場對 8099 發一次 GET，
+        # 不是 200 就 WARN 附心跳時間與重啟指令，不自動拉起（拉起會把死因再藏一次）。
+        # 只在 Startup 裡裝了啟動器的機器發動——那是「這台機器期望它在跑」的證據。
+        "id": "DASH-1",
+        "module": "dash1_dashboard_alive",
+        "events": {"SessionStart"},
+        "tools": None,
+    },
 ]
 
 _RULE_CACHE: dict = {}

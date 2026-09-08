@@ -83,6 +83,9 @@
     },
     "MAP-1": {
       "shadow": false
+    },
+    "DASH-1": {
+      "shadow": false
     }
   }
 }

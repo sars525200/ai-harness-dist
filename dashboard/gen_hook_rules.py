@@ -66,7 +66,7 @@ BAR_MAX_APPLIES = 50      # px，最大值對應的長度
 BAR_MAX_BLOCK = 36
 
 # 顯示順序：先 enforce 後 shadow，同組內照既有編輯順序（讀者已經習慣這個排列）
-ORDER = ["IDX-1", "EOL-1", "MAP-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "QUOTA-1",
+ORDER = ["IDX-1", "EOL-1", "MAP-1", "DASH-1", "DB-1", "R1", "R3", "R4", "AWC-1", "DECL-1", "DISP-1", "ESC-1", "BUDGET-1", "QUOTA-1",
          "WIN-1", "PR-1", "ENC-1", "HTML-1", "EXP-1", "UI-1", "CHK-1", "CTX-1"]
 
 # 敘述欄＝編輯內容。`tip` 有值時包成 .cell-brief（摘要常駐、hover 出浮窗）。
@@ -232,6 +232,16 @@ DESC = {
                "第一版誤把 shadow 觀察期也算進「講過了」，已修。"
                "<b>2026-09-07 起不再獨立掛 SessionStart</b>——被 ONB-2 取代，"
                "模組留著只給 ONB-2 前提不足時引用同一段提醒文字。",
+    },
+    "DASH-1": {
+        "badge": "9/08 新·enforce", "on": "<b>SessionStart</b>",
+        "why": "對 <code>127.0.0.1:8099</code> 發一次 GET 不是 200（沒在跑／卡住／佔埠的不是它）·"
+               "WARN 報上次心跳時間＋重啟指令，<b>不自動拉起</b>",
+        "tip": "9/07 看板服務無聲停掉六小時以上才被人工發現：服務 log 只在重生時寫一行、只認 Ctrl-C，"
+               "頁面徽章只在頁面開著時有用。判準綁後果：探 HTTP 不認行程名。"
+               "同日服務端補了「任何退出都留字」與心跳檔 <code>state/dashboard_server.alive</code>。"
+               "只在 Startup 裝了 <code>HarnessDashboardServer.vbs</code> 的機器發動。"
+               "不自動拉起——拉起會把死因再藏一次。",
     },
     "MAP-1": {
         "badge": "9/07 新·enforce", "on": "<b>SessionStart</b>／PreToolUse git commit",

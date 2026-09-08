@@ -28,6 +28,13 @@ user 2026-08-06 定：**完全不對外**。artifact 是 claude.ai 上一個可�
 注入全部是**服務端動態做的**，`harness-dashboard.html` 本體一個字都不動 ——
 否則結構驗證與產生器冪等測試都會被這段 JS 影響。
 
+## 死了要留痕（2026-09-08）
+
+9/07 服務無聲停掉六小時以上才被發現，事後查不出死因：log 只在重生時寫、只認 Ctrl-C。
+現在三件事：主執行緒任何退出都寫「服務結束」＋traceback；背景檢查每輪覆寫心跳檔
+`state/dashboard_server.alive`（死了時間就停在最後一輪）；開場由 `DASH-1` 探 8099，
+不通就出聲並報心跳。**不自動拉起**——拉起會把死因再藏一次。
+
 ## 刻意不做的事
 
 - **不做靜態目錄服務**：只認 `/`、`/index.html`、`/_state`、`/_recheck`、
@@ -52,6 +59,7 @@ import shutil
 import sys
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -83,6 +91,8 @@ import win_subprocess  # noqa: E402
 HTML_PATH = html_paths.HTML_PATH
 REFRESH = DASHBOARD / "refresh_dashboard.py"
 LOG_PATH = HARNESS / "state" / "dashboard_server.log"
+ALIVE_PATH = HARNESS / "state" / "dashboard_server.alive"   # 心跳檔（覆寫一行）：DASH-1 讀它報「上次活著」
+_PORT = {"value": 8099}     # serve() 起來後填實際埠，心跳檔要帶它
 
 HOST = "127.0.0.1"          # ⚠ 不要改成 0.0.0.0：那一改就對外了，而畫面上看不出差別
 DEFAULT_PORT = 8099
@@ -152,6 +162,29 @@ def _log(msg: str) -> None:
             f.write(line + "\n")
     except Exception:
         pass          # log 寫不進去不該讓服務掛掉
+
+
+def write_heartbeat(path=None) -> bool:
+    """把「我還活著」覆寫進心跳檔。寫不進去回 False、不炸（同 _log 的紀律）。
+
+    2026-09-08 加。9/07 服務無聲停掉：log 只在重生時寫一行，最後一行 17:42 之後什麼都
+    沒有，死亡時間只能夾在 6 小時裡，死因無從查起。log 不能拿來當心跳（每 10 秒一行會
+    把它洗滿），所以另開一個只有一行的檔：背景檢查每輪覆寫一次，死了之後時間就停在
+    最後一輪；`hooks/rules/dash1_dashboard_alive.py` 開場讀它報「上次心跳 N 分鐘前」。
+    先寫暫存檔再 os.replace：讀的那一方永遠看到完整的一行，不會讀到半截。
+    """
+    p = Path(path) if path else ALIVE_PATH
+    body = json.dumps({"pid": os.getpid(), "port": _PORT["value"], "ts": time.time(),
+                       "at": time.strftime("%Y-%m-%d %H:%M:%S")}, ensure_ascii=False)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        with io.open(tmp, "w", encoding="utf-8") as f:
+            f.write(body)
+        os.replace(tmp, p)
+        return True
+    except Exception:
+        return False
 
 
 def do_refresh(force: bool = False) -> dict:
@@ -328,6 +361,7 @@ def watcher(interval: float) -> None:
         except Exception as exc:            # 背景執行緒死掉＝新鮮度靜靜停擺，一定要留痕跡
             _log(f"背景檢查例外：{exc!r}")
             sleep_for = next_watch_sleep(False, sleep_for, interval)
+        write_heartbeat()          # 每輪都寫，重生成功失敗都寫——它記的是「行程還在」，不是「重生成功」
         time.sleep(sleep_for)
 
 
@@ -623,17 +657,25 @@ def serve(port: int, once: bool = False, interval: float = WATCH_INTERVAL) -> in
     except OSError as exc:
         _log(f"埠 {port} 起不來：{exc} —— 可能已經有一份在跑（開 http://{HOST}:{port}/ 看看）")
         return 1
-    _log(f"看板服務啟動：http://{HOST}:{port}/　（只有這台機器連得到·每 {int(interval)} 秒檢查一次新鮮度）")
+    _PORT["value"] = port
+    _log(f"看板服務啟動：http://{HOST}:{port}/　（只有這台機器連得到·每 {int(interval)} 秒檢查一次新鮮度·pid {os.getpid()}）")
     if once:
         httpd.server_close()
         return 0
+    write_heartbeat()
     threading.Thread(target=watcher, args=(interval,), daemon=True).start()
+    # 2026-09-08：任何 Python 層的退出都要留字。9/07 那次只記 Ctrl-C，其餘死法一律無聲。
+    # 被外力 TerminateProcess 不會走到 finally——那種死法靠心跳檔夾時間、靠 DASH-1 開場出聲。
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         _log("收到中斷，停止服務")
+    except BaseException:
+        _log("主執行緒例外，服務結束：\n" + traceback.format_exc())
+        raise
     finally:
         httpd.server_close()
+        _log(f"服務結束（pid {os.getpid()}）——這一行沒出現而服務不在＝被外力終止或整個行程當掉，不是 Python 層的退出")
     return 0
 
 

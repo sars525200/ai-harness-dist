@@ -51,6 +51,7 @@
 | &nbsp;&nbsp;└ `hooks/rules/budget1_daily_usage.py` | BUDGET-1 —— Stop 事件觀察：今日用量是不是已經衝過平常的量級 | own |
 | &nbsp;&nbsp;└ `hooks/rules/chk1_project_checks.py` | CHK-1 —— 改完檔案之後，跑這個專案自己宣告的檢查腳本 | own |
 | &nbsp;&nbsp;└ `hooks/rules/ctx1_resident_budget.py` | CTX-1 —— 常駐層檔案寫入後的預算檢查（PostToolUse Write/Edit） | own |
+| &nbsp;&nbsp;└ `hooks/rules/dash1_dashboard_alive.py` | DASH-1 —— 本機看板服務死了要有人發現（SessionStart WARN，不自動拉起） | own |
 | &nbsp;&nbsp;└ `hooks/rules/db1_deploy.py` | DB-1 —— 部署邊界對帳（攔 `git push vm`） | own |
 | &nbsp;&nbsp;└ `hooks/rules/decl1_stage_files.py` | DECL-1 —— Stop 事件觀察：這一輪有宣告階段，卻沒帶「修改檔案」欄 | own |
 | &nbsp;&nbsp;└ `hooks/rules/decl2_missing_declaration.py` | DECL-2 —— Stop shadow：這一輪明明動了檔案，卻整段找不到任何自我宣告 | own |
@@ -116,5 +117,5 @@
 ---
 
 本檔由 `skills/code-map-generator/generate_map.py` 產生。「用途」欄是離線最佳猜測（讀 `SKILL.md` description／`README.md`／模組 docstring），標 `(用途待人工填寫)` 的欄位是猜不到，不是懶得填。
-<!-- generated-at: 2026-09-07T23:35:14 -->
+<!-- generated-at: 2026-09-08T10:43:11 -->
 <!-- onb2-status: auto-generated, unreviewed -->
