@@ -93,6 +93,45 @@ try_realign() {
     [ "$_did" = 1 ]
 }
 
+# ── 拒絕對齊時，標記檔要講清楚（2026-09-08 加）─────────────────────────────
+# 2026-09-08 實踩：另一則對話在自己分支上把一顆 commit 改寫（拿掉自動遞增的版號檔），
+# 鏡像留的是舊版 ⇒ try_realign 正確地拒絕（內容不同）⇒ 之後每一顆 commit 都紅。
+# 但標記檔只貼 git 原文，讀起來像「主線沒備份」，人要挖十分鐘才知道：主線其實
+# 推成功了、紅的是哪條分支、鏡像多了哪顆、該貼哪三行。挖過一次的東西就寫成程式。
+# 這裡**不做決定**（蓋不蓋還是人判），只把判斷需要的事實與指令放進標記檔。
+diagnose() {
+    git fetch -q backup "+refs/heads/*:refs/remotes/_mirror/*" 2>/dev/null || { echo "（鏡像連不上，無法診斷）"; return; }
+    _cur=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+    _head=$(git rev-parse HEAD 2>/dev/null)
+    if [ "$(git rev-parse "_mirror/$_cur" 2>/dev/null)" = "$_head" ]; then
+        echo "這顆 commit（$_cur）已經在鏡像上——紅的是下面的分支，不是這顆。"
+    else
+        echo "這顆 commit（$_cur）沒推上鏡像。"
+    fi
+    for _ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/_mirror/); do
+        _br=${_ref#_mirror/}
+        if ! git show-ref --verify -q "refs/heads/$_br"; then
+            echo
+            echo "分支 $_br：鏡像有、本機沒有（可能別台機器推的）——不自動處理"
+            continue
+        fi
+        _r=$(git rev-parse "$_ref") || continue
+        _l=$(git rev-parse "$_br") || continue
+        [ "$_r" = "$_l" ] && continue
+        git merge-base --is-ancestor "$_r" "$_l" && continue
+        echo
+        echo "分支 $_br 分叉：鏡像 $(git rev-parse --short "$_r")，本機 $(git rev-parse --short "$_l")"
+        echo "鏡像獨有的 commit（本機找不到同樣的檔案樹，所以沒自動蓋）："
+        git log --format='  %h %s' "$_r" --not "$_l"
+        echo "鏡像那份 vs 本機那份：$(git diff --shortstat "$_r" "$_l")"
+        echo "看過差異、確定本機那份是對的，貼這三行（舊 tip 先用 tag 留住，不會弄丟）："
+        _tag="keep/$(printf '%s' "$_br" | tr '/' '-')-$(git rev-parse --short "$_r")-$(date '+%Y%m%d')"
+        echo "  git tag $_tag $_r && git push -q backup $_tag"
+        echo "  git push -q --force-with-lease=$_br:$_r backup $_br"
+        echo "  git push -q backup --all && rm -f state/mirror_sync_failed.txt"
+    done
+}
+
 ERR=$(git push -q backup --all 2>&1)
 if [ $? -eq 0 ]; then
     rm -f "$MARK"
@@ -109,6 +148,7 @@ if try_realign; then
     fi
 fi
 
+DIAG=$(diagnose 2>&1)
 {
     echo "最後一次鏡像推送失敗"
     echo "時間: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -116,10 +156,16 @@ fi
     echo "原因:"
     echo "$ERR"
     echo
+    echo "診斷:"
+    echo "$DIAG"
+    echo
     echo "查現況: py -3 tools/check_before_start.py --no-vm"
 } > "$MARK" 2>/dev/null
 
-echo "!! 備份鏡像推送失敗，這顆 commit 沒有備份 —— 詳情 state/mirror_sync_failed.txt" >&2
+case "$DIAG" in
+    *已經在鏡像上*) echo "!! 備份鏡像：這顆已推上，但有別的分支分叉沒對齊 —— 該貼的指令在 state/mirror_sync_failed.txt" >&2 ;;
+    *)              echo "!! 備份鏡像推送失敗，這顆 commit 沒有備份 —— 詳情 state/mirror_sync_failed.txt" >&2 ;;
+esac
 echo "$ERR" | head -3 >&2
 
 # fail-open：備份的問題不該讓 commit 看起來像失敗。
