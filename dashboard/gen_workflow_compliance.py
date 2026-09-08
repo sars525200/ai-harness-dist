@@ -46,6 +46,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -874,7 +875,9 @@ def repo_roots() -> list:
 
     **不寫死任何專案路徑**（U-1，`tests/test_harness_config.py` 的台帳在盯）：
     專案來自 `gen_layers.survey_projects()`（同 `projects()` 的單一真相），
-    harness 自己來自 `config.HARNESS_ROOT`。
+    harness 自己來自本檔位置（`_harness_roots()`，worktree 也歸給主目錄的名字）。
+    ⚠ 這裡原本寫「來自 `config.HARNESS_ROOT`」，但程式從來沒 import 過它 ——
+    2026-09-08 校對時發現文件與程式已漂，改成寫實際做法。
 
     ⚠ harness **沒有 `.claude\` 目錄**，而 `harness.config.json` 的 `scanRoots`
     靠 `.claude` 判定 ⇒ 它不會出現在 survey_projects 裡，只能另外補上。
@@ -892,12 +895,43 @@ def repo_roots() -> list:
         path = str(r.get("path") or "").replace("/", "\\").rstrip("\\")
         if path:
             out.append((r.get("name") or Path(path).name, path.lower()))
-    h = str(HARNESS).replace("/", "\\").rstrip("\\")
-    if not any(root == h.lower() for _, root in out):
-        out.append((HARNESS.name, h.lower()))
+    for name, root in _harness_roots():
+        if not any(r == root for _, r in out):
+            out.append((name, root))
     # 長的排前面：專案有可能巢狀，短根先命中會把子專案吃掉。
     out.sort(key=lambda x: -len(x[1]))
     _REPO_ROOTS = out
+    return out
+
+
+def _harness_roots() -> "list[tuple[str, str]]":
+    """harness 自己的根，外加它在 git worktree 裡的別名。**兩個根共用同一個名字**。
+
+    ⚠ 不能拿 `HARNESS.name` 當專案名：在 worktree 裡它是一個隨機代號
+    （2026-09-08 實測是 `jolly-noyce-1661ca`）。後果不是報錯，是**歸屬歪掉**——
+    在 worktree 裡做的每一次改動都被記到一個用完即丟的專案頭上，
+    那個名字下一週就不存在了，於是 harness 的成本與遵循度數字憑空少一塊，
+    而且少得無聲無息。而 worktree 根比主目錄長，排序又是長的先命中 ⇒ 必中。
+    改問 git 主 worktree 在哪（`--git-common-dir` 的上一層），名稱一律用主目錄的。
+    問不到就退回原本的行為，不讓歸屬邏輯把整支產生器拖垮。
+    """
+    main = HARNESS
+    try:
+        r = subprocess.run(["git", "-C", str(HARNESS), "rev-parse", "--git-common-dir"],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace")
+        if r.returncode == 0 and (r.stdout or "").strip():
+            common = Path(r.stdout.strip())
+            if not common.is_absolute():
+                common = HARNESS / common
+            main = common.resolve().parent
+    except Exception:
+        pass
+    name = main.name
+    out = [(name, str(main).replace("/", "\\").rstrip("\\").lower())]
+    here = str(HARNESS).replace("/", "\\").rstrip("\\").lower()
+    if here != out[0][1]:
+        out.append((name, here))
     return out
 
 

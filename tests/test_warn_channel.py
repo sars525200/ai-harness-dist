@@ -71,6 +71,22 @@ def _tmp_state():
             contract._STATE_DIR = saved
 
 
+def _note(sid):
+    """便箋檔的路徑 —— **只有這一個真相**。
+
+    2026-09-08：這六處原本各自寫死 `D:\\Patrick-AI\\.ai-harness\\state`，而被測的
+    `dispatch._pending_path()` 是從 `contract._STATE_DIR`（由 `__file__` 推）算的。
+    兩邊在主目錄剛好相等，所以看不出來；一進 worktree 或 clone 就分岔，
+    後果不是「路徑錯了」而是**測試對著另一個目錄斷言**：
+      · 斷言「該落下便箋」的 → 紅（東西其實有寫，寫在另一邊）
+      · 斷言「投遞後便箋不存在」的（_c4e）→ **綠，而且是假的**（那邊本來就沒有）
+    第二種才是真正危險的：它跟真的通過長得一模一樣。
+    2026-09-05·B4 已經為了同樣的理由改過 _c4d 一格，同檔另外六格漏了 ——
+    所以這次收斂成一個函式，讓下一次不必再靠「有沒有記得一起改」。
+    """
+    return os.path.join(contract._STATE_DIR, f"pending_warn.{sid}.json")
+
+
 def _put_pending(session_id, entries, dropped=0):
     dispatch._write_pending(dispatch._pending_path(session_id),
                             {"entries": entries, "dropped": dropped})
@@ -190,7 +206,7 @@ def _c4():
     import glob
     import os
     sid = "warnchan-stop-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     for stale in glob.glob(note):
         os.remove(stale)
     rc, out, err = _run("Stop", [warn("AWC-1 訊息")], shadow=False, session_id=sid)
@@ -226,7 +242,7 @@ def _c4e():
     import glob
     import os
     sid = "warnchan-accum-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     for stale in glob.glob(note):
         os.remove(stale)
 
@@ -252,7 +268,7 @@ def _c4f():
     import glob
     import os
     sid = "warnchan-dedup-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     for stale in glob.glob(note):
         os.remove(stale)
 
@@ -277,7 +293,7 @@ def _c4g():
     import json as _json
     import os
     sid = "warnchan-legacy-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     os.makedirs(os.path.dirname(note), exist_ok=True)
     with open(note, "w", encoding="utf-8") as fh:
         _json.dump({"ts": dispatch._now(), "message": "舊格式的訊息"}, fh, ensure_ascii=False)
@@ -298,7 +314,7 @@ def _c4h():
     import json as _json
     import os
     sid = "warnchan-expire-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     os.makedirs(os.path.dirname(note), exist_ok=True)
     old_ts = dispatch._minutes_ago(dispatch._PENDING_TTL_MIN + 30)
     with open(note, "w", encoding="utf-8") as fh:
@@ -322,7 +338,7 @@ def _c4c():
     import json as _json
     import os
     sid = "warnchan-ups-0001"
-    note = os.path.join(r"D:\Patrick-AI\.ai-harness\state", f"pending_warn.{sid}.json")
+    note = _note(sid)
     _run("Stop", [warn("AWC-1 便箋內容")], shadow=False, session_id=sid)
     assert os.path.exists(note), "前置沒成立：Stop 該落便箋"
 

@@ -80,10 +80,33 @@ def load_allow() -> dict:
         sys.exit(2)
 
 
+def _is_repo(path: str) -> bool:
+    """這個路徑是不是一個能查的 git repo。
+
+    ⚠ **不能用 `os.path.isdir(path/.git)`**：worktree 與 submodule 的 `.git`
+    是**檔案**不是目錄（裡面是一行 `gitdir:` 指標）。用 isdir 判的後果不是報錯，
+    是那個 repo 被整個跳過、而且跳得無聲無息 —— 它裡面的 hash 全部被歸類成
+    「四個 repo 都找不到」。2026-09-08 在 worktree 裡實測：155 個引用被報成斷線，
+    絕大多數就躺在本 repo 自己的物件庫裡，只因為本 repo 被判成「不是 repo」。
+    改問 git 本人（`rev-parse --git-dir`），worktree、submodule、一般 clone 都認得。
+    """
+    return subprocess.run(["git", "-C", path, "rev-parse", "--git-dir"],
+                          capture_output=True).returncode == 0
+
+
+def live_repos() -> "list[str]":
+    """實際查得動的 repo。只算一次 —— exists() 每個 hash 都會叫。"""
+    global _LIVE
+    if _LIVE is None:
+        _LIVE = [r for r in REPOS if _is_repo(r)]
+    return _LIVE
+
+
+_LIVE = None
+
+
 def exists(sha: str) -> bool:
-    for repo in REPOS:
-        if not os.path.isdir(os.path.join(repo, ".git")):
-            continue
+    for repo in live_repos():
         r = subprocess.run(["git", "-C", repo, "cat-file", "-e", sha],
                            capture_output=True)
         if r.returncode == 0:
@@ -134,6 +157,14 @@ def main() -> int:
     print("文件 git hash 引用檢查")
     print("=" * 74)
     print(f"  掃 {len(files)} 個 tracked .md，查了 {len(checked)} 個相異 hash")
+    # 查了哪幾個 repo 一定要印出來：少查一個 repo 的後果是「正常引用被報成斷線」，
+    # 而那跟「文件真的寫錯」在報表上長得一模一樣。不印就沒人分得出來。
+    live = live_repos()
+    print(f"  查得動的 repo {len(live)}/{len(REPOS)}：{'、'.join(live)}")
+    missing_repos = [r for r in REPOS if r not in live]
+    if missing_repos:
+        print(f"  ⚠ 這台機器上不存在／不是 repo，已跳過：{'、'.join(missing_repos)}")
+        print("     下面的『找不到』有可能只是躺在這些 repo 裡。")
     print(f"  結構性排除 {skipped_ctx} 個（該行明說是 session／sha256，不是 git 物件）")
     if exempted:
         print(f"  豁免 {len(exempted)} 個（獨立列出、不靜默吞掉）：")
@@ -144,7 +175,7 @@ def main() -> int:
         print("  ✔ 沒有對不上的引用。")
         return 0
     print()
-    print(f"  ❌ {len(findings)} 個引用在四個 repo 都找不到：")
+    print(f"  ❌ {len(findings)} 個引用在查得動的 {len(live)} 個 repo 都找不到：")
     for sha, f, i, line in findings:
         print(f"    {sha}")
         print(f"      {f}:{i}")

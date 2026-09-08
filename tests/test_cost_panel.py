@@ -683,7 +683,14 @@ def run() -> "tuple[int, list]":
         fails: list = []
         try:
             fn(fails)
-        except Exception as exc:  # noqa: BLE001
+        # ⚠ SystemExit 一定要跟 Exception 一起接：它繼承的是 BaseException，
+        # `except Exception` 攔不到。2026-09-08 實測後果 ——
+        # 被測的 gen_cost_panel 在「沒有事件紀錄」時 `raise SystemExit` 拒絕產空表
+        # （那是對的），但這個 SystemExit 穿過 run()、把整支測試從第 4 條就中止，
+        # 後面 15 條一條都沒跑，畫面上只看得到**一行紅**。
+        # 「15 條沒跑」與「15 條通過」在總結上長得一模一樣 —— 這才是要修的東西。
+        # KeyboardInterrupt 不接：那是人要它停，不該被記成一條測試失敗。
+        except (Exception, SystemExit) as exc:  # noqa: BLE001
             fails.append(f"例外：{type(exc).__name__}: {exc}")
         if fails:
             failures.append(f"{name}：{fails[0]}")
