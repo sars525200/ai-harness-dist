@@ -31,6 +31,11 @@ exe（或本檔）旁邊 → `sys._MEIPASS` → 各磁碟根目錄與其 `.claud
 `pyinstaller --onefile --windowed tools\setup_new_pc_gui.py`（**刻意不帶 `--add-data`**，
 理由同上；代價是 settings.json 要跟 exe 放在同一個資料夾）。
 ⚠ 未簽章的 exe 每個使用者都會看到「Windows 已保護您的電腦」，商用前要先買程式碼簽章憑證。
+
+**整支精靈不呼叫外部 Python**（2026-09-08 訂）：exe 的賣點是新機器免裝 Python，
+只要有任何一個按鈕退回去叫 `py -3`，那個賣點就在那個按鈕上破掉，而症狀是
+「按鈕壞了」不是「這台沒有 Python」。「查看使用說明」因此把產生器**載成模組**
+在本行程跑（`run_generator_inprocess()`）。新加功能時照這條走。
 """
 from __future__ import annotations
 
@@ -311,6 +316,47 @@ def default_target() -> str:
     return str(Path(_pick_work_drive()) / INSTALL_SUBPATH)
 
 
+def run_generator_inprocess(gen: Path) -> "tuple[int, str]":
+    r"""把說明頁產生器當成模組載進**本行程**跑，回 `(退出碼, 它印的東西)`。
+
+    ── 為什麼不是 `py -3 tools\gen_explainer_page.py` ──────────────────────
+    exe 的賣點是「新機器不必先裝 Python」。呼叫外部直譯器會讓「查看使用說明」
+    變成整個精靈裡**唯一**需要 Python 的按鈕，而缺了它的症狀是一個退出碼——
+    使用者看到的是「按鈕壞了」，不是「這台沒有 Python」。載模組沒有這個依賴：
+    exe 自己就是一個 Python。
+
+    ── 仍然是現場跑 repo 裡那一份 ────────────────────────────────────────
+    用**檔案路徑**載，不是打包進 exe 的副本。所以說明頁的規則數、技能數、版號
+    跟這台機器現在 clone 到的內容一致；預先包一份靜態 html 進 exe，第一次改規則
+    之後那頁就開始說謊。產生器的 `ROOT` 從它自己的 `__file__` 推，用路徑載進來
+    時那個值就是 repo 根，不必額外傳。
+
+    ── 為什麼吃掉它的 stdout ─────────────────────────────────────────────
+    視窗版沒有主控台，`print` 出去的東西沒有人看得到。接進紀錄框才有用。
+    改 `sys.stdout` 是行程全域的，但 `spawn()` 保證同一時間只有一件事在跑。
+    """
+    import contextlib   # noqa: PLC0415  只有這個函式要
+    import importlib.util  # noqa: PLC0415
+    import io as _io    # noqa: PLC0415
+
+    buf = _io.StringIO()
+    spec = importlib.util.spec_from_file_location("harness_gen_explainer", str(gen))
+    if spec is None or spec.loader is None:
+        return 1, "載不進產生器：%s" % gen
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            spec.loader.exec_module(mod)          # 頂層跑一遍（`__main__` 那段不會觸發）
+            rc = int(mod.main() or 0)
+    except SystemExit as exc:                     # 產生器自己 sys.exit 也要收得住
+        rc = int(exc.code or 0)
+    except Exception as exc:
+        # 印出型別與訊息就好，不吐 traceback：看畫面的人是「站在新電腦前面」的那個，
+        # 需要的是「哪裡壞了」，不是堆疊。
+        return 1, buf.getvalue() + "\n產生器出錯：%s: %s" % (type(exc).__name__, exc)
+    return rc, buf.getvalue()
+
+
 def harness_version(repo: Path | None) -> str:
     """讀 `<repo>/version.json` 的版號。找不到就回「未知」，不擋畫面。
 
@@ -518,10 +564,7 @@ class App(tk.Tk):
 
         def work():
             self.say("── 產生說明頁 ──")
-            cmd = [sys.executable if not getattr(sys, "frozen", False) else "py",
-                   *([] if not getattr(sys, "frozen", False) else ["-3"]),
-                   str(gen)]
-            rc, out = run(cmd, cwd=str(repo), timeout=120)
+            rc, out = run_generator_inprocess(gen)
             for line in out.splitlines()[-20:]:
                 self.say("   " + line)
             out_html = repo / "docs" / "harness-guide.html"

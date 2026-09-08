@@ -438,8 +438,11 @@ def build() -> str:
 def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     html = build()
-    OUT.write_bytes(html.encode("utf-8"))
-    print("已產生：%s（%.1f KB）" % (OUT, len(html) / 1024))
+    raw = html.encode("utf-8")
+    OUT.write_bytes(raw)
+    # 量 bytes 不量字元：中文一個字 3 bytes，用 len(html) 會report 成實際的六成，
+    # 而這個數字唯一的用途就是讓人看一眼「產出來的東西大小合不合理」。
+    print("已產生：%s（%.1f KB）" % (OUT, len(raw) / 1024))
     return 0
 
 

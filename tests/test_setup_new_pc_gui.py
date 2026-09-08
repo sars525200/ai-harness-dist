@@ -22,6 +22,10 @@
    關掉重開後第 4 分頁只看預設路徑，印「先完成步驟 3」——**明明已經下載完了**，
    照那句話做要重下載 25 MB。
 
+4. 2026-09-08：「查看使用說明」在 exe 版會去叫系統的 `py -3` 跑產生器
+   ⇒ 整個精靈裡**唯一**需要 Python 的按鈕。而 exe 的賣點正是新機器免裝 Python，
+   缺了它按下去只拿到一個退出碼，**使用者看到的是「按鈕壞了」**。
+
 `--old` 那條存在的理由：**沒看它紅過的綠燈不算數。**
 """
 from __future__ import annotations
@@ -227,6 +231,52 @@ try:
             fails.append("[5] CLI 那列不是 must")
 finally:
     G.shutil.which = real_which
+
+# ── 6. 產說明頁不准呼叫外部直譯器 ──────────────────────────
+# 綁的是後果不是寫法：**只要走出這個行程去找 Python，這條就紅**。
+# exe 的賣點是新機器免裝 Python；「查看使用說明」原本是 `py -3 <產生器>`，
+# 於是它變成整個精靈裡唯一需要 Python 的按鈕，而缺了它的症狀是一個退出碼——
+# 使用者看到的是「按鈕壞了」。
+interp_calls: list = []
+_saved_run = G.run
+G.run = lambda cmd, timeout=None, cwd=None: (interp_calls.append(cmd), (0, ""))[1]
+try:
+    with tempfile.TemporaryDirectory() as _td:
+        fake_repo = Path(_td) / "repo"
+        (fake_repo / "tools").mkdir(parents=True)
+        fake_gen = fake_repo / "tools" / "gen_explainer_page.py"
+        # 假產生器：ROOT 一樣從自己的 __file__ 推（真的那支也是），
+        # 這樣「用路徑載進來時 ROOT 會不會指對」也一起被驗到。
+        fake_gen.write_text(
+            "from pathlib import Path\n"
+            "ROOT = Path(__file__).resolve().parents[1]\n"
+            "def main():\n"
+            "    out = ROOT / 'docs' / 'harness-guide.html'\n"
+            "    out.parent.mkdir(parents=True, exist_ok=True)\n"
+            "    out.write_text('<h1>x</h1>', encoding='utf-8')\n"
+            "    print('已產生：%s' % out)\n"
+            "    return 0\n",
+            encoding="utf-8")
+
+        if OLD:
+            def gen_call(g):                      # 舊寫法：退回去叫外部 Python
+                return G.run(["py", "-3", str(g)], timeout=120)
+        else:
+            gen_call = G.run_generator_inprocess
+
+        rc, out = gen_call(fake_gen)
+        made = fake_repo / "docs" / "harness-guide.html"
+        if rc != 0:
+            fails.append("[6] 產生器沒跑成功（退出碼 %s）" % rc)
+        if "已產生" not in out:
+            fails.append("[6] 產生器印的東西沒有接進紀錄框——視窗版沒有主控台，吞掉就是全黑")
+        if not made.exists():
+            fails.append("[6] 說明頁沒有真的被產出來")
+        if interp_calls:
+            fails.append("[6] 產說明頁時走出行程去找 Python：%r ——"
+                         " exe 版在沒裝 Python 的新機器上這顆按鈕就是壞的" % (interp_calls[0],))
+finally:
+    G.run = _saved_run
 
 # 定錨 [2] 的根因：`Path("")` 就是 `Path(".")`，而它**存在**——
 # 這正是舊的 exists() 守衛放行的原因。這行紅了代表 Python 行為變了，
