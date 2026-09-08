@@ -124,11 +124,15 @@ diagnose() {
         echo "鏡像獨有的 commit（本機找不到同樣的檔案樹，所以沒自動蓋）："
         git log --format='  %h %s' "$_r" --not "$_l"
         echo "鏡像那份 vs 本機那份：$(git diff --shortstat "$_r" "$_l")"
-        echo "看過差異、確定本機那份是對的，貼這三行（舊 tip 先用 tag 留住，不會弄丟）："
+        echo "看過差異、確定本機那份是對的，照順序一行一行貼（舊 tip 先用 tag 留住，不會弄丟）："
+        # 一行一句、不用 && 串：PowerShell 5.1 讀到 && 整句不跑（2026-09-08 實踩：第一句 tag 沒建、
+        # 第二句 force push 卻跑了，舊 tip 差點沒留住）。rm 那句也留一行，PowerShell 有同名別名。
         _tag="keep/$(printf '%s' "$_br" | tr '/' '-')-$(git rev-parse --short "$_r")-$(date '+%Y%m%d')"
-        echo "  git tag $_tag $_r && git push -q backup $_tag"
+        echo "  git tag $_tag $_r"
+        echo "  git push -q backup $_tag"
         echo "  git push -q --force-with-lease=$_br:$_r backup $_br"
-        echo "  git push -q backup --all && rm -f state/mirror_sync_failed.txt"
+        echo "  git push -q backup --all"
+        echo "  rm -f state/mirror_sync_failed.txt"
     done
 }
 

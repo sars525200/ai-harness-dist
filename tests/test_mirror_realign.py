@@ -136,9 +136,14 @@ def case_b2(tmp):
         "附 tag 留住舊 tip": f"git tag keep/main-{before[:7]}" in text and f" {before}" in text,
         "附 force-with-lease": f"--force-with-lease=main:{before} backup main" in text,
         "附清標記": "rm -f state/mirror_sync_failed.txt" in text,
+        # 2026-09-08 實踩：指令用 && 串，貼進 PowerShell 5.1 整句不跑；第一行沒跑（tag 沒建）、
+        # 第二行跑了（force push 生效）——舊 tip 差點沒留住。指令一行一句，任何 shell 都能貼。
+        "指令不含 &&（PowerShell 5.1 讀不懂）": not any("&&" in ln for ln in text.splitlines() if ln.startswith("  git ")),
+        "五句指令各自一行": sum(1 for ln in text.splitlines() if ln.startswith("  git ")) == 4
+                              and "  rm -f state/mirror_sync_failed.txt" in text.splitlines(),
     }
     missing = [k for k, v in need.items() if not v]
-    return not missing, ("標記檔六項齊全" if not missing else f"缺：{'、'.join(missing)}\n{text[-600:]}")
+    return not missing, ("標記檔八項齊全" if not missing else f"缺：{'、'.join(missing)}\n{text[-600:]}")
 
 
 def case_c(tmp):
@@ -186,7 +191,7 @@ def main():
     try:
         results = [("A 同內容改寫 → 自動對齊", case_a(tmp)),
                    ("B 鏡像有獨有內容 → 拒絕對齊", case_b(tmp)),
-                   ("B2 拒絕時標記檔要點名分支、列獨有 commit、附三行指令", case_b2(tmp)),
+                   ("B2 拒絕時標記檔要點名分支、列獨有 commit、附可貼指令（一行一句）", case_b2(tmp)),
                    ("C 主線推成功只有別的分支分叉 → 標記檔說這顆已在鏡像上、指令蓋對分支", case_c(tmp))]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
