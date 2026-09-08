@@ -34,11 +34,38 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEN_PATH = os.path.join(ROOT, "dashboard", "gen_cost_panel.py")
 
 
+_STATE_FIXTURE_DIR = None
+
+
+def _state_fixture_dir() -> str:
+    """一份最小、確定性的 event log 目錄，讓 `event_usage()` 在任何機器上都拿得到合法輸入。
+
+    2026-09-08：本檔多數 case 只隔離 `PROJECT_DIR`，`STATE_DIR` 留給預設值
+    （這台機器正式的 `state/`）。`event_usage()` 找不到帶時間戳的事件會
+    `raise SystemExit`——這在主目錄剛好過（有歷史資料），一進 worktree／新 clone
+    就必紅：那不是這幾個 case 要驗的東西，是輸入來源沒隔離乾淨。
+    只建一份、所有 case 共用只讀——它不驗任何斷言，純粹讓 `event_usage()` 有東西可讀。
+    """
+    global _STATE_FIXTURE_DIR
+    if _STATE_FIXTURE_DIR is None:
+        d = tempfile.mkdtemp(prefix="cost_panel_state_")
+        row = {"kind": "dispatch", "event": "Stop", "ts": "2026-01-01T00:00:00Z"}
+        with open(os.path.join(d, "events.fixturecp0001.ndjson"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        _STATE_FIXTURE_DIR = d
+    return _STATE_FIXTURE_DIR
+
+
 def _load():
-    """每次都拿一份乾淨的模組——測試要改模組層常數，不能互相污染。"""
+    """每次都拿一份乾淨的模組——測試要改模組層常數，不能互相污染。
+
+    `STATE_DIR` 預設指到共用 fixture（見 `_state_fixture_dir`）；需要測「event log
+    斷掉」行為的 case（如 `_case_refuse_empty`）在拿到模組之後自己覆寫，覆寫不受影響。
+    """
     spec = importlib.util.spec_from_file_location("gen_cost_panel_under_test", GEN_PATH)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    mod.STATE_DIR = __import__("pathlib").Path(_state_fixture_dir())
     return mod
 
 

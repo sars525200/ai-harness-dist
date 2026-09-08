@@ -25,12 +25,73 @@ for _p in (_HOOKS, os.path.join(_HOOKS, "rules")):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+import report  # noqa: E402
+
 
 def _read_rows(path):
     if not os.path.exists(path):
         return []
     with io.open(path, encoding="utf-8") as fh:
         return [json.loads(l) for l in fh if l.strip()]
+
+
+def _write_ndjson(path, rows):
+    with io.open(path, "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+class _FixtureState:
+    """把 report.STATE_DIR 換成一份已知內容的臨時目錄。
+
+    2026-09-08：`_case_denominator_exists`／`_case_legacy_not_silently_zero`
+    原本直接讀**這台機器上正式的** `state/`——在主目錄剛好有歷史資料所以會過，
+    换一台新 clone（或這個 worktree）`state/` 是空的就必然紅：分母為 0、
+    也不會有「舊資料未標 source」那批。這不是測試在挑機器的毛病，
+    是它的輸入來源本來就不該是「這台機器現在留著什麼」。
+    改成自己造一份最小事件紀錄，讓斷言在任何機器上驗的是同一件事。
+
+    產出兩個檔：
+      events.fixture-src-0001.ndjson  —— dispatch Stop/SubagentStop 各若干筆，
+                                          外加一筆非 dispatch 的雜訊（不該被算進分母）
+      failopen.ndjson                 —— 1 筆 source=session、1 筆 source=test、
+                                          1 筆舊資料且 transcript 是 uuid 形狀（該被
+                                          推估為真）、1 筆舊資料且 transcript 是
+                                          `unit-test.jsonl`（該被推估為假）
+    """
+
+    #: 對應 report._stop_dispatch_count() 要數到的分母
+    STOP_EVENTS = 5
+    SUBAGENT_STOP_EVENTS = 3
+    DAY = "2026-09-08"
+
+    def __enter__(self):
+        self.tmp = tempfile.mkdtemp(prefix="report_fixture_")
+        self.saved = report.STATE_DIR
+        report.STATE_DIR = self.tmp
+
+        events = []
+        for _ in range(self.STOP_EVENTS):
+            events.append({"kind": "dispatch", "event": "Stop", "ts": self.DAY + "T00:00:00Z"})
+        for _ in range(self.SUBAGENT_STOP_EVENTS):
+            events.append({"kind": "dispatch", "event": "SubagentStop", "ts": self.DAY + "T00:00:00Z"})
+        events.append({"kind": "applies", "event": "Stop", "ts": self.DAY + "T00:00:00Z"})  # 雜訊：不是 dispatch
+        # 檔名前綴不能撞 report._PROBE_SESSION_RE（test-/e2e-/warnchan-/ZZ 開頭會被排除）
+        _write_ndjson(os.path.join(self.tmp, "events.fixturesrc0001.ndjson"), events)
+
+        failopen_rows = [
+            {"source": "session", "reason": "r1", "transcript": "aaaaaaaa-1111-2222-3333-444444444444.jsonl", "ts": self.DAY + "T00:00:00Z"},
+            {"source": "test", "reason": "r2", "transcript": "unit-test.jsonl", "ts": self.DAY + "T00:00:00Z"},
+            {"reason": "r3", "transcript": "bbbbbbbb-1111-2222-3333-444444444444.jsonl", "ts": self.DAY + "T00:00:00Z"},  # 舊資料·像真的
+            {"reason": "r4", "transcript": "unit-test.jsonl", "ts": self.DAY + "T00:00:00Z"},  # 舊資料·像假的
+        ]
+        _write_ndjson(os.path.join(self.tmp, "failopen.ndjson"), failopen_rows)
+        return self
+
+    def __exit__(self, *exc):
+        report.STATE_DIR = self.saved
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
 
 
 def _case_source_field():
@@ -75,11 +136,10 @@ def _case_report_consumes():
     而測試 4/4 全綠。斷言必須綁**值**，不是綁字串存在。
     """
     import re as _re
-    import report
 
     if not hasattr(report, "_print_failopen_stats"):
         return "report.py 沒有 _print_failopen_stats —— fail-open 至今零消費者（R2-H1）"
-    rows = report._load_failopen_rows()
+
     # ⚠ **期望值必須獨立算**：第一版用 `report._looks_like_real_session` 去算 expect，
     # 於是把推估器打死成 `return False` 時兩邊一起變 0、測試照樣綠（覆核 R6-H3 的變異 1
     # 在修過一次之後**仍然穿透**）。這正是 feedback 檔第八種「斷言因為別的理由而綠」：
@@ -92,13 +152,16 @@ def _case_report_consumes():
             return True
         return bool(_re.match("[0-9a-f]{8}-[0-9a-f]{4}-", t))
 
-    labelled = [r for r in rows if r.get("source") == "session"]
-    legacy = [r for r in rows if "source" not in r and _independent_real(r)]
-    expect = len(labelled) + len(legacy)
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        report._print_failopen_stats()
-    out = buf.getvalue()
+    # 2026-09-08：改讀 fixture，不讀這台機器正式的 state/ —— 理由見 _FixtureState。
+    with _FixtureState():
+        rows = report._load_failopen_rows()
+        labelled = [r for r in rows if r.get("source") == "session"]
+        legacy = [r for r in rows if "source" not in r and _independent_real(r)]
+        expect = len(labelled) + len(legacy)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            report._print_failopen_stats()
+        out = buf.getvalue()
     if "fail-open" not in out:
         return "輸出沒提到 fail-open"
     if "%" not in out:
@@ -122,19 +185,25 @@ def _case_denominator_exists():
     `_stop_dispatch_count` 換成 `lambda: (999999, {})` 照樣全綠，
     而這條的 docstring 逐字寫著「不是寫死或估計」。
     """
-    import report
-
     if not hasattr(report, "_stop_dispatch_count"):
         return "report.py 沒有 _stop_dispatch_count —— 比率沒有可查證的分母來源"
-    total, by_day = report._stop_dispatch_count()
-    if not isinstance(by_day, dict):
-        return "應同時回傳逐日分佈供近期比率使用，實得 " + type(by_day).__name__
-    independent = sum(
-        1 for e in report._load_all_events()
-        if e.get("kind") == "dispatch" and e.get("event") in ("Stop", "SubagentStop"))
+    # 2026-09-08：改讀 fixture，不讀這台機器正式的 state/ —— 理由見 _FixtureState。
+    # 這台機器正式資料的多寡是環境事實，不是這條斷言該驗的東西；分母為 0
+    # 在一個乾淨 clone／worktree 裡是**必然**發生的，不是「零目標不報成功」抓到的缺陷。
+    with _FixtureState() as fx:
+        total, by_day = report._stop_dispatch_count()
+        if not isinstance(by_day, dict):
+            return "應同時回傳逐日分佈供近期比率使用，實得 " + type(by_day).__name__
+        independent = sum(
+            1 for e in report._load_all_events()
+            if e.get("kind") == "dispatch" and e.get("event") in ("Stop", "SubagentStop"))
+        expect = fx.STOP_EVENTS + fx.SUBAGENT_STOP_EVENTS
     if total != independent:
         return ("分母 %d 與獨立從 events 數出來的 %d 對不上 —— "
                 "它不是真實事件數（寫死／估計／濾錯都會長這樣）" % (total, independent))
+    if total != expect:
+        return ("分母 %d 與 fixture 寫入的 %d 對不上 —— 混進了雜訊事件或濾錯"
+                % (total, expect))
     if total != sum(by_day.values()):
         return "總數 %d 與逐日分佈加總 %d 對不上" % (total, sum(by_day.values()))
     if total <= 0:
@@ -151,12 +220,15 @@ def _case_legacy_not_silently_zero():
     **一個新裝的量測器第一次開口就報 0，正是它要抓的那種假綠**（feedback-execution-
     test-before-deploy 的同型）。舊資料要走啟發式推估並**標明是推估**，不能算成 0。
     """
-    import report
-
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        report._print_failopen_stats()
-    out = buf.getvalue()
+    # 2026-09-08：改讀 fixture，不讀這台機器正式的 state/ —— 理由見 _FixtureState。
+    # 原本靠「這台機器碰巧留著 2026-08-23 之前的 88 筆舊資料」才測得到這條，
+    # 那批資料一旦被清掉或輪替掉，這條在**任何機器**上都會靜默變不驗證任何東西
+    # ——分支根本不會被踩到，卻照樣印「通過」。fixture 自帶一筆舊資料，恆定觸發。
+    with _FixtureState():
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            report._print_failopen_stats()
+        out = buf.getvalue()
     if "未標" not in out:
         return "輸出沒提到舊資料未標 source —— 無法判斷它有沒有處理這批"
     if "推估" not in out:

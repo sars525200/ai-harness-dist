@@ -12,9 +12,23 @@ from __future__ import annotations
 import os
 import sys
 
-sys.path.insert(0, r"D:\Patrick-AI\.ai-harness\hooks")
+# 從本檔位置推——**不能寫死主目錄路徑**。2026-09-08 實測：寫死時這支測試不管在
+# 哪個 worktree 跑，永遠 import 的是**主目錄**那份 agent_readonly_gate.py，
+# 而被測程式自己的 `_PY_ALLOWED_ROOT` 是用 `__file__` 正確推導的——兩邊只在
+# 「剛好在主目錄跑」時碰巧相等。後果不是報錯，是**這支測試在 worktree 裡驗的
+# 是別人的程式碼**：改 worktree 自己的 gate 邏輯，這裡的綠燈完全看不到；
+# 而下面 CASES 裡另外 5 條寫死 `D:\Patrick-AI\.ai-harness\...` 的白名單樣本
+# 又剛好靠這同一個 bug 互相抵銷才維持綠——同一個坑，兩處要一起修。
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hooks"))
 
 import agent_readonly_gate as gate  # noqa: E402
+
+# 白名單樣本要跟 `gate._PY_ALLOWED_ROOT` 用同一個根，不能各寫各的絕對路徑——
+# 上面那段修完之後，這裡如果還寫死 `D:\Patrick-AI\.ai-harness`，在別的 worktree
+# 跑就會回到原本的假綠（gate 檢查的是 worktree 根，樣本卻餵主目錄路徑，
+# 「該放行」的案例會全部翻成 BLOCK，反而變成新的假紅）。
+_ROOT = os.path.dirname(gate.HOOKS_DIR)                       # 反斜線，正常大小寫
+_ROOT_NORM = _ROOT.replace("\\", "/").lower()                 # 正斜線＋小寫磁碟機代號
 
 CASES = [
     # ── 該放行：雙改檢核員真正要用的形狀 ──────────────────────────────
@@ -34,14 +48,14 @@ CASES = [
     #    被擋掉的後果不是「慢一點」是**整輪 tool block 零產出**
     #    （2026-08-22 票 08 實測，改用 4 次 Glob 才補回同樣的清單）。
     ("ls", True, "列目錄"),
-    ("ls -la D:/Patrick-AI/.ai-harness/state", True, "列目錄（合寫旗標）"),
+    (f"ls -la {_ROOT_NORM}/state", True, "列目錄（合寫旗標）"),
     ("ls -R D:/IT-department/.claude", True, "遞迴列目錄"),
     ("ls -la D:/a D:/b", True, "多個路徑（ls 不寫檔，限制個數沒有安全收益）"),
     ("ls --color=always", False, "長旗標不在白名單"),
     # ── 同日：`py -3 <harness 腳本> <任意路徑>`。
     #    現行實作把「所有 .py 引數」都當成要跑的腳本，於是「拿 harness 的工具去
     #    讀專案的檔」被擋 —— 而安全邊界是**哪一段程式碼會跑**，不是**提到哪些路徑**。
-    ("py -3 D:/Patrick-AI/.ai-harness/tools/py_syntax_check.py D:/IT-department/SOP_PROD/05_UI_Demo/server.py",
+    (f"py -3 {_ROOT_NORM}/tools/py_syntax_check.py D:/IT-department/SOP_PROD/05_UI_Demo/server.py",
      True, "harness 腳本讀專案檔（第一個 .py 才是被執行的）"),
     ("py -3 D:/IT-department/SOP_PROD/05_UI_Demo/server.py", False,
      "被執行的腳本不在 harness 底下 —— 仍要擋"),
@@ -63,27 +77,27 @@ CASES = [
 
     # ── 該放行：稽核類角色要拿獨立證據的探測腳本（2026-08-20 開的口）────
     #    擋掉它們的後果不是「角色慢一點」，是稽核退化成「稽核者相信被稽核者」。
-    (r"py -3 -X utf8 D:\Patrick-AI\.ai-harness\hooks\report.py", True,
+    (f"py -3 -X utf8 {_ROOT}\\hooks\\report.py", True,
      "接線心跳與 would-block —— 稽核的主要證據來源"),
-    (r"py -3 D:\Patrick-AI\.ai-harness\dashboard\capability_checks.py", True,
+    (f"py -3 {_ROOT}\\dashboard\\capability_checks.py", True,
      "八大類 N/M，不帶 -X utf8 也該放行"),
-    (r"py -3 -X utf8 D:\Patrick-AI\.ai-harness\dashboard\gen_workflow_compliance.py --check", True,
+    (f"py -3 -X utf8 {_ROOT}\\dashboard\\gen_workflow_compliance.py --check", True,
      "--check 是唯讀旗標"),
-    ("py -3 -X utf8 d:/Patrick-AI/.ai-harness/rulefile/check_bloat.py", True,
+    (f"py -3 -X utf8 {_ROOT_NORM}/rulefile/check_bloat.py", True,
      "正斜線與小寫磁碟機代號要正規化後才比對"),
 
     # ── 該擋：py 的三道收窄 ─────────────────────────────────────────
-    (r"py -3 D:\Patrick-AI\.ai-harness\rulefile\check_bloat.py --write-snapshot --project X", False,
+    (f"py -3 {_ROOT}\\rulefile\\check_bloat.py --write-snapshot --project X", False,
      "**寫入型旗標**：這支會覆寫基準"),
-    (r"py -3 D:\Patrick-AI\.ai-harness\dashboard\check_freshness.py --write-snapshot", False,
+    (f"py -3 {_ROOT}\\dashboard\\check_freshness.py --write-snapshot", False,
      "同上，另一支的寫入開關"),
-    (r"py -3 D:\Patrick-AI\.ai-harness\dashboard\gen_layers.py --init", False,
+    (f"py -3 {_ROOT}\\dashboard\\gen_layers.py --init", False,
      "--init 會建立設定檔"),
     (r"py -3 D:\IT-department\SOP_PROD\05_UI_Demo\db\formal_excel_tools.py", False,
      "**不在 harness 底下**：那是會動正式資料的腳本"),
     ("py -3 some_script.py", False, "相對路徑驗不了指到哪 —— fail-closed"),
     (r"py -3 -m pip install x", False, "-m 是執行任意模組"),
-    (r"py -3 D:\Patrick-AI\.ai-harness\hooks\report.py -c \"x\"", False,
+    (f'py -3 {_ROOT}\\hooks\\report.py -c "x"', False,
      "混進 -c 也要擋（不是只看第一個參數）"),
     ("py -3", False, "沒有 .py 檔就不是「跑一支腳本」的形狀"),
     ("cmp -s a.js b.js", True, "逐位元組比對"),
